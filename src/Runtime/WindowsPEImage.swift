@@ -81,7 +81,8 @@ struct WindowsPEImage {
         let imageBase = try u64(data, optional + 24)
         let sizeOfImage = try u32(data, optional + 56)
         let sizeOfHeaders = try u32(data, optional + 60)
-        guard sizeOfImage > 0, sizeOfHeaders > 0,
+        let (_, imageEndOverflow) = imageBase.addingReportingOverflow(UInt64(sizeOfImage))
+        guard sizeOfImage > 0, sizeOfHeaders > 0, !imageEndOverflow,
               UInt64(sizeOfHeaders) <= UInt64(data.count),
               sizeOfHeaders <= sizeOfImage else { throw ParseError.malformed("invalid image/header size") }
 
@@ -97,6 +98,9 @@ struct WindowsPEImage {
         let tableSize = sectionCount.multipliedReportingOverflow(by: 40)
         guard !tableSize.overflow else { throw ParseError.malformed("section table overflow") }
         try require(data, table, tableSize.partialValue, "section table")
+        guard UInt64(sizeOfHeaders) >= UInt64(table + tableSize.partialValue) else {
+            throw ParseError.malformed("SizeOfHeaders does not cover the section table")
+        }
         var sections: [Section] = []
         for index in 0..<sectionCount {
             let offset = table + index * 40
@@ -115,6 +119,32 @@ struct WindowsPEImage {
                 throw ParseError.malformed("section \(name) extends beyond image")
             }
             sections.append(section)
+        }
+
+        let virtualSections = sections.sorted { $0.virtualAddress < $1.virtualAddress }
+        for pair in zip(virtualSections, virtualSections.dropFirst()) {
+            let previousEnd = UInt64(pair.0.virtualAddress)
+                + UInt64(max(pair.0.virtualSize, pair.0.rawSize))
+            guard previousEnd <= UInt64(pair.1.virtualAddress) else {
+                throw ParseError.malformed("overlapping virtual sections")
+            }
+        }
+        let rawSections = sections.filter { $0.rawSize > 0 }.sorted { $0.rawOffset < $1.rawOffset }
+        for pair in zip(rawSections, rawSections.dropFirst()) {
+            let previousEnd = UInt64(pair.0.rawOffset) + UInt64(pair.0.rawSize)
+            guard previousEnd <= UInt64(pair.1.rawOffset) else {
+                throw ParseError.malformed("overlapping raw sections")
+            }
+        }
+        if entryPoint != 0 {
+            guard entryPoint < sizeOfImage,
+                  sections.contains(where: {
+                      ($0.characteristics & 0x2000_0000) != 0
+                          && entryPoint >= $0.virtualAddress
+                          && UInt64(entryPoint - $0.virtualAddress) < UInt64($0.rawSize)
+                  }) else {
+                throw ParseError.malformed("entry point is not backed by executable section data")
+            }
         }
 
         let shell = WindowsPEImage(machine: machine, entryPointRVA: entryPoint, imageBase: imageBase,
