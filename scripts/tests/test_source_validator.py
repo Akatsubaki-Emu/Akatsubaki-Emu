@@ -283,6 +283,9 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("isteam_guest_memory_write(native, offset, base, 16)", pair)
         self.assertIn("memory.writeUInt64Pair(seconds, nanoseconds, offset: address)", syscalls)
         self.assertIn("memory.writeUInt64Pair(seconds, microseconds, offset: address)", syscalls)
+        for name in ("test_static_elf_execution.swift", "test_x86_64_interpreter.swift", "test_linux_syscall_dispatcher.swift"):
+            harness = (root / "scripts" / "tests" / name).read_text(encoding="utf-8")
+            self.assertIn("func writeUInt64Pair", harness)
 
 
     def test_guest_time_fraction_fields_are_within_linux_ranges(self):

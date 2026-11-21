@@ -255,6 +255,7 @@ required = {
         "hello from static ELF",
         "func writeUInt32(_ value: UInt32, offset: UInt64) -> Bool",
         "interpreter.run(maxInstructions: 64)",
+        "func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool",
     ],
     "scripts/tests/test_linux_process_stack.swift": [
         "auxiliary[3] == 0x40040",
@@ -309,6 +310,7 @@ required = {
         "precondition(indirectFaultExit == .memoryFault(address: 0x1006))",
         "precondition(zeroShift.registerValue(0) == 1)",
         "precondition(zeroShift.conditionFlags & X86_64ALU.carry != 0)",
+        "func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",

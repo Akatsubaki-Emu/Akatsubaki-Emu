@@ -82,6 +82,16 @@ final class GuestMemory {
         return true
     }
 
+    func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool {
+        guard offset <= size, size - offset >= 16 else { return false }
+        let start = Int(offset)
+        for index in 0..<8 {
+            bytes[start + index] = UInt8(truncatingIfNeeded: first >> (index * 8))
+            bytes[start + 8 + index] = UInt8(truncatingIfNeeded: second >> (index * 8))
+        }
+        return true
+    }
+
     func writeUInt64(_ value: UInt64, offset: UInt64) -> Bool {
         guard offset <= size, size - offset >= 8 else { return false }
         let i = Int(offset)
