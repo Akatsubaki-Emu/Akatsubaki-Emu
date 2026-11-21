@@ -127,8 +127,9 @@ final class GameRuntimeProfileStore {
         value.updatedAt = Date()
         let destination = url(for: value.gameID)
         if fm.fileExists(atPath: destination.path) {
-            let values = try destination.resourceValues(forKeys: [.fileSizeKey])
-            guard let existingSize = values.fileSize, existingSize <= 1024 * 1024 else {
+            let values = try destination.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true,
+                  let existingSize = values.fileSize, existingSize <= 1024 * 1024 else {
                 throw GameRuntimeProfile.ProfileError.corruptStoredProfile
             }
             let existingData = try Data(contentsOf: destination)
@@ -149,7 +150,8 @@ final class GameRuntimeProfileStore {
 
     func profile(for gameID: UUID) -> GameRuntimeProfile? {
         let profileURL = url(for: gameID)
-        guard let values = try? profileURL.resourceValues(forKeys: [.fileSizeKey]),
+        guard let values = try? profileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true,
               let size = values.fileSize, size <= 1024 * 1024,
               let data = try? Data(contentsOf: profileURL),
               data.count <= 1024 * 1024,
@@ -170,7 +172,8 @@ final class GameRuntimeProfileStore {
 
     var hasUnreadableProfiles: Bool {
         profileFiles.contains { file in
-            guard let values = try? file.resourceValues(forKeys: [.fileSizeKey]),
+            guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true,
                   let size = values.fileSize, size <= 1024 * 1024,
                   let data = try? Data(contentsOf: file), data.count <= 1024 * 1024,
                   let profile = try? decoder.decode(GameRuntimeProfile.self, from: data),

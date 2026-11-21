@@ -196,7 +196,8 @@ required = {
         "org.webmproject.webp",
     ],
     "src/Runtime/ExternalDriveStore.swift": [
-        "maximumBytes: Int? = nil",
+        "maximumBytes: Int? = 64 * 1024 * 1024",
+        "values.isRegularFile == true",
         "CocoaError(.fileReadTooLarge)",
         "replaceItemAt(destination, withItemAt: temporary)",
     ],
