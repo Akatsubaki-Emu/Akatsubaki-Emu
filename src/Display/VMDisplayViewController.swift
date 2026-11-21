@@ -16,6 +16,8 @@ final class VMDisplayViewController: UIViewController {
     private let functionKeyBar = UIStackView()
     private var keyboardObservers: [NSObjectProtocol] = []
     private var lastMotionStatusUpdate: TimeInterval = 0
+    private var lastReportedGuestFrameWidth = 0
+    private var lastReportedGuestFrameHeight = 0
 
     init(configuration: VMConfiguration, diskImage: URL) {
         self.configuration = configuration
@@ -89,7 +91,12 @@ final class VMDisplayViewController: UIViewController {
         vncClient.onFrame = { [weak self] data, width, height in
             guard let self else { return }
             self.virtioGPU.submit(.updateFramebuffer(data, width: width, height: height))
-            DispatchQueue.main.async {
+            guard self.lastReportedGuestFrameWidth != width
+                || self.lastReportedGuestFrameHeight != height else { return }
+            self.lastReportedGuestFrameWidth = width
+            self.lastReportedGuestFrameHeight = height
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
                 if case .failed = self.engine.state { return }
                 self.status.text = "\(width) × \(height) guest • \(self.configuration.displayWidth) × \(self.configuration.displayHeight) target • Metal"
             }
