@@ -239,6 +239,35 @@ struct InterpreterTests {
         precondition(leaExit == .unsupportedInstruction(address: 7))
         precondition(lea.registerValue(3) == 128)
 
+        let memoryArithmeticMemory = GuestMemory(size: 256)
+        precondition(memoryArithmeticMemory.write(Data([0x02, 0x00, 0x00, 0x00]), offset: 0x80))
+        let memoryArithmeticProgram: [UInt8] = [
+            0xB8, 0x03, 0x00, 0x00, 0x00,
+            0x01, 0x05, 0x75, 0x00, 0x00, 0x00,
+            0x8B, 0x1D, 0x6F, 0x00, 0x00, 0x00,
+            0x0F, 0x0B
+        ]
+        precondition(memoryArithmeticMemory.write(Data(memoryArithmeticProgram), offset: 0))
+        let memoryArithmetic = X86_64Interpreter(memory: memoryArithmeticMemory)
+        try memoryArithmetic.reset(entryPoint: 0)
+        let memoryArithmeticExit = try memoryArithmetic.run(maxInstructions: 8)
+        precondition(memoryArithmeticExit == .unsupportedInstruction(address: 17))
+        precondition(memoryArithmetic.registerValue(3) == 5)
+        precondition(memoryArithmeticMemory.readUInt32(offset: 0x80) == 5)
+
+        let lea32Memory = GuestMemory(size: 256)
+        let lea32Program: [UInt8] = [
+            0x48, 0xBC, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x8D, 0x5C, 0x24, 0x08,
+            0x0F, 0x0B
+        ]
+        precondition(lea32Memory.write(Data(lea32Program), offset: 0))
+        let lea32 = X86_64Interpreter(memory: lea32Memory)
+        try lea32.reset(entryPoint: 0)
+        let lea32Exit = try lea32.run(maxInstructions: 4)
+        precondition(lea32Exit == .unsupportedInstruction(address: 14))
+        precondition(lea32.registerValue(3) == 0x108)
+
         let truncatedShortMemory = GuestMemory(size: 1)
         precondition(truncatedShortMemory.write(Data([0x74]), offset: 0))
         let truncatedShort = X86_64Interpreter(memory: truncatedShortMemory)
@@ -308,6 +337,20 @@ struct InterpreterTests {
         let retImmediateExit = try retImmediate.run(maxInstructions: 4)
         precondition(retImmediateExit == .unsupportedInstruction(address: 3))
         precondition(retImmediate.registerValue(4) == 0x110)
+
+        let truncatedRetMemory = GuestMemory(size: 1)
+        precondition(truncatedRetMemory.write(Data([0xC2]), offset: 0))
+        let truncatedRet = X86_64Interpreter(memory: truncatedRetMemory)
+        try truncatedRet.reset(entryPoint: 0)
+        let truncatedRetExit = try truncatedRet.run(maxInstructions: 1)
+        precondition(truncatedRetExit == .memoryFault(address: 1))
+
+        let indirectFaultMemory = GuestMemory(size: 64)
+        precondition(indirectFaultMemory.write(Data([0xFF, 0x25, 0x00, 0x10, 0x00, 0x00]), offset: 0))
+        let indirectFault = X86_64Interpreter(memory: indirectFaultMemory)
+        try indirectFault.reset(entryPoint: 0)
+        let indirectFaultExit = try indirectFault.run(maxInstructions: 1)
+        precondition(indirectFaultExit == .memoryFault(address: 0x1006))
 
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [

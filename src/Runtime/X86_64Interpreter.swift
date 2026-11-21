@@ -123,8 +123,10 @@ final class X86_64Interpreter: GuestCPUBackend {
                 }
                 rip = target
             case 0xC2: // RET imm16
-                guard let adjustment = fetchUInt16(),
-                      let target = readUInt64(at: registers[4]) else {
+                guard let adjustment = fetchUInt16() else {
+                    return .memoryFault(address: rip)
+                }
+                guard let target = readUInt64(at: registers[4]) else {
                     return .memoryFault(address: registers[4])
                 }
                 let (nextStackPointer, overflow) = registers[4].addingReportingOverflow(8 + UInt64(adjustment))
@@ -144,10 +146,12 @@ final class X86_64Interpreter: GuestCPUBackend {
                     return .memoryFault(address: rip)
                 }
                 let group = (modrm >> 3) & 7
-                guard group == 2 || group == 4 || group == 6,
-                      let target = readOperand(decoded.operand, width64: true) else {
+                guard group == 2 || group == 4 || group == 6 else {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)
+                }
+                guard let target = readOperand(decoded.operand, width64: true) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
                 }
                 if group == 2 || group == 6 {
                     guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }

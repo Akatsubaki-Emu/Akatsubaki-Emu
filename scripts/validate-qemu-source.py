@@ -188,10 +188,12 @@ required = {
         "private func decodeRM(_ modrm: UInt8, rex: UInt8)",
         "usesRIPRelative",
         "let scale = UInt64(1) << ((sib >> 6) & 3)",
-        "32-bit GPR writes zero-extend",
+        "registers[index] = width64 ? value : UInt64(UInt32(truncatingIfNeeded: value))",
         "PUSH RSP stores the pre-decrement value.",
         "POP RSP loads the popped value directly",
-    ],
+
+        "guard let adjustment = fetchUInt16() else",
+        "return .memoryFault(address: operandAddress(decoded.operand))",    ],
     "scripts/tests/test_linux_process_stack.swift": [
         "auxiliary[3] == 0x40040",
         "auxiliary[25] == result.randomAddress",
@@ -213,7 +215,12 @@ required = {
         "precondition(c7.registerValue(0) == 0x12345678)",
         "precondition(truncatedShortExit == .memoryFault(address: 1))",
         "precondition(truncatedNearExit == .memoryFault(address: 2))",
-    ],
+
+        "precondition(memoryArithmetic.registerValue(3) == 5)",
+        "precondition(memoryArithmeticMemory.readUInt32(offset: 0x80) == 5)",
+        "precondition(lea32.registerValue(3) == 0x108)",
+        "precondition(truncatedRetExit == .memoryFault(address: 1))",
+        "precondition(indirectFaultExit == .memoryFault(address: 0x1006))",    ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
         "\"-vnc\", \"127.0.0.1:0\"",
