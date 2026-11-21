@@ -570,6 +570,45 @@ struct InterpreterTests {
         precondition(decInterpreter.registerValue(0) == 0xFFFF_FFFF)
         precondition(decInterpreter.conditionFlags & X86_64ALU.carry == 0)
 
+        let ripC7Memory = GuestMemory(size: 128)
+        precondition(ripC7Memory.write(Data([0xC7, 0x05, 0x16, 0x00, 0x00, 0x00,
+                                             0x78, 0x56, 0x34, 0x12, 0x0F, 0x0B]), offset: 0))
+        let ripC7 = X86_64Interpreter(memory: ripC7Memory)
+        try ripC7.reset(entryPoint: 0)
+        let ripC7Exit = try ripC7.run(maxInstructions: 3)
+        precondition(ripC7Exit == .unsupportedInstruction(address: 10))
+        precondition(ripC7Memory.readUInt32(offset: 0x20) == 0x12345678)
+
+        let ripTestMemory = GuestMemory(size: 128)
+        precondition(ripTestMemory.write(Data([0xF7, 0x05, 0x16, 0x00, 0x00, 0x00,
+                                               0x01, 0x00, 0x00, 0x00, 0x0F, 0x0B]), offset: 0))
+        precondition(ripTestMemory.writeUInt32(1, offset: 0x20))
+        let ripTest = X86_64Interpreter(memory: ripTestMemory)
+        try ripTest.reset(entryPoint: 0)
+        let ripTestExit = try ripTest.run(maxInstructions: 3)
+        precondition(ripTestExit == .unsupportedInstruction(address: 10))
+        precondition(ripTest.conditionFlags & X86_64ALU.zero == 0)
+
+        let ripIMULMemory = GuestMemory(size: 128)
+        precondition(ripIMULMemory.write(Data([0x6B, 0x05, 0x19, 0x00, 0x00, 0x00,
+                                               0xFE, 0x0F, 0x0B]), offset: 0))
+        precondition(ripIMULMemory.writeUInt32(4, offset: 0x20))
+        let ripIMUL = X86_64Interpreter(memory: ripIMULMemory)
+        try ripIMUL.reset(entryPoint: 0)
+        let ripIMULExit = try ripIMUL.run(maxInstructions: 3)
+        precondition(ripIMULExit == .unsupportedInstruction(address: 7))
+        precondition(ripIMUL.registerValue(0) == 0xFFFF_FFF8)
+
+        let ripAddMemory = GuestMemory(size: 128)
+        precondition(ripAddMemory.write(Data([0x83, 0x05, 0x19, 0x00, 0x00, 0x00,
+                                              0x02, 0x0F, 0x0B]), offset: 0))
+        precondition(ripAddMemory.writeUInt32(5, offset: 0x20))
+        let ripAdd = X86_64Interpreter(memory: ripAddMemory)
+        try ripAdd.reset(entryPoint: 0)
+        let ripAddExit = try ripAdd.run(maxInstructions: 3)
+        precondition(ripAddExit == .unsupportedInstruction(address: 7))
+        precondition(ripAddMemory.readUInt32(offset: 0x20) == 7)
+
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [
             0xB8, 0x0C, 0x00, 0x00, 0x00,
