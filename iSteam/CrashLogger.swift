@@ -6,6 +6,7 @@ final class CrashLogger {
     static let shared = CrashLogger()
     private let queue = DispatchQueue(label: "com.chantinlongx.iSteam.crashlog")
     private let fileManager = FileManager.default
+    private let maximumLogBytes = 5 * 1024 * 1024
     private init() {}
 
     private var directory: URL {
@@ -24,8 +25,16 @@ final class CrashLogger {
     func write(_ message: String) {
         queue.async {
             try? self.fileManager.createDirectory(at: self.directory, withIntermediateDirectories: true)
-            let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(message)\n"
+            let safeMessage = String(message.prefix(8192))
+            let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(safeMessage)\n"
             if let data = line.data(using: .utf8) {
+                if let attributes = try? self.fileManager.attributesOfItem(atPath: self.latestLogURL.path),
+                   let size = attributes[.size] as? NSNumber,
+                   size.intValue >= self.maximumLogBytes {
+                    let previous = self.directory.appendingPathComponent("previous-crash.log")
+                    try? self.fileManager.removeItem(at: previous)
+                    try? self.fileManager.moveItem(at: self.latestLogURL, to: previous)
+                }
                 if let handle = try? FileHandle(forWritingTo: self.latestLogURL) {
                     try? handle.seekToEnd()
                     try? handle.write(contentsOf: data)
@@ -55,5 +64,7 @@ final class CrashLogger {
         try? text.data(using: .utf8)?.write(to: latestLogURL)
     }
 
-    func clear() { try? fileManager.removeItem(at: latestLogURL) }
+    func clear() {
+        queue.async { try? self.fileManager.removeItem(at: self.latestLogURL) }
+    }
 }
