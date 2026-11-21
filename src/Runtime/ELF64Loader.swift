@@ -52,6 +52,7 @@ final class ELF64Loader {
         let data: Data
         do { data = try Data(contentsOf: url, options: [.mappedIfSafe]) }
         catch { throw LoadError.unreadable }
+        guard data.count <= 512 * 1024 * 1024 else { throw LoadError.fileTooLarge }
 
         guard data.count >= 64, data[0] == 0x7F, data[1] == 0x45,
               data[2] == 0x4C, data[3] == 0x46 else { throw LoadError.invalidMagic }
