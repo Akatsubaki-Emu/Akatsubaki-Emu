@@ -96,10 +96,10 @@ printf '%s\n' "$runtime_relative" > "$OUT/QEMU/runtime-library-path.txt"
 printf '%s\n' "$exports" | grep -E ' _?qemu_(init|main_loop|cleanup)$| _?qemu_system_shutdown_request$' > "$OUT/exports.txt" || true
 
 data_dir=""
-found="$(find "$APP" -type f \\( \
+found="$(find "$APP" -type f \( \
   -name 'bios-256k.bin' -o -name 'vgabios-stdvga.bin' \
   -o -name 'edk2-x86_64-code.fd' -o -name 'edk2-x86_64-code.secboot.fd' \
-  -o -name 'OVMF_CODE.fd' -o -name 'OVMF_CODE_4M.fd' \\) -print -quit 2>/dev/null || true)"
+  -o -name 'OVMF_CODE.fd' -o -name 'OVMF_CODE_4M.fd' \) -print -quit 2>/dev/null || true)"
 if [ -n "$found" ]; then data_dir="$(dirname "$found")"; fi
 if [ -z "$data_dir" ]; then
   echo "QEMU lifecycle library was found, but no recognizable QEMU BIOS/firmware data files were found." >&2
@@ -113,11 +113,11 @@ printf '%s\n' "$runtime_relative" > "$OUT/QEMU/runtime-library-path.txt"
 while IFS= read -r firmware_file; do
   [ -n "$firmware_file" ] || continue
   cp "$firmware_file" "$OUT/QEMU/$(basename "$firmware_file")"
-done < <(find "$APP" -type f \\( \
+done < <(find "$APP" -type f \( \
   -name 'OVMF_CODE.fd' -o -name 'OVMF_CODE_4M.fd' \
   -o -name 'OVMF_VARS.fd' -o -name 'OVMF_VARS_4M.fd' \
   -o -name 'edk2-x86_64-code.fd' -o -name 'edk2-x86_64-code.secboot.fd' \
-  -o -name 'edk2-x86_64-vars.fd' \\) -print 2>/dev/null || true)
+  -o -name 'edk2-x86_64-vars.fd' \) -print 2>/dev/null || true)
 
 cat > "$OUT/BUILD-INFO.txt" <<EOF
 Source: utmapp/UTM at the revision checked out by the workflow

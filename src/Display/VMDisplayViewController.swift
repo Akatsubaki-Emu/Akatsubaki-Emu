@@ -127,11 +127,17 @@ final class VMDisplayViewController: UIViewController {
     private func addKeyboardControls() {
         keyboardToggle.translatesAutoresizingMaskIntoConstraints = false
         keyboardToggle.setTitle("⌨ Keyboard", for: .normal)
-        keyboardToggle.setTitleColor(.white, for: .normal)
-        keyboardToggle.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
-        keyboardToggle.backgroundColor = UIColor.black.withAlphaComponent(0.78)
-        keyboardToggle.layer.cornerRadius = 9
-        keyboardToggle.contentEdgeInsets = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+        var keyboardConfiguration = UIButton.Configuration.filled()
+        keyboardConfiguration.baseBackgroundColor = UIColor.black.withAlphaComponent(0.78)
+        keyboardConfiguration.baseForegroundColor = .white
+        keyboardConfiguration.cornerStyle = .medium
+        keyboardConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12)
+        keyboardConfiguration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .systemFont(ofSize: 13, weight: .semibold)
+            return outgoing
+        }
+        keyboardToggle.configuration = keyboardConfiguration
         keyboardToggle.addTarget(self, action: #selector(toggleTouchKeyboard), for: .touchUpInside)
         view.addSubview(keyboardToggle)
 
