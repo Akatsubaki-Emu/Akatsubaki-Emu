@@ -129,5 +129,13 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("atomic_load(&g_main_loop_active)", source)
 
 
+    def test_profile_directory_enumeration_failure_blocks_incomplete_export(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Steam" / "GameRuntimeProfile.swift").read_text(encoding="utf-8")
+        self.assertIn("private func profileFiles() throws -> [URL]", source)
+        self.assertIn("guard let files = try? profileFiles() else { return true }", source)
+        self.assertIn("refusing to export an incomplete library backup", source)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -170,17 +170,25 @@ final class GameRuntimeProfileStore {
         if fm.fileExists(atPath: file.path) { try fm.removeItem(at: file) }
     }
 
-    private var profileFiles: [URL] {
-        (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil))?
-            .filter { $0.pathExtension == "json" } ?? []
+    private func profileFiles() throws -> [URL] {
+        try fm.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ).filter { $0.pathExtension == "json" }
     }
 
     var hasUnreadableProfiles: Bool {
-        profileFiles.contains { readProfile(at: $0) == nil }
+        guard let files = try? profileFiles() else { return true }
+        return files.contains { readProfile(at: $0) == nil }
     }
 
     var allProfiles: [GameRuntimeProfile] {
-        profileFiles.compactMap { readProfile(at: $0) }
+        guard let files = try? profileFiles() else {
+            EmulationLog.shared.write("Game profile directory is unavailable; refusing to export an incomplete library backup")
+            return []
+        }
+        return files.compactMap { readProfile(at: $0) }
             .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 }

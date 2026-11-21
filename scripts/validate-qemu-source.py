@@ -260,6 +260,8 @@ required = {
     ],
     "src/Steam/GameRuntimeProfile.swift": [
         "var hasUnreadableProfiles: Bool",
+        "private func profileFiles() throws -> [URL]",
+        "guard let files = try? profileFiles() else { return true }",
         "profile.validate()",
         "launchArguments.count <= 256",
         "environment.count <= 128",
