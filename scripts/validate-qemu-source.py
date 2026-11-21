@@ -234,7 +234,8 @@ required = {
         "POP RSP loads the popped value directly",
         "guard let adjustment = fetchUInt16() else",
         "return .memoryFault(address: operandAddress(decoded.operand))"
-    ],
+
+        "case 0xC3:",    ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
         "hello from static ELF",
@@ -257,6 +258,7 @@ required = {
         "precondition(leave.registerValue(4) == 0x200)",
         "precondition(indirect.registerValue(3) == 0x42)",
         "precondition(retImmediate.registerValue(4) == 0x110)",
+        "precondition(ret.registerValue(4) == 64)",
         "syscallInterpreter.configureLinuxProcess(programBreak: 0x1000, stackBase: 0x3F0000)",
         "precondition(orInterpreter.registerValue(0) == 3)",
         "precondition(c7.registerValue(0) == 0x12345678)",

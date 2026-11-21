@@ -183,6 +183,82 @@ final class X86_64Interpreter: GuestCPUBackend {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)
                 }
+            case 0xFF: // INC, DEC, indirect CALL, JMP and PUSH
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
+                }
+                let group = (modrm >> 3) & 7
+                if group == 0 || group == 1 {
+                    let width64 = rex & 0x08 != 0
+                    guard let source = readOperand(decoded.operand, width64: width64) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                    let previousCarry = flags & X86_64ALU.carry
+                    let result = group == 0
+                        ? X86_64ALU.add(source, 1, width64: width64, flags: flags)
+                        : X86_64ALU.subtract(source, 1, width64: width64, flags: flags)
+                    flags = (result.flags & ~X86_64ALU.carry) | previousCarry
+                    guard writeOperand(result.value, to: decoded.operand, width64: width64) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                } else {
+                    guard group == 2 || group == 4 || group == 6 else {
+                        rip = instructionAddress
+                        return .unsupportedInstruction(address: instructionAddress)
+                    }
+                    guard let target = readOperand(decoded.operand, width64: true) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                    if group == 2 || group == 6 {
+                        guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
+                        registers[4] -= 8
+                        let value = group == 2 ? rip : target
+                        guard memory.writeUInt64(value, offset: registers[4]) else {
+                            return .memoryFault(address: registers[4])
+                        }
+                    }
+                    if group != 6 { rip = target }
+                }
+            case 0xC3: // RET
+                guard let target = readUInt64(at: registers[4]) else {
+                    return .memoryFault(address: registers[4])
+                }
+                registers[4] &+= 8
+                rip = target
+            case 0xC1, 0xD1, 0xD3: // SHL, SHR and SAR
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex, trailingImmediateBytes: opcode == 0xC1 ? 1 : 0) else {
+                    return .memoryFault(address: rip)
+                }
+                let group = (modrm >> 3) & 7
+                let kind: X86_64ALU.ShiftKind
+                switch group {
+                case 4: kind = .left
+                case 5: kind = .logicalRight
+                case 7: kind = .arithmeticRight
+                default:
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                let count: UInt8
+                switch opcode {
+                case 0xC1:
+                    guard let immediate = fetchByte() else { return .memoryFault(address: rip) }
+                    count = immediate
+                case 0xD1:
+                    count = 1
+                default:
+                    count = UInt8(truncatingIfNeeded: registers[1])
+                }
+                let width64 = rex & 0x08 != 0
+                guard let source = readOperand(decoded.operand, width64: width64) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
+                let result = X86_64ALU.shift(source, count: count, kind: kind,
+                                             width64: width64, flags: flags)
+                flags = result.flags
+                guard writeOperand(result.value, to: decoded.operand, width64: width64) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
             case 0xC7:
                 guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex, trailingImmediateBytes: 4) else {
                     return .memoryFault(address: rip)

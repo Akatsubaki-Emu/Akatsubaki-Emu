@@ -600,6 +600,15 @@ struct InterpreterTests {
         let unsupportedF7Exit = try unsupportedF7.run(maxInstructions: 1)
         precondition(unsupportedF7Exit == .unsupportedInstruction(address: 0))
 
+        let retMemory = GuestMemory(size: 64)
+        precondition(retMemory.writeUInt64(8, offset: 56))
+        precondition(retMemory.write(Data([0xC3, 0x0F, 0x0B]), offset: 0))
+        let ret = X86_64Interpreter(memory: retMemory)
+        try ret.reset(entryPoint: 0)
+        let retExit = try ret.run(maxInstructions: 3)
+        precondition(retExit == .unsupportedInstruction(address: 8))
+        precondition(ret.registerValue(4) == 64)
+
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [
             0xB8, 0x0C, 0x00, 0x00, 0x00,
