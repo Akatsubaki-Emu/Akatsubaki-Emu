@@ -68,6 +68,21 @@ final class GuestMemory {
     }
 
     @discardableResult
+    func write(_ data: Data, sourceRange: Range<Int>, offset: UInt64) -> Bool {
+        guard let native, sourceRange.lowerBound >= 0,
+              sourceRange.upperBound <= data.count,
+              offset <= size,
+              UInt64(sourceRange.count) <= size - offset else { return false }
+        if sourceRange.isEmpty { return true }
+        return data.withUnsafeBytes { bytes in
+            guard let base = bytes.baseAddress else { return false }
+            let source = base.advanced(by: sourceRange.lowerBound)
+                .assumingMemoryBound(to: UInt8.self)
+            return isteam_guest_memory_write(native, offset, source, sourceRange.count)
+        }
+    }
+
+    @discardableResult
     func write(_ data: Data, offset: UInt64) -> Bool {
         guard let native, offset <= size, UInt64(data.count) <= size - offset else { return false }
         if data.isEmpty { return true }

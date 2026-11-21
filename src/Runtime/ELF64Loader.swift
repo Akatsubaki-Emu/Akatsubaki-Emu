@@ -174,17 +174,11 @@ final class ELF64Loader {
                 throw LoadError.segmentOutsideGuestMemory
             }
         }
-        let chunkSize = 64 * 1024
         for (segment, fileOffset) in pending where segment.fileSize > 0 {
-            var copied: UInt64 = 0
-            while copied < segment.fileSize {
-                let amount = Int(min(UInt64(chunkSize), segment.fileSize - copied))
-                let sourceStart = fileOffset + Int(copied)
-                let bytes = data.subdata(in: sourceStart..<(sourceStart + amount))
-                guard memory.write(bytes, offset: segment.guestAddress + copied) else {
-                    throw LoadError.segmentOutsideGuestMemory
-                }
-                copied += UInt64(amount)
+            let sourceEnd = fileOffset + Int(segment.fileSize)
+            guard memory.write(data, sourceRange: fileOffset..<sourceEnd,
+                               offset: segment.guestAddress) else {
+                throw LoadError.segmentOutsideGuestMemory
             }
         }
         let maximumGuestAddress = orderedSegments.reduce(UInt64(0)) { max($0, $1.guestAddress + $1.memorySize) }
