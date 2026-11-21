@@ -61,7 +61,7 @@ extension GameStore {
 
     var allTags: [String] {
         var seen = Set<String>()
-        return games.flatMap(\\.tags)
+        return games.flatMap(\.tags)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && seen.insert($0.folding(options: .caseInsensitive, locale: .current)).inserted }
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
