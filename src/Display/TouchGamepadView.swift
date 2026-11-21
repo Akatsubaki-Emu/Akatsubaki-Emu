@@ -74,10 +74,9 @@ final class TouchGamepadView: UIView {
             if !didApplyLayout {
                 didApplyLayout = true
                 applyDefaultLayout()
-            }
-            if !editMode, !restoreLayout() {
-                // No saved layout (or an obsolete layout shape): recompute defaults
-                // for the new bounds instead of leaving controls at old coordinates.
+            } else if !restoreLayout() {
+                // Restore normalized coordinates in both modes so resizing the
+                // window cannot strand controls off-screen while editing.
                 applyDefaultLayout()
             }
         }
