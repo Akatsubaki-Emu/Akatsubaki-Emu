@@ -140,6 +140,10 @@ required = {
         "precondition(sibMemory.readUInt64(offset: 0x108) == 0x1122334455667788)",
         "precondition(lea.registerValue(3) == 128)",
     ],
+    "scripts/tests/test_x86_64_interpreter.swift": [
+        "precondition(truncatedShortExit == .memoryFault(address: 1))",
+        "precondition(truncatedNearExit == .memoryFault(address: 2))",
+    ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
         "\"-vnc\", \"127.0.0.1:0\"",

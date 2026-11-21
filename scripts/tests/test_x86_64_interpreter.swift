@@ -215,6 +215,20 @@ struct InterpreterTests {
         precondition(leaExit == .unsupportedInstruction(address: 7))
         precondition(lea.registerValue(3) == 128)
 
+        let truncatedShortMemory = GuestMemory(size: 1)
+        precondition(truncatedShortMemory.write(Data([0x74]), offset: 0))
+        let truncatedShort = X86_64Interpreter(memory: truncatedShortMemory)
+        try truncatedShort.reset(entryPoint: 0)
+        let truncatedShortExit = try truncatedShort.run(maxInstructions: 1)
+        precondition(truncatedShortExit == .memoryFault(address: 1))
+
+        let truncatedNearMemory = GuestMemory(size: 3)
+        precondition(truncatedNearMemory.write(Data([0x0F, 0x84, 0x01]), offset: 0))
+        let truncatedNear = X86_64Interpreter(memory: truncatedNearMemory)
+        try truncatedNear.reset(entryPoint: 0)
+        let truncatedNearExit = try truncatedNear.run(maxInstructions: 1)
+        precondition(truncatedNearExit == .memoryFault(address: 2))
+
         let unsupportedMemory = GuestMemory(size: 4)
         precondition(unsupportedMemory.write(Data([0x0F, 0x0B]), offset: 0))
         let unsupported = X86_64Interpreter(memory: unsupportedMemory)
