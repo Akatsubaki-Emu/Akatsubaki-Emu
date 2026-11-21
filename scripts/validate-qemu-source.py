@@ -422,7 +422,7 @@ if release_concurrency_start < 0 or release_concurrency_end < 0:
 else:
     release_concurrency = release_workflow[release_concurrency_start:release_concurrency_end]
     for token in [
-        "group: isteam-release${{ inputs.channel == 'Main' && '-main' || '' }}",
+        "group: isteam-release${{ github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && '-main' || '' }}",
         "cancel-in-progress: true",
     ]:
         if token not in release_concurrency:
