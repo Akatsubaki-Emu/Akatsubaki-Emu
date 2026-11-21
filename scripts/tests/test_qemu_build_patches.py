@@ -20,6 +20,7 @@ class QEMUBuildPatchTests(unittest.TestCase):
             "config_host_data.set('CONFIG_POSIX_MEMALIGN', "
             "cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
             "emulator_link_args = []\n"
+            "emulator_link_args += ['-Wl,-force_load,libqemuutil.a']\n"
             "link_args = emulator_link_args\n"
         )
         runtime = "/toolchain/libclang_rt.ios.a"
@@ -30,6 +31,8 @@ class QEMUBuildPatchTests(unittest.TestCase):
         self.assertIn("emulator_link_args += ['-Wl,-force_load," + runtime + "']", twice)
         self.assertLess(twice.index("emulator_link_args = []"), twice.index("emulator_link_args +="))
         self.assertIn("link_args = emulator_link_args", twice)
+        self.assertIn("emulator_link_args += ['-Wl,-force_load,libqemuutil.a']", twice)
+        self.assertEqual(twice.count("emulator_link_args += "), 2)
         self.assertNotIn("add_project_link_arguments", twice)
 
     def test_qemu_meson_patch_replaces_a_stale_runtime_path(self):
@@ -37,12 +40,34 @@ class QEMUBuildPatchTests(unittest.TestCase):
             "project('qemu', 'c')\n"
             "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
             "emulator_link_args = []\n"
+            "emulator_link_args += ['-Wl,-force_load,libqemuutil.a']\n"
         )
         first = patch_qemu_meson_ios.patch_source(source, "/old/libclang_rt.ios.a")
-        updated = patch_qemu_meson_ios.patch_source(first, "/new/libclang_rt.ios.a")
+        legacy = first.replace(
+            patch_qemu_meson_ios.MARKER_COMMENT,
+            patch_qemu_meson_ios.LEGACY_MARKER_COMMENT
+        )
+        updated = patch_qemu_meson_ios.patch_source(legacy, "/new/libclang_rt.ios.a")
+        self.assertNotIn(patch_qemu_meson_ios.LEGACY_MARKER_COMMENT, updated)
         self.assertNotIn("/old/libclang_rt.ios.a", updated)
         self.assertIn("-Wl,-force_load,/new/libclang_rt.ios.a", updated)
-        self.assertEqual(updated.count("emulator_link_args += "), 1)
+        self.assertIn("emulator_link_args += ['-Wl,-force_load,libqemuutil.a']", updated)
+        self.assertEqual(updated.count("emulator_link_args += "), 2)
+
+    def test_qemu_meson_patch_fails_if_owned_marker_is_detached(self):
+        source = (
+            "project('qemu', 'c')\n"
+            "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
+            "emulator_link_args = []\n"
+        )
+        patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+        detached = patched.replace(
+            patch_qemu_meson_ios.MARKER_COMMENT + "\nemulator_link_args +=",
+            patch_qemu_meson_ios.MARKER_COMMENT + "\n# upstream edit\nemulator_link_args +=",
+            1
+        )
+        with self.assertRaisesRegex(SystemExit, "marker is not followed by its link argument"):
+            patch_qemu_meson_ios.patch_source(detached, "/toolchain/libclang_rt.ios.a")
 
     def test_qemu_meson_patch_fails_if_emulator_link_anchor_changes(self):
         source = (

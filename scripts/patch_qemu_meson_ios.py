@@ -4,6 +4,9 @@ from pathlib import Path
 import os
 import sys
 
+MARKER_COMMENT = "# i-Steam iOS: force-load Apple's compiler runtime into the emulator dylib."
+LEGACY_MARKER_COMMENT = "# i-Steam iOS: put compiler-rt on the actual emulator library link edge."
+
 
 def patch_source(source: str, runtime_path: str) -> str:
     old_probe = "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))"
@@ -20,26 +23,46 @@ def patch_source(source: str, runtime_path: str) -> str:
     anchor = "emulator_link_args = []"
 
     lines = source.splitlines()
-    existing = [
-        index for index, line in enumerate(lines)
+    owned_comments = [i for i, line in enumerate(lines) if line.strip() == MARKER_COMMENT]
+    owned_runtime_lines = [
+        i for i, line in enumerate(lines)
         if line.strip().startswith("emulator_link_args += ['-Wl,-force_load,")
+        and "libclang_rt.ios.a" in line
     ]
-    if existing:
-        first = existing[0]
-        lines[first] = marker
-        for index in reversed(existing[1:]):
-            del lines[index]
-        source = "\n".join(lines) + ("\n" if source.endswith("\n") else "")
+
+    if owned_comments:
+        first_comment = owned_comments[0]
+        first_runtime = first_comment + 1
+        if (first_runtime >= len(lines)
+                or not lines[first_runtime].strip().startswith("emulator_link_args += ")
+                or "libclang_rt.ios.a" not in lines[first_runtime]):
+            raise SystemExit("QEMU meson.build changed: compiler-runtime marker is not followed by its link argument")
+        output = []
+        for index, line in enumerate(lines):
+            if index == first_comment:
+                output.extend((MARKER_COMMENT, marker))
+            elif (index == first_runtime or index in owned_comments[1:] or index in owned_runtime_lines
+                  or line.strip() == LEGACY_MARKER_COMMENT):
+                continue
+            else:
+                output.append(line)
+        lines = output
+    elif owned_runtime_lines:
+        first_runtime = owned_runtime_lines[0]
+        output = []
+        for index, line in enumerate(lines):
+            if index == first_runtime:
+                output.extend((MARKER_COMMENT, marker))
+            elif index in owned_runtime_lines or line.strip() == LEGACY_MARKER_COMMENT:
+                continue
+            else:
+                output.append(line)
+        lines = output
     else:
         if anchor not in source:
             raise SystemExit("QEMU meson.build changed: emulator_link_args declaration not found")
-        source = source.replace(
-            anchor,
-            anchor + "\n"
-            "# i-Steam iOS: put compiler-rt on the actual emulator library link edge.\n"
-            + marker,
-            1
-        )
+        source = source.replace(anchor, anchor + "\n" + MARKER_COMMENT + "\n" + marker, 1)
+        lines = source.splitlines()
 
     if new_probe not in source or marker not in source:
         raise SystemExit("QEMU meson.build patch verification failed")
