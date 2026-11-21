@@ -271,8 +271,25 @@ final class LinuxSyscallDispatcher {
         var data = Data(count: count)
         let generated = data.withUnsafeMutableBytes { bytes -> Bool in
             guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
-            for index in 0..<count {
-                base[index] = UInt8.random(in: 0...255, using: &generator)
+            var offset = 0
+            while count - offset >= MemoryLayout<UInt64>.size {
+                var word = generator.next().littleEndian
+                let copied = withUnsafeBytes(of: &word) { source -> Bool in
+                    guard let sourceBase = source.baseAddress else { return false }
+                    base.advanced(by: offset).copyMemory(from: sourceBase, byteCount: MemoryLayout<UInt64>.size)
+                    return true
+                }
+                guard copied else { return false }
+                offset += MemoryLayout<UInt64>.size
+            }
+            if offset < count {
+                var word = generator.next().littleEndian
+                let copied = withUnsafeBytes(of: &word) { source -> Bool in
+                    guard let sourceBase = source.baseAddress else { return false }
+                    base.advanced(by: offset).copyMemory(from: sourceBase, byteCount: count - offset)
+                    return true
+                }
+                guard copied else { return false }
             }
             return true
         }
