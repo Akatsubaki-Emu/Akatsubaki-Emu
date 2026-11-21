@@ -165,6 +165,7 @@ required = {
         "static func and(",
         "static func or(",
         "static func multiply(",
+        "static func shift("
         "static func subtract(",
         "static func condition(",
         "static func makeFlags("
@@ -183,6 +184,7 @@ required = {
         "case 0x89, 0x8B:",
         "case 0x8D:",
         "case 0xC7:",
+        "case 0xC1, 0xD1, 0xD3:",
         "case 0x63:",
         "case 0x69, 0x6B:",
         "second == 0xAF",
@@ -237,6 +239,10 @@ required = {
         "precondition(movExtend.registerValue(1) == 0xFFFF_F234)",
         "precondition(byteExtend.registerValue(1) == 0xFFFF_FFF2)",
         "precondition(highByte.registerValue(0) == 24)",
+        "precondition(shiftLeft.registerValue(0) == 0)",
+        "precondition(shiftRight.registerValue(0) == 0x4000_0000)",
+        "precondition(shiftArithmetic.registerValue(0) == 0xC000_0000)",
+        "precondition(shiftCL.registerValue(0) == 4)",
         "precondition(truncatedShortExit == .memoryFault(address: 1))",
         "precondition(truncatedNearExit == .memoryFault(address: 2))",
         "precondition(memoryArithmetic.registerValue(3) == 5)",

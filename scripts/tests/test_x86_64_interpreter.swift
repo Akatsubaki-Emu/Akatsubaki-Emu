@@ -435,6 +435,47 @@ struct InterpreterTests {
         precondition(highByteExit == .unsupportedInstruction(address: 12))
         precondition(highByte.registerValue(0) == 24)
 
+        let shiftLeftMemory = GuestMemory(size: 32)
+        precondition(shiftLeftMemory.write(Data([0xB8, 0x00, 0x00, 0x00, 0x80,
+                                                 0xC1, 0xE0, 0x01, 0x0F, 0x0B]), offset: 0))
+        let shiftLeft = X86_64Interpreter(memory: shiftLeftMemory)
+        try shiftLeft.reset(entryPoint: 0)
+        let shiftLeftExit = try shiftLeft.run(maxInstructions: 4)
+        precondition(shiftLeftExit == .unsupportedInstruction(address: 8))
+        precondition(shiftLeft.registerValue(0) == 0)
+        precondition(shiftLeft.conditionFlags & X86_64ALU.carry != 0)
+        precondition(shiftLeft.conditionFlags & X86_64ALU.overflow != 0)
+
+        let shiftRightMemory = GuestMemory(size: 32)
+        precondition(shiftRightMemory.write(Data([0xB8, 0x00, 0x00, 0x00, 0x80,
+                                                  0xC1, 0xE8, 0x01, 0x0F, 0x0B]), offset: 0))
+        let shiftRight = X86_64Interpreter(memory: shiftRightMemory)
+        try shiftRight.reset(entryPoint: 0)
+        let shiftRightExit = try shiftRight.run(maxInstructions: 4)
+        precondition(shiftRightExit == .unsupportedInstruction(address: 8))
+        precondition(shiftRight.registerValue(0) == 0x4000_0000)
+        precondition(shiftRight.conditionFlags & X86_64ALU.overflow != 0)
+
+        let shiftArithmeticMemory = GuestMemory(size: 32)
+        precondition(shiftArithmeticMemory.write(Data([0xB8, 0x00, 0x00, 0x00, 0x80,
+                                                       0xC1, 0xF8, 0x01, 0x0F, 0x0B]), offset: 0))
+        let shiftArithmetic = X86_64Interpreter(memory: shiftArithmeticMemory)
+        try shiftArithmetic.reset(entryPoint: 0)
+        let shiftArithmeticExit = try shiftArithmetic.run(maxInstructions: 4)
+        precondition(shiftArithmeticExit == .unsupportedInstruction(address: 8))
+        precondition(shiftArithmetic.registerValue(0) == 0xC000_0000)
+        precondition(shiftArithmetic.conditionFlags & X86_64ALU.overflow == 0)
+
+        let shiftCLMemory = GuestMemory(size: 32)
+        precondition(shiftCLMemory.write(Data([0xB8, 0x01, 0x00, 0x00, 0x00,
+                                               0xB9, 0x02, 0x00, 0x00, 0x00,
+                                               0xD3, 0xE0, 0x0F, 0x0B]), offset: 0))
+        let shiftCL = X86_64Interpreter(memory: shiftCLMemory)
+        try shiftCL.reset(entryPoint: 0)
+        let shiftCLExit = try shiftCL.run(maxInstructions: 5)
+        precondition(shiftCLExit == .unsupportedInstruction(address: 12))
+        precondition(shiftCL.registerValue(0) == 4)
+
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [
             0xB8, 0x0C, 0x00, 0x00, 0x00,

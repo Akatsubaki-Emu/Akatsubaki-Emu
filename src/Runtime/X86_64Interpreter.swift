@@ -168,6 +168,40 @@ final class X86_64Interpreter: GuestCPUBackend {
                 }
                 registers[4] &+= 8
                 rip = target
+            case 0xC1, 0xD1, 0xD3: // SHL, SHR and SAR
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
+                }
+                let group = (modrm >> 3) & 7
+                let kind: X86_64ALU.ShiftKind
+                switch group {
+                case 4: kind = .left
+                case 5: kind = .logicalRight
+                case 7: kind = .arithmeticRight
+                default:
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                let count: UInt8
+                switch opcode {
+                case 0xC1:
+                    guard let immediate = fetchByte() else { return .memoryFault(address: rip) }
+                    count = immediate
+                case 0xD1:
+                    count = 1
+                default:
+                    count = UInt8(truncatingIfNeeded: registers[1])
+                }
+                let width64 = rex & 0x08 != 0
+                guard let source = readOperand(decoded.operand, width64: width64) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
+                let result = X86_64ALU.shift(source, count: count, kind: kind,
+                                             width64: width64, flags: flags)
+                flags = result.flags
+                guard writeOperand(result.value, to: decoded.operand, width64: width64) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
             case 0xC7:
                 guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
                     return .memoryFault(address: rip)

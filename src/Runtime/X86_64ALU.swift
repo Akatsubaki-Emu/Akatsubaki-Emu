@@ -82,6 +82,62 @@ enum X86_64ALU {
         return Result(value: value, flags: newFlags)
     }
 
+    enum ShiftKind {
+        case left
+        case logicalRight
+        case arithmeticRight
+    }
+
+    static func shift(_ value: UInt64, count: UInt8, kind: ShiftKind,
+                      width64: Bool, flags: UInt64) -> Result {
+        let bitCount = width64 ? 64 : 32
+        let mask = width64 ? UInt64.max : UInt64(UInt32.max)
+        let signBit = UInt64(1) << (bitCount - 1)
+        let masked = value & mask
+        let countMask: UInt8 = width64 ? 0x3F : 0x1F
+        let amount = Int(count & countMask)
+        guard amount != 0 else { return Result(value: masked, flags: flags) }
+
+        let result: UInt64
+        let carryOut: Bool
+        switch kind {
+        case .left:
+            carryOut = ((masked >> (bitCount - amount)) & 1) != 0
+            result = (masked << amount) & mask
+        case .logicalRight:
+            carryOut = ((masked >> (amount - 1)) & 1) != 0
+            result = masked >> amount
+        case .arithmeticRight:
+            carryOut = ((masked >> (amount - 1)) & 1) != 0
+            if width64 {
+                result = UInt64(bitPattern: Int64(bitPattern: masked) >> amount)
+            } else {
+                let signed = Int32(bitPattern: UInt32(truncatingIfNeeded: masked))
+                result = UInt64(UInt32(bitPattern: signed >> amount))
+            }
+        }
+
+        var updatedFlags = flags & ~(carry | parity | zero | sign)
+        if amount == 1 { updatedFlags &= ~overflow }
+        if carryOut { updatedFlags |= carry }
+        if UInt8(truncatingIfNeeded: result).nonzeroBitCount.isMultiple(of: 2) {
+            updatedFlags |= parity
+        }
+        if result & mask == 0 { updatedFlags |= zero }
+        if result & signBit != 0 { updatedFlags |= sign }
+
+        if amount == 1 {
+            let overflowOut: Bool
+            switch kind {
+            case .left: overflowOut = (result & signBit != 0) != carryOut
+            case .logicalRight: overflowOut = masked & signBit != 0
+            case .arithmeticRight: overflowOut = false
+            }
+            if overflowOut { updatedFlags |= overflow }
+        }
+        return Result(value: result, flags: updatedFlags)
+    }
+
     static func condition(_ code: UInt8, flags: UInt64) -> Bool? {
         let cf = flags & carry != 0
         let zf = flags & zero != 0
