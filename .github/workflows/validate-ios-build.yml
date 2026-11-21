@@ -60,6 +60,16 @@ jobs:
             -o "$RUNNER_TEMP/test-game-library-query"
           "$RUNNER_TEMP/test-game-library-query"
 
+      - name: Test bounded Windows PE import directory parsing
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/WindowsPEImage.swift \
+            scripts/tests/test_windows_pe_image.swift \
+            -o "$RUNNER_TEMP/test-windows-pe-image"
+          "$RUNNER_TEMP/test-windows-pe-image"
+
       - name: Test VNC key-state source arbitration
         if: matrix.scheme == 'iSteam'
         run: |

@@ -184,14 +184,23 @@ struct WindowsPEImage {
         guard directories.count > 1 else { return [] }
         let directory = directories[1]
         guard directory.rva != 0, directory.size >= 20 else { return [] }
-        var cursor = try fileOffset(forRVA: directory.rva, length: 20)
+        let directoryEnd = UInt64(directory.rva) + UInt64(directory.size)
+        guard directoryEnd <= UInt64(sizeOfImage) else {
+            throw ParseError.malformed("import directory exceeds image")
+        }
         var result: [Import] = []
-        for _ in 0..<min(Int(directory.size) / 20, 4096) {
-            try Self.require(file, cursor, 20, "import descriptor")
+        for index in 0..<min(Int(directory.size) / 20, 4096) {
+            let descriptorRVA = UInt64(directory.rva) + UInt64(index) * 20
+            guard descriptorRVA <= UInt64(UInt32.max) else {
+                throw ParseError.malformed("import descriptor RVA overflow")
+            }
+            // Map each descriptor independently. Advancing a file offset can
+            // cross a section's raw-data boundary and parse unrelated bytes as
+            // a valid descriptor from the following file region.
+            let cursor = try fileOffset(forRVA: UInt32(descriptorRVA), length: 20)
             let originalThunk = try Self.u32(file, cursor)
             let nameRVA = try Self.u32(file, cursor + 12)
             let firstThunk = try Self.u32(file, cursor + 16)
-            cursor += 20
             if originalThunk == 0 && nameRVA == 0 && firstThunk == 0 { return result }
             guard nameRVA != 0, firstThunk != 0 else { throw ParseError.malformed("incomplete import descriptor") }
             let library = try readCString(atRVA: nameRVA, limit: 512)

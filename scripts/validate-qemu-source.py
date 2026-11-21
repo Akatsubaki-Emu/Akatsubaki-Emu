@@ -48,6 +48,8 @@ required = {
     ],
     "src/Runtime/WindowsPEImage.swift": [
         "unterminated PE string within its mapped section",
+        "let descriptorRVA = UInt64(directory.rva) + UInt64(index) * 20",
+        "fileOffset(forRVA: UInt32(descriptorRVA), length: 20)",
         "Section(name: name,\n                virtualAddress:",
         "virtualSize: try u32(data, offset + 8)",
         "rawOffset: try u32(data, offset + 20)",
@@ -83,6 +85,10 @@ required = {
         "VMConfiguration.defaultSteamOS",
     ],    "src/Performance/TranslationCache.swift": [
         "SHA256.hash(data: Data(key.utf8))",
+    ],
+    "scripts/tests/test_windows_pe_image.swift": [
+        "makeImage(importDirectoryRVA: UInt32, importDirectorySize: UInt32)",
+        "Import descriptor crossing raw section boundary was accepted",
     ],
     "src/Runtime/RuntimeComponentManifest.swift": [
         "resolvingSymlinksInPath()",
