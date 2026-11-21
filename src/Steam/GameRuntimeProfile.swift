@@ -87,7 +87,7 @@ struct GameRuntimeProfile: Codable, Equatable, Identifiable {
         var errorDescription: String? {
             switch self {
             case .invalidName: return "A game profile needs a name."
-            case .invalidResolution: return "Resolution must be between 320×240 and 8192×8192."
+            case .invalidResolution: return "Resolution must be between 320×240 and 8192×8192 and fit the 64 MiB framebuffer limit."
             case .invalidFrameRate: return "Target FPS must be between 24 and 120."
             case .invalidMemory: return "Profile memory must be between 256 MB and 16384 MB."
             case .invalidCPUCount: return "Profile CPU count must be between 1 and 16."
