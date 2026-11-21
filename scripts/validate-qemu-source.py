@@ -15,8 +15,27 @@ required = {
         "let completion = QEMUOneShotCompletion()",
         "RFB FramebufferUpdateRequest is exactly 10 bytes:",
         "0, 0, 0, 0,",
+        "let is64Bit = rex & 0x08 != 0",
     ],
-    "src/Runtime/RuntimeComponentManifest.swift": [
+    "src/Runtime/WindowsPELoader.swift": [
+        "WindowsPEImage.parse(data)",
+        "is64Bit: true",
+    ],
+    "src/Runtime/WindowsPEImage.swift": [
+        "unterminated PE string within its mapped section",
+    ],
+    "iSteam/ELFValidator.swift": [
+        "guard fileType == 2",
+        "unsupportedFileType",
+    ],
+    "iSteam/LaunchSetupViewController.swift": [
+        "guestControl.selectedSegmentIndex = 2",
+        "executable-library route currently accepts Windows PE metadata only",
+    ],
+    "src/Performance/TranslationCache.swift": [
+        "SHA256.hash(data: Data(key.utf8))",
+    ],
+    "src/Runtime/RuntimeComponentManifest.swift":
         "resolvingSymlinksInPath()",
         "rootPrefix",
     ],
@@ -81,22 +100,6 @@ required = {
     "src/Runtime/ExecutionBackendRouter.swift": [
         "antiCheatAssessment == .notRequested",
         "return dynamicTranslationBackend != nil",
-        "Cached AOT translations require a dynamic engine",
-    ],
-    "src/Core/VMConfiguration.swift": [
-        "static var defaultAccelerator: Accelerator",
-        "case .automatic, .qemuJIT: return .jit",
-        "case .qemuInterpreter, .hypervisor: return .tcg",
-    ],
-    "iSteam/LaunchSetupViewController.swift": [
-        "RuntimeSettings.shared.vmMode",
-        "config.accelerator = VMConfiguration.defaultAccelerator",
-        "let selectedMode: VMExecutionMode",
-    ],
-    "src/Steam/GameRuntimeProfile.swift": [
-        "launchArguments.count <= 256",
-        "environment.count <= 128",
-        "compatibilityNotes.utf8.count <= 16_384",
     ],
     "src/Runtime/X86_64Interpreter.swift": [
         "PUSH RSP stores the pre-decrement value.",
