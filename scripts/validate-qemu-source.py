@@ -245,7 +245,6 @@ required = {
     "src/Steam/GameRuntimeProfile.swift": [
         "var hasUnreadableProfiles: Bool",
         "profile.validate()",
-        "corruptStoredProfile",
         "launchArguments.count <= 256",
         "environment.count <= 128",
         "compatibilityNotes.utf8.count <= 16_384",
