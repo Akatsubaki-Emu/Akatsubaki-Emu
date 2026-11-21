@@ -3,6 +3,11 @@ import Network
 
 /// Thread-safe one-shot gate for NWConnection callbacks that may arrive
 /// concurrently while an async continuation is waiting.
+private final class VNCPointerSendBatch {
+    var latestMessage: Data?
+    var scheduled = false
+}
+
 private final class QEMUOneShotCompletion: @unchecked Sendable {
     private let lock = NSLock()
     private var completed = false
@@ -51,6 +56,9 @@ final class QEMUVNCClient {
     private var pointerX: Int = 0
     private var pointerY: Int = 0
     private var keyState = VNCKeyState()
+    /// A separate batch per connection prevents stale queued pointer work from
+    /// leaking into a restarted VNC session.
+    private var pointerSendBatch: VNCPointerSendBatch?
     private var connected = false
     var isConnected: Bool { withStateLock { connected } }
     var onFrame: ((Data, Int, Int) -> Void)?
@@ -80,6 +88,7 @@ final class QEMUVNCClient {
                     try await self.performHandshake(candidate)
                     self.withStateLock {
                         self.connected = true
+                        self.pointerSendBatch = VNCPointerSendBatch()
                     }
                     self.onStatus?("Guest display connected • local VNC")
                     try await self.readServerMessages(candidate)
@@ -109,6 +118,7 @@ final class QEMUVNCClient {
             let group = pendingSendGroup
             connection = nil
             connected = false
+            pointerSendBatch = nil
 
             // No later input can enter the old group after connection becomes nil.
             // Queue releases after all earlier key-down packets, then cancel only
@@ -429,7 +439,30 @@ final class QEMUVNCClient {
             pointerY = nextY
             let message = Data([5, 0, UInt8((pointerX >> 8) & 0xff), UInt8(pointerX & 0xff),
                                 UInt8((pointerY >> 8) & 0xff), UInt8(pointerY & 0xff)])
-            enqueueSend(message, to: connection, in: pendingSendGroup)
+            guard let batch = pointerSendBatch else { return }
+            batch.latestMessage = message
+            guard !batch.scheduled else { return }
+            batch.scheduled = true
+            let group = pendingSendGroup
+            group.enter()
+            sendQueue.async { [self] in
+                let latestMessage = withStateLock { () -> Data? in
+                    let latest = batch.latestMessage
+                    batch.latestMessage = nil
+                    batch.scheduled = false
+                    return latest
+                }
+                guard let latestMessage else {
+                    group.leave()
+                    return
+                }
+                connection.send(content: latestMessage, completion: .contentProcessed { error in
+                    if let error {
+                        EmulationLog.shared.write("QEMU VNC pointer send failed: \\(error.localizedDescription)")
+                    }
+                    group.leave()
+                })
+            }
         }
     }
 
