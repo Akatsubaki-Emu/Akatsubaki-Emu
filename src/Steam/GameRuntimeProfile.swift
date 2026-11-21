@@ -148,16 +148,21 @@ final class GameRuntimeProfileStore {
         EmulationLog.shared.write("Saved runtime profile for \(value.displayName)")
     }
 
-    func profile(for gameID: UUID) -> GameRuntimeProfile? {
-        let profileURL = url(for: gameID)
-        guard let values = try? profileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+    private func readProfile(at file: URL) -> GameRuntimeProfile? {
+        guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
               values.isRegularFile == true,
               let size = values.fileSize, size <= 1024 * 1024,
-              let data = try? Data(contentsOf: profileURL),
-              data.count <= 1024 * 1024,
-              let value = try? decoder.decode(GameRuntimeProfile.self, from: data),
-              (try? value.validate()) != nil else { return nil }
-        return value
+              let data = try? Data(contentsOf: file), data.count <= 1024 * 1024,
+              let profile = try? decoder.decode(GameRuntimeProfile.self, from: data),
+              (try? profile.validate()) != nil,
+              UUID(uuidString: file.deletingPathExtension().lastPathComponent) == profile.gameID else {
+            return nil
+        }
+        return profile
+    }
+
+    func profile(for gameID: UUID) -> GameRuntimeProfile? {
+        readProfile(at: url(for: gameID))
     }
 
     func removeProfile(for gameID: UUID) throws {
@@ -171,26 +176,11 @@ final class GameRuntimeProfileStore {
     }
 
     var hasUnreadableProfiles: Bool {
-        profileFiles.contains { file in
-            guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
-                  values.isRegularFile == true,
-                  let size = values.fileSize, size <= 1024 * 1024,
-                  let data = try? Data(contentsOf: file), data.count <= 1024 * 1024,
-                  let profile = try? decoder.decode(GameRuntimeProfile.self, from: data),
-                  (try? profile.validate()) != nil else { return true }
-            return false
-        }
+        profileFiles.contains { readProfile(at: $0) == nil }
     }
 
     var allProfiles: [GameRuntimeProfile] {
-        profileFiles.compactMap { file in
-            guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
-                  values.isRegularFile == true,
-                  let size = values.fileSize, size <= 1024 * 1024,
-                  let data = try? Data(contentsOf: file), data.count <= 1024 * 1024,
-                  let profile = try? decoder.decode(GameRuntimeProfile.self, from: data),
-                  (try? profile.validate()) != nil else { return nil }
-            return profile
-        }.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        profileFiles.compactMap { readProfile(at: $0) }
+            .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 }
