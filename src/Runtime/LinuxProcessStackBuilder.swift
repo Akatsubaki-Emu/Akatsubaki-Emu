@@ -122,16 +122,24 @@ struct LinuxProcessStackBuilder {
         let vectorBytes = words.count * 8
         guard vectorBytes <= cursor else { throw BuildError.insufficientSpace }
         let vectorStart = (cursor - vectorBytes) & ~15
-        for (index, word) in words.enumerated() {
-            var littleEndian = word.littleEndian
-            let bytes = withUnsafeBytes(of: &littleEndian) { Data($0) }
-            let offset = vectorStart + index * 8
-            buffer.replaceSubrange(offset..<(offset + 8), with: bytes)
+        let vectorWritten = buffer.withUnsafeMutableBytes { destination -> Bool in
+            guard let base = destination.baseAddress else { return false }
+            for (index, word) in words.enumerated() {
+                var littleEndian = word.littleEndian
+                withUnsafeBytes(of: &littleEndian) { bytes in
+                    if let source = bytes.baseAddress {
+                        base.advanced(by: vectorStart + index * 8)
+                            .copyMemory(from: source, byteCount: 8)
+                    }
+                }
+            }
+            return true
         }
+        guard vectorWritten else { throw BuildError.stackUnavailable }
 
         let stackPointer = stackBase + UInt64(vectorStart)
         guard stackPointer & 0xF == 0,
-              memory.write(buffer.subdata(in: vectorStart..<Self.stackSize), offset: stackPointer) else {
+              memory.write(buffer, sourceRange: vectorStart..<Self.stackSize, offset: stackPointer) else {
             throw BuildError.stackUnavailable
         }
         let argumentVectorAddress = stackPointer + 8

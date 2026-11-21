@@ -9,6 +9,16 @@ final class GuestMemory {
         bytes = [UInt8](repeating: 0, count: Int(size))
     }
 
+    func write(_ data: Data, sourceRange: Range<Int>, offset: UInt64) -> Bool {
+        guard sourceRange.lowerBound >= 0, sourceRange.upperBound <= data.count,
+              offset <= size, UInt64(sourceRange.count) <= size - offset else { return false }
+        let destination = Int(offset)
+        for index in sourceRange {
+            bytes[destination + index - sourceRange.lowerBound] = data[index]
+        }
+        return true
+    }
+
     func write(_ data: Data, offset: UInt64) -> Bool {
         guard offset <= size, UInt64(data.count) <= size - offset else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset) + data.count, with: data)
