@@ -28,22 +28,25 @@ struct QEMUCommandBuilder {
         // -nodefaults disables implicit input devices. VNC keyboard/pointer events
         // therefore need an explicit USB controller, keyboard and tablet for every guest.
         let machine = "q35,usb=on"
+        let gpu = configuration.bootWindows ? "VGA" : configuration.gpu.rawValue
+        let networkDevice = configuration.bootWindows ? "e1000e" : "virtio-net-pci"
         var args = [
             "-machine", machine, "-nodefaults",
             "-m", "\(configuration.memoryMB)", "-smp", "\(configuration.cpuCount)",
             "-cpu", "max",
             "-accel", configuration.accelerator == .jit ? "tcg,tb-size=512,split-wx=on" : "tcg",
-            // VNC is the current display backend, so use a portable 2D device.
-            "-device", configuration.gpu.rawValue,
+            // Windows includes generic VGA/AHCI/E1000 drivers; Linux can use VirtIO.
+            "-device", gpu,
+            "-device", "ich9-ahci,id=sata0",
+            "-monitor", "none", "-serial", "none", "-parallel", "none",
             "-rtc", "base=utc,clock=host"
         ]
         let bootFromISO = diskImage.map(Self.isISO9660) ?? false
         args += ["-boot", bootFromISO ? "order=d,menu=on,strict=off" : "order=c,menu=on,strict=off"]
-        args += ["-netdev", "user,id=isteam-net0", "-device", "virtio-net-pci,netdev=isteam-net0", "-device", "virtio-rng-pci"]
+        args += ["-netdev", "user,id=isteam-net0",
+                  "-device", "\(networkDevice),netdev=isteam-net0",
+                  "-device", "virtio-rng-pci"]
         args += ["-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"]
-        if configuration.bootWindows {
-            args += ["-device", "virtio-balloon-pci"]
-        }
 
         // Expose the built-in QEMU VNC server on loopback only. QEMUVNCClient
         // consumes raw framebuffer rectangles and routes keyboard/pointer events.
@@ -53,10 +56,19 @@ struct QEMUCommandBuilder {
         }
         if let diskImage {
             if bootFromISO {
-                args += ["-cdrom", diskImage.path]
+                // Attach installation/live media through the explicit AHCI
+                // controller; -cdrom's implicit IDE device is absent under
+                // -nodefaults on a q35 machine.
+                args += [
+                    "-drive", "if=none,id=isteam-cdrom,media=cdrom,format=raw,file=\(Self.escapeDriveValue(diskImage.path))",
+                    "-device", "ide-cd,drive=isteam-cdrom,bus=sata0.1,bootindex=1"
+                ]
             } else {
                 let format = QEMUDiskImageFormat.detect(at: diskImage).rawValue
-                args += ["-drive", "if=virtio,format=\(format),file=\(Self.escapeDriveValue(diskImage.path))"]
+                args += [
+                    "-drive", "if=none,id=isteam-disk,format=\(format),file=\(Self.escapeDriveValue(diskImage.path))",
+                    "-device", "ide-hd,drive=isteam-disk,bus=sata0.0,bootindex=1"
+                ]
             }
         }
         return args
