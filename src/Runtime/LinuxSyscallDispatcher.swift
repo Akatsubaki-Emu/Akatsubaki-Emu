@@ -161,7 +161,8 @@ final class LinuxSyscallDispatcher {
         guard !endOverflow, address >= programBreak, end <= limit, end <= memory.size else {
             return errno(12)
         }
-        let overlaps = mappedRanges.contains(where: { address < $0.upperBound && $0.lowerBound < end })
+        let firstPotential = firstMappedRangeEnding(after: address)
+        let overlaps = firstPotential < mappedRanges.count && mappedRanges[firstPotential].lowerBound < end
         var rangeWasCleared = false
         if overlaps {
             if noReplace { return errno(17) }
@@ -175,13 +176,31 @@ final class LinuxSyscallDispatcher {
     }
 
     private func insertMappedRange(_ newRange: Range<UInt64>) {
-        let index = mappedRanges.firstIndex(where: { $0.lowerBound > newRange.lowerBound }) ?? mappedRanges.endIndex
-        mappedRanges.insert(newRange, at: index)
+        var lower = 0
+        var upper = mappedRanges.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if mappedRanges[middle].lowerBound <= newRange.lowerBound { lower = middle + 1 }
+            else { upper = middle }
+        }
+        mappedRanges.insert(newRange, at: lower)
+    }
+
+    private func firstMappedRangeEnding(after address: UInt64) -> Int {
+        var lower = 0
+        var upper = mappedRanges.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if mappedRanges[middle].upperBound <= address { lower = middle + 1 }
+            else { upper = middle }
+        }
+        return lower
     }
 
     private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64? {
         var candidate = Self.alignUp(max(start, programBreak))
-        for range in mappedRanges {
+        for index in firstMappedRangeEnding(after: candidate)..<mappedRanges.count {
+            let range = mappedRanges[index]
             let (candidateEnd, overflow) = candidate.addingReportingOverflow(size)
             if overflow { return nil }
             if range.lowerBound >= candidateEnd { break }
@@ -228,8 +247,8 @@ final class LinuxSyscallDispatcher {
             cursor = min(end, programBreak)
             if cursor == end { return 0 }
         }
-        for range in mappedRanges {
-            if range.upperBound <= cursor { continue }
+        for index in firstMappedRangeEnding(after: cursor)..<mappedRanges.count {
+            let range = mappedRanges[index]
             if range.lowerBound > cursor { return errno(12) }
             cursor = min(end, range.upperBound)
             if cursor == end { return 0 }

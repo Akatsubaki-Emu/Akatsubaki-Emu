@@ -7,10 +7,14 @@ class LinuxMappingOrderTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
         self.assertIn("private func insertMappedRange(_ newRange: Range<UInt64>)", source)
+        self.assertIn("private func firstMappedRangeEnding(after address: UInt64) -> Int", source)
         self.assertIn("insertMappedRange(address..<end)", source)
+        self.assertIn("firstMappedRangeEnding(after: candidate)", source)
+        self.assertIn("firstMappedRangeEnding(after: cursor)", source)
+        self.assertIn("let firstPotential = firstMappedRangeEnding(after: address)", source)
         self.assertNotIn("mappedRanges.sorted", source)
+        self.assertNotIn("mappedRanges.firstIndex(where:", source)
         self.assertIn("mappedRanges.first?.lowerBound ?? mmapCursor", source)
-        self.assertIn("for range in mappedRanges {", source)
         mapping = source.split("private func mapAnonymous", 1)[1].split("private func insertMappedRange", 1)[0]
         self.assertIn("rangeWasCleared = true", mapping)
         self.assertIn("if !rangeWasCleared && !memory.zero", mapping)
