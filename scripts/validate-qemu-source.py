@@ -8,7 +8,7 @@ required = {
         "pendingSendGroup = DispatchGroup()",
         "group.enter()",
         "group.leave()",
-        "group.notify(queue: queue)",
+        "previousGroup.notify(queue: queue)",
         "framebufferWidth = width",
         "width <= Self.maxFramebufferBytes / height / 4",
         "for attempt in 0..<120",
