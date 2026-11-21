@@ -15,6 +15,8 @@ required = {
         "32bpp, 24-bit depth, little endian, true colour; memory order B,G,R,X.",
         "Raw rectangles and DesktopSize updates only.",
         "if encoding == -223",
+        "guard count <= 4096",
+        "rectangleBytes <= Self.maxFramebufferBytes - updateBytes",
         "private var buttonKeys = Set<UInt32>()",
         "private var movementKeys = Set<UInt32>()",
         "private func enqueueSend(_ data: Data, to connection: NWConnection,",

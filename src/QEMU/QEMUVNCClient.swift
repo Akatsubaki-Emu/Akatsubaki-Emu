@@ -287,6 +287,10 @@ final class QEMUVNCClient {
             case 0: // FramebufferUpdate
                 _ = try await receiveExactly(1, from: connection) // padding
                 let count = Int(Self.u16(try await receiveExactly(2, from: connection), 0))
+                guard count <= 4096 else {
+                    throw ClientError.protocolError("QEMU sent too many framebuffer rectangles in one update.")
+                }
+                var updateBytes = 0
                 for _ in 0..<count {
                     let header = try await receiveExactly(12, from: connection)
                     let x = Int(Self.u16(header, 0))
@@ -316,7 +320,12 @@ final class QEMUVNCClient {
                           y + height <= currentSize.1, width <= Int.max / height / 4 else {
                         throw ClientError.protocolError("QEMU sent a framebuffer rectangle outside the guest display.")
                     }
-                    let pixels = try await receiveExactly(width * height * 4, from: connection)
+                    let rectangleBytes = width * height * 4
+                    guard rectangleBytes <= Self.maxFramebufferBytes - updateBytes else {
+                        throw ClientError.protocolError("QEMU framebuffer update exceeded the 64 MiB transfer limit.")
+                    }
+                    updateBytes += rectangleBytes
+                    let pixels = try await receiveExactly(rectangleBytes)
                     withStateLock {
                         // The reader task owns framebuffer updates; the lock also
                         // protects snapshots consumed by the UI/render thread.
