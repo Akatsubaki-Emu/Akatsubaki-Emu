@@ -207,5 +207,15 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("loadedEntryPoint = image.entryPoint", source)
 
 
+    def test_elf_program_header_segment_matches_the_mapped_file_table(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "ELF64Loader.swift").read_text(encoding="utf-8")
+        declared = source.split("if type == 6", 1)[1].split("if type == 2", 1)[0]
+        self.assertIn("fileOffset == phoff", declared)
+        self.assertIn("fileSize >= programHeaderTableSize", declared)
+        self.assertIn("memorySize >= programHeaderTableSize", declared)
+        self.assertIn("mappedProgramHeaderAddress == declaredProgramHeaderAddress", source)
+
+
 if __name__ == "__main__":
     unittest.main()

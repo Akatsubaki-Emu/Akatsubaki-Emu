@@ -126,6 +126,11 @@ required = {
         "entry - $0.guestAddress < $0.fileSize",
         "programHeaderAddress",
         "programHeadersNotMapped",
+        "declaredProgramHeaderAddress",
+        "mappedProgramHeaderAddress",
+        "fileOffset == phoff",
+        "fileSize >= programHeaderTableSize",
+        "memorySize >= programHeaderTableSize",
         "maximumGuestAddress",
     ],
     "src/Runtime/X86_64ALU.swift": [
