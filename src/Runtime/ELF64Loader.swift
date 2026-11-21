@@ -21,7 +21,7 @@ final class ELF64Loader {
         case unreadable, invalidMagic, unsupportedClassOrEndian
         case truncatedHeader, invalidProgramHeaderTable, noLoadableSegments
         case invalidSegment, segmentOutsideGuestMemory, unsupportedMachine(UInt16)
-        case unsupportedFileType(UInt16), fileTooLarge
+        case unsupportedFileType(UInt16), unsupportedDynamicImage, fileTooLarge
 
         var errorDescription: String? {
             switch self {
@@ -36,6 +36,7 @@ final class ELF64Loader {
             case .segmentOutsideGuestMemory: return "An ELF load segment does not fit in guest memory."
             case .unsupportedMachine(let machine): return "Unsupported ELF machine type: \(machine)."
             case .unsupportedFileType(let type): return "Unsupported ELF file type: \(type). This loader currently supports fixed-address ET_EXEC images only."
+            case .unsupportedDynamicImage: return "Dynamic linking, interpreter segments and TLS are not supported by this ELF loader."
             }
         }
     }
@@ -56,12 +57,13 @@ final class ELF64Loader {
 
         guard data.count >= 64, data[0] == 0x7F, data[1] == 0x45,
               data[2] == 0x4C, data[3] == 0x46 else { throw LoadError.invalidMagic }
-        guard data[4] == 2, data[5] == 1 else { throw LoadError.unsupportedClassOrEndian }
+        guard data[4] == 2, data[5] == 1, data[6] == 1 else { throw LoadError.unsupportedClassOrEndian }
 
         guard let fileType = u16(data, 16), let machine = u16(data, 18),
               let entry = u64(data, 24), let phoff = u64(data, 32),
+              let version = u32(data, 20),
               let ehsize = u16(data, 52), let phentsize = u16(data, 54),
-              let phnum = u16(data, 56), ehsize >= 64, phentsize >= 56 else {
+              let phnum = u16(data, 56), version == 1, ehsize >= 64, phentsize >= 56 else {
             throw LoadError.truncatedHeader
         }
         // ET_DYN needs a load bias and dynamic relocations; accepting it as
@@ -96,8 +98,11 @@ final class ELF64Loader {
                   let fileSize = u64(data, base + 32), let memorySize = u64(data, base + 40) else {
                 throw LoadError.invalidProgramHeaderTable
             }
+            if type == 2 || type == 3 || type == 7 {
+                throw LoadError.unsupportedDynamicImage
+            }
             guard type == 1 else { continue }
-            guard fileSize <= memorySize, fileOffset <= UInt64(data.count),
+            guard memorySize > 0, fileSize <= memorySize, fileOffset <= UInt64(data.count),
                   fileSize <= UInt64(data.count) - fileOffset else { throw LoadError.invalidSegment }
             let loadAddress = virtualAddress
             guard loadAddress <= memory.size, memorySize <= memory.size - loadAddress,
@@ -105,6 +110,11 @@ final class ELF64Loader {
                   total <= UInt64.max - memorySize else {
                 throw LoadError.segmentOutsideGuestMemory
             }
+            guard let alignment = u64(data, base + 48),
+                  alignment <= 1 || (
+                    alignment & (alignment - 1) == 0
+                    && virtualAddress % alignment == fileOffset % alignment
+                  ) else { throw LoadError.invalidSegment }
             let segment = Segment(guestAddress: loadAddress, fileSize: fileSize,
                                   memorySize: memorySize, flags: flags)
             segments.append(segment)
@@ -113,6 +123,13 @@ final class ELF64Loader {
         }
 
         guard !segments.isEmpty else { throw LoadError.noLoadableSegments }
+        let orderedSegments = segments.sorted { $0.guestAddress < $1.guestAddress }
+        for pair in zip(orderedSegments, orderedSegments.dropFirst()) {
+            guard pair.0.memorySize <= UInt64.max - pair.0.guestAddress,
+                  pair.0.guestAddress + pair.0.memorySize <= pair.1.guestAddress else {
+                throw LoadError.invalidSegment
+            }
+        }
         // The entry point must land inside a loadable executable segment.
         // Merely being within a writable/data PT_LOAD region is not sufficient.
         guard segments.contains(where: {

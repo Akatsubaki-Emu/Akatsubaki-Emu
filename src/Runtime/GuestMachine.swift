@@ -67,6 +67,10 @@ final class GuestMachine {
         if configuration.architecture == .x86_64 {
             self.cpu = X86_64Interpreter(memory: self.memory)
             self.state = .configured
+        } else {
+            self.state = .failed(
+                GuestEngineError.backendNotInstalled(configuration.architecture).localizedDescription
+            )
         }
     }
 
