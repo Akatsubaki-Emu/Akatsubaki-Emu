@@ -187,7 +187,9 @@ bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
                     std::min(end - address, pageSize - pageOffset));
                 const auto found = memory->pages.find(pageIndex);
                 if (found != memory->pages.end() && found->second) {
-                    if (pageOffset == 0 && amount == pageSize) {
+                    const uint64_t pageStart = pageIndex * pageSize;
+                    const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);
+                    if (pageOffset == 0 && static_cast<uint64_t>(amount) == pageLength) {
                         memory->pages.erase(found);
                     } else {
                         std::memset(found->second->data() + pageOffset, 0, amount);

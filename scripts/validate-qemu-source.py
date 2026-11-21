@@ -266,7 +266,13 @@ required = {
         "precondition(lea32.registerValue(3) == 0x108)",
         "precondition(truncatedRetExit == .memoryFault(address: 1))",
         "precondition(indirectFaultExit == .memoryFault(address: 0x1006))"
-    ],
+
+        "precondition(shift.registerValue(3) == 2)",
+        "precondition(shift.registerValue(1) == 0x40000000)",
+        "precondition(shift.registerValue(2) == 0xC0000000)",
+        "precondition(shift.conditionFlags & X86_64ALU.carry != 0)",
+        "precondition(zeroShift.registerValue(0) == 1)",
+        "precondition(zeroShift.conditionFlags & X86_64ALU.carry != 0)",    ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
         "\"-vnc\", \"127.0.0.1:0\"",
@@ -574,6 +580,15 @@ required = {
         "saveLayout()",
         "releaseButtons()",
         "func releaseAllButtons()",
+    ],
+    "iSteam/NativeGuestMemory.cpp": [
+        "const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);",
+        "static_cast<uint64_t>(amount) == pageLength",
+    ],
+    "scripts/tests/test_native_guest_memory.cpp": [
+        "constexpr uint64_t partialSize = pageSize + 17;",
+        "isteam_guest_memory_zero(partial, pageSize, partialSize - pageSize)",
+        "isteam_guest_memory_allocated_pages(partial) == 0",
     ],
     ".gitlab-ci.yml": [
         "test_static_elf_execution.swift",

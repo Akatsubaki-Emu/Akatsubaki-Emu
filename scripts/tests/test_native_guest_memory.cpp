@@ -79,6 +79,18 @@ int main() {
         }
     }
 
+    // Clearing the final partial page should release its backing allocation too.
+    constexpr uint64_t partialSize = pageSize + 17;
+    ISteamGuestMemory *partial = isteam_guest_memory_create(partialSize);
+    assert(partial != nullptr);
+    std::array<uint8_t, 17> partialPayload{};
+    partialPayload.fill(0x5A);
+    assert(isteam_guest_memory_write(partial, pageSize, partialPayload.data(), partialPayload.size()));
+    assert(isteam_guest_memory_allocated_pages(partial) == 1);
+    assert(isteam_guest_memory_zero(partial, pageSize, partialSize - pageSize));
+    assert(isteam_guest_memory_allocated_pages(partial) == 0);
+    isteam_guest_memory_destroy(partial);
+
     // Clearing a huge sparse address range should visit allocated pages, not every page in the range.
     constexpr uint64_t largeSize = 1ULL << 30;
     ISteamGuestMemory *sparse = isteam_guest_memory_create(largeSize);
