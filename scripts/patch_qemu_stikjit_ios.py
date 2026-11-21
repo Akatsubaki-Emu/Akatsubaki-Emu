@@ -87,6 +87,7 @@ def patch_source(source: str) -> str:
             "iSteamJITPrepareRegion",
             "iSteamJITDetach",
             "__builtin_available(iOS 26.0, *)",
+            "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
             "tcg_splitwx_diff = buf_rx - buf_rw",
         ]
         missing = [item for item in required if item not in source]
@@ -118,6 +119,7 @@ def patch_source(source: str) -> str:
         "iSteamJITPrepareRegion",
         "iSteamJITDetach",
         "__builtin_available(iOS 26.0, *)",
+        "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
         "mach_vm_remap(mach_task_self(), &buf_rw",
         "mach_vm_protect(mach_task_self(), buf_rw",
         "tcg_splitwx_diff = buf_rx - buf_rw",

@@ -113,7 +113,7 @@ final class RuntimeSettings {
     private init() {}
     private let defaults = UserDefaults.standard
     var vmMode: VMExecutionMode {
-        get { VMExecutionMode(rawValue: defaults.string(forKey: "iSteam.vmMode") ?? "") ?? .windowsVM }
+        get { VMExecutionMode(rawValue: defaults.string(forKey: "iSteam.vmMode") ?? "") ?? .linuxVM }
         set { defaults.set(newValue.rawValue, forKey: "iSteam.vmMode") }
     }
     var acceleration: VMAccelerationBackend {

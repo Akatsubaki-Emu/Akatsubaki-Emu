@@ -77,12 +77,22 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertEqual(once, twice)
         self.assertIn("--target-list=x86_64-softmmu", twice)
         self.assertIn('python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"', twice)
+        self.assertIn('python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"', twice)
+        self.assertLess(twice.index("ISTEAM_QEMU_JIT_PATCHER"), twice.index("ISTEAM_QEMU_MESON_PATCHER"))
         self.assertIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"', twice)
         self.assertNotIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$DIR/build/build.ninja"', twice)
         self.assertIn("http://ftp.gnu.org/gnu/libiconv/*", twice)
         self.assertIn("https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}", twice)
         shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
         self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
+
+    def test_fresh_launch_defaults_to_ubuntu(self):
+        root = Path(__file__).resolve().parents[2]
+        settings = (root / "src/Core/RuntimeSettings.swift").read_text(encoding="utf-8")
+        launch = (root / "iSteam/LaunchSetupViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("?? .linuxVM", settings)
+        self.assertIn('string(forKey: "iSteam.lastGuest") ?? "Ubuntu"', launch)
+        self.assertIn("case .linuxVM:", launch)
 
     def test_qemu_tcg_profiles_both_request_split_wx(self):
         root = Path(__file__).resolve().parents[2]
@@ -117,30 +127,6 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
         with self.assertRaisesRegex(SystemExit, "split-W^X Darwin allocator not found"):
             patch_qemu_stikjit_ios.patch_source("#ifdef CONFIG_DARWIN\\n#include <mach/mach.h>\\n#endif\\n")
-
-    def test_utm_patch_installs_stikdebug_allocator_before_qemu_configure(self):
-        source = '''#!/bin/sh
-generate_meson_cross() {
-    echo "has_function_dup3 = false" >> $cross
-}
-QEMU_PLATFORM_BUILD_FLAGS="--enable-shared-lib --disable-cocoa --disable-sdl --disable-coreaudio --disable-slirp-smbd --enable-ucontext --with-coroutine=libucontext $HVF_FLAGS $TCI_BUILD_FLAGS"
-download () {
-    URL=$1
-    FILE="$(basename $URL)"
-}
-build () {
-    if [ -z "$REBUILD" ]; then
-        echo "Configuring"
-        ./configure --prefix="$PREFIX" --host="$CHOST" $@
-    fi
-    echo "Building"
-    make -j$NCPU
-}
-build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
-'''
-        patched = patch_utm_qemu_ios.patch_script(source)
-        self.assertIn('python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"', patched)
-        self.assertLess(patched.index("ISTEAM_QEMU_JIT_PATCHER"), patched.index("ISTEAM_QEMU_MESON_PATCHER"))
 
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):
         root = Path(__file__).resolve().parents[2]

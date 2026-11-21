@@ -1,8 +1,8 @@
 import UIKit
 import UniformTypeIdentifiers
 
-/// Full-page launch configuration. Saved settings are restored, but this screen remains
-/// a launch scaffold until a bootable QEMU runtime is bundled and connected.
+/// Full-page launch configuration. Restores saved settings and dispatches VM sessions
+/// to the bundled QEMU runtime when its device artifact is present.
 final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegate {
     private let guestControl = UISegmentedControl(items: ["Ubuntu", "SteamOS", "Windows 10"])
     private let runtimeControl = UISegmentedControl(items: ["Full VM", "EXE library"])
