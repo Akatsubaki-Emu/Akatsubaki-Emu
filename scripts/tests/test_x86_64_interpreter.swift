@@ -284,7 +284,7 @@ struct InterpreterTests {
         precondition(leave.registerValue(4) == 0x200)
         precondition(leave.registerValue(5) == 0)
 
-        let indirectMemory = GuestMemory(size: 128)
+        let indirectMemory = GuestMemory(size: 4096)
         var indirectProgram: [UInt8] = [
             0x48, 0xB8, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0xFF, 0xD0, 0x0F, 0x0B
