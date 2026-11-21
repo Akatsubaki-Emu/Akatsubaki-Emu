@@ -148,14 +148,14 @@ final class QEMUNativeRuntime {
 
     private static func findUEFIFirmware(in directory: URL) -> URL? {
         containedRegularFile(
-            named: ["OVMF_CODE.fd", "edk2-x86_64-code.fd", "edk2-x86_64-code.secboot.fd"],
+            named: ["OVMF_CODE.fd", "OVMF_CODE_4M.fd", "edk2-x86_64-code.fd", "edk2-x86_64-code.secboot.fd"],
             in: directory
         )
     }
 
     private static func findUEFIVariables(in directory: URL) -> URL? {
         containedRegularFile(
-            named: ["OVMF_VARS.fd", "edk2-x86_64-vars.fd"],
+            named: ["OVMF_VARS.fd", "OVMF_VARS_4M.fd", "edk2-x86_64-vars.fd"],
             in: directory
         )
     }
@@ -166,13 +166,16 @@ final class QEMUNativeRuntime {
     private static func makeWritableUEFIVariables(from template: URL, for configurationID: UUID) throws -> URL {
         let values = try template.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
         let size = values.fileSize ?? 0
+        guard size > 0 else { throw RuntimeError.runtimeUnavailable("The bundled UEFI variable-store template is empty.") }
         let modified = Int(values.contentModificationDate?.timeIntervalSince1970 ?? 0)
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("AkatsubakiEmu/QEMU/firmware", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let stem = template.deletingPathExtension().lastPathComponent
         let destination = directory.appendingPathComponent("\(stem)-\(configurationID.uuidString)-\(size)-\(modified).fd")
-        if !FileManager.default.fileExists(atPath: destination.path) {
+        let existingSize = try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        if existingSize != size {
+            try? FileManager.default.removeItem(at: destination)
             try FileManager.default.copyItem(at: template, to: destination)
         }
         return destination

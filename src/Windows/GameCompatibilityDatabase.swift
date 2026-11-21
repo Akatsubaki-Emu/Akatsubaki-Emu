@@ -57,7 +57,10 @@ final class GameCompatibilityDatabase {
         }
         let data = try Data(contentsOf: fileURL)
         guard data.count <= 5 * 1024 * 1024,
-              let records = try? decoder.decode([GameCompatibilityRecord].self, from: data) else {
+              let records = try? decoder.decode([GameCompatibilityRecord].self, from: data),
+              records.count <= 20_000,
+              Set(records.map { $0.appID.lowercased() }).count == records.count,
+              records.allSatisfy({ (try? $0.validate()) != nil }) else {
             throw DatabaseError.corruptDatabase
         }
         return records

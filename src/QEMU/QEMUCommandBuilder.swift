@@ -7,6 +7,8 @@ enum QEMUDiskImageFormat: String {
     case qcow2
     case vmdk
     case vhdx
+    case vdi
+    case vpc
 
     static func detect(at url: URL) -> QEMUDiskImageFormat {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return .raw }
@@ -17,6 +19,14 @@ enum QEMUDiskImageFormat: String {
         if let prefix = String(data: header.prefix(32), encoding: .ascii),
            prefix.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("# Disk DescriptorFile") { return .vmdk }
         if header.count >= 8, String(data: header.prefix(8), encoding: .ascii) == "vhdxfile" { return .vhdx }
+        if let signature = String(data: header.prefix(64), encoding: .ascii),
+           signature.hasPrefix("<<< Oracle VM VirtualBox Disk Image >>>") { return .vdi }
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+           let size, size >= 512 {
+            try? handle.seek(toOffset: UInt64(size - 512))
+            if let footer = try? handle.read(upToCount: 8),
+               String(data: footer, encoding: .ascii) == "conectix" { return .vpc }
+        }
         return .raw
     }
 }
