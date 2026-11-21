@@ -15,13 +15,17 @@ final class ELF64Loader {
         let machine: UInt16
         let segments: [Segment]
         let loadedByteCount: UInt64
+        let programHeaderAddress: UInt64
+        let programHeaderEntrySize: UInt16
+        let programHeaderCount: UInt16
+        let maximumGuestAddress: UInt64
     }
 
     enum LoadError: LocalizedError {
         case unreadable, invalidMagic, unsupportedClassOrEndian
         case truncatedHeader, invalidProgramHeaderTable, noLoadableSegments
         case invalidSegment, segmentOutsideGuestMemory, unsupportedMachine(UInt16)
-        case unsupportedFileType(UInt16), unsupportedDynamicImage, fileTooLarge
+        case unsupportedFileType(UInt16), unsupportedDynamicImage, programHeadersNotMapped, fileTooLarge
 
         var errorDescription: String? {
             switch self {
@@ -37,6 +41,7 @@ final class ELF64Loader {
             case .unsupportedMachine(let machine): return "Unsupported ELF machine type: \(machine)."
             case .unsupportedFileType(let type): return "Unsupported ELF file type: \(type). This loader currently supports fixed-address ET_EXEC images only."
             case .unsupportedDynamicImage: return "Dynamic linking, interpreter segments and TLS are not supported by this ELF loader."
+            case .programHeadersNotMapped: return "The ELF program-header table is not mapped inside a loadable segment."
             }
         }
     }
@@ -84,6 +89,7 @@ final class ELF64Loader {
         let tableOffset = Int(phoff)
         let entrySize = Int(phentsize)
         let entryCount = Int(phnum)
+        let programHeaderTableSize = UInt64(entrySize) * UInt64(entryCount)
         guard entryCount == 0 || entrySize <= (data.count - tableOffset) / entryCount else {
             throw LoadError.invalidProgramHeaderTable
         }
@@ -91,6 +97,7 @@ final class ELF64Loader {
         var segments: [Segment] = []
         var pending: [(Segment, Int)] = []
         var total: UInt64 = 0
+        var programHeaderAddress: UInt64?
         for index in 0..<entryCount {
             let base = tableOffset + index * entrySize
             guard let type = u32(data, base), let flags = u32(data, base + 4),
@@ -98,12 +105,23 @@ final class ELF64Loader {
                   let fileSize = u64(data, base + 32), let memorySize = u64(data, base + 40) else {
                 throw LoadError.invalidProgramHeaderTable
             }
+            if type == 6 {
+                programHeaderAddress = virtualAddress
+                continue
+            }
             if type == 2 || type == 3 || type == 7 {
                 throw LoadError.unsupportedDynamicImage
             }
             guard type == 1 else { continue }
             guard memorySize > 0, fileSize <= memorySize, fileOffset <= UInt64(data.count),
                   fileSize <= UInt64(data.count) - fileOffset else { throw LoadError.invalidSegment }
+            if phoff >= fileOffset {
+                let offsetInSegment = phoff - fileOffset
+                if offsetInSegment <= fileSize && programHeaderTableSize <= fileSize - offsetInSegment {
+                    guard virtualAddress <= UInt64.max - offsetInSegment else { throw LoadError.invalidSegment }
+                    programHeaderAddress = virtualAddress + offsetInSegment
+                }
+            }
             let loadAddress = virtualAddress
             guard loadAddress <= memory.size, memorySize <= memory.size - loadAddress,
                   fileSize <= UInt64(Int.max), loadAddress <= UInt64(Int.max),
@@ -124,6 +142,16 @@ final class ELF64Loader {
 
         guard !segments.isEmpty else { throw LoadError.noLoadableSegments }
         let orderedSegments = segments.sorted { $0.guestAddress < $1.guestAddress }
+        guard let phdrAddress = programHeaderAddress,
+              phdrAddress <= memory.size,
+              programHeaderTableSize <= memory.size - phdrAddress,
+              orderedSegments.contains(where: {
+                  phdrAddress >= $0.guestAddress
+                      && phdrAddress - $0.guestAddress <= $0.fileSize
+                      && programHeaderTableSize <= $0.fileSize - (phdrAddress - $0.guestAddress)
+              }) else {
+            throw LoadError.programHeadersNotMapped
+        }
         for pair in zip(orderedSegments, orderedSegments.dropFirst()) {
             guard pair.0.memorySize <= UInt64.max - pair.0.guestAddress,
                   pair.0.guestAddress + pair.0.memorySize <= pair.1.guestAddress else {
@@ -159,7 +187,10 @@ final class ELF64Loader {
                 copied += UInt64(amount)
             }
         }
-        return Image(entryPoint: entry, machine: machine, segments: segments, loadedByteCount: total)
+        let maximumGuestAddress = orderedSegments.reduce(UInt64(0)) { max($0, $1.guestAddress + $1.memorySize) }
+        return Image(entryPoint: entry, machine: machine, segments: segments, loadedByteCount: total,
+                     programHeaderAddress: phdrAddress, programHeaderEntrySize: phentsize,
+                     programHeaderCount: phnum, maximumGuestAddress: maximumGuestAddress)
     }
 
     private func u16(_ data: Data, _ offset: Int) -> UInt16? {

@@ -5,6 +5,7 @@ protocol GuestCPUBackend: AnyObject {
     var architecture: VMConfiguration.Architecture { get }
     var instructionCount: UInt64 { get }
     func reset(entryPoint: UInt64) throws
+    func setInitialStackPointer(_ pointer: UInt64) throws
     func run(maxInstructions: UInt64) throws -> GuestCPUExit
     func requestStop()
     func resume()
@@ -52,6 +53,7 @@ final class GuestMachine {
     private(set) var lastExit: GuestCPUExit?
     private var cpu: GuestCPUBackend?
     private var hasLoadedImage = false
+    private var initialStackPointer: UInt64?
     private let executionLock = NSLock()
     private let activeCPULock = NSLock()
     private var activeCPU: GuestCPUBackend?
@@ -136,7 +138,7 @@ final class GuestMachine {
     /// Loads an ELF64 image into guest memory and initializes the CPU at its
     /// entry point. Loading requires a compatible, real CPU backend to be installed.
     @discardableResult
-    func loadELFImage(at url: URL) throws -> ELF64Loader.Image {
+    func loadELFImage(at url: URL, arguments: [String] = [], environment: [String: String] = [:]) throws -> ELF64Loader.Image {
         guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
         return try withExecutionLock {
             guard let cpu else {
@@ -146,9 +148,26 @@ final class GuestMachine {
             }
             do {
                 hasLoadedImage = false
+                initialStackPointer = nil
+                guard configuration.architecture == .x86_64 else {
+                    throw GuestEngineError.backendNotInstalled(configuration.architecture)
+                }
                 let image = try ELF64Loader().load(url, into: memory,
                                                    expectedArchitecture: configuration.architecture)
+                let stack = try LinuxProcessStackBuilder().build(
+                    executablePath: url.path,
+                    arguments: arguments,
+                    environment: environment,
+                    memory: memory,
+                    entryPoint: image.entryPoint,
+                    programHeaders: .init(address: image.programHeaderAddress,
+                                          entrySize: image.programHeaderEntrySize,
+                                          count: image.programHeaderCount),
+                    maximumImageAddress: image.maximumGuestAddress
+                )
                 try cpu.reset(entryPoint: image.entryPoint)
+                try cpu.setInitialStackPointer(stack.stackPointer)
+                initialStackPointer = stack.stackPointer
                 hasLoadedImage = true
                 lastExit = nil
                 state = .configured
@@ -174,6 +193,7 @@ final class GuestMachine {
             }
             do {
                 try cpu.reset(entryPoint: entryPoint)
+                if let initialStackPointer { try cpu.setInitialStackPointer(initialStackPointer) }
                 lastExit = nil
                 state = .configured
             } catch {
@@ -238,6 +258,7 @@ final class GuestMachine {
             cpu?.requestStop()
             memory.clear()
             hasLoadedImage = false
+            initialStackPointer = nil
             state = .stopped
             lastExit = nil
         }

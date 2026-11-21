@@ -36,6 +36,14 @@ final class X86_64Interpreter: GuestCPUBackend {
     var instructionPointer: UInt64 { rip }
     var conditionFlags: UInt64 { flags }
 
+    func setInitialStackPointer(_ pointer: UInt64) throws {
+        guard pointer & 0xF == 0, memory.size >= 8, pointer <= memory.size - 8 else {
+            throw GuestEngineError.invalidState("The Linux initial stack pointer is outside guest memory or is not 16-byte aligned.")
+        }
+        registers[4] = pointer
+        registers[5] = 0
+    }
+
     func registerValue(_ index: Int) -> UInt64? {
         registers.indices.contains(index) ? registers[index] : nil
     }

@@ -8,6 +8,7 @@ protocol GuestCPUBackend {
     var architecture: VMConfiguration.Architecture { get }
     var instructionCount: UInt64 { get }
     func reset(entryPoint: UInt64) throws
+    func setInitialStackPointer(_ pointer: UInt64) throws
     func requestStop()
     func resume()
     func run(maxInstructions: UInt64) throws -> GuestCPUExit
@@ -129,6 +130,12 @@ struct InterpreterTests {
         try fault.reset(entryPoint: 0)
         let faultExit = try fault.run(maxInstructions: 1)
         precondition(faultExit == .memoryFault(address: 1))
+
+        let stackPointerMemory = GuestMemory(size: 1024)
+        let stackPointerInterpreter = X86_64Interpreter(memory: stackPointerMemory)
+        try stackPointerInterpreter.reset(entryPoint: 0)
+        try stackPointerInterpreter.setInitialStackPointer(0x100)
+        precondition(stackPointerInterpreter.registerValue(4) == 0x100)
 
         let arithmeticMemory = GuestMemory(size: 128)
         let arithmeticProgram: [UInt8] = [

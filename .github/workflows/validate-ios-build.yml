@@ -41,6 +41,15 @@ jobs:
             scripts/tests/test_translation_cache.swift \
             -o "$RUNNER_TEMP/test-translation-cache"
           "$RUNNER_TEMP/test-translation-cache"
+      - name: Test Linux x86-64 process stack and auxiliary vector
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/LinuxProcessStackBuilder.swift \
+            scripts/tests/test_linux_process_stack.swift \
+            -o "$RUNNER_TEMP/test-linux-process-stack"
+          "$RUNNER_TEMP/test-linux-process-stack"
       - name: Test x86-64 interpreter register moves and syscall path
         if: matrix.scheme == 'iSteam'
         run: |

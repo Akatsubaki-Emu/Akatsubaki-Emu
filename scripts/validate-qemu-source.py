@@ -104,6 +104,14 @@ required = {
         "resolvingSymlinksInPath()",
         "rootPrefix",
     ],
+    "src/Runtime/LinuxProcessStackBuilder.swift": [
+        "struct ProgramHeaders",
+        "static let stackSize = 1024 * 1024",
+        "(3, programHeaders.address)",
+        "(25, randomAddress)",
+        "(31, argumentPointers[0])",
+        "stackPointer & 0xF == 0",
+    ],
     "src/Runtime/ELF64Loader.swift": [
         "($0.flags & 0x1) != 0",
         "loadable executable segment",
@@ -113,6 +121,9 @@ required = {
         "alignment & (alignment - 1) == 0",
         "orderedSegments",
         "entry - $0.guestAddress < $0.fileSize",
+        "programHeaderAddress",
+        "programHeadersNotMapped",
+        "maximumGuestAddress",
     ],
     "src/Runtime/X86_64ALU.swift": [
         "static func add(",
@@ -121,6 +132,8 @@ required = {
         "static func makeFlags(",
     ],
     "src/Runtime/X86_64Interpreter.swift": [
+        "func setInitialStackPointer(_ pointer: UInt64) throws",
+        "registers[4] = pointer",
         "case 0xB8...0xBF: // MOV r32, imm32 or MOV r64, imm64",
         "registers[index] = UInt64(immediate)",
         "let width64 = rex & 0x08 != 0",
@@ -136,7 +149,13 @@ required = {
         "PUSH RSP stores the pre-decrement value.",
         "POP RSP loads the popped value directly",
     ],
+    "scripts/tests/test_linux_process_stack.swift": [
+        "auxiliary[3] == 0x40040",
+        "auxiliary[25] == result.randomAddress",
+        "Image/stack overlap should fail.",
+    ],
     "scripts/tests/test_x86_64_interpreter.swift": [
+        "stackPointerInterpreter.setInitialStackPointer(0x100)",
         "precondition(arithmetic.registerValue(3) == 2)",
         "precondition(signed.registerValue(3) == 2)",
                 "precondition(signed.conditionFlags & X86_64ALU.sign != 0)",
@@ -279,6 +298,10 @@ required = {
         "var isAvailable: Bool",
     ],
     "src/Runtime/GuestMachine.swift": [
+        "func loadELFImage(at url: URL, arguments: [String] = [], environment: [String: String] = [:])",
+        "LinuxProcessStackBuilder().build(",
+        "cpu.setInitialStackPointer(stack.stackPointer)",
+        "initialStackPointer",
         "maximumGuestBytes: UInt64 = 16 * 1024 * 1024 * 1024",
         "guard self.memory.isAvailable",
         "case memoryUnavailable",

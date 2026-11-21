@@ -1,7 +1,7 @@
 # Kenran Butō (絢爛舞踏) — Hybrid runtime composition
 
 - **System name:** Kenran Butō (絢爛舞踏).
-- **Status:** composable execution-policy prototype; the translation-cache artifact layer is implemented, but no production translator or Windows/Linux userspace stack is integrated.
+- **Status:** composable execution-policy prototype; the translation-cache artifact layer is implemented and a limited static Linux process-entry stack is now built, but no production translator or full Windows/Linux userspace stack is integrated.
 - **Component naming:** Kenran Butō AOT is the planned static x86-64 → ARM64 translator; Kenran Butō Cache stores validated translated-code artifacts; Kenran Butō Router selects backends and fallback; Kenran Butō Runtime orchestrates execution; Kenran Butō Graphics owns graphics translation. These names do not imply that missing implementations are complete.
 - **Planner:** `src/Runtime/ExecutionBackendRouter.swift`
 - **Cache:** `src/Performance/TranslationCache.swift`
@@ -40,6 +40,7 @@
 - **Box64:** a C/Swift bridge can look for an already-loaded Box64 entry point. It does not bundle Box64, provide a Linux rootfs/syscall ABI, or prove game execution.
 - **Wine/Proton:** not integrated.
 - **QEMU:** `QEMURuntimeStatus` asks the native bridge to `dlopen` the candidate with `RTLD_NOW` and resolve `qemu_init`, `qemu_main_loop`, `qemu_cleanup`, and `qemu_system_shutdown_request`. `RuntimeCapabilityRegistry` records this as `loadable`, not `operational`, so it cannot yet make QEMU selectable in the planner. The bridge is deliberately one-shot per app process because QEMU global-state reinitialization is not proven safe. Guest boot, firmware compatibility, device-level graceful stop, display/input and persistence remain unverified. QEMU remains full-system only, not a PE process translator.
+- **Linux ELF startup:** `ELF64Loader` maps fixed-address static ET_EXEC segments and verifies that the program-header table is mapped. `LinuxProcessStackBuilder` creates an aligned initial stack with argv, envp, AT_PHDR/AT_PHENT/AT_PHNUM, AT_ENTRY, AT_RANDOM and AT_EXECFN. PIE, PT_INTERP, dynamic linking, TLS and a complete syscall ABI remain unsupported.
 - **Interpreter:** diagnostic x86-64 subset with 32/64-bit register moves, register and 32/64-bit memory forms of MOV/LEA/ADD/SUB/CMP/AND/XOR, ModRM/SIB base-index-scale and RIP-relative addressing, sign-extended immediate arithmetic, condition flags (CF/PF/AF/ZF/SF/OF), and selected short/near conditional branches. Other memory widths and addressing prefixes, SIMD, atomics, exceptions, paging, and most Linux syscalls remain unsupported; this is not a general game backend.
 - **a32rt:** not integrated.
 - **Graphics:** Metal framebuffer presentation exists; DirectX→Vulkan→Metal guest translation is not integrated.
