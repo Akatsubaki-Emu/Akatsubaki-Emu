@@ -12,7 +12,7 @@ enum Box64Bridge {
             }
         }
 
-        guard allocated.allSatisfy({ $0 != nil }), strings.allSatisfy({ !$0.contains("\\0") }) else { return -12 }
+        guard allocated.allSatisfy({ $0 != nil }), strings.allSatisfy({ !$0.contains("\0") }) else { return -12 }
 
         var argv: [UnsafePointer<CChar>?] = allocated.map { pointer in
             guard let pointer else { return nil }

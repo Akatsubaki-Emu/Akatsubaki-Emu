@@ -58,7 +58,7 @@ final class VMSaveSlotStore {
 
     private func isValidName(_ name: String) -> Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && name.utf8.count <= 256 && !name.contains("\\0")
+            && name.utf8.count <= 256 && !name.contains("\0")
     }
 
     private func readConfiguration(at url: URL, expectedName: String) -> VMConfiguration? {
@@ -159,7 +159,8 @@ final class VMSaveSlotStore {
 
     func lastSessionConfiguration() -> VMConfiguration? {
         let url = directory.appendingPathComponent("last-session.json")
-        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true,
               let size = values.fileSize, size <= maximumMetadataBytes,
               let data = try? Data(contentsOf: url), data.count <= maximumMetadataBytes,
               let session = try? decoder.decode(Session.self, from: data) else { return nil }

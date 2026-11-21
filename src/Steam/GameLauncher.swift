@@ -15,7 +15,7 @@ final class GameLauncher {
         do {
             _ = try WindowsPELoader().load(executable)
         } catch {
-            EmulationLog.shared.write("Game launcher rejected invalid or unsupported PE image: \\(error.localizedDescription)")
+            EmulationLog.shared.write("Game launcher rejected invalid or unsupported PE image: \(error.localizedDescription)")
             return false
         }
         let directoryValues = try? workingDirectory.resourceValues(forKeys: [.isDirectoryKey])
