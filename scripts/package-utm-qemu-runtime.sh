@@ -2,7 +2,34 @@
 set -euo pipefail
 
 ARCHIVE="${1:?usage: package-utm-qemu-runtime.sh /path/to/UTM.xcarchive /path/to/output}"
-OUT="${2:?usage: package-utm-qemu-runtime.sh /path/to/UTM.xcarchive /path/to/output}"
+OUT_REQUEST="${2:?usage: package-utm-qemu-runtime.sh /path/to/UTM.xcarchive /path/to/output}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
+
+# Packaging output is destructive: only permit a real child of repository build/.
+case "$OUT_REQUEST" in
+    /*) OUT_CANDIDATE="$OUT_REQUEST" ;;
+    *) OUT_CANDIDATE="$REPO_ROOT/$OUT_REQUEST" ;;
+esac
+case "$OUT_CANDIDATE" in
+    "$REPO_ROOT"/build/*) ;;
+    *) echo "Refusing unsafe output path (must be inside build/): $OUT_REQUEST" >&2; exit 2 ;;
+esac
+OUT_PARENT_REQUEST="$(dirname "$OUT_CANDIDATE")"
+OUT_NAME="$(basename "$OUT_CANDIDATE")"
+case "$OUT_NAME" in ""|"."|"..") echo "Refusing invalid output directory name." >&2; exit 2 ;; esac
+mkdir -p "$OUT_PARENT_REQUEST"
+OUT_PARENT="$(cd "$OUT_PARENT_REQUEST" && pwd -P)"
+OUT="$OUT_PARENT/$OUT_NAME"
+case "$OUT" in
+    "$REPO_ROOT"/build/*) ;;
+    *) echo "Refusing output path that resolves outside build/: $OUT_REQUEST" >&2; exit 2 ;;
+esac
+if [ -L "$OUT" ]; then
+    echo "Refusing to replace a symlink output directory: $OUT" >&2
+    exit 2
+fi
+
 APP="$ARCHIVE/Products/Applications/UTM.app"
 test -d "$APP" || { echo "UTM.app missing from archive: $APP" >&2; exit 1; }
 
