@@ -51,6 +51,7 @@ final class GuestMachine {
     private(set) var state: State = .stopped
     private(set) var lastExit: GuestCPUExit?
     private var cpu: GuestCPUBackend?
+    private var hasLoadedImage = false
     private let executionLock = NSLock()
     private let activeCPULock = NSLock()
     private var activeCPU: GuestCPUBackend?
@@ -144,9 +145,11 @@ final class GuestMachine {
                 throw error
             }
             do {
+                hasLoadedImage = false
                 let image = try ELF64Loader().load(url, into: memory,
                                                    expectedArchitecture: configuration.architecture)
                 try cpu.reset(entryPoint: image.entryPoint)
+                hasLoadedImage = true
                 lastExit = nil
                 state = .configured
                 return image
@@ -161,6 +164,9 @@ final class GuestMachine {
     func reset(entryPoint: UInt64) throws {
         guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
         try withExecutionLock {
+            guard hasLoadedImage else {
+                throw GuestEngineError.invalidState("Load a valid ELF image before resetting the guest CPU.")
+            }
             guard let cpu else {
                 let error = GuestEngineError.backendNotInstalled(configuration.architecture)
                 state = .failed(error.localizedDescription)
@@ -182,6 +188,9 @@ final class GuestMachine {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
         return try withExecutionLock {
+            guard hasLoadedImage else {
+                throw GuestEngineError.invalidState("Load a valid ELF image before running the guest CPU.")
+            }
             guard state == .configured else {
                 throw GuestEngineError.invalidState("The guest must be configured before running; resume a paused guest or load/reset an image first.")
             }
@@ -228,6 +237,7 @@ final class GuestMachine {
         withExecutionLock {
             cpu?.requestStop()
             memory.clear()
+            hasLoadedImage = false
             state = .stopped
             lastExit = nil
         }
