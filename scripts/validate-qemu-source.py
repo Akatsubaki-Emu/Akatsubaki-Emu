@@ -241,6 +241,7 @@ required = {
     ],
     "src/Steam/GameLibraryQuery.swift": [
         "seen.insert($0.folding(options: .caseInsensitive, locale: .current)).inserted",
+        "games.flatMap(\\.tags)",
     ],
     "src/Steam/GameRuntimeProfile.swift": [
         "var hasUnreadableProfiles: Bool",
