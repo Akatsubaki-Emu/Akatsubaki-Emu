@@ -20,6 +20,16 @@ final class GuestMemory {
         return true
     }
 
+    func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool {
+        guard offset <= size, size - offset >= 16 else { return false }
+        let start = Int(offset)
+        for index in 0..<8 {
+            bytes[start + index] = UInt8(truncatingIfNeeded: first >> (index * 8))
+            bytes[start + 8 + index] = UInt8(truncatingIfNeeded: second >> (index * 8))
+        }
+        return true
+    }
+
     func writeUInt64(_ value: UInt64, offset: UInt64) -> Bool {
         var littleEndian = value.littleEndian
         return withUnsafeBytes(of: &littleEndian) { write(Data($0), offset: offset) }
@@ -142,6 +152,13 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let clockValue) = clock else { preconditionFailure() }
         precondition(clockValue == 0)
         precondition(memory.readUInt64(offset: 0x1100) != nil)
+        precondition(memory.readUInt64(offset: 0x1108) != nil)
+
+        let timeval = dispatcher.dispatch(number: 96, arguments: [0x1200, 0, 0, 0, 0, 0])!
+        guard case .returned(let timevalValue) = timeval else { preconditionFailure() }
+        precondition(timevalValue == 0)
+        precondition(memory.readUInt64(offset: 0x1200) != nil)
+        precondition(memory.readUInt64(offset: 0x1208) != nil)
 
         let badTimezone = dispatcher.dispatch(number: 96, arguments: [0x3F0000, UInt64.max, 0, 0, 0, 0])!
         guard case .returned(let badTimezoneValue) = badTimezone else { preconditionFailure() }

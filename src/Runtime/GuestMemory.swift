@@ -68,6 +68,17 @@ final class GuestMemory {
     }
 
     @discardableResult
+    func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool {
+        guard let native, offset <= size, 16 <= size - offset else { return false }
+        var pair = (first.littleEndian, second.littleEndian)
+        return withUnsafeBytes(of: &pair) { bytes in
+            guard bytes.count == 16,
+                  let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_write(native, offset, base, 16)
+        }
+    }
+
+    @discardableResult
     func writeUInt64(_ value: UInt64, offset: UInt64) -> Bool {
         guard let native, offset <= size, 8 <= size - offset else { return false }
         var littleEndian = value.littleEndian
