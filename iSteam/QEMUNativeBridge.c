@@ -123,9 +123,10 @@ bool isteam_qemu_validate_library(const char *library_path,
     bool has_init = dlsym(library, "qemu_init") != NULL;
     bool has_main_loop = dlsym(library, "qemu_main_loop") != NULL;
     bool has_cleanup = dlsym(library, "qemu_cleanup") != NULL;
+    bool has_shutdown = dlsym(library, "qemu_system_shutdown_request") != NULL;
     dlclose(library);
 
-    if (!has_init || !has_main_loop || !has_cleanup) {
+    if (!has_init || !has_main_loop || !has_cleanup || !has_shutdown) {
         if (error_buffer && error_capacity > 0)
             snprintf(error_buffer, (size_t)error_capacity,
                      "QEMU library is missing required lifecycle exports: %s%s%s",
@@ -180,9 +181,9 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     qemu_main_loop_fn loop_fn = (qemu_main_loop_fn)dlsym(library, "qemu_main_loop");
     qemu_cleanup_fn cleanup_fn = (qemu_cleanup_fn)dlsym(library, "qemu_cleanup");
     qemu_shutdown_request_fn shutdown_fn = (qemu_shutdown_request_fn)dlsym(library, "qemu_system_shutdown_request");
-    if (!init_fn || !loop_fn || !cleanup_fn) {
+    if (!init_fn || !loop_fn || !cleanup_fn || !shutdown_fn) {
         dlclose(library);
-        if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "QEMU library lacks required lifecycle symbols (qemu_init, qemu_main_loop, qemu_cleanup)");
+        if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "QEMU library lacks required lifecycle exports (qemu_init, qemu_main_loop, qemu_cleanup, qemu_system_shutdown_request)");
         clear_starting();
         return false;
     }
