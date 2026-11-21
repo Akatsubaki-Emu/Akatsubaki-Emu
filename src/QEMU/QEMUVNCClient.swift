@@ -32,7 +32,7 @@ final class QEMUVNCClient {
 
     private let queue = DispatchQueue(label: "com.xthrx.isteam.qemu-vnc")
     private let sendQueue = DispatchQueue(label: "com.xthrx.isteam.qemu-vnc.send")
-    private let pendingSendGroup = DispatchGroup()
+    private var pendingSendGroup = DispatchGroup()
     private let lock = NSLock()
     private var connection: NWConnection?
 
@@ -51,6 +51,8 @@ final class QEMUVNCClient {
     private var pointerX: Int = 0
     private var pointerY: Int = 0
     private var pressedKeys = Set<UInt32>()
+    private var buttonKeys = Set<UInt32>()
+    private var movementKeys = Set<UInt32>()
     private var connected = false
     var isConnected: Bool { withStateLock { connected } }
     var onFrame: ((Data, Int, Int) -> Void)?
@@ -104,17 +106,28 @@ final class QEMUVNCClient {
     func stop() {
         readerTask?.cancel()
         readerTask = nil
-        let previousConnection = withStateLock { () -> NWConnection? in
+        let (previousConnection, previousGroup) = withStateLock { () -> (NWConnection?, DispatchGroup) in
             let previous = connection
+            let group = pendingSendGroup
             connection = nil
             connected = false
+
+            // No later input can enter the old group after connection becomes nil.
+            // Queue releases after all earlier key-down packets, then cancel only
+            // after Network.framework confirms the final release was processed.
+            if let previous {
+                for key in pressedKeys {
+                    enqueueSend(Self.keyEvent(key, down: false), to: previous, in: group)
+                }
+            }
             pressedKeys.removeAll()
-            return previous
+            buttonKeys.removeAll()
+            movementKeys.removeAll()
+            pendingSendGroup = DispatchGroup()
+            return (previous, group)
         }
         if let previousConnection {
-            // All queued key-up/pointer writes are allowed to complete before
-            // cancelling the socket. This prevents held guest keys on exit.
-            pendingSendGroup.notify(queue: queue) {
+            previousGroup.notify(queue: queue) {
                 previousConnection.cancel()
             }
         }
@@ -172,32 +185,48 @@ final class QEMUVNCClient {
     /// All client writes enter one serial queue. Key-down/key-up and pointer
     /// packets can originate from different UI/controller threads; sending them
     /// from independent Tasks could reorder a release ahead of its press.
-    private func enqueueSend(_ data: Data, to connection: NWConnection) {
-        pendingSendGroup.enter()
+    private func enqueueSend(_ data: Data, to connection: NWConnection,
+                             in group: DispatchGroup? = nil) {
+        let group = group ?? pendingSendGroup
+        group.enter()
         sendQueue.async {
             connection.send(content: data, completion: .contentProcessed { error in
                 if let error {
-                    EmulationLog.shared.write("QEMU VNC send failed: \(error.localizedDescription)")
+                    EmulationLog.shared.write("QEMU VNC send failed: \\(error.localizedDescription)")
                 }
-                self.pendingSendGroup.leave()
+                group.leave()
             })
         }
     }
 
     private func send(_ data: Data, to connection: NWConnection) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            pendingSendGroup.enter()
-            sendQueue.async {
-                connection.send(content: data, completion: .contentProcessed { error in
-                    self.pendingSendGroup.leave()
-                    if let error {
-                        continuation.resume(throwing: ClientError.connection(error.localizedDescription))
-                    } else {
-                        continuation.resume(returning: ())
-                    }
-                })
+            let enqueued = withStateLock { () -> Bool in
+                guard self.connection === connection else { return false }
+                let group = pendingSendGroup
+                group.enter()
+                sendQueue.async {
+                    connection.send(content: data, completion: .contentProcessed { error in
+                        group.leave()
+                        if let error {
+                            continuation.resume(throwing: ClientError.connection(error.localizedDescription))
+                        } else {
+                            continuation.resume(returning: ())
+                        }
+                    })
+                }
+                return true
+            }
+            if !enqueued {
+                continuation.resume(throwing: CancellationError())
             }
         }
+    }
+
+    private static func keyEvent(_ keysym: UInt32, down: Bool) -> Data {
+        Data([4, down ? 1 : 0, 0, 0,
+              UInt8((keysym >> 24) & 0xff), UInt8((keysym >> 16) & 0xff),
+              UInt8((keysym >> 8) & 0xff), UInt8(keysym & 0xff)])
     }
 
     private func performHandshake(_ connection: NWConnection) async throws {
@@ -332,53 +361,60 @@ final class QEMUVNCClient {
     }
 
     func sendKey(_ key: String, down: Bool) {
-        guard let connection = withStateLock({ connection }) else { return }
         guard let keysym = Self.keysym(for: key) else { return }
-        let value = UInt32(keysym)
-        let message = Data([4, down ? 1 : 0, 0, 0,
-                            UInt8((value >> 24) & 0xff), UInt8((value >> 16) & 0xff),
-                            UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
-        enqueueSend(message, to: connection)
+        withStateLock {
+            guard let connection else { return }
+            let wasPressed = pressedKeys.contains(keysym)
+            if down { buttonKeys.insert(keysym) }
+            else { buttonKeys.remove(keysym) }
+            let shouldBePressed = buttonKeys.contains(keysym) || movementKeys.contains(keysym)
+            if shouldBePressed != wasPressed {
+                enqueueSend(Self.keyEvent(keysym, down: shouldBePressed), to: connection)
+            }
+            if shouldBePressed { pressedKeys.insert(keysym) }
+            else { pressedKeys.remove(keysym) }
+        }
     }
 
     func tapKey(_ key: String) {
-        guard let connection = withStateLock({ connection }),
-              let keysym = Self.keysym(for: key) else { return }
-        let value = UInt32(keysym)
-        let press = Data([4, 1, 0, 0, UInt8((value >> 24) & 0xff),
-                          UInt8((value >> 16) & 0xff), UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
-        let release = Data([4, 0, 0, 0, UInt8((value >> 24) & 0xff),
-                            UInt8((value >> 16) & 0xff), UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
-        enqueueSend(press, to: connection)
-        enqueueSend(release, to: connection)
+        guard let keysym = Self.keysym(for: key) else { return }
+        withStateLock {
+            guard let connection, !pressedKeys.contains(keysym) else { return }
+            enqueueSend(Self.keyEvent(keysym, down: true), to: connection)
+            enqueueSend(Self.keyEvent(keysym, down: false), to: connection)
+        }
     }
 
     func setMovement(x: Float, y: Float) {
         let desired = Set([
             abs(x) > 0.25 ? (x < 0 ? "A" : "D") : "",
             abs(y) > 0.25 ? (y < 0 ? "W" : "S") : ""
-        ].filter { !$0.isEmpty })
-        let (previous, next) = withStateLock { () -> (Set<UInt32>, Set<UInt32>) in
-            let previous = pressedKeys
-            let next = Set(desired.compactMap { Self.keysym(for: $0) })
-            pressedKeys = next
-            return (previous, next)
+        ].filter { !$0.isEmpty }.compactMap { Self.keysym(for: $0) })
+
+        withStateLock {
+            guard let connection else { return }
+            let previouslyPressed = pressedKeys
+            movementKeys = desired
+            let shouldBePressed = buttonKeys.union(movementKeys)
+            for key in previouslyPressed.subtracting(shouldBePressed) {
+                enqueueSend(Self.keyEvent(key, down: false), to: connection)
+            }
+            for key in shouldBePressed.subtracting(previouslyPressed) {
+                enqueueSend(Self.keyEvent(key, down: true), to: connection)
+            }
+            pressedKeys = shouldBePressed
         }
-        for key in previous.subtracting(next) { sendKeysym(key, down: false) }
-        for key in next.subtracting(previous) { sendKeysym(key, down: true) }
     }
 
     func movePointer(dx: Float, dy: Float) {
-        let pointer = withStateLock { () -> (NWConnection, Int, Int)? in
-            guard let connection, framebufferWidth > 0, framebufferHeight > 0 else { return nil }
+        withStateLock {
+            guard let connection, framebufferWidth > 0, framebufferHeight > 0 else { return }
             pointerX = min(max(pointerX + Int(dx * 12), 0), framebufferWidth - 1)
             pointerY = min(max(pointerY - Int(dy * 12), 0), framebufferHeight - 1)
-            return (connection, pointerX, pointerY)
+            let message = Data([5, 0, UInt8((pointerX >> 8) & 0xff), UInt8(pointerX & 0xff),
+                                UInt8((pointerY >> 8) & 0xff), UInt8(pointerY & 0xff)])
+            enqueueSend(message, to: connection)
         }
-        guard let (connection, x, y) = pointer else { return }
-        let message = Data([5, 0, UInt8((x >> 8) & 0xff), UInt8(x & 0xff),
-                            UInt8((y >> 8) & 0xff), UInt8(y & 0xff)])
-        enqueueSend(message, to: connection)
     }
 
     func sendButton(_ name: String, down: Bool) {
