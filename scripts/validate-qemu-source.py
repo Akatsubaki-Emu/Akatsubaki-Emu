@@ -241,6 +241,23 @@ required = {
         "#define ISTEAM_NONNULL _Nonnull",
         "#define ISTEAM_NONNULL",
     ],
+    "iSteam/Box64Bridge.c": [
+        "dlsym(RTLD_DEFAULT, \"box64_library_main\")",
+        "g_box64_working_directory_lock",
+        "fchdir(originalDirectory)",
+    ],
+    "iSteam/JIT26Protocol.c": [
+        "#if defined(__arm64__) && !TARGET_OS_TV",
+        "iSteamJITIsSupported",
+    ],
+    "src/Core/EmulationLog.swift": [
+        "maximumLogBytes = 5 * 1024 * 1024",
+        "emulation.previous.log",
+    ],
+    "iSteam/CrashLogger.swift": [
+        "maximumLogBytes = 5 * 1024 * 1024",
+        "previous-crash.log",
+    ],
     "src/Display/ControllerInputManager.swift": [
         "GCController.stopWirelessControllerDiscovery()",
         "pad.leftTrigger",
