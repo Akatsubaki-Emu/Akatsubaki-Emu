@@ -59,6 +59,26 @@ final class VMDisplayViewController: UIViewController {
         addKeyboardControls()
         configureControllerInput()
         configureMotionInput()
+        engine.onStateChange = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .starting:
+                self.status.text = "Starting QEMU • waiting for guest display"
+            case .running:
+                if !self.vncClient.isConnected {
+                    self.status.text = "QEMU active • waiting for guest display"
+                }
+            case .stopping:
+                self.status.text = "Stopping virtual machine…"
+                self.vncClient.stop()
+            case .stopped:
+                self.status.text = "Virtual machine stopped"
+                self.vncClient.stop()
+            case .failed(let message):
+                self.status.text = "VM failed • \\(message)"
+                self.vncClient.stop()
+            }
+        }
         registerKeyboardNotifications()
         refreshHardwareKeyboardState()
         virtioGPU.start()

@@ -10,6 +10,7 @@ required = {
         "func tapKey(_ key: String)",
         "numberOfColours = Int(Self.u16(header, 3))",
         "private static let maxFramebufferBytes = 64 * 1024 * 1024",
+        "for attempt in 0..<120",
         "private let sendQueue = DispatchQueue(label: \"com.xthrx.isteam.qemu-vnc.send\")",
         "private final class QEMUOneShotCompletion: @unchecked Sendable",
         "private func withStateLock<T>",
@@ -77,6 +78,8 @@ required = {
         'replacingOccurrences(of: ",", with: ",,")',
     ],
     "src/Core/VMEngine.swift": [
+        "var onStateChange: ((State) -> Void)?",
+        "private func setState(_ newState: State)",
         "startupDeadline = .now() + 60",
         "within 60 seconds",
     ],
@@ -192,6 +195,7 @@ required = {
         "self.configuration = configuration",
         "vncClient.onFrame",
         "vncClient.start()",
+        "engine.onStateChange",
         "vncClient.tapKey(key)",
     ],
     "src/Runtime/HostDeviceBridge.swift": [

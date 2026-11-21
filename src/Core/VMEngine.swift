@@ -13,6 +13,7 @@ final class VMEngine {
     }
 
     private(set) var state: State = .stopped
+    var onStateChange: ((State) -> Void)?
     private let configuration: VMConfiguration
     private var backend: QEMUBackend?
     private var monitor: DispatchSourceTimer?
@@ -22,15 +23,21 @@ final class VMEngine {
         self.configuration = configuration
     }
 
+    private func setState(_ newState: State) {
+        state = newState
+        let callback = onStateChange
+        DispatchQueue.main.async { callback?(newState) }
+    }
+
     func start() {
         guard case .stopped = state else { return }
-        state = .failed("Choose a guest disk image in the VM setup screen before starting the engine.")
+        setState(.failed("Choose a guest disk image in the VM setup screen before starting the engine."))
         EmulationLog.shared.write("VM start blocked: no guest disk image was supplied.")
     }
 
     func start(diskImage: URL, firmware: URL? = nil) {
         guard case .stopped = state else { return }
-        state = .starting
+        setState(.starting)
         EmulationLog.shared.write("Preparing session: \(configuration.name)")
         EmulationLog.shared.write("Guest: \(configuration.bootWindows ? "Windows" : "Linux")")
         EmulationLog.shared.write("CPU=\(configuration.architecture.rawValue) RAM=\(configuration.memoryMB)MB CPUs=\(configuration.cpuCount)")
@@ -57,7 +64,7 @@ final class VMEngine {
         } catch {
             backend?.stop()
             backend = nil
-            state = .failed(error.localizedDescription)
+            setState(.failed(error.localizedDescription))
             EmulationLog.shared.write("Session start failed: \(error.localizedDescription)")
         }
     }
@@ -68,7 +75,7 @@ final class VMEngine {
             monitor?.cancel()
             monitor = nil
             backend = nil
-            state = .stopped
+            setState(.stopped)
             EmulationLog.shared.write("QEMU session stopped; restart requires relaunching i-Steam.")
             return
         }
@@ -81,7 +88,7 @@ final class VMEngine {
         }
 
         if candidate.isRunning {
-            state = .running
+            setState(.running)
             startupDeadline = nil
             EmulationLog.shared.write("QEMU main loop is active. Guest OS boot is not independently verified.")
             return
@@ -105,13 +112,13 @@ final class VMEngine {
         startupDeadline = nil
         backend?.stop()
         backend = nil
-        state = .failed(message)
+        setState(.failed(message))
         EmulationLog.shared.write(message)
     }
 
     func stop() {
         guard case .stopped = state else {
-            state = .stopping
+            setState(.stopping)
             startupDeadline = nil
             backend?.stop()
 
@@ -119,7 +126,7 @@ final class VMEngine {
                 monitor?.cancel()
                 monitor = nil
                 backend = nil
-                state = .stopped
+                setState(.stopped)
                 EmulationLog.shared.write("Stopped session: \(configuration.name)")
                 return
             }

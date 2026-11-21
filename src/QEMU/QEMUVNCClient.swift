@@ -63,7 +63,7 @@ final class QEMUVNCClient {
         readerTask = Task { [weak self] in
             guard let self else { return }
             var lastError: Error = ClientError.connection("QEMU VNC server did not start.")
-            for attempt in 0..<40 {
+            for attempt in 0..<120 {
                 if Task.isCancelled { return }
                 let candidate = NWConnection(host: "127.0.0.1", port: endpointPort, using: .tcp)
                 self.withStateLock {
@@ -82,7 +82,7 @@ final class QEMUVNCClient {
                     lastError = error
                     candidate.cancel()
                     if Task.isCancelled { return }
-                    if attempt < 39 {
+                    if attempt < 119 {
                         try? await Task.sleep(nanoseconds: 500_000_000)
                     }
                 }
