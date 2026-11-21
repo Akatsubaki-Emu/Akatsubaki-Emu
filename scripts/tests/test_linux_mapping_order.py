@@ -11,6 +11,9 @@ class LinuxMappingOrderTests(unittest.TestCase):
         self.assertNotIn("mappedRanges.sorted", source)
         self.assertIn("mappedRanges.first?.lowerBound ?? mmapCursor", source)
         self.assertIn("for range in mappedRanges {", source)
+        mapping = source.split("private func mapAnonymous", 1)[1].split("private func insertMappedRange", 1)[0]
+        self.assertIn("rangeWasCleared = true", mapping)
+        self.assertIn("if !rangeWasCleared && !memory.zero", mapping)
 
 
 if __name__ == "__main__":

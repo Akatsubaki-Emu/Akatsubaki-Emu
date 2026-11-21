@@ -162,11 +162,13 @@ final class LinuxSyscallDispatcher {
             return errno(12)
         }
         let overlaps = mappedRanges.contains(where: { address < $0.upperBound && $0.lowerBound < end })
+        var rangeWasCleared = false
         if overlaps {
             if noReplace { return errno(17) }
             guard fixed, unmap(address: address, length: size) == 0 else { return errno(12) }
+            rangeWasCleared = true
         }
-        guard memory.zero(offset: address, length: size) else { return errno(12) }
+        if !rangeWasCleared && !memory.zero(offset: address, length: size) { return errno(12) }
         insertMappedRange(address..<end)
         if !fixed { mmapCursor = max(mmapCursor, end) }
         return address
