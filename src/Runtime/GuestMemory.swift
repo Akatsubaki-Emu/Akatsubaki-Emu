@@ -37,6 +37,17 @@ final class GuestMemory {
         return success ? value : nil
     }
 
+    func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int? {
+        guard let native, offset <= size else { return nil }
+        let count = Int(min(UInt64(buffer.count), size - offset))
+        guard count > 0 else { return 0 }
+        let success = buffer.withUnsafeMutableBytes { bytes -> Bool in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_read(native, offset, base, count)
+        }
+        return success ? count : nil
+    }
+
     func readUInt32(offset: UInt64) -> UInt32? {
         guard let native, offset <= size, 4 <= size - offset else { return nil }
         var value: UInt32 = 0

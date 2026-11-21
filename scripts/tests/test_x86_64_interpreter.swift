@@ -31,6 +31,8 @@ enum GuestEngineError: Error {
 final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
+    private(set) var readByteCalls = 0
+    private(set) var readPrefixCalls = 0
 
     init(size: UInt64) {
         self.size = size
@@ -38,8 +40,20 @@ final class GuestMemory {
     }
 
     func readByte(offset: UInt64) -> UInt8? {
+        readByteCalls += 1
         guard offset < size else { return nil }
         return bytes[Int(offset)]
+    }
+
+    func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int? {
+        readPrefixCalls += 1
+        guard offset <= size else { return nil }
+        let count = Int(min(UInt64(buffer.count), size - offset))
+        if count > 0 {
+            let start = Int(offset)
+            for index in 0..<count { buffer[index] = bytes[start + index] }
+        }
+        return count
     }
 
     func readUInt32(offset: UInt64) -> UInt32? {
@@ -644,6 +658,39 @@ struct InterpreterTests {
         try unsupported.reset(entryPoint: 0)
         let unsupportedExit = try unsupported.run(maxInstructions: 1)
         precondition(unsupportedExit == .unsupportedInstruction(address: 0))
-        print("x86-64 interpreter register, memory addressing, ALU flags, stack frames, indirect control flow, brk syscall, budget and fault tests passed")
+        let windowMemory = GuestMemory(size: 64)
+        precondition(windowMemory.write(Data([0x90, 0x90, 0xF4]), offset: 0x20))
+        let windowInterpreter = X86_64Interpreter(memory: windowMemory)
+        try windowInterpreter.reset(entryPoint: 0x20)
+        precondition(try windowInterpreter.run(maxInstructions: 8) == .halted)
+        precondition(windowMemory.readPrefixCalls == 3)
+        precondition(windowMemory.readByteCalls == 0)
+
+        let boundaryMemory = GuestMemory(size: 8192)
+        precondition(boundaryMemory.write(Data([0xB8, 0x78, 0x56, 0x34, 0x12, 0xF4]), offset: 4094))
+        let boundaryInterpreter = X86_64Interpreter(memory: boundaryMemory)
+        try boundaryInterpreter.reset(entryPoint: 4094)
+        precondition(try boundaryInterpreter.run(maxInstructions: 4) == .halted)
+        precondition(boundaryInterpreter.registerValue(0) == 0x12345678)
+
+        let edgeMemory = GuestMemory(size: 4096)
+        precondition(edgeMemory.write(Data([0x90]), offset: 4095))
+        let edgeInterpreter = X86_64Interpreter(memory: edgeMemory)
+        try edgeInterpreter.reset(entryPoint: 4095)
+        precondition(try edgeInterpreter.run(maxInstructions: 2) == .memoryFault(address: 4096))
+
+        let selfModifyingMemory = GuestMemory(size: 64)
+        precondition(selfModifyingMemory.write(Data([
+            0xB8, 0xF4, 0x00, 0x00, 0x00,
+            0x89, 0x05, 0x00, 0x00, 0x00, 0x00,
+            0x90, 0xF4
+        ]), offset: 0))
+        let selfModifyingInterpreter = X86_64Interpreter(memory: selfModifyingMemory)
+        try selfModifyingInterpreter.reset(entryPoint: 0)
+        precondition(try selfModifyingInterpreter.run(maxInstructions: 8) == .halted)
+        precondition(selfModifyingMemory.readByte(offset: 11) == 0xF4)
+        precondition(selfModifyingMemory.readPrefixCalls == 3)
+
+        print("x86-64 interpreter register, memory addressing, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
