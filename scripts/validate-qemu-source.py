@@ -265,8 +265,7 @@ required = {
         "precondition(memoryArithmeticMemory.readUInt32(offset: 0x80) == 5)",
         "precondition(lea32.registerValue(3) == 0x108)",
         "precondition(truncatedRetExit == .memoryFault(address: 1))",
-        "precondition(indirectFaultExit == .memoryFault(address: 0x1006))"
-
+        "precondition(indirectFaultExit == .memoryFault(address: 0x1006))",
         "precondition(shift.registerValue(3) == 2)",
         "precondition(shift.registerValue(1) == 0x40000000)",
         "precondition(shift.registerValue(2) == 0xC0000000)",
