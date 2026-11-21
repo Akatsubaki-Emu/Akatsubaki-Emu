@@ -10,6 +10,12 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("var isStikDebugAvailable: Bool", source)
         self.assertIn("StikDebug JIT requires iOS 17.4 or later", source)
 
+    def test_stikdebug_availability_is_limited_to_physical_ios_devices(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        physical_guard = "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)"
+        self.assertEqual(source.count(physical_guard), 2)
+
     def test_ios_26_breakpoint_script_is_gated_to_supported_devices(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")

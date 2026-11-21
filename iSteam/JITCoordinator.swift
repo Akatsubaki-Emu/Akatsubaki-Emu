@@ -28,7 +28,7 @@ final class JITCoordinator {
     var hasGetTaskAllow: Bool { false }
 
     var isStikDebugAvailable: Bool {
-        #if os(iOS)
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if #available(iOS 17.4, *) {
             return true
         }
@@ -37,7 +37,7 @@ final class JITCoordinator {
     }
 
     var isJITProtocolSupported: Bool {
-        #if os(iOS)
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if #available(iOS 26.0, *) {
             return iSteamJITIsSupported()
         }

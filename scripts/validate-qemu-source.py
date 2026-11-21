@@ -70,6 +70,7 @@ required = {
         "scheme = \"stikdebug\"",
         "host = \"enable-jit\"",
         "script-name",
+        "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)",
     ],
     "iSteam/CrashLogger.swift": [
         "queueKey = DispatchSpecificKey<UInt8>()",
@@ -142,6 +143,11 @@ required = {
         "test_qemu_runtime_does_not_cancel_in_progress_release_build",
         "cancel-in-progress: false",
         "def test_windows_and_steamos_profiles_select_uefi_firmware",
+    ],
+    "scripts/tests/test_jit_coordinator.py": [
+        "test_stikdebug_availability_is_limited_to_physical_ios_devices",
+        "targetEnvironment(simulator)",
+        "targetEnvironment(macCatalyst)",
     ],
     "scripts/tests/test_guest_time_pair.py": [
         "func writeUInt64Pair",
