@@ -520,6 +520,7 @@ required = {
         "hasLoadedImage",
         "activeCPULock",
         "requestActiveStop",
+        "A caller can pause between bounded execution batches as well.",
         "state == .configured",
         "executionLock.lock()",
     ],

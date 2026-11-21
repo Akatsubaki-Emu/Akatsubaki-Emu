@@ -305,5 +305,13 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("test_qemu_runtime_does_not_cancel_in_progress_release_build", tests)
 
 
+    def test_guest_machine_pause_works_between_bounded_execution_batches(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        pause = source.split("func pause()", 1)[1].split("func stop()", 1)[0]
+        self.assertIn("_ = requestActiveStop()", pause)
+        self.assertIn("if state == .configured", pause)
+        self.assertIn("state = .paused", pause)
+
 if __name__ == "__main__":
     unittest.main()

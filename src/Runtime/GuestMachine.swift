@@ -277,11 +277,11 @@ final class GuestMachine {
     }
 
     func pause() {
-        let wasExecuting = requestActiveStop()
+        // Interrupt an active batch without waiting for its execution lock.
+        _ = requestActiveStop()
         withExecutionLock {
-            // runBatch normally records .paused after observing the stop request.
-            // If its instruction budget ended first, preserve the user's pause.
-            if wasExecuting && state == .configured {
+            // A caller can pause between bounded execution batches as well.
+            if state == .configured {
                 state = .paused
             }
         }
