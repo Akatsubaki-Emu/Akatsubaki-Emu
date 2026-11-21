@@ -124,10 +124,8 @@ final class QEMUVNCClient {
             // Queue releases after all earlier key-down packets, then cancel only
             // after Network.framework confirms the final release was processed.
             let releaseEvents = keyState.releaseAll()
-            if let previous {
-                for event in releaseEvents {
-                    enqueueSend(Self.keyEvent(event.keysym, down: false), to: previous, in: group)
-                }
+            if let previous, !releaseEvents.isEmpty {
+                enqueueSend(Self.keyEvents(releaseEvents), to: previous, in: group)
             }
             pendingSendGroup = DispatchGroup()
             return (previous, group)
@@ -239,6 +237,23 @@ final class QEMUVNCClient {
               UInt8((keysym >> 8) & 0xff), UInt8(keysym & 0xff)])
     }
 
+    private static func keyEvents(_ events: [VNCKeyState.Event]) -> Data {
+        var data = Data()
+        data.reserveCapacity(events.count * 8)
+        for event in events {
+            let keysym = event.keysym
+            data.append(4)
+            data.append(event.isDown ? 1 : 0)
+            data.append(0)
+            data.append(0)
+            data.append(UInt8((keysym >> 24) & 0xff))
+            data.append(UInt8((keysym >> 16) & 0xff))
+            data.append(UInt8((keysym >> 8) & 0xff))
+            data.append(UInt8(keysym & 0xff))
+        }
+        return data
+    }
+
     private func performHandshake(_ connection: NWConnection) async throws {
         let serverVersion = try await receiveExactly(12, from: connection)
         guard let version = String(data: serverVersion, encoding: .ascii),
@@ -296,8 +311,8 @@ final class QEMUVNCClient {
             let type = try await receiveExactly(1, from: connection)[0]
             switch type {
             case 0: // FramebufferUpdate
-                _ = try await receiveExactly(1, from: connection) // padding
-                let count = Int(Self.u16(try await receiveExactly(2, from: connection), 0))
+                let updateHeader = try await receiveExactly(3, from: connection)
+                let count = Int(Self.u16(updateHeader, 1))
                 guard count <= 4096 else {
                     throw ClientError.protocolError("QEMU sent too many framebuffer rectangles in one update.")
                 }
@@ -413,8 +428,11 @@ final class QEMUVNCClient {
         guard let keysym = Self.keysym(for: key) else { return }
         withStateLock {
             guard connected, let connection, !keyState.isPressed(keysym) else { return }
-            enqueueSend(Self.keyEvent(keysym, down: true), to: connection, in: pendingSendGroup)
-            enqueueSend(Self.keyEvent(keysym, down: false), to: connection, in: pendingSendGroup)
+            let events = [
+                VNCKeyState.Event(keysym: keysym, isDown: true),
+                VNCKeyState.Event(keysym: keysym, isDown: false)
+            ]
+            enqueueSend(Self.keyEvents(events), to: connection, in: pendingSendGroup)
         }
     }
 
@@ -422,8 +440,9 @@ final class QEMUVNCClient {
         let desiredMask = VNCKeyState.movementMask(for: x, y: y)
         withStateLock {
             guard connected, let connection else { return }
-            for event in keyState.setMovement(desiredMask, source: source) {
-                enqueueSend(Self.keyEvent(event.keysym, down: event.isDown), to: connection, in: pendingSendGroup)
+            let events = keyState.setMovement(desiredMask, source: source)
+            if !events.isEmpty {
+                enqueueSend(Self.keyEvents(events), to: connection, in: pendingSendGroup)
             }
         }
     }
