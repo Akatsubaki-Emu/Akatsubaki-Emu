@@ -182,9 +182,8 @@ final class LinuxSyscallDispatcher {
         for range in mappedRanges {
             let (candidateEnd, overflow) = candidate.addingReportingOverflow(size)
             if overflow { return nil }
-            if candidate < range.upperBound && range.lowerBound < candidateEnd {
-                candidate = Self.alignUp(range.upperBound)
-            }
+            if range.lowerBound >= candidateEnd { break }
+            if candidate < range.upperBound { candidate = Self.alignUp(range.upperBound) }
         }
         let (end, overflow) = candidate.addingReportingOverflow(size)
         guard !overflow, end <= limit, end <= memory.size else { return nil }
