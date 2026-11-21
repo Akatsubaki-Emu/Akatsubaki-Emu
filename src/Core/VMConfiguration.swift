@@ -51,7 +51,7 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
         let resolution = RuntimeSettings.shared.renderResolution
         return VMConfiguration(
             id: UUID(), name: "Ubuntu", architecture: .x86_64, memoryMB: 4096,
-            cpuCount: 4, accelerator: .jit, gpu: .virtioGPU,
+            cpuCount: 4, accelerator: defaultAccelerator, gpu: .virtioGPU,
             displayWidth: resolution.width,
             displayHeight: resolution.height,
             displayFPS: RuntimeSettings.shared.frameRate.value,
