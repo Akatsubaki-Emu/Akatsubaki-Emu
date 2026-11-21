@@ -48,11 +48,19 @@ final class GameCompatibilityDatabase {
         return root.appendingPathComponent("game-compatibility.json")
     }
 
+    private func loadRecords() throws -> [GameCompatibilityRecord] {
+        guard fm.fileExists(atPath: fileURL.path) else { return [] }
+        let data = try Data(contentsOf: fileURL)
+        guard data.count <= 5 * 1024 * 1024,
+              let records = try? decoder.decode([GameCompatibilityRecord].self, from: data) else {
+            throw DatabaseError.corruptDatabase
+        }
+        return records
+    }
+
     var records: [GameCompatibilityRecord] {
-        guard let data = try? Data(contentsOf: fileURL),
-              data.count <= 5 * 1024 * 1024,
-              let records = try? decoder.decode([GameCompatibilityRecord].self, from: data) else { return [] }
-        return records.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        let loaded = (try? loadRecords()) ?? []
+        return loaded.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 
     func record(for appID: String) -> GameCompatibilityRecord? {
@@ -61,7 +69,7 @@ final class GameCompatibilityDatabase {
 
     func save(_ record: GameCompatibilityRecord) throws {
         try record.validate()
-        var current = records
+        var current = try loadRecords()
         if let index = current.firstIndex(where: { $0.appID.caseInsensitiveCompare(record.appID) == .orderedSame }) {
             current[index] = record
         } else {
@@ -75,16 +83,17 @@ final class GameCompatibilityDatabase {
     }
 
     func remove(appID: String) throws {
-        let remaining = records.filter { $0.appID.caseInsensitiveCompare(appID) != .orderedSame }
+        let remaining = try loadRecords().filter { $0.appID.caseInsensitiveCompare(appID) != .orderedSame }
         try encoder.encode(remaining).write(to: fileURL, options: .atomic)
     }
 
     enum DatabaseError: LocalizedError {
-        case tooManyRecords, databaseTooLarge
+        case tooManyRecords, databaseTooLarge, corruptDatabase
         var errorDescription: String? {
             switch self {
             case .tooManyRecords: return "The compatibility database has reached its record limit."
             case .databaseTooLarge: return "The compatibility database exceeds the 5 MB safety limit."
+            case .corruptDatabase: return "The existing compatibility database is unreadable; it was preserved rather than overwritten."
             }
         }
     }
