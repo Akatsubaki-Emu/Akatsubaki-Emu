@@ -355,8 +355,8 @@ required = {
         "firmwareVariables: selectedFirmwareVariables",
         "startAccessingSecurityScopedResource()",
         "releaseScopesWhenStopped()",
-
-        "configuration.requiresUEFI",    ],
+        "configuration.requiresUEFI",
+    ],
     "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
         "dlopen(library_path, RTLD_NOW | RTLD_LOCAL)",
@@ -421,7 +421,6 @@ required = {
         "static var defaultAccelerator: Accelerator",
         "case .automatic, .qemuJIT: return .jit",
         "case .qemuInterpreter, .hypervisor: return .tcg",
-
         "var bootUEFI: Bool? = nil",
         "var requiresUEFI: Bool",
         "bootWindows: true, bootUEFI: true",
