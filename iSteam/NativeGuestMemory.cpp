@@ -146,20 +146,55 @@ bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
         const uint64_t end = offset + length;
-        for (uint64_t address = offset; address < end;) {
-            const uint64_t pageIndex = address / pageSize;
-            const size_t pageOffset = static_cast<size_t>(address % pageSize);
-            const size_t amount = static_cast<size_t>(
-                std::min(end - address, pageSize - pageOffset));
-            const auto found = memory->pages.find(pageIndex);
-            if (found != memory->pages.end() && found->second) {
-                if (pageOffset == 0 && amount == pageSize) {
-                    memory->pages.erase(found);
+        const uint64_t firstPage = offset / pageSize;
+        const uint64_t lastPage = (end - 1) / pageSize;
+        const uint64_t rangePageCount = lastPage - firstPage + 1;
+        if (rangePageCount > static_cast<uint64_t>(memory->pages.size())) {
+            // Large sparse ranges are cheaper to clear by visiting allocated pages
+            // than by hashing every page number in the requested address range.
+            for (auto it = memory->pages.begin(); it != memory->pages.end();) {
+                const uint64_t pageStart = it->first * pageSize;
+                if (pageStart >= memory->size) {
+                    it = memory->pages.erase(it);
+                    continue;
+                }
+                const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);
+                const uint64_t pageEnd = pageStart + pageLength;
+                if (pageStart >= end || pageEnd <= offset) {
+                    ++it;
+                    continue;
+                }
+                if (!it->second) {
+                    it = memory->pages.erase(it);
+                    continue;
+                }
+                const uint64_t overlapStart = std::max(offset, pageStart);
+                const uint64_t overlapEnd = std::min(end, pageEnd);
+                const size_t pageOffset = static_cast<size_t>(overlapStart - pageStart);
+                const size_t amount = static_cast<size_t>(overlapEnd - overlapStart);
+                if (pageOffset == 0 && amount == pageLength) {
+                    it = memory->pages.erase(it);
                 } else {
-                    std::memset(found->second->data() + pageOffset, 0, amount);
+                    std::memset(it->second->data() + pageOffset, 0, amount);
+                    ++it;
                 }
             }
-            address += amount;
+        } else {
+            for (uint64_t address = offset; address < end;) {
+                const uint64_t pageIndex = address / pageSize;
+                const size_t pageOffset = static_cast<size_t>(address % pageSize);
+                const size_t amount = static_cast<size_t>(
+                    std::min(end - address, pageSize - pageOffset));
+                const auto found = memory->pages.find(pageIndex);
+                if (found != memory->pages.end() && found->second) {
+                    if (pageOffset == 0 && amount == pageSize) {
+                        memory->pages.erase(found);
+                    } else {
+                        std::memset(found->second->data() + pageOffset, 0, amount);
+                    }
+                }
+                address += amount;
+            }
         }
         return true;
     } catch (...) {

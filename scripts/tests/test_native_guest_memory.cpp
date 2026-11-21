@@ -79,6 +79,18 @@ int main() {
         }
     }
 
+    // Clearing a huge sparse address range should visit allocated pages, not every page in the range.
+    constexpr uint64_t largeSize = 1ULL << 30;
+    ISteamGuestMemory *sparse = isteam_guest_memory_create(largeSize);
+    assert(sparse != nullptr);
+    const std::array<uint8_t, 4> marker{1, 2, 3, 4};
+    assert(isteam_guest_memory_write(sparse, pageSize * 2, marker.data(), marker.size()));
+    assert(isteam_guest_memory_write(sparse, largeSize - marker.size(), marker.data(), marker.size()));
+    assert(isteam_guest_memory_allocated_pages(sparse) == 2);
+    assert(isteam_guest_memory_zero(sparse, 0, largeSize));
+    assert(isteam_guest_memory_allocated_pages(sparse) == 0);
+    isteam_guest_memory_destroy(sparse);
+
     isteam_guest_memory_clear(memory);
     assert(isteam_guest_memory_allocated_pages(memory) == 0);
     isteam_guest_memory_destroy(memory);
