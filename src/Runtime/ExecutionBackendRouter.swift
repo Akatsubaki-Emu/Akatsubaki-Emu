@@ -272,8 +272,8 @@ enum RuntimeBackendRouter {
         let selected = staticBackend ?? dynamicBackend ?? architectureBackend ?? fullSystem ?? interpreter
         if selected == nil {
             explanation.append("No installed compatible backend is available. Missing integrations are not inferred from source files.")
-        } else if dynamicBackend == nil && interpreter != nil && staticBackend == nil {
-            explanation.append("The x86 interpreter is diagnostic only; it cannot execute arbitrary Linux binaries or replace FEXCore/Box64.")
+        } else if dynamicBackend == nil && (interpreter != nil || staticBackend != nil) {
+            explanation.append("Cached AOT translations require a dynamic engine for cache misses; the diagnostic interpreter is not a general-purpose backend.")
         } else {
             explanation.append("Preferred backend candidate: \(selected!.rawValue). Its own startup and guest validation must still succeed.")
         }

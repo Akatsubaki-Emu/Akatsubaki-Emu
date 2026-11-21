@@ -81,6 +81,22 @@ required = {
     "src/Runtime/ExecutionBackendRouter.swift": [
         "antiCheatAssessment == .notRequested",
         "return dynamicTranslationBackend != nil",
+        "Cached AOT translations require a dynamic engine",
+    ],
+    "src/Core/VMConfiguration.swift": [
+        "static var defaultAccelerator: Accelerator",
+        "case .automatic, .qemuJIT: return .jit",
+        "case .qemuInterpreter, .hypervisor: return .tcg",
+    ],
+    "iSteam/LaunchSetupViewController.swift": [
+        "RuntimeSettings.shared.vmMode",
+        "config.accelerator = VMConfiguration.defaultAccelerator",
+        "let selectedMode: VMExecutionMode",
+    ],
+    "src/Steam/GameRuntimeProfile.swift": [
+        "launchArguments.count <= 256",
+        "environment.count <= 128",
+        "compatibilityNotes.utf8.count <= 16_384",
     ],
     "src/Runtime/X86_64Interpreter.swift": [
         "PUSH RSP stores the pre-decrement value.",
