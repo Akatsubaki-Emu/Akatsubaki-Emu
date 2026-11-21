@@ -5,20 +5,12 @@ import sys
 
 required = {
     "src/QEMU/QEMUVNCClient.swift": [
-        "private func performHandshake(_ connection: NWConnection) async throws",
-        "case 0: // FramebufferUpdate",
-        "func tapKey(_ key: String)",
-        "numberOfColours = Int(Self.u16(header, 3))",
-        "private static let maxFramebufferBytes = 64 * 1024 * 1024",
+        "pendingSendGroup.enter()",
+        "pendingSendGroup.notify(queue: queue)",
+        "framebufferWidth = width",
+        "width <= Self.maxFramebufferBytes / height / 4",
         "for attempt in 0..<120",
-        "private let sendQueue = DispatchQueue(label: \"com.xthrx.isteam.qemu-vnc.send\")",
-        "private final class QEMUOneShotCompletion: @unchecked Sendable",
-        "private func withStateLock<T>",
-        "let completion = QEMUOneShotCompletion()",
-        "RFB FramebufferUpdateRequest is exactly 10 bytes:",
-        "0, 0, 0, 0,",
-    ],
-    "src/Runtime/WindowsPELoader.swift": [
+    ],    "src/Runtime/WindowsPELoader.swift": [
         "WindowsPEImage.parse(data)",
         "is64Bit: true",
     ],
@@ -27,6 +19,10 @@ required = {
         "Section(name: name,\n                virtualAddress:",
         "virtualSize: try u32(data, offset + 8)",
         "rawOffset: try u32(data, offset + 20)",
+    ],
+    "iSteam/JITCoordinator.swift": [
+        "if #available(iOS 26.0, *)",
+        "return iSteamJITIsSupported()",
     ],
     "iSteam/ELFValidator.swift": [
         "guard fileType == 2",
@@ -60,24 +56,19 @@ required = {
         "POP RSP loads the popped value directly",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
-        '"-vnc", "127.0.0.1:0"',
-        'firmwareVariables: URL? = nil',
-        '"-drive", "if=pflash,format=raw,file=\\(Self.escapeDriveValue(firmwareVariables.path))"',
-        'let gpu = configuration.bootWindows ? "VGA" : configuration.gpu.rawValue',
-        '"-device", gpu',
-        '"-device", "ich9-ahci,id=sata0"',
-        'let networkDevice = configuration.bootWindows ? "e1000e" : "virtio-net-pci"',
-        '"-device", "ich9-ahci,id=sata0"',
-        '"-monitor", "none", "-serial", "none", "-parallel", "none"',
-        '"ide-hd,drive=isteam-disk,bus=sata0.0,bootindex=1"',
-        '"ide-cd,drive=isteam-cdrom,bus=sata0.1,bootindex=1"',
-        '"-device", "\\(networkDevice),netdev=isteam-net0"',
-        'let machine = "q35,usb=on"',
-        '"-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"',
-        "escapeDriveValue(_ path: String)",
-        'replacingOccurrences(of: ",", with: ",,")',
-    ],
-    "src/Core/VMEngine.swift": [
+        "firmwareVariables: URL? = nil",
+        "\"-vnc\", \"127.0.0.1:0\"",
+        "let gpu = configuration.bootWindows ? \"VGA\" : configuration.gpu.rawValue",
+        "let networkDevice = configuration.bootWindows ? \"e1000e\" : \"virtio-net-pci\"",
+        "\"-device\", \"ich9-ahci,id=sata0\"",
+        "\"-monitor\", \"none\", \"-serial\", \"none\", \"-parallel\", \"none\"",
+        "\"ide-hd,drive=isteam-disk,bus=sata0.0,bootindex=1\"",
+        "\"ide-cd,drive=isteam-cdrom,bus=sata0.1,bootindex=1",
+        "\"vhdxfile\"",
+        "\"conectix\"",
+        "case vdi",
+        "case vpc",
+    ],    "src/Core/VMEngine.swift": [
         "var onStateChange: ((State) -> Void)?",
         "private func setState(_ newState: State)",
         "startupDeadline = .now() + 60",
@@ -91,8 +82,7 @@ required = {
         "findUEFIVariables(in directory: URL)",
         "makeWritableUEFIVariables(from template: URL, for configurationID: UUID)",
         "firmwareVariables: selectedFirmwareVariables",
-    ],
-    "iSteam/QEMUNativeBridge.c": [
+    ],    "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
         "dlopen(library_path, RTLD_NOW | RTLD_LOCAL)",
         "malloc(argument_length + 1)",
@@ -145,6 +135,12 @@ required = {
         "framebufferBytes <= 64 * 1024 * 1024",
         "fit the 64 MiB framebuffer limit",
     ],
+    "src/Runtime/GuestBlockDevice.swift": [
+        "static let maximumTransferBytes = 16 * 1024 * 1024",
+        "byteCount <= UInt64(Self.maximumTransferBytes)",
+        "data.count <= Self.maximumTransferBytes",
+        "startAccessingSecurityScopedResource()",
+    ],
     "src/Runtime/GuestMemory.swift": [
         "private let native: OpaquePointer?",
         "var isAvailable: Bool",
@@ -188,18 +184,12 @@ required = {
         "UInt64(preferredResolutionWidth) * UInt64(preferredResolutionHeight) * 4 <= 64 * 1024 * 1024",
     ],
     "src/Display/VMDisplayViewController.swift": [
-        "configuration.displayWidth, height: configuration.displayHeight",
-        "configuration.displayFPS",
-        "configuration.displayWidth, height: configuration.displayHeight",
-        "configuration.displayFPS",
         "private let configuration: VMConfiguration",
         "self.configuration = configuration",
-        "vncClient.onFrame",
+        "gamepad?.releaseAllButtons()",
         "vncClient.start()",
         "engine.onStateChange",
-        "vncClient.tapKey(key)",
-    ],
-    "src/Runtime/HostDeviceBridge.swift": [
+    ],    "src/Runtime/HostDeviceBridge.swift": [
         "resolvingSymlinksInPath()",
         "withAccess(to: source)",
     ],
@@ -225,13 +215,9 @@ required = {
         "if let rightThumbstickButton = pad.rightThumbstickButton",
     ],
     "src/Display/TouchGamepadView.swift": [
-        'iSteam.touchGamepad.layout.v3',
-        "control.center.x / bounds.width",
-        "control.center.y / bounds.height",
-        "if bounds.size != lastBoundsSize",
-        "installEditGesturesIfNeeded()",
-    ],
-    "scripts/patch_utm_qemu_ios.py": [
+        "func releaseAllButtons()",
+        "private func releaseButtons()",
+    ],    "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
