@@ -231,17 +231,27 @@ final class LinuxSyscallDispatcher {
         let size = rounded & ~UInt64(4095)
         let (end, endOverflow) = address.addingReportingOverflow(size)
         let limit = stackBase >= 4096 ? stackBase - 4096 : 0
-        guard !endOverflow, address >= initialProgramBreak, end <= limit, end <= memory.size else {
+        guard !endOverflow, address >= programBreak, end <= limit, end <= memory.size else {
             return errno(22)
         }
-        guard memory.zero(offset: address, length: size) else { return errno(22) }
+
         var remaining: [Range<UInt64>] = []
         for range in mappedRanges {
             if range.upperBound <= address || range.lowerBound >= end {
                 remaining.append(range)
-            } else {
-                if range.lowerBound < address { remaining.append(range.lowerBound..<address) }
-                if range.upperBound > end { remaining.append(end..<range.upperBound) }
+                continue
+            }
+
+            let overlapStart = max(range.lowerBound, address)
+            let overlapEnd = min(range.upperBound, end)
+            guard memory.zero(offset: overlapStart, length: overlapEnd - overlapStart) else {
+                return errno(22)
+            }
+            if range.lowerBound < address {
+                remaining.append(range.lowerBound..<address)
+            }
+            if range.upperBound > end {
+                remaining.append(end..<range.upperBound)
             }
         }
         mappedRanges = remaining

@@ -849,7 +849,7 @@ struct InterpreterTests {
         precondition(zeroExtendMemory.readByteCalls == 0)
 
         let signExtendMemory = GuestMemory(size: 256)
-        precondition(signExtendMemory.write(Data([0x0F, 0xBF, 0x05, 0x79, 0x00, 0x00, 0x00, 0xF4]), offset: 0))
+        precondition(signExtendMemory.write(Data([0x48, 0x0F, 0xBF, 0x05, 0x78, 0x00, 0x00, 0x00, 0xF4]), offset: 0))
         precondition(signExtendMemory.write(Data([0xFF, 0x80]), offset: 0x80))
         let signExtend = X86_64Interpreter(memory: signExtendMemory)
         try signExtend.reset(entryPoint: 0)

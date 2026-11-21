@@ -80,6 +80,12 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let shrunkValue) = shrunk else { preconditionFailure() }
         precondition(shrunkValue == 0x41000)
 
+        precondition(memory.write(Data([0xAA, 0xBB]), offset: 0x40000))
+        let heapUnmap = dispatcher.dispatch(number: 11, arguments: [0x40000, 4096, 0, 0, 0, 0])!
+        guard case .returned(let heapUnmapValue) = heapUnmap else { preconditionFailure() }
+        precondition(heapUnmapValue == UInt64(bitPattern: Int64(-22)))
+        precondition(memory.read(offset: 0x40000, length: 2) == Data([0xAA, 0xBB]))
+
         let mapping = dispatcher.dispatch(number: 9, arguments: [0, 8192, 3, 0x22, UInt64.max, 0])!
         guard case .returned(let mapped) = mapping else { preconditionFailure() }
         precondition(mapped >= 0x10000 && mapped % 4096 == 0)
@@ -113,15 +119,22 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let noReplaceValue) = noReplace else { preconditionFailure() }
         precondition(noReplaceValue == UInt64(bitPattern: Int64(-17)))
 
-        let unmap = dispatcher.dispatch(number: 11, arguments: [mapped, 8192, 0, 0, 0, 0])!
+        precondition(memory.write(Data([10, 11, 12]), offset: 0x4B000))
+        let unmap = dispatcher.dispatch(number: 11, arguments: [0x4B000, 0x6000, 0, 0, 0, 0])!
         guard case .returned(let unmapValue) = unmap else { preconditionFailure() }
         precondition(unmapValue == 0)
+        precondition(memory.read(offset: 0x4B000, length: 3) == Data([10, 11, 12]))
         precondition(memory.read(offset: mapped, length: 3) == Data([0, 0, 0]))
-        precondition(memory.read(offset: mapped + 4096, length: 3) == Data([0, 0, 0]))
+        precondition(memory.read(offset: mapped + 4096, length: 3) == Data([4, 5, 6]))
 
         let protectionAfterUnmap = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
         guard case .returned(let protectionAfterUnmapValue) = protectionAfterUnmap else { preconditionFailure() }
         precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-12)))
+
+        let unmapRemainder = dispatcher.dispatch(number: 11, arguments: [mapped + 4096, 4096, 0, 0, 0, 0])!
+        guard case .returned(let unmapRemainderValue) = unmapRemainder else { preconditionFailure() }
+        precondition(unmapRemainderValue == 0)
+        precondition(memory.read(offset: mapped + 4096, length: 3) == Data([0, 0, 0]))
 
         let invalidMmapFD = dispatcher.dispatch(number: 9, arguments: [0, 4096, 3, 0x22, 0, 0])!
         guard case .returned(let invalidMmapFDValue) = invalidMmapFD else { preconditionFailure() }
