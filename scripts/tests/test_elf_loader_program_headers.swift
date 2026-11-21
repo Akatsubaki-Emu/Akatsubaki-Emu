@@ -1,5 +1,12 @@
 import Foundation
 
+#if os(Linux)
+extension URL {
+    func startAccessingSecurityScopedResource() -> Bool { false }
+    func stopAccessingSecurityScopedResource() {}
+}
+#endif
+
 enum VMConfiguration {
     enum Architecture { case x86_64, arm64, riscv64 }
 }

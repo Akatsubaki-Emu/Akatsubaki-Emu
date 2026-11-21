@@ -1,0 +1,32 @@
+stages:
+  - validate
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+
+swift-runtime-tests:
+  stage: validate
+  image: swift:6.0
+  interruptible: true
+  timeout: 20m
+  script:
+    - swiftc -parse-as-library -swift-version 5 src/Runtime/ELF64Loader.swift scripts/tests/test_elf_loader_program_headers.swift -o /tmp/test-elf-phdr
+    - /tmp/test-elf-phdr
+    - swiftc -parse-as-library -swift-version 5 src/Runtime/X86_64ALU.swift src/Runtime/LinuxSyscallDispatcher.swift src/Runtime/X86_64Interpreter.swift scripts/tests/test_x86_64_interpreter.swift -o /tmp/test-x86-interpreter
+    - /tmp/test-x86-interpreter
+    - swiftc -parse-as-library -swift-version 5 src/Runtime/LinuxProcessStackBuilder.swift scripts/tests/test_linux_process_stack.swift -o /tmp/test-linux-stack
+    - /tmp/test-linux-stack
+    - swiftc -parse-as-library -swift-version 5 src/Runtime/LinuxSyscallDispatcher.swift scripts/tests/test_linux_syscall_dispatcher.swift -o /tmp/test-linux-syscalls
+    - /tmp/test-linux-syscalls
+
+python-source-contracts:
+  stage: validate
+  image: python:3.12-slim
+  interruptible: true
+  timeout: 5m
+  script:
+    - python -m py_compile scripts/validate-qemu-source.py
+    - python scripts/validate-qemu-source.py
