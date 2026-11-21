@@ -86,7 +86,12 @@ final class VMDisplayViewController: UIViewController {
         refreshHardwareKeyboardState()
         virtioGPU.start()
         vncClient.onFrame = { [weak self] data, width, height in
-            self?.virtioGPU.submit(.updateFramebuffer(data, width: width, height: height))
+            guard let self else { return }
+            self.virtioGPU.submit(.updateFramebuffer(data, width: width, height: height))
+            DispatchQueue.main.async {
+                if case .failed = self.engine.state { return }
+                self.status.text = "\(width) × \(height) guest • \(self.configuration.displayWidth) × \(self.configuration.displayHeight) target • Metal"
+            }
         }
         vncClient.onStatus = { [weak self] message in
             DispatchQueue.main.async {

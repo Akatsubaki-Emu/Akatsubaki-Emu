@@ -62,11 +62,11 @@ enum DisplayResolution: String, CaseIterable {
     }
     var detail: String {
         switch self {
-        case .p720: return "Lowest GPU and memory load"
-        case .p1080: return "Full HD"
-        case .p1440: return "QHD"
-        case .p2160: return "4K internal render target; high memory cost"
-        case .custom: return "Choose width and height"
+        case .p720: return "Low-memory target; guest drivers may choose a different size"
+        case .p1080: return "Full HD target; guest drivers may choose a different size"
+        case .p1440: return "QHD target; guest drivers may choose a different size"
+        case .p2160: return "4K target; high memory cost; guest drivers may choose a different size"
+        case .custom: return "Choose target dimensions; guest drivers may choose a different size"
         }
     }
     var renderResolution: RenderResolution {

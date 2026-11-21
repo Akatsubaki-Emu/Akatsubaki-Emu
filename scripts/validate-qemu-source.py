@@ -216,6 +216,7 @@ required = {
         "configuration.displayWidth, height: configuration.displayHeight",
         "configuration.displayFPS",
         "vncClient.onFrame",
+        "guest • \\(self.configuration.displayWidth)",
         "vncClient.onStatus",
         "engine.start(diskImage: diskImage)",
         "MotionInputManager.shared.stop()",
