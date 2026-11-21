@@ -12,7 +12,7 @@
 <key>UIFileSharingEnabled</key><true/>
 <key>LSSupportsOpeningDocumentsInPlace</key><true/>
 <key>LSApplicationQueriesSchemes</key><array><string>stikdebug</string></array>
-<key>NSMotionUsageDescription</key><string>iSteam uses device motion for head-look input in Cardboard VR mode.</string>
+<key>NSMotionUsageDescription</key><string>Akatsubaki Emu uses device motion for head-look input in Cardboard VR mode.</string>
 <key>UILaunchScreen</key><dict/>
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 </dict></plist>
