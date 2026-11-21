@@ -282,5 +282,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("memory.writeUInt64Pair(seconds, microseconds, offset: address)", syscalls)
 
 
+    def test_guest_time_fraction_fields_are_within_linux_ranges(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
+        timespec = source.split("private func writeTimespec", 1)[1].split("private func writeTimeval", 1)[0]
+        timeval = source.split("private func writeTimeval", 1)[1].split("private func errno", 1)[0]
+        self.assertIn("min(UInt64(999_999_999)", timespec)
+        self.assertIn("min(UInt64(999_999)", timeval)
+
+
 if __name__ == "__main__":
     unittest.main()

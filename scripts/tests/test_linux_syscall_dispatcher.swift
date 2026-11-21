@@ -152,13 +152,13 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let clockValue) = clock else { preconditionFailure() }
         precondition(clockValue == 0)
         precondition(memory.readUInt64(offset: 0x1100) != nil)
-        precondition(memory.readUInt64(offset: 0x1108) != nil)
+        precondition(memory.readUInt64(offset: 0x1108)! < 1_000_000_000)
 
         let timeval = dispatcher.dispatch(number: 96, arguments: [0x1200, 0, 0, 0, 0, 0])!
         guard case .returned(let timevalValue) = timeval else { preconditionFailure() }
         precondition(timevalValue == 0)
         precondition(memory.readUInt64(offset: 0x1200) != nil)
-        precondition(memory.readUInt64(offset: 0x1208) != nil)
+        precondition(memory.readUInt64(offset: 0x1208)! < 1_000_000)
 
         let badTimezone = dispatcher.dispatch(number: 96, arguments: [0x3F0000, UInt64.max, 0, 0, 0, 0])!
         guard case .returned(let badTimezoneValue) = badTimezone else { preconditionFailure() }

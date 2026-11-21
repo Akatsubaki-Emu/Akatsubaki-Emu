@@ -305,14 +305,14 @@ final class LinuxSyscallDispatcher {
         default: return errno(22)
         }
         let seconds = UInt64(max(0, interval))
-        let nanoseconds = UInt64(max(0, (interval - floor(interval)) * 1_000_000_000))
+        let nanoseconds = min(UInt64(999_999_999), UInt64(max(0, (interval - floor(interval)) * 1_000_000_000)))
         return memory.writeUInt64Pair(seconds, nanoseconds, offset: address) ? 0 : errno(14)
     }
 
     private func writeTimeval(at address: UInt64, timezone: UInt64) -> UInt64 {
         let interval = Date().timeIntervalSince1970
         let seconds = UInt64(max(0, interval))
-        let microseconds = UInt64(max(0, (interval - floor(interval)) * 1_000_000))
+        let microseconds = min(UInt64(999_999), UInt64(max(0, (interval - floor(interval)) * 1_000_000)))
         guard memory.writeUInt64Pair(seconds, microseconds, offset: address) else { return errno(14) }
         if timezone != 0 && !memory.zero(offset: timezone, length: 8) { return errno(14) }
         return 0

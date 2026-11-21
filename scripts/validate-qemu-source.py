@@ -133,6 +133,8 @@ required = {
         "isteam_guest_memory_write(native, offset, base, 16)",
         "memory.writeUInt64Pair(seconds, nanoseconds, offset: address)",
         "memory.writeUInt64Pair(seconds, microseconds, offset: address)",
+        "min(UInt64(999_999_999)",
+        "min(UInt64(999_999)",
     ],
     "scripts/tests/test_linux_getrandom_allocation.py": [
         "var data = Data(count: count)",
