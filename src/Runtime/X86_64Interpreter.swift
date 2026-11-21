@@ -102,6 +102,10 @@ final class X86_64Interpreter: GuestCPUBackend {
             case 0xCC: // INT3
                 rip = instructionAddress
                 return .unsupportedInstruction(address: instructionAddress)
+            case 0xB0...0xB7: // MOV r8, imm8
+                guard let immediate = fetchByte() else { return .memoryFault(address: rip) }
+                let index = Int(opcode - 0xB0) | (rex & 0x01 != 0 ? 8 : 0)
+                writeByteRegister(immediate, encodedIndex: index, rex: rex)
             case 0xB8...0xBF: // MOV r32, imm32 or MOV r64, imm64
                 let index = Int(opcode - 0xB8) | (rex & 0x01 != 0 ? 8 : 0)
                 if rex & 0x08 != 0 {
@@ -263,6 +267,17 @@ final class X86_64Interpreter: GuestCPUBackend {
                 guard writeOperand(result.value, to: decoded.operand, width64: width64) else {
                     return .memoryFault(address: operandAddress(decoded.operand))
                 }
+            case 0xC6: // MOV r/m8, imm8
+                guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
+                guard (modrm >> 3) & 7 == 0 else {
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                guard let decoded = decodeRM(modrm, rex: rex, trailingImmediateBytes: 1),
+                      let immediate = fetchByte() else { return .memoryFault(address: rip) }
+                guard writeByteOperand(immediate, to: decoded.operand, modrm: modrm, rex: rex) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
             case 0xC7:
                 guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex, trailingImmediateBytes: 4) else {
                     return .memoryFault(address: rip)
@@ -349,6 +364,21 @@ final class X86_64Interpreter: GuestCPUBackend {
                 } else {
                     registers[index] = value
                     registers[4] &+= 8
+                }
+            case 0x88, 0x8A: // MOV r/m8, r8 and MOV r8, r/m8
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
+                }
+                if opcode == 0x88 {
+                    let value = readByteRegister(decoded.reg, rex: rex)
+                    guard writeByteOperand(value, to: decoded.operand, modrm: modrm, rex: rex) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                } else {
+                    guard let value = readByteOperand(decoded.operand, modrm: modrm, rex: rex) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                    writeByteRegister(value, encodedIndex: decoded.reg, rex: rex)
                 }
             case 0x89, 0x8B:
                 guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
@@ -611,17 +641,40 @@ final class X86_64Interpreter: GuestCPUBackend {
         }
     }
 
+    private func readByteRegister(_ encodedIndex: Int, rex: UInt8) -> UInt8 {
+        if rex == 0 && (4...7).contains(encodedIndex) {
+            return UInt8(truncatingIfNeeded: registers[encodedIndex - 4] >> 8)
+        }
+        return UInt8(truncatingIfNeeded: registers[encodedIndex])
+    }
+
+    private func writeByteRegister(_ value: UInt8, encodedIndex: Int, rex: UInt8) {
+        if rex == 0 && (4...7).contains(encodedIndex) {
+            let index = encodedIndex - 4
+            registers[index] = (registers[index] & ~UInt64(0xFF00)) | (UInt64(value) << 8)
+        } else {
+            registers[encodedIndex] = (registers[encodedIndex] & ~UInt64(0xFF)) | UInt64(value)
+        }
+    }
+
+    private func writeByteOperand(_ value: UInt8, to operand: Operand, modrm: UInt8, rex: UInt8) -> Bool {
+        switch operand {
+        case .memory(let address):
+            return memory.writeByte(value, offset: address)
+        case .register:
+            let encoded = Int(modrm & 7) | (rex & 0x01 != 0 ? 8 : 0)
+            writeByteRegister(value, encodedIndex: encoded, rex: rex)
+            return true
+        }
+    }
+
     private func readByteOperand(_ operand: Operand, modrm: UInt8, rex: UInt8) -> UInt8? {
         switch operand {
         case .memory(let address):
             return memory.readByte(offset: address)
         case .register:
-            let encoded = Int(modrm & 7)
-            if rex == 0 && (4...7).contains(encoded) {
-                return UInt8(truncatingIfNeeded: registers[encoded - 4] >> 8)
-            }
-            let index = encoded | (rex & 0x01 != 0 ? 8 : 0)
-            return UInt8(truncatingIfNeeded: registers[index])
+            let encoded = Int(modrm & 7) | (rex & 0x01 != 0 ? 8 : 0)
+            return readByteRegister(encoded, rex: rex)
         }
     }
 

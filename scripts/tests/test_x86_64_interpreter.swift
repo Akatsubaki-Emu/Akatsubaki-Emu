@@ -45,6 +45,12 @@ final class GuestMemory {
         return bytes[Int(offset)]
     }
 
+    func writeByte(_ value: UInt8, offset: UInt64) -> Bool {
+        guard offset < size else { return false }
+        bytes[Int(offset)] = value
+        return true
+    }
+
     func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int? {
         readPrefixCalls += 1
         guard offset <= size else { return nil }
@@ -633,6 +639,52 @@ struct InterpreterTests {
         let retExit = try ret.run(maxInstructions: 3)
         precondition(retExit == .unsupportedInstruction(address: 8))
         precondition(ret.registerValue(4) == 64)
+
+        let byteImmediateMemory = GuestMemory(size: 64)
+        precondition(byteImmediateMemory.write(Data([0xB8, 0x78, 0x56, 0x34, 0x12,
+                                                     0xB4, 0xAA, 0x0F, 0x0B]), offset: 0))
+        let byteImmediate = X86_64Interpreter(memory: byteImmediateMemory)
+        try byteImmediate.reset(entryPoint: 0)
+        let byteImmediateExit = try byteImmediate.run(maxInstructions: 4)
+        precondition(byteImmediateExit == .unsupportedInstruction(address: 7))
+        precondition(byteImmediate.registerValue(0) == 0x1234_AA78)
+
+        let byteStoreMemory = GuestMemory(size: 128)
+        precondition(byteStoreMemory.write(Data([0xB8, 0x78, 0x56, 0x34, 0x12,
+                                                 0x88, 0x25, 0x15, 0x00, 0x00, 0x00,
+                                                 0x0F, 0x0B]), offset: 0))
+        let byteStore = X86_64Interpreter(memory: byteStoreMemory)
+        try byteStore.reset(entryPoint: 0)
+        let byteStoreExit = try byteStore.run(maxInstructions: 4)
+        precondition(byteStoreExit == .unsupportedInstruction(address: 11))
+        precondition(byteStoreMemory.readByte(offset: 0x20) == 0x56)
+
+        let byteLoadMemory = GuestMemory(size: 128)
+        precondition(byteLoadMemory.write(Data([0x8A, 0x05, 0x1A, 0x00, 0x00, 0x00,
+                                                0x0F, 0x0B]), offset: 0))
+        precondition(byteLoadMemory.writeByte(0xAB, offset: 0x20))
+        let byteLoad = X86_64Interpreter(memory: byteLoadMemory)
+        try byteLoad.reset(entryPoint: 0)
+        let byteLoadExit = try byteLoad.run(maxInstructions: 3)
+        precondition(byteLoadExit == .unsupportedInstruction(address: 6))
+        precondition(byteLoad.registerValue(0) == 0xAB)
+
+        let byteImmediateStoreMemory = GuestMemory(size: 128)
+        precondition(byteImmediateStoreMemory.write(Data([0xC6, 0x05, 0x19, 0x00, 0x00, 0x00,
+                                                          0x7F, 0x0F, 0x0B]), offset: 0))
+        let byteImmediateStore = X86_64Interpreter(memory: byteImmediateStoreMemory)
+        try byteImmediateStore.reset(entryPoint: 0)
+        let byteImmediateStoreExit = try byteImmediateStore.run(maxInstructions: 3)
+        precondition(byteImmediateStoreExit == .unsupportedInstruction(address: 7))
+        precondition(byteImmediateStoreMemory.readByte(offset: 0x20) == 0x7F)
+
+        let rexByteMemory = GuestMemory(size: 32)
+        precondition(rexByteMemory.write(Data([0x41, 0xB0, 0x7F, 0x0F, 0x0B]), offset: 0))
+        let rexByte = X86_64Interpreter(memory: rexByteMemory)
+        try rexByte.reset(entryPoint: 0)
+        let rexByteExit = try rexByte.run(maxInstructions: 3)
+        precondition(rexByteExit == .unsupportedInstruction(address: 3))
+        precondition(rexByte.registerValue(8) == 0x7F)
 
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [

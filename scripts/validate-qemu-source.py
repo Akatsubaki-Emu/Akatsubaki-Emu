@@ -262,6 +262,12 @@ required = {
         "case 0xC3:",
         "let takeBranch = X86_64ALU.condition(opcode & 0x0F, flags: flags)",
         "let takeBranch = X86_64ALU.condition(second & 0x0F, flags: flags)",
+        "case 0xB0...0xB7: // MOV r8, imm8",
+        "case 0x88, 0x8A: // MOV r/m8, r8 and MOV r8, r/m8",
+        "case 0xC6: // MOV r/m8, imm8",
+        "private func readByteRegister(_ encodedIndex: Int, rex: UInt8) -> UInt8",
+        "private func writeByteRegister(_ value: UInt8, encodedIndex: Int, rex: UInt8)",
+        "private func writeByteOperand(_ value: UInt8, to operand: Operand, modrm: UInt8, rex: UInt8) -> Bool",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
@@ -324,6 +330,11 @@ required = {
         "precondition(zeroShift.registerValue(0) == 1)",
         "precondition(zeroShift.conditionFlags & X86_64ALU.carry != 0)",
         "func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool",
+        "precondition(byteImmediate.registerValue(0) == 0x1234_AA78)",
+        "precondition(byteStoreMemory.readByte(offset: 0x20) == 0x56)",
+        "precondition(byteLoad.registerValue(0) == 0xAB)",
+        "precondition(byteImmediateStoreMemory.readByte(offset: 0x20) == 0x7F)",
+        "precondition(rexByte.registerValue(8) == 0x7F)",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
@@ -466,6 +477,7 @@ required = {
         "var isAvailable: Bool",
         "func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool",
         "isteam_guest_memory_write(native, offset, base, 16)",
+        "func writeByte(_ value: UInt8, offset: UInt64) -> Bool",
     ],
     "src/Runtime/GuestMachine.swift": [
         "func loadELFImage(at url: URL, arguments: [String] = [], environment: [String: String] = [:])",

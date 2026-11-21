@@ -37,6 +37,16 @@ final class GuestMemory {
         return success ? value : nil
     }
 
+    @discardableResult
+    func writeByte(_ value: UInt8, offset: UInt64) -> Bool {
+        guard let native, offset < size else { return false }
+        var byte = value
+        return withUnsafeBytes(of: &byte) { bytes in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_write(native, offset, base, 1)
+        }
+    }
+
     func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int? {
         guard let native, offset <= size else { return nil }
         let count = Int(min(UInt64(buffer.count), size - offset))
