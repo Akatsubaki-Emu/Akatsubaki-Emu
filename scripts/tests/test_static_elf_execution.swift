@@ -73,6 +73,15 @@ final class GuestMemory {
         return value
     }
 
+    func writeUInt32(_ value: UInt32, offset: UInt64) -> Bool {
+        guard offset <= size, size - offset >= 4 else { return false }
+        let index = Int(offset)
+        for shift in 0..<4 {
+            bytes[index + shift] = UInt8(truncatingIfNeeded: value >> (shift * 8))
+        }
+        return true
+    }
+
     func writeUInt64(_ value: UInt64, offset: UInt64) -> Bool {
         guard offset <= size, size - offset >= 8 else { return false }
         let i = Int(offset)

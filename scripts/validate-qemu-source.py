@@ -198,6 +198,7 @@ required = {
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
         "hello from static ELF",
+        "func writeUInt32(_ value: UInt32, offset: UInt64) -> Bool",
         "interpreter.run(maxInstructions: 64)",
     ],
     "scripts/tests/test_linux_process_stack.swift": [
