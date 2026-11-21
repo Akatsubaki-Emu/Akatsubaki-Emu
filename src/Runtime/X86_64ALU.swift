@@ -138,7 +138,7 @@ enum X86_64ALU {
         return Result(value: result, flags: updatedFlags)
     }
 
-    static func condition(_ code: UInt8, flags: UInt64) -> Bool? {
+    static func condition(_ code: UInt8, flags: UInt64) -> Bool {
         let cf = flags & carry != 0
         let zf = flags & zero != 0
         let sf = flags & sign != 0
@@ -154,7 +154,7 @@ enum X86_64ALU {
         case 0xD: return sf == of
         case 0xE: return zf || (sf != of)
         case 0xF: return !zf && (sf == of)
-        default: return nil
+        default: return false
         }
     }
 

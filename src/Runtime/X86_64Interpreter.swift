@@ -463,10 +463,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                 }
             case 0x72, 0x73, 0x74, 0x75, 0x78, 0x79, 0x7C, 0x7D, 0x7E, 0x7F:
                 guard let raw = fetchByte() else { return .memoryFault(address: rip) }
-                guard let takeBranch = X86_64ALU.condition(opcode & 0x0F, flags: flags) else {
-                    rip = instructionAddress
-                    return .unsupportedInstruction(address: instructionAddress)
-                }
+                let takeBranch = X86_64ALU.condition(opcode & 0x0F, flags: flags)
                 if takeBranch { rip = addSigned(Int8(bitPattern: raw), to: rip) }
             case 0x0F: // Two-byte opcode map
                 guard let second = fetchByte() else { return .memoryFault(address: rip) }
@@ -532,10 +529,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                     || (second >= 0x88 && second <= 0x89)
                     || (second >= 0x8C && second <= 0x8F) {
                     guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
-                    guard let takeBranch = X86_64ALU.condition(second & 0x0F, flags: flags) else {
-                        rip = instructionAddress
-                        return .unsupportedInstruction(address: instructionAddress)
-                    }
+                    let takeBranch = X86_64ALU.condition(second & 0x0F, flags: flags)
                     if takeBranch { rip = addSigned(Int32(bitPattern: raw), to: rip) }
                 } else {
                     rip = instructionAddress
