@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdatomic.h>
 #include <string.h>
 
 extern char **environ;
@@ -32,6 +33,7 @@ static bool g_thread_created = false;
 static bool g_starting = false;
 static bool g_running = false;
 static bool g_stop_requested = false;
+static atomic_bool g_main_loop_active = ATOMIC_VAR_INIT(false);
 /* UTM documents that QEMU cannot safely be relaunched in the same iOS process. */
 static bool g_has_started = false;
 static char g_error[512] = {0};
@@ -73,14 +75,15 @@ static void *qemu_thread_main(void *unused) {
     } else {
         pthread_mutex_lock(&g_lock);
         g_running = true;
+        atomic_store(&g_main_loop_active, true);
         bool stop_after_init = g_stop_requested;
         qemu_shutdown_request_fn shutdown_fn = g_qemu_shutdown;
         pthread_mutex_unlock(&g_lock);
         if (stop_after_init && shutdown_fn) shutdown_fn(ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI);
         g_qemu_main_loop();
 
-        // Do not call into QEMU's shutdown API after its main loop has exited.
-        // The worker remains active until cleanup and dlclose have completed.
+        // Clear the callable state before waiting on the lifecycle mutex.
+        atomic_store(&g_main_loop_active, false);
         pthread_mutex_lock(&g_lock);
         g_running = false;
         pthread_mutex_unlock(&g_lock);
@@ -267,7 +270,8 @@ bool isteam_qemu_start(int argc, const char * const *argv,
 void isteam_qemu_request_stop(void) {
     pthread_mutex_lock(&g_lock);
     const bool active = g_thread_created || g_running;
-    if (active && !g_running) {
+    const bool main_loop_active = atomic_load(&g_main_loop_active);
+    if (active && !main_loop_active) {
         g_stop_requested = true;
     } else if (active && g_qemu_shutdown) {
         // Keep the library loaded while calling its function pointer. The

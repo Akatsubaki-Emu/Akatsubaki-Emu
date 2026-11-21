@@ -128,5 +128,15 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("currentLogBytes <= maximumLogBytes - byteCount", emulation_contract)
 
 
+    def test_qemu_stop_uses_atomic_main_loop_lifecycle_gate(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
+        self.assertIn("#include <stdatomic.h>", source)
+        self.assertIn("static atomic_bool g_main_loop_active", source)
+        self.assertIn("atomic_store(&g_main_loop_active, true)", source)
+        self.assertIn("atomic_store(&g_main_loop_active, false)", source)
+        self.assertIn("atomic_load(&g_main_loop_active)", source)
+
+
 if __name__ == "__main__":
     unittest.main()
