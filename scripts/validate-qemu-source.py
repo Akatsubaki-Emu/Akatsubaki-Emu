@@ -10,6 +10,13 @@ required = {
         "framebufferWidth = width",
         "width <= Self.maxFramebufferBytes / height / 4",
         "for attempt in 0..<120",
+        "private static let maxFramebufferBytes = 64 * 1024 * 1024",
+        "private let sendQueue = DispatchQueue",
+        "setPixelFormat",
+        "setEncodings",
+        "requestFramebufferUpdate(incremental: true",
+        "case -223",
+        "case 4: // KeyEvent",
     ],    "src/Runtime/WindowsPELoader.swift": [
         "WindowsPEImage.parse(data)",
         "is64Bit: true",
@@ -23,6 +30,9 @@ required = {
     "iSteam/JITCoordinator.swift": [
         "if #available(iOS 26.0, *)",
         "return iSteamJITIsSupported()",
+        "hasGetTaskAllow",
+        "stikdebug://jit",
+        "JIT26Protocol",
     ],
     "iSteam/ELFValidator.swift": [
         "guard fileType == 2",
@@ -68,6 +78,12 @@ required = {
         "\"conectix\"",
         "case vdi",
         "case vpc",
+        "\"-machine\", machine",
+        "\"-device\", \"qemu-xhci\"",
+        "\"-boot\", bootFromISO ? \"order=d\" : \"order=c\"",
+        "QEMUDiskImageFormat.detect(at: diskImage)",
+        "Self.escapeDriveValue(diskImage.path)",
+        "replacingOccurrences(of: \",\", with: \",,\")",
     ],    "src/Core/VMEngine.swift": [
         "var onStateChange: ((State) -> Void)?",
         "private func setState(_ newState: State)",
@@ -81,6 +97,9 @@ required = {
         "findUEFIFirmware(in directory: URL)",
         "findUEFIVariables(in directory: URL)",
         "makeWritableUEFIVariables(from template: URL, for configurationID: UUID)",
+        "firmwareVariables: selectedFirmwareVariables",
+        "startAccessingSecurityScopedResource()",
+        "releaseScopesWhenStopped()",
         "firmwareVariables: selectedFirmwareVariables",
     ],    "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
@@ -140,6 +159,9 @@ required = {
         "byteCount <= UInt64(Self.maximumTransferBytes)",
         "data.count <= Self.maximumTransferBytes",
         "startAccessingSecurityScopedResource()",
+        "case shortRead",
+        "FileHandle(forUpdating: url)",
+        "handle.synchronize()",
     ],
     "src/Runtime/GuestMemory.swift": [
         "private let native: OpaquePointer?",
@@ -189,6 +211,14 @@ required = {
         "gamepad?.releaseAllButtons()",
         "vncClient.start()",
         "engine.onStateChange",
+        "configuration.displayWidth, height: configuration.displayHeight",
+        "configuration.displayFPS",
+        "vncClient.onFrame",
+        "vncClient.onStatus",
+        "engine.start(diskImage: diskImage)",
+        "MotionInputManager.shared.stop()",
+        "ControllerInputManager.shared.stop()",
+        "vncClient.stop()",
     ],    "src/Runtime/HostDeviceBridge.swift": [
         "resolvingSymlinksInPath()",
         "withAccess(to: source)",
@@ -217,6 +247,10 @@ required = {
     "src/Display/TouchGamepadView.swift": [
         "func releaseAllButtons()",
         "private func releaseButtons()",
+        "iSteam.touchGamepad.layout.v3",
+        "control.center.x / bounds.width",
+        "saveLayout()",
+        "releaseButtons()",
     ],    "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",
