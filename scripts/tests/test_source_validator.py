@@ -297,5 +297,13 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("min(UInt64(999_999)", timeval)
 
 
+    def test_qemu_runtime_manual_runs_do_not_cancel_release_jobs(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
+        tests = (root / "scripts" / "tests" / "test_qemu_build_patches.py").read_text(encoding="utf-8")
+        self.assertIn("cancel-in-progress: false", workflow)
+        self.assertIn("test_qemu_runtime_does_not_cancel_in_progress_release_build", tests)
+
+
 if __name__ == "__main__":
     unittest.main()

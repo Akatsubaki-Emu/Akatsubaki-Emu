@@ -134,6 +134,14 @@ required = {
         "min(UInt64(999_999_999)",
         "min(UInt64(999_999)",
     ],
+    ".github/workflows/build-qemu-runtime.yml": [
+        "group: qemu-runtime-ios-arm64-",
+        "cancel-in-progress: false",
+    ],
+    "scripts/tests/test_qemu_build_patches.py": [
+        "test_qemu_runtime_does_not_cancel_in_progress_release_build",
+        "cancel-in-progress: false",
+    ],
     "scripts/tests/test_guest_time_pair.py": [
         "func writeUInt64Pair",
         "isteam_guest_memory_write(native, offset, base, 16)",
@@ -640,7 +648,6 @@ required = {
         "test_vnc_key_state.swift",
         "test_windows_pe_image.swift",
         "python -m unittest discover -s scripts/tests -p 'test_*.py'",
-        "test_guest_time_pair.py",
     ],
     ".github/workflows/validate-ios-build.yml": [
         "src/Runtime/LinuxSyscallDispatcher.swift",
