@@ -37,7 +37,6 @@ required = {
         "overlapping virtual sections",
         "overlapping raw sections",
         "entry point is not backed by executable section data",
-        "entry - $0.guestAddress < $0.fileSize",
     ],
     "iSteam/JITCoordinator.swift": [
         "if #available(iOS 26.0, *)",
@@ -78,6 +77,7 @@ required = {
         "type == 2 || type == 3 || type == 7",
         "alignment & (alignment - 1) == 0",
         "orderedSegments",
+        "entry - $0.guestAddress < $0.fileSize",
     ],
     "src/Runtime/X86_64Interpreter.swift": [
         "let is64Bit = rex & 0x08 != 0",
@@ -195,6 +195,11 @@ required = {
         "case .unsupportedGPU(let gpu)",
         "framebufferBytes <= 64 * 1024 * 1024",
         "fit the 64 MiB framebuffer limit",
+    ],
+    "scripts/tests/test_qemu_native_bridge.c": [
+        "tooManyArguments[4097]",
+        "oversizedArgument",
+        "QEMU arguments exceed the configured size limits",
     ],
     "src/Runtime/GuestBlockDevice.swift": [
         "case invalidGeometry, outOfBounds, readOnly, shortRead",
