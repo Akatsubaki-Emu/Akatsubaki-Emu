@@ -566,9 +566,11 @@ final class X86_64Interpreter: GuestCPUBackend {
                 guard let second = fetchByte() else { return .memoryFault(address: rip) }
                 if second == 0x05 {
                     let number = registers[0]
-                    let arguments = [registers[7], registers[6], registers[2],
-                                     registers[10], registers[8], registers[9]]
-                    guard let outcome = syscallDispatcher.dispatch(number: number, arguments: arguments) else {
+                    guard let outcome = syscallDispatcher.dispatch(
+                        number: number,
+                        arg0: registers[7], arg1: registers[6], arg2: registers[2],
+                        arg3: registers[10], arg4: registers[8], arg5: registers[9]
+                    ) else {
                         rip = instructionAddress
                         return .backendUnavailable("Unsupported Linux x86-64 syscall \(number)")
                     }

@@ -52,14 +52,20 @@ final class LinuxSyscallDispatcher {
 
     func dispatch(number: UInt64, arguments: [UInt64]) -> Outcome? {
         guard arguments.count >= 6 else { return nil }
-        let a = arguments
+        return dispatch(number: number, arg0: arguments[0], arg1: arguments[1],
+                        arg2: arguments[2], arg3: arguments[3],
+                        arg4: arguments[4], arg5: arguments[5])
+    }
+
+    func dispatch(number: UInt64, arg0: UInt64, arg1: UInt64, arg2: UInt64,
+                  arg3: UInt64, arg4: UInt64, arg5: UInt64) -> Outcome? {
         switch number {
         case 0:
-            return .returned(a[0] == 0 ? 0 : errno(9))
+            return .returned(arg0 == 0 ? 0 : errno(9))
         case 1:
-            let descriptor = a[0]
-            let address = a[1]
-            let requested = a[2]
+            let descriptor = arg0
+            let address = arg1
+            let requested = arg2
             guard descriptor == 1 || descriptor == 2 else { return .returned(errno(9)) }
             if requested == 0 { return .returned(0) }
             guard requested <= 1_048_576, requested <= UInt64(Int.max),
@@ -85,39 +91,39 @@ final class LinuxSyscallDispatcher {
             }
             return .returned(requested)
         case 3:
-            return .returned(a[0] <= 2 ? 0 : errno(9))
+            return .returned(arg0 <= 2 ? 0 : errno(9))
         case 9:
-            guard a[4] == UInt64.max, a[5] == 0 else { return .returned(errno(22)) }
-            return .returned(mapAnonymous(address: a[0], length: a[1], flags: a[3]))
+            guard arg4 == UInt64.max, arg5 == 0 else { return .returned(errno(22)) }
+            return .returned(mapAnonymous(address: arg0, length: arg1, flags: arg3))
         case 10:
-            return .returned(validateRange(address: a[0], length: a[1]))
+            return .returned(validateRange(address: arg0, length: arg1))
         case 11:
-            return .returned(unmap(address: a[0], length: a[1]))
+            return .returned(unmap(address: arg0, length: arg1))
         case 12:
-            return .returned(setBreak(a[0]))
+            return .returned(setBreak(arg0))
         case 28:
-            return .returned(validateRange(address: a[0], length: a[1]))
+            return .returned(validateRange(address: arg0, length: arg1))
         case 39, 186:
             return .returned(1)
         case 96:
-            return .returned(writeTimeval(at: a[0], timezone: a[1]))
+            return .returned(writeTimeval(at: arg0, timezone: arg1))
         case 102, 104, 107, 108:
             return .returned(0)
         case 158:
             return .returned(errno(38))
         case 202:
-            let operation = a[1] & 0x7F
+            let operation = arg1 & 0x7F
             return .returned(operation == 1 ? 0 : errno(11))
         case 218:
             return .returned(1)
         case 228:
-            return .returned(writeTimespec(clock: a[0], at: a[1]))
+            return .returned(writeTimespec(clock: arg0, at: arg1))
         case 231, 60:
-            return .exited(Int32(truncatingIfNeeded: a[0]))
+            return .exited(Int32(truncatingIfNeeded: arg0))
         case 273:
             return .returned(0)
         case 318:
-            return .returned(getRandom(at: a[0], length: a[1], flags: a[2]))
+            return .returned(getRandom(at: arg0, length: arg1, flags: arg2))
         case 334:
             return .returned(errno(38))
         default:

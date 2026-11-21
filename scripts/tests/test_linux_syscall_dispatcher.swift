@@ -171,6 +171,12 @@ struct LinuxSyscallDispatcherTests {
         let identity = dispatcher.dispatch(number: 39, arguments: [0, 0, 0, 0, 0, 0])!
         guard case .returned(let pid) = identity else { preconditionFailure() }
         precondition(pid == 1)
+        let scalarIdentity = dispatcher.dispatch(
+            number: 39, arg0: 0, arg1: 0, arg2: 0, arg3: 0, arg4: 0, arg5: 0
+        )!
+        guard case .returned(let scalarPID) = scalarIdentity else { preconditionFailure() }
+        precondition(scalarPID == 1)
+        precondition(dispatcher.dispatch(number: 39, arguments: [0]) == nil)
         precondition(dispatcher.dispatch(number: 9999, arguments: [0, 0, 0, 0, 0, 0]) == nil)
 
         dispatcher.reset()
