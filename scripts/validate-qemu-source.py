@@ -15,7 +15,6 @@ required = {
         "let completion = QEMUOneShotCompletion()",
         "RFB FramebufferUpdateRequest is exactly 10 bytes:",
         "0, 0, 0, 0,",
-        "let is64Bit = rex & 0x08 != 0",
     ],
     "src/Runtime/WindowsPELoader.swift": [
         "WindowsPEImage.parse(data)",
@@ -35,7 +34,7 @@ required = {
     "src/Performance/TranslationCache.swift": [
         "SHA256.hash(data: Data(key.utf8))",
     ],
-    "src/Runtime/RuntimeComponentManifest.swift":
+    "src/Runtime/RuntimeComponentManifest.swift": [
         "resolvingSymlinksInPath()",
         "rootPrefix",
     ],
