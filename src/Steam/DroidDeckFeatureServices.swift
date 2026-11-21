@@ -35,7 +35,23 @@ final class GameLibraryTransferStore {
             games: GameStore.shared.games,
             profiles: GameRuntimeProfileStore.shared.allProfiles
         )
-        try encoder.encode(backup).write(to: destination, options: .atomic)
+        let data = try encoder.encode(backup)
+        let scoped = destination.startAccessingSecurityScopedResource()
+        defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
+
+        let coordinator = NSFileCoordinator()
+        var coordinationError: NSError?
+        var writeError: Error?
+        coordinator.coordinate(writingItemAt: destination, options: .forReplacing,
+                               error: &coordinationError) { writableURL in
+            do {
+                try data.write(to: writableURL, options: .atomic)
+            } catch {
+                writeError = error
+            }
+        }
+        if let coordinationError { throw coordinationError }
+        if let writeError { throw writeError }
         EmulationLog.shared.write("Exported game library backup (\(backup.games.count) entries)")
     }
 
