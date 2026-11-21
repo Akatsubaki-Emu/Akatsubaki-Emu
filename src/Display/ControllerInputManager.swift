@@ -8,8 +8,11 @@ final class ControllerInputManager {
     var onMove: ((Float, Float) -> Void)?
     var onLook: ((Float, Float) -> Void)?
     var onButton: ((String, Bool) -> Void)?
+    private var isStarted = false
 
     func start() {
+        guard !isStarted else { return }
+        isStarted = true
         NotificationCenter.default.addObserver(self, selector: #selector(connect(_:)), name: .GCControllerDidConnect, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(disconnect(_:)), name: .GCControllerDidDisconnect, object: nil)
         GCController.startWirelessControllerDiscovery {}
@@ -17,7 +20,27 @@ final class ControllerInputManager {
     }
 
     func stop() {
+        guard isStarted else { return }
+        isStarted = false
         NotificationCenter.default.removeObserver(self)
+        GCController.stopWirelessControllerDiscovery()
+        onMove?(0, 0)
+        onLook?(0, 0)
+        for controller in GCController.controllers() {
+            guard let pad = controller.extendedGamepad else { continue }
+            let buttons: [(GCControllerButtonInput, String)] = [
+                (pad.buttonA, "A"), (pad.buttonB, "B"), (pad.buttonX, "X"),
+                (pad.buttonY, "Y"), (pad.buttonMenu, "Start"),
+                (pad.leftShoulder, "LB"), (pad.rightShoulder, "RB"),
+                (pad.leftTrigger, "LT"), (pad.rightTrigger, "RT"),
+                (pad.leftThumbstickButton, "L3"), (pad.rightThumbstickButton, "R3"),
+                (pad.dpad.up, "DPadUp"), (pad.dpad.down, "DPadDown"),
+                (pad.dpad.left, "DPadLeft"), (pad.dpad.right, "DPadRight")
+            ]
+            for (_, name) in buttons {
+                onButton?(ControllerMappingStore.shared.profile.action(for: name), false)
+            }
+        }
     }
 
     @objc private func connect(_ note: Notification) {

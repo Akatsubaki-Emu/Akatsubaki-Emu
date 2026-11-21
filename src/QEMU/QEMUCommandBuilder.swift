@@ -25,8 +25,9 @@ struct QEMUCommandBuilder {
     let configuration: VMConfiguration
 
     func arguments(diskImage: URL? = nil, firmware: URL? = nil) -> [String] {
-        let needsUSBInput = configuration.bootWindows || configuration.name == "SteamOS Gaming Mode"
-        let machine = needsUSBInput ? "q35,usb=on" : "q35"
+        // -nodefaults disables implicit input devices. VNC keyboard/pointer events
+        // therefore need an explicit USB controller, keyboard and tablet for every guest.
+        let machine = "q35,usb=on"
         var args = [
             "-machine", machine, "-nodefaults",
             "-m", "\(configuration.memoryMB)", "-smp", "\(configuration.cpuCount)",
@@ -39,9 +40,7 @@ struct QEMUCommandBuilder {
         let bootFromISO = diskImage.map(Self.isISO9660) ?? false
         args += ["-boot", bootFromISO ? "order=d,menu=on,strict=off" : "order=c,menu=on,strict=off"]
         args += ["-netdev", "user,id=isteam-net0", "-device", "virtio-net-pci,netdev=isteam-net0", "-device", "virtio-rng-pci"]
-        if needsUSBInput {
-            args += ["-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"]
-        }
+        args += ["-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"]
         if configuration.bootWindows {
             args += ["-device", "virtio-balloon-pci"]
         }
