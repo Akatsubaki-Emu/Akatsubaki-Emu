@@ -287,6 +287,7 @@ final class QEMUVNCClient {
                     throw ClientError.protocolError("QEMU sent too many framebuffer rectangles in one update.")
                 }
                 var updateBytes = 0
+                var framebufferChanged = false
                 for _ in 0..<count {
                     let header = try await receiveExactly(12, from: connection)
                     let x = Int(Self.u16(header, 0))
@@ -306,6 +307,7 @@ final class QEMUVNCClient {
                             pointerX = min(pointerX, width - 1)
                             pointerY = min(pointerY, height - 1)
                         }
+                        framebufferChanged = true
                         continue
                     }
                     guard encoding == 0 else {
@@ -347,9 +349,12 @@ final class QEMUVNCClient {
                             }
                         }
                     }
+                    framebufferChanged = true
                 }
-                let frame = withStateLock { (framebuffer, framebufferWidth, framebufferHeight) }
-                onFrame?(frame.0, frame.1, frame.2)
+                if framebufferChanged {
+                    let frame = withStateLock { (framebuffer, framebufferWidth, framebufferHeight) }
+                    onFrame?(frame.0, frame.1, frame.2)
+                }
                 try await requestFramebufferUpdate(incremental: true, connection: connection)
             case 1: // SetColourMapEntries: padding + first-colour + colour-count.
                 let header = try await receiveExactly(5, from: connection)
