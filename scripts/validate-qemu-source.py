@@ -18,7 +18,8 @@ required = {
         "private var buttonKeys = Set<UInt32>()",
         "private var movementKeys = Set<UInt32>()",
         "private func enqueueSend(_ data: Data, to connection: NWConnection,",
-    ],  "src/Runtime/WindowsPELoader.swift": [
+    ],
+    "src/Runtime/WindowsPELoader.swift": [
         "WindowsPEImage.parse(data)",
         "is64Bit: true",
     ],
@@ -34,7 +35,8 @@ required = {
         "scheme = \"stikdebug\"",
         "host = \"enable-jit\"",
         "script-name",
-    ],   "iSteam/ELFValidator.swift": [
+    ],
+    "iSteam/ELFValidator.swift": [
         "guard fileType == 2",
         "unsupportedFileType",
     ],
@@ -82,7 +84,8 @@ required = {
         "QEMUDiskImageFormat.detect(at: diskImage)",
         "Self.escapeDriveValue(diskImage.path)",
         "replacingOccurrences(of: \",\", with: \",,\")",
-    ],  "src/Core/VMEngine.swift": [
+    ],
+    "src/Core/VMEngine.swift": [
         "var onStateChange: ((State) -> Void)?",
         "private func setState(_ newState: State)",
         "startupDeadline = .now() + 60",
@@ -98,7 +101,8 @@ required = {
         "firmwareVariables: selectedFirmwareVariables",
         "startAccessingSecurityScopedResource()",
         "releaseScopesWhenStopped()",
-    ],   "iSteam/QEMUNativeBridge.c": [
+    ],
+    "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
         "dlopen(library_path, RTLD_NOW | RTLD_LOCAL)",
         "malloc(argument_length + 1)",
@@ -159,7 +163,8 @@ required = {
         "startAccessingSecurityScopedResource()",
         "FileHandle(forUpdating: url)",
         "handle.synchronize()",
-    ],   "src/Runtime/GuestMemory.swift": [
+    ],
+    "src/Runtime/GuestMemory.swift": [
         "private let native: OpaquePointer?",
         "var isAvailable: Bool",
     ],
@@ -217,7 +222,8 @@ required = {
         "ControllerInputManager.shared.stop()",
         "vncClient.stop()",
         "releaseGuestInputs()",
-    ],   "src/Runtime/HostDeviceBridge.swift": [
+    ],
+    "src/Runtime/HostDeviceBridge.swift": [
         "resolvingSymlinksInPath()",
         "withAccess(to: source)",
     ],
@@ -248,7 +254,8 @@ required = {
         "saveLayout()",
         "releaseButtons()",
         "func releaseAllButtons()",
-    ],   "scripts/patch_utm_qemu_ios.py": [
+    ],
+    "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
