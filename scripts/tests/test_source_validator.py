@@ -217,5 +217,20 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("mappedProgramHeaderAddress == declaredProgramHeaderAddress", source)
 
 
+    def test_linux_syscall_range_validation_requires_mapped_memory(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
+        self.assertIn("private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64?", source)
+        self.assertIn("if noReplace { return errno(17) }", source)
+        self.assertIn("private func validateRange(address: UInt64, length: UInt64) -> UInt64", source)
+        self.assertIn("cursor = min(end, range.upperBound)", source)
+
+    def test_guest_image_load_resets_old_syscall_state_before_replacing_memory(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        load = source.split("func loadELFImage", 1)[1].split("func reset", 1)[0]
+        self.assertLess(load.index("try cpu.reset(entryPoint: 0)"), load.index("ELF64Loader().load"))
+
+
 if __name__ == "__main__":
     unittest.main()

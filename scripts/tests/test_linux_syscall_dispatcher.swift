@@ -72,15 +72,38 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let mapped) = mapping else { preconditionFailure() }
         precondition(mapped >= 0x10000 && mapped % 4096 == 0)
         precondition(memory.write(Data([1, 2, 3]), offset: mapped))
+        let hinted = dispatcher.dispatch(number: 9, arguments: [0x48000, 4096, 3, 0x22, UInt64.max, 0])!
+        guard case .returned(let hintedAddress) = hinted else { preconditionFailure() }
+        precondition(hintedAddress == 0x48000)
+        precondition(memory.write(Data([7, 8, 9]), offset: hintedAddress))
+
+        precondition(memory.write(Data([4, 5, 6]), offset: mapped + 4096))
+        let protection = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
+        guard case .returned(let protectionValue) = protection else { preconditionFailure() }
+        precondition(protectionValue == 0)
+        let advice = dispatcher.dispatch(number: 28, arguments: [mapped, 4096, 0, 0, 0, 0])!
+        guard case .returned(let adviceValue) = advice else { preconditionFailure() }
+        precondition(adviceValue == 0)
+
+        let fixed = dispatcher.dispatch(number: 9, arguments: [mapped, 4096, 3, 0x32, UInt64.max, 0])!
+        guard case .returned(let fixedAddress) = fixed else { preconditionFailure() }
+        precondition(fixedAddress == mapped)
+        precondition(memory.read(offset: mapped, length: 3) == Data([0, 0, 0]))
+        precondition(memory.read(offset: mapped + 4096, length: 3) == Data([4, 5, 6]))
+
+        let noReplace = dispatcher.dispatch(number: 9, arguments: [mapped, 4096, 3, 0x100022, UInt64.max, 0])!
+        guard case .returned(let noReplaceValue) = noReplace else { preconditionFailure() }
+        precondition(noReplaceValue == UInt64(bitPattern: Int64(-17)))
 
         let unmap = dispatcher.dispatch(number: 11, arguments: [mapped, 8192, 0, 0, 0, 0])!
         guard case .returned(let unmapValue) = unmap else { preconditionFailure() }
         precondition(unmapValue == 0)
         precondition(memory.read(offset: mapped, length: 3) == Data([0, 0, 0]))
+        precondition(memory.read(offset: mapped + 4096, length: 3) == Data([0, 0, 0]))
 
-        let protection = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
-        guard case .returned(let protectionValue) = protection else { preconditionFailure() }
-        precondition(protectionValue == 0)
+        let protectionAfterUnmap = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
+        guard case .returned(let protectionAfterUnmapValue) = protectionAfterUnmap else { preconditionFailure() }
+        precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-12)))
 
         let random = dispatcher.dispatch(number: 318, arguments: [0x40800, 32, 0, 0, 0, 0])!
         guard case .returned(let randomValue) = random else { preconditionFailure() }
@@ -91,6 +114,10 @@ struct LinuxSyscallDispatcherTests {
         precondition(clockValue == 0)
         precondition(memory.readUInt64(offset: 0x1100) != nil)
 
+        let badTimezone = dispatcher.dispatch(number: 96, arguments: [0x3F0000, UInt64.max, 0, 0, 0, 0])!
+        guard case .returned(let badTimezoneValue) = badTimezone else { preconditionFailure() }
+        precondition(badTimezoneValue == UInt64(bitPattern: Int64(-14)))
+
         let identity = dispatcher.dispatch(number: 39, arguments: [0, 0, 0, 0, 0, 0])!
         guard case .returned(let pid) = identity else { preconditionFailure() }
         precondition(pid == 1)
@@ -99,6 +126,7 @@ struct LinuxSyscallDispatcherTests {
         dispatcher.reset()
         precondition(memory.readUInt64(offset: 0x40800) == 0)
         precondition(memory.readUInt64(offset: mapped) == 0)
+        precondition(memory.readUInt64(offset: hintedAddress) == 0)
         let resetBreak = dispatcher.dispatch(number: 12, arguments: [0, 0, 0, 0, 0, 0])!
         guard case .returned(let resetValue) = resetBreak else { preconditionFailure() }
         precondition(resetValue == 0x40000)

@@ -77,13 +77,13 @@ final class LinuxSyscallDispatcher {
         case 9:
             return .returned(mapAnonymous(address: a[0], length: a[1], flags: a[3]))
         case 10:
-            return .returned(validateRange(address: a[0], length: a[1]) ? 0 : errno(22))
+            return .returned(validateRange(address: a[0], length: a[1]))
         case 11:
             return .returned(unmap(address: a[0], length: a[1]))
         case 12:
             return .returned(setBreak(a[0]))
         case 28:
-            return .returned(validateRange(address: a[0], length: a[1]) ? 0 : errno(22))
+            return .returned(validateRange(address: a[0], length: a[1]))
         case 39, 186:
             return .returned(1)
         case 96:
@@ -142,27 +142,42 @@ final class LinuxSyscallDispatcher {
             guard requested & 0xFFF == 0 else { return errno(22) }
             address = requested
         } else {
-            let hint = requested >= mmapCursor ? requested : mmapCursor
-            address = Self.alignUp(hint)
-            for range in mappedRanges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
-                let (candidateEnd, candidateOverflow) = address.addingReportingOverflow(size)
-                if candidateOverflow { return errno(12) }
-                if address < range.upperBound && range.lowerBound < candidateEnd {
-                    address = Self.alignUp(range.upperBound)
-                }
+            let hint = requested == 0 ? mmapCursor : requested & ~UInt64(0xFFF)
+            if let hintedAddress = findFreeAddress(startingAt: hint, size: size, limit: limit) {
+                address = hintedAddress
+            } else if let cursorAddress = findFreeAddress(startingAt: mmapCursor, size: size, limit: limit) {
+                address = cursorAddress
+            } else {
+                return errno(12)
             }
         }
         let (end, endOverflow) = address.addingReportingOverflow(size)
         guard !endOverflow, address >= programBreak, end <= limit, end <= memory.size else {
             return errno(12)
         }
-        if mappedRanges.contains(where: { address < $0.upperBound && $0.lowerBound < end }) {
-            return noReplace ? errno(17) : errno(12)
+        let overlaps = mappedRanges.contains(where: { address < $0.upperBound && $0.lowerBound < end })
+        if overlaps {
+            if noReplace { return errno(17) }
+            guard fixed, unmap(address: address, length: size) == 0 else { return errno(12) }
         }
         guard memory.zero(offset: address, length: size) else { return errno(12) }
         mappedRanges.append(address..<end)
-        if !fixed { mmapCursor = end }
+        if !fixed { mmapCursor = max(mmapCursor, end) }
         return address
+    }
+
+    private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64? {
+        var candidate = Self.alignUp(max(start, programBreak))
+        for range in mappedRanges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+            let (candidateEnd, overflow) = candidate.addingReportingOverflow(size)
+            if overflow { return nil }
+            if candidate < range.upperBound && range.lowerBound < candidateEnd {
+                candidate = Self.alignUp(range.upperBound)
+            }
+        }
+        let (end, overflow) = candidate.addingReportingOverflow(size)
+        guard !overflow, end <= limit, end <= memory.size else { return nil }
+        return candidate
     }
 
     private func unmap(address: UInt64, length: UInt64) -> UInt64 {
@@ -189,11 +204,25 @@ final class LinuxSyscallDispatcher {
         return 0
     }
 
-    private func validateRange(address: UInt64, length: UInt64) -> Bool {
-        guard address & 0xFFF == 0, length > 0 else { return false }
+    private func validateRange(address: UInt64, length: UInt64) -> UInt64 {
+        guard address & 0xFFF == 0, length > 0 else { return errno(22) }
         let (end, overflow) = address.addingReportingOverflow(length)
         let limit = stackBase >= 4096 ? stackBase - 4096 : 0
-        return !overflow && address >= initialProgramBreak && end <= limit && end <= memory.size
+        guard !overflow, address >= initialProgramBreak, end <= limit, end <= memory.size else {
+            return errno(22)
+        }
+        var cursor = address
+        if cursor < programBreak {
+            cursor = min(end, programBreak)
+            if cursor == end { return 0 }
+        }
+        for range in mappedRanges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+            if range.upperBound <= cursor { continue }
+            if range.lowerBound > cursor { return errno(12) }
+            cursor = min(end, range.upperBound)
+            if cursor == end { return 0 }
+        }
+        return errno(12)
     }
 
     private func getRandom(at address: UInt64, length: UInt64) -> UInt64 {
