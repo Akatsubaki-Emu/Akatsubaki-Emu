@@ -27,6 +27,13 @@ class SourceValidatorTests(unittest.TestCase):
         duplicates = sorted({key for key in keys if keys.count(key) > 1})
         self.assertFalse(duplicates, f"duplicate required source-contract keys: {duplicates}")
 
+    def test_guest_machine_has_one_serialized_stop_entry_point(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        self.assertEqual(source.count("func stop()"), 1)
+        self.assertIn("requestActiveStop()", source)
+        self.assertIn("memory.clear()", source)
+
     def test_qemu_packager_has_one_complete_candidate_scan(self):
         root = Path(__file__).resolve().parents[2]
         package = (root / "scripts" / "package-utm-qemu-runtime.sh").read_text(encoding="utf-8")
