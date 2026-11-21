@@ -23,6 +23,8 @@ final class VMSaveSlotStore {
         return url
     }
 
+    private let maximumMetadataBytes = 1 * 1024 * 1024
+
     private init() {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     }
@@ -42,7 +44,9 @@ final class VMSaveSlotStore {
 
     func configuration(named name: String) -> VMConfiguration? {
         let url = directory.appendingPathComponent(safeFilename(name) + ".json")
-        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+              let size = values.fileSize, size <= maximumMetadataBytes,
+              let data = try? Data(contentsOf: url), data.count <= maximumMetadataBytes else { return nil }
         return try? decoder.decode(VMConfiguration.self, from: data)
     }
 
@@ -73,7 +77,9 @@ final class VMSaveSlotStore {
 
     func lastSession() -> (configuration: VMConfiguration, diskImageURL: URL)? {
         let url = directory.appendingPathComponent("last-session.json")
-        guard let data = try? Data(contentsOf: url),
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+              let size = values.fileSize, size <= maximumMetadataBytes,
+              let data = try? Data(contentsOf: url), data.count <= maximumMetadataBytes,
               let session = try? decoder.decode(Session.self, from: data),
               let bookmark = session.diskImageBookmark else { return nil }
         var stale = false
@@ -97,7 +103,9 @@ final class VMSaveSlotStore {
 
     func lastSessionConfiguration() -> VMConfiguration? {
         let url = directory.appendingPathComponent("last-session.json")
-        guard let data = try? Data(contentsOf: url),
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+              let size = values.fileSize, size <= maximumMetadataBytes,
+              let data = try? Data(contentsOf: url), data.count <= maximumMetadataBytes,
               let session = try? decoder.decode(Session.self, from: data) else { return nil }
         return session.configuration
     }

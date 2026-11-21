@@ -47,7 +47,7 @@ final class ControllerMappingStore {
 
     var profile: ControllerMappingProfile {
         get {
-            guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+            guard let data = UserDefaults.standard.data(forKey: defaultsKey), data.count <= 64 * 1024,
                   let value = try? JSONDecoder().decode(ControllerMappingProfile.self, from: data),
                   (try? value.validate()) != nil else { return .standard }
             return value

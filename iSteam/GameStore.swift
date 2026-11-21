@@ -88,6 +88,7 @@ final class GameStore {
 
     private func loadGames() -> [GameEntry]? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
+        guard data.count <= 20 * 1024 * 1024 else { return nil }
         guard let decoded = try? decoder.decode([GameEntry].self, from: data),
               decoded.count <= 10_000,
               Set(decoded.map(\.id)).count == decoded.count,
