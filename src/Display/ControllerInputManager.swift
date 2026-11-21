@@ -9,6 +9,8 @@ final class ControllerInputManager {
     var onLook: ((Float, Float) -> Void)?
     var onButton: ((String, Bool, String) -> Void)?
     private var isStarted = false
+    private let buttonActionLock = NSLock()
+    private var activeButtonActions: [String: String] = [:]
 
     func start() {
         guard !isStarted else { return }
@@ -27,12 +29,14 @@ final class ControllerInputManager {
         onLook?(0, 0)
         for controller in GCController.controllers() {
             let source = sourceID(for: controller)
-            onMove?(0, 0, "(source):left")
-            onMove?(0, 0, "(source):right")
+            onMove?(0, 0, source + ":left")
+            onMove?(0, 0, source + ":right")
             guard let pad = controller.extendedGamepad else { continue }
             let buttons = buttonInputs(for: pad)
             for (_, name) in buttons {
-                onButton?(ControllerMappingStore.shared.profile.action(for: name), false, "(source):button:(name)")
+                let buttonSource = source + ":button:" + name
+                let action = mappedAction(for: name, source: buttonSource, pressed: false)
+                onButton?(action, false, buttonSource)
             }
             detachHandlers(from: pad)
         }
@@ -48,20 +52,34 @@ final class ControllerInputManager {
         // A controller can disappear while a stick or button is held. Release
         // every guest input so the guest cannot remain stuck in movement/fire.
         let source = sourceID(for: controller)
-        onMove?(0, 0, "(source):left")
-        onMove?(0, 0, "(source):right")
+        onMove?(0, 0, source + ":left")
+        onMove?(0, 0, source + ":right")
         onLook?(0, 0)
         if let pad = controller.extendedGamepad {
             let buttons = buttonInputs(for: pad)
             for (_, name) in buttons {
-                onButton?(ControllerMappingStore.shared.profile.action(for: name), false, "(source):button:(name)")
+                let buttonSource = source + ":button:" + name
+                let action = mappedAction(for: name, source: buttonSource, pressed: false)
+                onButton?(action, false, buttonSource)
             }
             detachHandlers(from: pad)
         }
     }
 
+    private func mappedAction(for name: String, source: String, pressed: Bool) -> String {
+        buttonActionLock.lock()
+        defer { buttonActionLock.unlock() }
+        if pressed {
+            let action = ControllerMappingStore.shared.profile.action(for: name)
+            activeButtonActions[source] = action
+            return action
+        }
+        return activeButtonActions.removeValue(forKey: source)
+            ?? ControllerMappingStore.shared.profile.action(for: name)
+    }
+
     private func sourceID(for controller: GCController) -> String {
-        "controller:(ObjectIdentifier(controller))"
+        "controller:" + String(describing: ObjectIdentifier(controller))
     }
 
     private func detachHandlers(from pad: GCExtendedGamepad) {
@@ -75,8 +93,8 @@ final class ControllerInputManager {
     private func configure(_ controller: GCController) {
         guard let pad = controller.extendedGamepad else { return }
         let source = sourceID(for: controller)
-        let leftSource = "(source):left"
-        let rightSource = "(source):right"
+        let leftSource = source + ":left"
+        let rightSource = source + ":right"
         pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
             guard let self else { return }
             let profile = ControllerMappingStore.shared.profile
@@ -94,8 +112,12 @@ final class ControllerInputManager {
         }
         let buttons = buttonInputs(for: pad)
         for (button, name) in buttons {
-            let buttonSource = "(source):button:(name)"
-            button.valueChangedHandler = { [weak self] _, _, pressed in self?.onButton?(ControllerMappingStore.shared.profile.action(for: name), pressed, buttonSource) }
+            let buttonSource = source + ":button:" + name
+            button.valueChangedHandler = { [weak self] _, _, pressed in
+                guard let self else { return }
+                let action = self.mappedAction(for: name, source: buttonSource, pressed: pressed)
+                self.onButton?(action, pressed, buttonSource)
+            }
         }
     }
 

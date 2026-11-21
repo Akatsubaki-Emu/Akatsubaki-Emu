@@ -446,7 +446,7 @@ final class QEMUVNCClient {
         case "DPadRight", "dpadright": key = "RIGHT"
         default: return
         }
-        sendKey(key, down: down, source: "(source):(name)")
+        sendKey(key, down: down, source: source + ":" + name)
     }
 
 

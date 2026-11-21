@@ -137,5 +137,13 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("refusing to export an incomplete library backup", source)
 
 
+    def test_controller_button_release_uses_the_press_time_mapping(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Display" / "ControllerInputManager.swift").read_text(encoding="utf-8")
+        self.assertIn("activeButtonActions[source] = action", source)
+        self.assertIn("activeButtonActions.removeValue(forKey: source)", source)
+        self.assertIn('let buttonSource = source + ":button:" + name', source)
+
+
 if __name__ == "__main__":
     unittest.main()
