@@ -126,6 +126,9 @@ final class TouchGamepadView: UIView {
         editMode.toggle()
         editButtonControl.setTitle(editMode ? "Done Editing" : "Move / Resize", for: .normal)
         if editMode {
+            // A long-press recognizer can cancel a button's touch-up event.
+            // Release every logical guest key before switching to edit mode.
+            releaseButtons()
             installEditGesturesIfNeeded()
         } else {
             saveLayout()
@@ -133,6 +136,14 @@ final class TouchGamepadView: UIView {
                 control.layer.borderColor = UIColor.white.withAlphaComponent(0.65).cgColor
                 control.layer.borderWidth = 1
                 control.gestureRecognizers?.filter { $0 is UIPanGestureRecognizer || $0 is UIPinchGestureRecognizer }.forEach { control.removeGestureRecognizer($0) }
+            }
+        }
+    }
+
+    private func releaseButtons() {
+        for button in buttons {
+            if let key = button.accessibilityIdentifier {
+                onButton?(key, false)
             }
         }
     }

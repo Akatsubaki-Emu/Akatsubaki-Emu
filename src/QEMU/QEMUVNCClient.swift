@@ -42,6 +42,7 @@ final class QEMUVNCClient {
         return try body()
     }
     private var readerTask: Task<Void, Never>?
+    private static let maxFramebufferBytes = 64 * 1024 * 1024
     private var framebuffer = Data()
     private var framebufferWidth = 0
     private var framebufferHeight = 0
@@ -195,7 +196,8 @@ final class QEMUVNCClient {
         let height = Int(Self.u16(serverInit, 2))
         let nameLength = Int(Self.u32(serverInit, 20))
         guard width > 0, height > 0, width <= 8192, height <= 8192,
-              width <= Int.max / height / 4, nameLength <= 1_048_576 else {
+              width <= Self.maxFramebufferBytes / height / 4,
+              nameLength <= 1_048_576 else {
             throw ClientError.protocolError("QEMU announced an unsupported guest display size.")
         }
         _ = try await receiveExactly(nameLength, from: connection)
@@ -231,7 +233,7 @@ final class QEMUVNCClient {
                     let encoding = Int32(bitPattern: Self.u32(header, 8))
                     if encoding == -223 { // DesktopSize
                         guard width > 0, height > 0, width <= 8192, height <= 8192,
-                              width <= Int.max / height / 4 else {
+                              width <= Self.maxFramebufferBytes / height / 4 else {
                             throw ClientError.protocolError("QEMU requested an invalid guest display size.")
                         }
                         framebufferWidth = width

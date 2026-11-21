@@ -30,7 +30,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         view = MTKView(frame: .zero, device: device)
         super.init()
         view.colorPixelFormat = .bgra8Unorm
-        view.framebufferOnly = true
+        view.framebufferOnly = false
         view.enableSetNeedsDisplay = true
         view.isPaused = true
         view.clearColor = MTLClearColor(red: 0.025, green: 0.03, blue: 0.045, alpha: 1)
