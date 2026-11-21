@@ -76,7 +76,9 @@ required = {
         "vncClient.onFrame", "vncClient.start()", "vncClient.tapKey(key)"
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
-        "QEMURuntimeStatus.inspect()", "isteam_qemu_start", "isteam_qemu_request_stop"
+        "QEMURuntimeStatus.inspect()", "isteam_qemu_start", "isteam_qemu_request_stop",
+        "containedRegularFile(named names: [String], in directory: URL)",
+        "for configurationID: UUID",
     ],
     "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",

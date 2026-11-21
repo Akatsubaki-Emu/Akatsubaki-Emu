@@ -56,7 +56,7 @@ final class QEMUNativeRuntime {
                     "UEFI code was found, but no writable variable-store template (OVMF_VARS.fd or edk2-x86_64-vars.fd) is bundled."
                 )
             }
-            selectedFirmwareVariables = try Self.makeWritableUEFIVariables(from: variablesTemplate)
+            selectedFirmwareVariables = try Self.makeWritableUEFIVariables(from: variablesTemplate, for: configuration.id)
         } else {
             selectedFirmwareVariables = nil
         }
@@ -118,37 +118,52 @@ final class QEMUNativeRuntime {
         EmulationLog.shared.write("QEMU launch requested with disk \(diskImage.lastPathComponent)")
     }
 
-    private static func findUEFIFirmware(in directory: URL) -> URL? {
-        let names = ["OVMF_CODE.fd", "edk2-x86_64-code.fd", "edk2-x86_64-code.secboot.fd"]
-        for name in names {
-            let candidate = directory.appendingPathComponent(name)
-            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+    private static func containedRegularFile(named names: [String], in directory: URL) -> URL? {
+        let root = directory.resolvingSymlinksInPath().standardizedFileURL
+        let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        func validated(_ candidate: URL) -> URL? {
+            let resolved = candidate.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+            var isDirectory: ObjCBool = false
+            guard resolved.path.hasPrefix(prefix),
+                  FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDirectory),
+                  !isDirectory.boolValue else { return nil }
+            return resolved
         }
-        if let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil) {
-            for case let url as URL in enumerator where names.contains(url.lastPathComponent) {
-                return url
+
+        for name in names {
+            if let candidate = validated(directory.appendingPathComponent(name)) {
+                return candidate
             }
         }
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+        for case let url as URL in enumerator where names.contains(url.lastPathComponent) {
+            if let candidate = validated(url) { return candidate }
+        }
         return nil
+    }
+
+    private static func findUEFIFirmware(in directory: URL) -> URL? {
+        containedRegularFile(
+            named: ["OVMF_CODE.fd", "edk2-x86_64-code.fd", "edk2-x86_64-code.secboot.fd"],
+            in: directory
+        )
     }
 
     private static func findUEFIVariables(in directory: URL) -> URL? {
-        let names = ["OVMF_VARS.fd", "edk2-x86_64-vars.fd"]
-        for name in names {
-            let candidate = directory.appendingPathComponent(name)
-            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
-        }
-        if let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil) {
-            for case let url as URL in enumerator where names.contains(url.lastPathComponent) {
-                return url
-            }
-        }
-        return nil
+        containedRegularFile(
+            named: ["OVMF_VARS.fd", "edk2-x86_64-vars.fd"],
+            in: directory
+        )
     }
 
-    /// UEFI variable stores are writable guest state. Keep a per-template copy
-    /// in Application Support so QEMU never writes into the signed app bundle.
-    private static func makeWritableUEFIVariables(from template: URL) throws -> URL {
+    /// UEFI variable stores are writable guest state. Keep one persistent copy
+    /// per VM configuration in Application Support so QEMU never writes into
+    /// the signed app bundle or shares NVRAM between different guests.
+    private static func makeWritableUEFIVariables(from template: URL, for configurationID: UUID) throws -> URL {
         let values = try template.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
         let size = values.fileSize ?? 0
         let modified = Int(values.contentModificationDate?.timeIntervalSince1970 ?? 0)
@@ -156,7 +171,7 @@ final class QEMUNativeRuntime {
             .appendingPathComponent("AkatsubakiEmu/QEMU/firmware", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let stem = template.deletingPathExtension().lastPathComponent
-        let destination = directory.appendingPathComponent("\(stem)-\(size)-\(modified).fd")
+        let destination = directory.appendingPathComponent("\(stem)-\(configurationID.uuidString)-\(size)-\(modified).fd")
         if !FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.copyItem(at: template, to: destination)
         }
