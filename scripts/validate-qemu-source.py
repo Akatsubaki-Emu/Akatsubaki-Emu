@@ -127,6 +127,11 @@ required = {
         "PUSH RSP stores the pre-decrement value.",
         "POP RSP loads the popped value directly",
     ],
+    "scripts/tests/test_x86_64_interpreter.swift": [
+        "precondition(arithmetic.registerValue(3) == 2)",
+        "precondition(signed.registerValue(3) == 2)",
+        "precondition(signed.conditionFlags & X86_64ALU.sign != 0)",
+    ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
         "\"-vnc\", \"127.0.0.1:0\"",

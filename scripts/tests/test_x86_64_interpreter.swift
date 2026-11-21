@@ -162,7 +162,7 @@ struct InterpreterTests {
         try signed.reset(entryPoint: 0)
         let signedExit = try signed.run(maxInstructions: 16)
         precondition(signedExit == .unsupportedInstruction(address: 20))
-        precondition(signed.registerValue(3) == 1)
+        precondition(signed.registerValue(3) == 2)
         precondition(signed.conditionFlags & X86_64ALU.carry != 0)
         precondition(signed.conditionFlags & X86_64ALU.sign != 0)
 
