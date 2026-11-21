@@ -72,9 +72,6 @@ required = {
         "startupDeadline = .now() + 60",
         "within 60 seconds",
     ],
-    "src/Display/VMDisplayViewController.swift": [
-        "vncClient.onFrame", "vncClient.start()", "vncClient.tapKey(key)"
-    ],
     "src/QEMU/QEMUNativeRuntime.swift": [
         "QEMURuntimeStatus.inspect()", "isteam_qemu_start", "isteam_qemu_request_stop",
         "containedRegularFile(named names: [String], in directory: URL)",
@@ -83,8 +80,9 @@ required = {
     "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
         "dlopen(library_path, RTLD_NOW | RTLD_LOCAL)",
-        "malloc(argument_length + 1)",
-        "memcpy(copied_argv[i], argument, argument_length + 1)",
+        "static char *duplicate_string(const char *value)",
+        "size_t length = strlen(value) + 1",
+        "copied_argv[i] = duplicate_string(argv[i] ? argv[i] : \"\")",
         'dlsym(library, "qemu_init")',
         'dlsym(library, "qemu_main_loop")',
         'dlsym(library, "qemu_cleanup")',
@@ -173,6 +171,9 @@ required = {
     "src/Display/VMDisplayViewController.swift": [
         "private let configuration: VMConfiguration",
         "self.configuration = configuration",
+        "vncClient.onFrame",
+        "vncClient.start()",
+        "vncClient.tapKey(key)",
     ],
     "iSteam/QEMUNativeBridge.h": [
         "#define ISTEAM_NONNULL _Nonnull",
