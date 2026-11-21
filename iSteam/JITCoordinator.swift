@@ -32,14 +32,14 @@ final class JITCoordinator {
     }
 
     func requestJIT(from controller: UIViewController?) {
-        guard hasGetTaskAllow else {
-            show("This installation does not expose get-task-allow. Re-sign it with a JIT-capable signer.", title: "JIT unavailable", on: controller)
+        guard isJITProtocolSupported else {
+            show("This device or build does not support the StikDebug JIT breakpoint protocol.", title: "JIT unavailable", on: controller)
             return
         }
 
         switch selectedMethod {
         case .waitForDebugger:
-            show("Attach StikDebug or another compatible JIT debugger to this process.", title: "Waiting for debugger", on: controller)
+            show("Attach StikDebug or another compatible JIT debugger to this process. The signer must grant the required debugging entitlement.", title: "Waiting for debugger", on: controller)
         case .stikDebug:
             openStikDebug(on: controller)
         }
@@ -56,7 +56,10 @@ final class JITCoordinator {
             URLQueryItem(name: "script-name", value: "universal.js")
         ]
         guard let url = c.url else { return }
-        UIApplication.shared.open(url)
+        UIApplication.shared.open(url, options: [:]) { [weak self, weak controller] opened in
+            guard !opened else { return }
+            self?.show("StikDebug could not be opened. Check that it is installed and its URL scheme is available.", title: "JIT helper unavailable", on: controller)
+        }
     }
 
     private func show(_ message: String, title: String, on controller: UIViewController?) {

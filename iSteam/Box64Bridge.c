@@ -1,24 +1,49 @@
 #include "Box64Bridge.h"
+
 #include <dlfcn.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <errno.h>
 
 typedef int (*box64_main_fn)(int, char **);
 
 static box64_main_fn resolveBox64Main(void) {
-    void *handle = dlopen(NULL, RTLD_NOW | RTLD_GLOBAL);
-    if (!handle) return NULL;
-    box64_main_fn fn = (box64_main_fn)dlsym(handle, "box64_library_main");
-    if (!fn) fn = (box64_main_fn)dlsym(handle, "box64_main");
+    box64_main_fn fn = (box64_main_fn)dlsym(RTLD_DEFAULT, "box64_library_main");
+    if (!fn) fn = (box64_main_fn)dlsym(RTLD_DEFAULT, "box64_main");
     return fn;
 }
 
-bool box64IsAvailable(void) { return resolveBox64Main() != NULL; }
+bool box64IsAvailable(void) {
+    return resolveBox64Main() != NULL;
+}
 
-int box64Run(const char *executable, const char *workingDirectory, int argc, const char *argv[]) {
-    (void)executable;
-    if (!workingDirectory || chdir(workingDirectory) != 0) return errno ? -errno : -1;
+int box64Run(const char *executable, const char *workingDirectory,
+             int argc, const char *argv[]) {
+    if (!executable || !executable[0] || argc < 1 || !argv || !argv[0]) {
+        return -EINVAL;
+    }
+
     box64_main_fn fn = resolveBox64Main();
     if (!fn) return -2;
-    return fn(argc, (char **)argv);
+
+    if (!workingDirectory || !workingDirectory[0]) return -EINVAL;
+    int originalDirectory = open(".", O_RDONLY | O_CLOEXEC);
+    if (originalDirectory < 0) return -errno;
+
+    if (chdir(workingDirectory) != 0) {
+        int error = errno;
+        close(originalDirectory);
+        return -error;
+    }
+
+    int result = fn(argc, (char **)argv);
+    int executionErrno = errno;
+    if (fchdir(originalDirectory) != 0) {
+        int error = errno;
+        close(originalDirectory);
+        return -error;
+    }
+    close(originalDirectory);
+    errno = executionErrno;
+    return result;
 }
