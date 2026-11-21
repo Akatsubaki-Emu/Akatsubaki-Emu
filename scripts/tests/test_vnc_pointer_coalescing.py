@@ -19,6 +19,11 @@ class VNCPointerCoalescingTests(unittest.TestCase):
         self.assertIn("group.enter()", movement)
         self.assertIn("group.leave()", movement)
         self.assertNotIn("enqueueSend(message", movement)
+        enqueue = source.split("private func enqueueSend", 1)[1].split("private func send(", 1)[0]
+        self.assertIn("pointerSendBatch = VNCPointerSendBatch()", enqueue)
+        self.assertLess(enqueue.index("pointerSendBatch = VNCPointerSendBatch()"), enqueue.index("sendQueue.async"))
+        self.assertIn("@unchecked Sendable", source)
+        self.assertIn("pointer send failed: \\(error.localizedDescription)", source)
 
 
 if __name__ == "__main__":

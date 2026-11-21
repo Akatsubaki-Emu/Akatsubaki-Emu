@@ -3,7 +3,7 @@ import Network
 
 /// Thread-safe one-shot gate for NWConnection callbacks that may arrive
 /// concurrently while an async continuation is waiting.
-private final class VNCPointerSendBatch {
+private final class VNCPointerSendBatch: @unchecked Sendable {
     var latestMessage: Data?
     var scheduled = false
 }
@@ -193,6 +193,11 @@ final class QEMUVNCClient {
     /// from independent Tasks could reorder a release ahead of its press.
     private func enqueueSend(_ data: Data, to connection: NWConnection,
                              in group: DispatchGroup) {
+        // A queued pointer drain must finish before this key event. Rotating
+        // the batch makes later pointer movement queue behind the key event.
+        if pointerSendBatch != nil {
+            pointerSendBatch = VNCPointerSendBatch()
+        }
         group.enter()
         sendQueue.async {
             connection.send(content: data, completion: .contentProcessed { error in
@@ -458,7 +463,7 @@ final class QEMUVNCClient {
                 }
                 connection.send(content: latestMessage, completion: .contentProcessed { error in
                     if let error {
-                        EmulationLog.shared.write("QEMU VNC pointer send failed: \\(error.localizedDescription)")
+                        EmulationLog.shared.write("QEMU VNC pointer send failed: \(error.localizedDescription)")
                     }
                     group.leave()
                 })
