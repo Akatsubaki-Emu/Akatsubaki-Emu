@@ -70,12 +70,15 @@ final class VMDisplayViewController: UIViewController {
                 }
             case .stopping:
                 self.status.text = "Stopping virtual machine…"
+                self.releaseGuestInputs()
                 self.vncClient.stop()
             case .stopped:
                 self.status.text = "Virtual machine stopped"
+                self.releaseGuestInputs()
                 self.vncClient.stop()
             case .failed(let message):
                 self.status.text = "VM failed • \\(message)"
+                self.releaseGuestInputs()
                 self.vncClient.stop()
             }
         }
@@ -177,6 +180,12 @@ final class VMDisplayViewController: UIViewController {
 
     private func emitKeyboardKey(_ key: String) {
         vncClient.tapKey(key)
+    }
+
+    private func releaseGuestInputs() {
+        gamepad?.releaseAllButtons()
+        MotionInputManager.shared.stop()
+        ControllerInputManager.shared.stop()
     }
 
     private func registerKeyboardNotifications() {
