@@ -256,7 +256,7 @@ required = {
         "corruptStoredProfile",
         "UInt64(preferredResolutionWidth) * UInt64(preferredResolutionHeight) * 4 <= 64 * 1024 * 1024",
         "UUID(uuidString: file.deletingPathExtension().lastPathComponent) == profile.gameID",
-        "readProfile(at:)",
+        "private func readProfile(at file: URL)",
     ],
     "src/Display/VMDisplayViewController.swift": [
         "private let configuration: VMConfiguration",
