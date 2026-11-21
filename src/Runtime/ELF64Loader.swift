@@ -97,7 +97,8 @@ final class ELF64Loader {
         var segments: [Segment] = []
         var pending: [(Segment, Int)] = []
         var total: UInt64 = 0
-        var programHeaderAddress: UInt64?
+        var mappedProgramHeaderAddress: UInt64?
+        var declaredProgramHeaderAddress: UInt64?
         for index in 0..<entryCount {
             let base = tableOffset + index * entrySize
             guard let type = u32(data, base), let flags = u32(data, base + 4),
@@ -106,7 +107,13 @@ final class ELF64Loader {
                 throw LoadError.invalidProgramHeaderTable
             }
             if type == 6 {
-                programHeaderAddress = virtualAddress
+                guard fileOffset == phoff,
+                      fileSize >= programHeaderTableSize,
+                      memorySize >= programHeaderTableSize,
+                      declaredProgramHeaderAddress == nil else {
+                    throw LoadError.invalidProgramHeaderTable
+                }
+                declaredProgramHeaderAddress = virtualAddress
                 continue
             }
             if type == 2 || type == 3 || type == 7 {
@@ -119,7 +126,11 @@ final class ELF64Loader {
                 let offsetInSegment = phoff - fileOffset
                 if offsetInSegment <= fileSize && programHeaderTableSize <= fileSize - offsetInSegment {
                     guard virtualAddress <= UInt64.max - offsetInSegment else { throw LoadError.invalidSegment }
-                    programHeaderAddress = virtualAddress + offsetInSegment
+                    let mappedAddress = virtualAddress + offsetInSegment
+                    if let existing = mappedProgramHeaderAddress, existing != mappedAddress {
+                        throw LoadError.invalidProgramHeaderTable
+                    }
+                    mappedProgramHeaderAddress = mappedAddress
                 }
             }
             let loadAddress = virtualAddress
@@ -142,8 +153,18 @@ final class ELF64Loader {
 
         guard !segments.isEmpty else { throw LoadError.noLoadableSegments }
         let orderedSegments = segments.sorted { $0.guestAddress < $1.guestAddress }
-        guard let phdrAddress = programHeaderAddress,
-              phdrAddress <= memory.size,
+        let phdrAddress: UInt64
+        if let declaredProgramHeaderAddress {
+            guard mappedProgramHeaderAddress == declaredProgramHeaderAddress else {
+                throw LoadError.programHeadersNotMapped
+            }
+            phdrAddress = declaredProgramHeaderAddress
+        } else if let mappedProgramHeaderAddress {
+            phdrAddress = mappedProgramHeaderAddress
+        } else {
+            throw LoadError.programHeadersNotMapped
+        }
+        guard phdrAddress <= memory.size,
               programHeaderTableSize <= memory.size - phdrAddress,
               orderedSegments.contains(where: {
                   phdrAddress >= $0.guestAddress
@@ -167,10 +188,9 @@ final class ELF64Loader {
         }) else { throw LoadError.invalidSegment }
 
         // Start from a clean address space so bytes from a previously loaded image
-        // cannot survive outside the new PT_LOAD ranges.
-        // clear() releases all prior sparse pages. Newly allocated native pages
-        // are value-initialized to zero, so walking every PT_LOAD page here would
-        // only perform redundant hash lookups for untouched BSS ranges.
+        // cannot survive outside the new PT_LOAD ranges. Newly allocated native
+        // pages are value-initialized to zero, so clearing the sparse page map is
+        // sufficient; walking every untouched BSS page would be redundant.
         memory.clear()
         for (segment, fileOffset) in pending where segment.fileSize > 0 {
             let sourceEnd = fileOffset + Int(segment.fileSize)
