@@ -123,7 +123,6 @@ jobs:
               "scripts/patch_qemu_meson_ios.py",
               "scripts/verify_qemu_meson_link.py",
               "ISTEAM_QEMU_LINK_VERIFIER",
-              "build.ninja",
               "steps.xcode.outputs.version",
               "utm-ios-arm64-deps-v9-",
           ]:
