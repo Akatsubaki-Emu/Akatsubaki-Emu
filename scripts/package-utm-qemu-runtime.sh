@@ -22,9 +22,10 @@ while IFS= read -r file; do
   [ -n "$file" ] || continue
   if file "$file" | grep -q 'Mach-O'; then
     exports="$(nm -gU "$file" 2>/dev/null || true)"
-    if printf '%s\n' "$exports" | grep -qE ' _?qemu_init$' &&
-       printf '%s\n' "$exports" | grep -qE ' _?qemu_main_loop$' &&
-       printf '%s\n' "$exports" | grep -qE ' _?qemu_cleanup
+    if printf '%s\\n' "$exports" | grep -qE ' _?qemu_init$' &&
+       printf '%s\\n' "$exports" | grep -qE ' _?qemu_main_loop$' &&
+       printf '%s\\n' "$exports" | grep -qE ' _?qemu_cleanup$' &&
+       printf '%s\\n' "$exports" | grep -qE ' _?qemu_system_shutdown_request$'; then
       candidate="$file"
       break
     fi
