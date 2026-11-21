@@ -160,8 +160,9 @@ required = {
         "memorySize >= fileSize",
         "maximumGuestAddress",
     ],
-    "src/Runtime/X86_64ALU.swift": [
+        "src/Runtime/X86_64ALU.swift": [
         "static func add(",
+        "static func and(",
         "static func or(",
         "static func multiply(",
         "static func subtract(",
@@ -184,6 +185,8 @@ required = {
         "case 0x63:",
         "case 0x69, 0x6B:",
         "second == 0xAF",
+        "second == 0xB7 || second == 0xBF",
+        "private func readWordOperand(_ operand: Operand) -> UInt16?",
         "case 0xFF:",
         "case 0xC9:",
         "case 0xC2:",
@@ -225,6 +228,10 @@ required = {
         "syscallInterpreter.configureLinuxProcess(programBreak: 0x1000, stackBase: 0x3F0000)",
         "precondition(orInterpreter.registerValue(0) == 3)",
         "precondition(c7.registerValue(0) == 0x12345678)",
+        "precondition(movsxd.registerValue(0) == UInt64.max)",
+        "precondition(imul.registerValue(0) == UInt64.max - 5)",
+        "precondition(imulOverflow.conditionFlags & X86_64ALU.overflow != 0)",
+        "precondition(movExtend.registerValue(1) == 0xFFFF_F234)",
         "precondition(truncatedShortExit == .memoryFault(address: 1))",
         "precondition(truncatedNearExit == .memoryFault(address: 2))",
 

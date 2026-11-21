@@ -394,6 +394,21 @@ struct InterpreterTests {
         precondition(imulImmediateExit == .unsupportedInstruction(address: 11))
         precondition(imulImmediate.registerValue(0) == 0xFFFF_FFF8)
 
+        let movExtendMemory = GuestMemory(size: 128)
+        let movExtendProgram: [UInt8] = [
+            0x48, 0x0F, 0xB7, 0x05, 0x18, 0x00, 0x00, 0x00,
+            0x0F, 0xBF, 0x0D, 0x11, 0x00, 0x00, 0x00,
+            0x0F, 0x0B
+        ]
+        precondition(movExtendMemory.write(Data(movExtendProgram), offset: 0))
+        precondition(movExtendMemory.write(Data([0x34, 0xF2]), offset: 0x20))
+        let movExtend = X86_64Interpreter(memory: movExtendMemory)
+        try movExtend.reset(entryPoint: 0)
+        let movExtendExit = try movExtend.run(maxInstructions: 4)
+        precondition(movExtendExit == .unsupportedInstruction(address: 15))
+        precondition(movExtend.registerValue(0) == 0xF234)
+        precondition(movExtend.registerValue(1) == 0xFFFF_F234)
+
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [
             0xB8, 0x0C, 0x00, 0x00, 0x00,

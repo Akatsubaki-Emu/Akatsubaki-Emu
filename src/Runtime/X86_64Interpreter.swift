@@ -386,6 +386,20 @@ final class X86_64Interpreter: GuestCPUBackend {
                         instructionCount &+= 1
                         return .halted
                     }
+                } else if second == 0xB7 || second == 0xBF {
+                    guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                        return .memoryFault(address: rip)
+                    }
+                    guard let word = readWordOperand(decoded.operand) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                    let width64 = rex & 0x08 != 0
+                    let extended = second == 0xB7
+                        ? UInt64(word)
+                        : UInt64(bitPattern: Int64(Int16(bitPattern: word)))
+                    registers[decoded.reg] = width64
+                        ? extended
+                        : UInt64(UInt32(truncatingIfNeeded: extended))
                 } else if second == 0xAF { // IMUL r32/r64, r/m32/r/m64
                     guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
                         return .memoryFault(address: rip)
@@ -484,6 +498,18 @@ final class X86_64Interpreter: GuestCPUBackend {
         case .memory(let address):
             if width64 { return memory.readUInt64(offset: address) }
             return memory.readUInt32(offset: address).map { UInt64($0) }
+        }
+    }
+
+    private func readWordOperand(_ operand: Operand) -> UInt16? {
+        switch operand {
+        case .register(let index):
+            return UInt16(truncatingIfNeeded: registers[index])
+        case .memory(let address):
+            let (nextAddress, overflow) = address.addingReportingOverflow(1)
+            guard !overflow, let low = memory.readByte(offset: address),
+                  let high = memory.readByte(offset: nextAddress) else { return nil }
+            return UInt16(low) | UInt16(high) << 8
         }
     }
 
