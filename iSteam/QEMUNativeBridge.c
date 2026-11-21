@@ -135,7 +135,7 @@ bool isteam_qemu_validate_library(const char *library_path,
     bool has_jit_callbacks = dlsym(library, "isteam_qemu_set_jit_callbacks") != NULL;
     dlclose(library);
 
-    if (!has_init || !has_main_loop || !has_cleanup || !has_shutdown) {
+    if (!has_init || !has_main_loop || !has_cleanup || !has_shutdown || !has_jit_callbacks) {
         if (error_buffer && error_capacity > 0) {
             snprintf(error_buffer, (size_t)error_capacity,
                      "QEMU library is missing required lifecycle/JIT exports: %s%s%s%s%s",
@@ -211,7 +211,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     qemu_set_jit_callbacks_fn set_jit_callbacks = (qemu_set_jit_callbacks_fn)dlsym(library, "isteam_qemu_set_jit_callbacks");
     if (!init_fn || !loop_fn || !cleanup_fn || !shutdown_fn || !set_jit_callbacks) {
         dlclose(library);
-        if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "QEMU library lacks required lifecycle exports (qemu_init, qemu_main_loop, qemu_cleanup, qemu_system_shutdown_request)");
+        if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "QEMU library lacks required lifecycle/JIT exports (qemu_init, qemu_main_loop, qemu_cleanup, qemu_system_shutdown_request, isteam_qemu_set_jit_callbacks)");
         clear_starting();
         return false;
     }
