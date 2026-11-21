@@ -92,10 +92,15 @@ final class ExternalDriveStore {
                     at: destination.deletingLastPathComponent(),
                     withIntermediateDirectories: true
                 )
+                let temporary = destination.deletingLastPathComponent()
+                    .appendingPathComponent(".\(UUID().uuidString).import")
+                defer { try? fm.removeItem(at: temporary) }
+                try fm.copyItem(at: coordinatedURL, to: temporary)
                 if fm.fileExists(atPath: destination.path) {
-                    try fm.removeItem(at: destination)
+                    _ = try fm.replaceItemAt(destination, withItemAt: temporary)
+                } else {
+                    try fm.moveItem(at: temporary, to: destination)
                 }
-                try fm.copyItem(at: coordinatedURL, to: destination)
             } catch { copyError = error }
         }
         if let coordinationError { throw coordinationError }

@@ -71,6 +71,7 @@ final class GameArtworkStore {
     }
 
     func removeArtwork(for gameID: UUID) throws {
+        guard fm.fileExists(atPath: directory.path) else { return }
         let files = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             .filter { $0.deletingPathExtension().lastPathComponent == gameID.uuidString }
         for file in files { try fm.removeItem(at: file) }

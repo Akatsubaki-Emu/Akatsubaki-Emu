@@ -70,10 +70,16 @@ final class HostDeviceBridge {
             withIntermediateDirectories: true
         )
         try ExternalDriveStore.shared.withAccess(to: source) { coordinatedSource in
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
+            let fm = FileManager.default
+            let temporary = destination.deletingLastPathComponent()
+                .appendingPathComponent(".\(UUID().uuidString).receive")
+            defer { try? fm.removeItem(at: temporary) }
+            try fm.copyItem(at: coordinatedSource, to: temporary)
+            if fm.fileExists(atPath: destination.path) {
+                _ = try fm.replaceItemAt(destination, withItemAt: temporary)
+            } else {
+                try fm.moveItem(at: temporary, to: destination)
             }
-            try FileManager.default.copyItem(at: coordinatedSource, to: destination)
         }
         return destination
     }
