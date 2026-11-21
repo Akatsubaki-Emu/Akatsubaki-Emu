@@ -24,7 +24,7 @@ def verify_link(ninja_text: str, runtime_path: str) -> None:
     if expected not in link_edge:
         raise SystemExit(
             "QEMU link configuration is missing Apple's iOS compiler runtime. "
-            "The Meson project-level link argument did not reach "
+            "The Meson emulator-specific link arguments did not reach "
             "libqemu-x86_64-softmmu.dylib; refusing to compile with a known-broken link."
         )
 

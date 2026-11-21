@@ -368,6 +368,7 @@ required = {
     "scripts/verify_qemu_meson_link.py": [
         "build libqemu-x86_64-softmmu.dylib:",
         "LINK_ARGS",
+        "emulator-specific link arguments",
         "-Wl,-force_load,",
     ],
 }

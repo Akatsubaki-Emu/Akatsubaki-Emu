@@ -31,7 +31,11 @@ class QEMUBuildPatchTests(unittest.TestCase):
         self.assertNotIn("add_project_link_arguments", twice)
 
     def test_qemu_meson_patch_replaces_a_stale_runtime_path(self):
-        source = "project('qemu', 'c')\nemulator_link_args = []\n"
+        source = (
+            "project('qemu', 'c')\n"
+            "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
+            "emulator_link_args = []\n"
+        )
         first = patch_qemu_meson_ios.patch_source(source, "/old/libclang_rt.ios.a")
         updated = patch_qemu_meson_ios.patch_source(first, "/new/libclang_rt.ios.a")
         self.assertNotIn("/old/libclang_rt.ios.a", updated)
