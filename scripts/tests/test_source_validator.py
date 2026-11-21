@@ -114,5 +114,19 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("$0.url.lastPathComponent < $1.url.lastPathComponent", ordering)
 
 
+    def test_emulation_log_byte_bound_is_scoped_to_the_correct_source_contract(self):
+        root = Path(__file__).resolve().parents[2]
+        validator = (root / "scripts" / "validate-qemu-source.py").read_text(encoding="utf-8")
+        crash_start = validator.index('"iSteam/CrashLogger.swift": [')
+        crash_end = validator.index("],", crash_start)
+        emulation_start = validator.index('"src/Core/EmulationLog.swift": [')
+        emulation_end = validator.index("],", emulation_start)
+        crash_contract = validator[crash_start:crash_end]
+        emulation_contract = validator[emulation_start:emulation_end]
+        self.assertNotIn("String(decoding: message.utf8.prefix(8192)", crash_contract)
+        self.assertIn("String(decoding: message.utf8.prefix(8192)", emulation_contract)
+        self.assertIn("currentLogBytes <= maximumLogBytes - byteCount", emulation_contract)
+
+
 if __name__ == "__main__":
     unittest.main()

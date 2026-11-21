@@ -53,10 +53,7 @@ required = {
         "performSynchronouslyOnQueue",
         "details.prefix(500_000)",
         "data.write(to: latestLogURL, options: .atomic)",
-        "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",
-        "String(decoding: message.utf8.prefix(8192), as: UTF8.self)",
-        "guard byteCount <= maximumLogBytes, openLogIfNeeded() else { return }",
-        "currentLogBytes <= maximumLogBytes - byteCount",
+        "maximumLogBytes = 5 * 1024 * 1024",
         "previous-crash.log",
     ],
     "iSteam/ELFValidator.swift": [
@@ -322,7 +319,10 @@ required = {
         "iSteamJITIsSupported",
     ],
     "src/Core/EmulationLog.swift": [
-        "maximumLogBytes = 5 * 1024 * 1024",
+        "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",
+        "String(decoding: message.utf8.prefix(8192), as: UTF8.self)",
+        "guard byteCount <= maximumLogBytes, openLogIfNeeded() else { return }",
+        "currentLogBytes <= maximumLogBytes - byteCount",
         "emulation.previous.log",
     ],
     "src/Display/ControllerInputManager.swift": [
