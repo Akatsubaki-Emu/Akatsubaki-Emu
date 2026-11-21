@@ -71,6 +71,8 @@ required = {
     ],
     "iSteam/CrashLogger.swift": [
         "queueKey = DispatchSpecificKey<UInt8>()",
+        "String(decoding: value.utf8.prefix(maximumBytes), as: UTF8.self)",
+        "Int64(maximumLogBytes - data.count)",
         "performSynchronouslyOnQueue",
         "details.prefix(500_000)",
         "data.write(to: latestLogURL, options: .atomic)",

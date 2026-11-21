@@ -173,5 +173,13 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("if vrSettings.mode == .cardboard { motion.start() }", motion)
 
 
+    def test_crash_logger_uses_utf8_byte_limits_and_reserves_record_space(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "CrashLogger.swift").read_text(encoding="utf-8")
+        self.assertIn("String(decoding: value.utf8.prefix(maximumBytes), as: UTF8.self)", source)
+        self.assertIn("Int64(maximumLogBytes - data.count)", source)
+        self.assertIn("size.int64Value > maximumExistingSize", source)
+
+
 if __name__ == "__main__":
     unittest.main()

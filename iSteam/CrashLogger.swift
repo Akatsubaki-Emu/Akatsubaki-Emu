@@ -40,15 +40,20 @@ final class CrashLogger {
         }
     }
 
+    private func boundedString(_ value: String, maximumBytes: Int) -> String {
+        String(decoding: value.utf8.prefix(maximumBytes), as: UTF8.self)
+    }
+
     private func appendLogLine(_ message: String) {
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        let safeMessage = String(message.prefix(8192))
+        let safeMessage = boundedString(message, maximumBytes: 8192)
         let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(safeMessage)\n"
-        guard let data = line.data(using: .utf8) else { return }
+        guard let data = line.data(using: .utf8), data.count <= maximumLogBytes else { return }
+        let maximumExistingSize = Int64(maximumLogBytes - data.count)
 
         if let attributes = try? fileManager.attributesOfItem(atPath: latestLogURL.path),
            let size = attributes[.size] as? NSNumber,
-           size.int64Value >= Int64(maximumLogBytes) {
+           size.int64Value > maximumExistingSize {
             rotateLatestLog()
         }
 
@@ -85,10 +90,10 @@ final class CrashLogger {
         let report = """
         ===== Akatsubaki Emu Crash =====
         Date: \(ISO8601DateFormatter().string(from: Date()))
-        Type: \(String(type.prefix(128)))
-        Reason: \(String(reason.prefix(4096)))
+        Type: \(boundedString(type, maximumBytes: 128))
+        Reason: \(boundedString(reason, maximumBytes: 4096))
 
-        \(String(details.prefix(500_000)))
+        \(boundedString(details, maximumBytes: 500_000))
 
         Device: \(UIDevice.current.model)
         System: \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)
