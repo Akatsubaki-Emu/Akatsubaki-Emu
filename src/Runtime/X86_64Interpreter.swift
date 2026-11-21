@@ -454,13 +454,7 @@ final class X86_64Interpreter: GuestCPUBackend {
         case .memory(let address):
             if width64 { return memory.writeUInt64(value, offset: address) }
             let word = UInt32(truncatingIfNeeded: value)
-            let bytes = Data([
-                UInt8(truncatingIfNeeded: word),
-                UInt8(truncatingIfNeeded: word >> 8),
-                UInt8(truncatingIfNeeded: word >> 16),
-                UInt8(truncatingIfNeeded: word >> 24)
-            ])
-            return memory.write(bytes, offset: address)
+            return memory.writeUInt32(word, offset: address)
         }
     }
 
