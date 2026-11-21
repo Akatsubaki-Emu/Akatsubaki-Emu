@@ -365,6 +365,37 @@ final class X86_64Interpreter: GuestCPUBackend {
                     registers[index] = value
                     registers[4] &+= 8
                 }
+            case 0x80: // ADD/OR/AND/SUB/XOR/CMP r/m8, imm8
+                guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
+                let group = (modrm >> 3) & 7
+                guard group == 0 || group == 1 || group == 4 || group == 5 || group == 6 || group == 7 else {
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                guard let decoded = decodeRM(modrm, rex: rex, trailingImmediateBytes: 1),
+                      let immediate = fetchByte(),
+                      let lhs = readByteOperand(decoded.operand, modrm: modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
+                }
+                let result: X86_64ALU.Result
+                switch group {
+                case 0: result = X86_64ALU.add8(lhs, immediate, flags: flags)
+                case 1: result = X86_64ALU.or8(lhs, immediate, flags: flags)
+                case 4: result = X86_64ALU.and8(lhs, immediate, flags: flags)
+                case 5, 7: result = X86_64ALU.subtract8(lhs, immediate, flags: flags)
+                case 6: result = X86_64ALU.xor8(lhs, immediate, flags: flags)
+                default:
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                flags = result.flags
+                if group != 7 && !writeByteOperand(UInt8(truncatingIfNeeded: result.value),
+                    to: decoded.operand, modrm: modrm, rex: rex) {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
+            case 0xA8: // TEST AL, imm8
+                guard let immediate = fetchByte() else { return .memoryFault(address: rip) }
+                flags = X86_64ALU.and8(readByteRegister(0, rex: rex), immediate, flags: flags).flags
             case 0x88, 0x8A: // MOV r/m8, r8 and MOV r8, r/m8
                 guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
                     return .memoryFault(address: rip)

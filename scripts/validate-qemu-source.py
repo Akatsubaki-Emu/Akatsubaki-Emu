@@ -278,6 +278,9 @@ required = {
         "case 0x00, 0x02, 0x08, 0x0A, 0x20, 0x22, 0x28, 0x2A, 0x30, 0x32, 0x38, 0x3A, 0x84:",
         "X86_64ALU.add8(lhs, rhs, flags: flags)",
         "X86_64ALU.subtract8(lhs, rhs, flags: flags)",
+        "case 0x80: // ADD/OR/AND/SUB/XOR/CMP r/m8, imm8",
+        "case 0xA8: // TEST AL, imm8",
+        "X86_64ALU.add8(lhs, immediate, flags: flags)",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
@@ -350,6 +353,11 @@ required = {
         "precondition(byteSubtract.registerValue(0) == 0xFF)",
         "precondition(byteTest.conditionFlags & X86_64ALU.zero == 0)",
         "precondition(byteCompare.conditionFlags & X86_64ALU.carry != 0)",
+        "precondition(byteImmediateAdd.registerValue(0) == 0x80)",
+        "precondition(byteImmediateAdd.conditionFlags & X86_64ALU.overflow != 0)",
+        "precondition(byteImmediateCompare.registerValue(0) == 0xFF)",
+        "precondition(byteTestImmediate.conditionFlags & X86_64ALU.zero != 0)",
+        "precondition(unsupportedByteImmediateExit == .unsupportedInstruction(address: 0))",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
