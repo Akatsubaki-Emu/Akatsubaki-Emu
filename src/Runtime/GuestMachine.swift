@@ -53,6 +53,7 @@ final class GuestMachine {
     private(set) var lastExit: GuestCPUExit?
     private var cpu: GuestCPUBackend?
     private var hasLoadedImage = false
+    private var loadedEntryPoint: UInt64?
     private var initialStackPointer: UInt64?
     private let executionLock = NSLock()
     private let activeCPULock = NSLock()
@@ -126,7 +127,16 @@ final class GuestMachine {
         guard backend.architecture == configuration.architecture else {
             throw GuestEngineError.backendNotInstalled(configuration.architecture)
         }
-        withExecutionLock {
+        try withExecutionLock {
+            if hasLoadedImage {
+                guard let loadedEntryPoint else {
+                    throw GuestEngineError.invalidState("The loaded guest image has no saved entry point.")
+                }
+                try backend.reset(entryPoint: loadedEntryPoint)
+                if let initialStackPointer {
+                    try backend.setInitialStackPointer(initialStackPointer)
+                }
+            }
             cpu?.requestStop()
             backend.resume()
             cpu = backend
@@ -148,6 +158,7 @@ final class GuestMachine {
             }
             do {
                 hasLoadedImage = false
+                loadedEntryPoint = nil
                 initialStackPointer = nil
                 guard configuration.architecture == .x86_64 else {
                     throw GuestEngineError.backendNotInstalled(configuration.architecture)
@@ -168,6 +179,7 @@ final class GuestMachine {
                 try cpu.reset(entryPoint: image.entryPoint)
                 try cpu.setInitialStackPointer(stack.stackPointer)
                 initialStackPointer = stack.stackPointer
+                loadedEntryPoint = image.entryPoint
                 hasLoadedImage = true
                 lastExit = nil
                 state = .configured
@@ -194,6 +206,7 @@ final class GuestMachine {
             do {
                 try cpu.reset(entryPoint: entryPoint)
                 if let initialStackPointer { try cpu.setInitialStackPointer(initialStackPointer) }
+                loadedEntryPoint = entryPoint
                 lastExit = nil
                 state = .configured
             } catch {
@@ -258,6 +271,7 @@ final class GuestMachine {
             cpu?.requestStop()
             memory.clear()
             hasLoadedImage = false
+            loadedEntryPoint = nil
             initialStackPointer = nil
             state = .stopped
             lastExit = nil

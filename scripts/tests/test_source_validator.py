@@ -198,5 +198,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertNotIn("for delta in 0..<limit", reader)
 
 
+    def test_guest_backend_replacement_restores_loaded_entrypoint_and_stack(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        install = source.split("func installCPUBackend", 1)[1].split("func hostDeviceInfo", 1)[0]
+        self.assertIn("backend.reset(entryPoint: loadedEntryPoint)", install)
+        self.assertIn("backend.setInitialStackPointer(initialStackPointer)", install)
+        self.assertIn("loadedEntryPoint = image.entryPoint", source)
+
+
 if __name__ == "__main__":
     unittest.main()
