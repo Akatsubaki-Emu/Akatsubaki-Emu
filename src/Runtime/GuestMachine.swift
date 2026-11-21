@@ -23,6 +23,7 @@ enum GuestEngineError: LocalizedError {
     case invalidInstructionBudget
     case backendNotInstalled(VMConfiguration.Architecture)
     case memoryUnavailable
+    case invalidState(String)
 
     var errorDescription: String? {
         switch self {
@@ -32,6 +33,8 @@ enum GuestEngineError: LocalizedError {
             return "No guest CPU backend is installed for \(architecture.rawValue)."
         case .memoryUnavailable:
             return "Native guest memory could not be allocated on this device."
+        case .invalidState(let detail):
+            return detail
         }
     }
 }
@@ -48,6 +51,13 @@ final class GuestMachine {
     private(set) var state: State = .stopped
     private(set) var lastExit: GuestCPUExit?
     private var cpu: GuestCPUBackend?
+    private let executionLock = NSLock()
+
+    private func withExecutionLock<T>(_ body: () throws -> T) rethrows -> T {
+        executionLock.lock()
+        defer { executionLock.unlock() }
+        return try body()
+    }
 
     init(configuration: VMConfiguration, memorySize: UInt64? = nil) {
         self.configuration = configuration
@@ -93,10 +103,13 @@ final class GuestMachine {
         guard backend.architecture == configuration.architecture else {
             throw GuestEngineError.backendNotInstalled(configuration.architecture)
         }
-        cpu?.requestStop()
-        cpu = backend
-        state = .configured
-        lastExit = nil
+        try withExecutionLock {
+            cpu?.requestStop()
+            backend.resume()
+            cpu = backend
+            state = .configured
+            lastExit = nil
+        }
     }
 
     /// Loads an ELF64 image into guest memory and initializes the CPU at its
@@ -110,16 +123,18 @@ final class GuestMachine {
             throw error
         }
 
-        do {
-            let image = try ELF64Loader().load(url, into: memory,
-                                               expectedArchitecture: configuration.architecture)
-            try cpu.reset(entryPoint: image.entryPoint)
-            lastExit = nil
-            state = .configured
-            return image
-        } catch {
-            state = .failed(error.localizedDescription)
-            throw error
+        return try withExecutionLock {
+            do {
+                let image = try ELF64Loader().load(url, into: memory,
+                                                   expectedArchitecture: configuration.architecture)
+                try cpu.reset(entryPoint: image.entryPoint)
+                lastExit = nil
+                state = .configured
+                return image
+            } catch {
+                state = .failed(error.localizedDescription)
+                throw error
+            }
         }
     }
 
@@ -131,13 +146,15 @@ final class GuestMachine {
             state = .failed(error.localizedDescription)
             throw error
         }
-        do {
-            try cpu.reset(entryPoint: entryPoint)
-            lastExit = nil
-            state = .configured
-        } catch {
-            state = .failed(error.localizedDescription)
-            throw error
+        try withExecutionLock {
+            do {
+                try cpu.reset(entryPoint: entryPoint)
+                lastExit = nil
+                state = .configured
+            } catch {
+                state = .failed(error.localizedDescription)
+                throw error
+            }
         }
     }
 
@@ -145,6 +162,10 @@ final class GuestMachine {
     func runBatch(maxInstructions: UInt64) throws -> GuestCPUExit {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
+        return try withExecutionLock {
+        guard state == .configured else {
+            throw GuestEngineError.invalidState("The guest must be configured before running; resume a paused guest or load/reset an image first.")
+        }
         guard let cpu else {
             let error = GuestEngineError.backendNotInstalled(configuration.architecture)
             state = .failed(error.localizedDescription)
@@ -166,26 +187,39 @@ final class GuestMachine {
             state = .failed(error.localizedDescription)
             throw error
         }
+        }
     }
 
     func pause() {
-        cpu?.requestStop()
-        if state == .running { state = .paused }
+        let activeCPU = cpu
+        activeCPU?.requestStop()
+        withExecutionLock {
+            if state == .running {
+                state = .paused
+            } else if state != .paused {
+                activeCPU?.resume()
+            }
+        }
     }
 
     /// Resumes a paused interpreter without resetting registers or guest memory.
     @discardableResult
     func resume() -> Bool {
-        guard state == .paused, let cpu else { return false }
-        cpu.resume()
-        state = .configured
-        return true
+        withExecutionLock {
+            guard state == .paused, let cpu else { return false }
+            cpu.resume()
+            state = .configured
+            return true
+        }
     }
 
     func stop() {
         cpu?.requestStop()
-        memory.clear()
-        state = .stopped
-        lastExit = nil
+        withExecutionLock {
+            cpu?.requestStop()
+            memory.clear()
+            state = .stopped
+            lastExit = nil
+        }
     }
 }
