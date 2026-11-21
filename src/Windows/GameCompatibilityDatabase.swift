@@ -21,8 +21,9 @@ struct GameCompatibilityRecord: Codable, Identifiable, Equatable {
               appID.count <= 128, !appID.contains("\0"),
               !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               title.count <= 256, !testedRuntime.contains("\0"),
-              !testedDevice.contains("\0"), !notes.contains("\0"),
-              notes.utf8.count <= 16_384 else {
+              testedRuntime.utf8.count <= 256,
+              !testedDevice.contains("\0"), testedDevice.utf8.count <= 256,
+              !notes.contains("\0"), notes.utf8.count <= 16_384 else {
             throw DatabaseError.invalidRecord
         }
     }

@@ -50,7 +50,9 @@ struct GameEntry: Codable, Identifiable, Equatable {
             && tags.count <= 128
             && tags.allSatisfy { $0.utf8.count <= 128 && !$0.contains("\0") }
             && (notes?.utf8.count ?? 0) <= 16_384
+            && !(notes?.contains("\0") ?? false)
             && (coverArtPath?.utf8.count ?? 0) <= 4096
+            && !(coverArtPath?.contains("\0") ?? false)
     }
 
     private enum CodingKeys: String, CodingKey {
