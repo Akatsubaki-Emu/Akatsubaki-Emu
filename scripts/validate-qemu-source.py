@@ -32,6 +32,11 @@ required = {
         "Section(name: name,\n                virtualAddress:",
         "virtualSize: try u32(data, offset + 8)",
         "rawOffset: try u32(data, offset + 20)",
+        "imageEndOverflow",
+        "SizeOfHeaders does not cover the section table",
+        "overlapping virtual sections",
+        "overlapping raw sections",
+        "entry point is not backed by executable section data",
     ],
     "iSteam/JITCoordinator.swift": [
         "if #available(iOS 26.0, *)",
@@ -72,6 +77,11 @@ required = {
     "src/Runtime/ELF64Loader.swift": [
         "($0.flags & 0x1) != 0",
         "loadable executable segment",
+        "case unsupportedFileType(UInt16), unsupportedDynamicImage, fileTooLarge",
+        "version == 1",
+        "type == 2 || type == 3 || type == 7",
+        "alignment & (alignment - 1) == 0",
+        "orderedSegments",
     ],
     "src/Runtime/X86_64Interpreter.swift": [
         "let is64Bit = rex & 0x08 != 0",
@@ -102,6 +112,7 @@ required = {
         "private func setState(_ newState: State)",
         "startupDeadline = .now() + 60",
         "within 60 seconds",
+        "backend = candidate",
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
         "QEMURuntimeStatus.inspect()",
@@ -147,6 +158,8 @@ required = {
         "RuntimeCapabilityRegistry.current",
         "capabilities.backendAvailability",
         '"[runtime-capability] "',
+        "WindowsPELoader().load(executable)",
+        "directoryValues?.isDirectory == true",
     ],
 
 
@@ -165,6 +178,9 @@ required = {
         "antiCheatAssessment == .notRequested",
         "return dynamicTranslationBackend != nil",
         "Cached AOT translations require a dynamic engine",
+    ],
+    "src/Core/RuntimeSettings.swift": [
+        "?? .windowsVM",
     ],
     "src/Core/VMConfiguration.swift": [
         "static var defaultAccelerator: Accelerator",
@@ -196,6 +212,10 @@ required = {
         "maximumGuestBytes: UInt64 = 16 * 1024 * 1024 * 1024",
         "guard self.memory.isAvailable",
         "case memoryUnavailable",
+        "backendNotInstalled(configuration.architecture).localizedDescription",
+        "withExecutionLock",
+        "state == .configured",
+        "executionLock.lock()",
     ],
     "src/Steam/GameArtworkStore.swift": [
         "CGImageSourceGetCount(image) <= 200",
@@ -221,6 +241,9 @@ required = {
         "games.count <= 10_000",
         "GameRuntimeProfileStore.shared.removeProfile(for: id)",
     ],
+    "src/Steam/GameLibraryQuery.swift": [
+        "seen.insert($0.folding(options: .caseInsensitive, locale: .current)).inserted",
+    ],
     "src/Steam/GameRuntimeProfile.swift": [
         "var hasUnreadableProfiles: Bool",
         "profile.validate()",
@@ -232,6 +255,8 @@ required = {
         "1024 * 1024",
         "corruptStoredProfile",
         "UInt64(preferredResolutionWidth) * UInt64(preferredResolutionHeight) * 4 <= 64 * 1024 * 1024",
+        "UUID(uuidString: file.deletingPathExtension().lastPathComponent) == profile.gameID",
+        "readProfile(at:)",
     ],
     "src/Display/VMDisplayViewController.swift": [
         "private let configuration: VMConfiguration",
@@ -289,6 +314,19 @@ required = {
         "pad.dpad.up",
         "if let leftThumbstickButton = pad.leftThumbstickButton",
         "if let rightThumbstickButton = pad.rightThumbstickButton",
+    ],
+    "src/Display/KeyboardOverlayView.swift": [
+        "onKeyEvent: ((String, Bool) -> Void)?",
+        "activeModifiers",
+        "releaseAllKeys()",
+    ],
+    "src/Display/MotionInputManager.swift": [
+        "queue.maxConcurrentOperationCount = 1",
+        "withStateLock",
+        "motion.isDeviceMotionActive",
+    ],
+    "src/Display/ControllerMappingStore.swift": [
+        "!$0.value.isEmpty",
     ],
     "src/Display/TouchGamepadView.swift": [
         "iSteam.touchGamepad.layout.v3",
