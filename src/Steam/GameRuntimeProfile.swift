@@ -55,7 +55,8 @@ struct GameRuntimeProfile: Codable, Equatable, Identifiable {
             throw ProfileError.invalidName
         }
         guard (320...8192).contains(preferredResolutionWidth),
-              (240...8192).contains(preferredResolutionHeight) else {
+              (240...8192).contains(preferredResolutionHeight),
+              UInt64(preferredResolutionWidth) * UInt64(preferredResolutionHeight) * 4 <= 64 * 1024 * 1024 else {
             throw ProfileError.invalidResolution
         }
         guard (24...120).contains(targetFPS) else { throw ProfileError.invalidFrameRate }

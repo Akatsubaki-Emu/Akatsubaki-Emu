@@ -101,6 +101,39 @@ required = {
     "src/Runtime/ExecutionBackendRouter.swift": [
         "antiCheatAssessment == .notRequested",
         "return dynamicTranslationBackend != nil",
+        "Cached AOT translations require a dynamic engine",
+    ],
+    "src/Core/VMConfiguration.swift": [
+        "static var defaultAccelerator: Accelerator",
+        "case .automatic, .qemuJIT: return .jit",
+        "case .qemuInterpreter, .hypervisor: return .tcg",
+    ],
+    "src/Core/VMConfigurationValidation.swift": [
+        "framebufferBytes <= 64 * 1024 * 1024",
+        "fit the 64 MiB framebuffer limit",
+    ],
+    "src/Runtime/GuestMemory.swift": [
+        "private let native: OpaquePointer?",
+        "var isAvailable: Bool",
+    ],
+    "src/Runtime/GuestMachine.swift": [
+        "maximumGuestBytes: UInt64 = 16 * 1024 * 1024 * 1024",
+        "guard self.memory.isAvailable",
+    ],
+    "src/Steam/GameRuntimeProfile.swift": [
+        "launchArguments.count <= 256",
+        "environment.count <= 128",
+        "compatibilityNotes.utf8.count <= 16_384",
+        "UInt64(preferredResolutionWidth) * UInt64(preferredResolutionHeight) * 4 <= 64 * 1024 * 1024",
+    ],
+    "iSteam/LaunchSetupViewController.swift": [
+        "RuntimeSettings.shared.vmMode",
+        "config.accelerator = VMConfiguration.defaultAccelerator",
+        "let selectedMode: VMExecutionMode",
+    ],
+    "src/Display/VMDisplayViewController.swift": [
+        "configuration.displayWidth, height: configuration.displayHeight",
+        "configuration.displayFPS",
     ],
     "src/Runtime/HostDeviceBridge.swift": [
         "resolvingSymlinksInPath()",

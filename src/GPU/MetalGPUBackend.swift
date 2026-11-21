@@ -20,6 +20,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     /// cannot race a CPU write to the same texture.
     private var framebuffer: MTLTexture?
     private let targetFrameRate: Int
+    private let maxFramebufferBytes = 64 * 1024 * 1024
 
     init(width: Int, height: Int, frameRate: Int) {
         self.width = max(1, width)
@@ -58,7 +59,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     func submit(frame: Data, width frameWidth: Int, height frameHeight: Int) {
         guard frameWidth > 0, frameHeight > 0,
               frameWidth <= 8192, frameHeight <= 8192,
-              frameWidth <= Int.max / frameHeight / 4,
+              frameWidth <= maxFramebufferBytes / frameHeight / 4,
               frame.count >= frameWidth * frameHeight * 4,
               let device,
               let queue,
