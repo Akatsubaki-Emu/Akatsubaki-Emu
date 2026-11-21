@@ -31,18 +31,48 @@ final class VMSaveSlotStore {
 
     enum StoreError: LocalizedError {
         case metadataTooLarge
+        case invalidName
         var errorDescription: String? {
-            "Saved VM metadata exceeds the 1 MiB safety limit."
+            switch self {
+            case .metadataTooLarge:
+                return "Saved VM metadata exceeds the 1 MiB safety limit."
+            case .invalidName:
+                return "VM configuration names must be non-empty, contain no NUL characters, and be at most 256 UTF-8 bytes."
+            }
         }
     }
 
-    private func safeFilename(_ name: String) -> String {
+    private func legacySafeFilename(_ name: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_ "))
-        let clean = String(name.unicodeScalars.filter { allowed.contains($0) }).trimmingCharacters(in: .whitespacesAndNewlines)
+        let clean = String(name.unicodeScalars.filter { allowed.contains($0) })
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return String((clean.isEmpty ? "VM" : clean).prefix(64))
     }
 
+    private func safeFilename(_ name: String) -> String {
+        let hash = name.utf8.reduce(UInt64(14_695_981_039_346_656_037)) {
+            ($0 ^ UInt64($1)) &* 1_099_511_628_211
+        }
+        return "\(legacySafeFilename(name))-\(String(format: "%016llx", hash))"
+    }
+
+    private func isValidName(_ name: String) -> Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && name.utf8.count <= 256 && !name.contains("\\0")
+    }
+
+    private func readConfiguration(at url: URL, expectedName: String) -> VMConfiguration? {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true,
+              let size = values.fileSize, size <= maximumMetadataBytes,
+              let data = try? Data(contentsOf: url), data.count <= maximumMetadataBytes,
+              let configuration = try? decoder.decode(VMConfiguration.self, from: data),
+              configuration.name == expectedName else { return nil }
+        return configuration
+    }
+
     func saveConfiguration(_ configuration: VMConfiguration, name: String) throws {
+        guard isValidName(name) else { throw StoreError.invalidName }
         var saved = configuration
         saved.name = name
         let url = directory.appendingPathComponent(safeFilename(name) + ".json")
@@ -52,17 +82,30 @@ final class VMSaveSlotStore {
     }
 
     func configuration(named name: String) -> VMConfiguration? {
-        let url = directory.appendingPathComponent(safeFilename(name) + ".json")
-        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
-              let size = values.fileSize, size <= maximumMetadataBytes,
-              let data = try? Data(contentsOf: url), data.count <= maximumMetadataBytes else { return nil }
-        return try? decoder.decode(VMConfiguration.self, from: data)
+        guard isValidName(name) else { return nil }
+        let current = directory.appendingPathComponent(safeFilename(name) + ".json")
+        if let configuration = readConfiguration(at: current, expectedName: name) {
+            return configuration
+        }
+        // Read legacy sanitized filenames for configurations saved before the
+        // collision-resistant suffix was introduced.
+        let legacy = directory.appendingPathComponent(legacySafeFilename(name) + ".json")
+        return readConfiguration(at: legacy, expectedName: name)
     }
 
     var configurationNames: [String] {
         let urls = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        return urls.filter { $0.pathExtension == "json" && $0.lastPathComponent != "last-session.json" }
-            .map { $0.deletingPathExtension().lastPathComponent }.sorted()
+        return Set(urls.filter {
+            $0.pathExtension == "json" && $0.lastPathComponent != "last-session.json"
+        }.compactMap { url -> String? in
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true,
+                  let size = values.fileSize, size <= maximumMetadataBytes,
+                  let data = try? Data(contentsOf: url), data.count <= maximumMetadataBytes,
+                  let configuration = try? decoder.decode(VMConfiguration.self, from: data),
+                  isValidName(configuration.name) else { return nil }
+            return configuration.name
+        }).sorted()
     }
 
     func saveSessionMetadata(configuration: VMConfiguration, diskImageURL: URL, gameID: UUID? = nil) throws {
