@@ -53,7 +53,10 @@ required = {
         "performSynchronouslyOnQueue",
         "details.prefix(500_000)",
         "data.write(to: latestLogURL, options: .atomic)",
-        "maximumLogBytes = 5 * 1024 * 1024",
+        "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",
+        "String(decoding: message.utf8.prefix(8192), as: UTF8.self)",
+        "guard byteCount <= maximumLogBytes, openLogIfNeeded() else { return }",
+        "currentLogBytes <= maximumLogBytes - byteCount",
         "previous-crash.log",
     ],
     "iSteam/ELFValidator.swift": [

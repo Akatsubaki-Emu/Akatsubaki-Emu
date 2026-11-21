@@ -21,7 +21,7 @@ final class EmulationLog {
 
     func write(_ message: String) {
         queue.async {
-            let safeMessage = String(message.prefix(8192))
+            let safeMessage = String(decoding: message.utf8.prefix(8192), as: UTF8.self)
             let line = "[\(self.timestampFormatter.string(from: Date()))] \(safeMessage)\n"
             guard let data = line.data(using: .utf8) else { return }
             self.append(data)
@@ -29,11 +29,13 @@ final class EmulationLog {
     }
 
     private func append(_ data: Data) {
-        guard openLogIfNeeded() else { return }
+        let byteCount = UInt64(data.count)
+        guard byteCount <= maximumLogBytes, openLogIfNeeded() else { return }
 
-        if currentLogBytes > maximumLogBytes - UInt64(data.count) {
+        if currentLogBytes > maximumLogBytes - byteCount {
             rotateLog()
-            guard openLogIfNeeded() else { return }
+            guard openLogIfNeeded(),
+                  currentLogBytes <= maximumLogBytes - byteCount else { return }
         }
 
         do {
