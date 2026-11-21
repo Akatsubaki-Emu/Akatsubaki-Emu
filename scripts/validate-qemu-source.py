@@ -376,6 +376,8 @@ required = {
         "QEMUDiskImageFormat.detect(at: diskImage)",
         "Self.escapeDriveValue(diskImage.path)",
         "replacingOccurrences(of: \",\", with: \",,\")",
+        "tcg,tb-size=128,split-wx=on",
+        ': "tcg"',
     ],
     "src/Core/VMEngine.swift": [
         "var onStateChange: ((State) -> Void)?",
@@ -464,6 +466,10 @@ required = {
     ],
     "src/Core/RuntimeSettings.swift": [
         "?? .windowsVM",
+        "Uses the configured QEMU TCG translation profile",
+        "TCG with a 128 MiB translation-block cache and split-WX enabled",
+        "Default QEMU TCG options; TCG still uses JIT code generation and requires executable memory",
+        "stored selections fall back to QEMU TCG",
     ],
     "src/Core/VMConfiguration.swift": [
         "static var defaultAccelerator: Accelerator",

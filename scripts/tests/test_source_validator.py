@@ -305,6 +305,17 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("test_qemu_runtime_does_not_cancel_in_progress_release_build", tests)
 
 
+    def test_qemu_acceleration_profiles_describe_actual_tcg_behavior(self):
+        root = Path(__file__).resolve().parents[2]
+        settings = (root / "src" / "Core" / "RuntimeSettings.swift").read_text(encoding="utf-8")
+        builder = (root / "src" / "QEMU" / "QEMUCommandBuilder.swift").read_text(encoding="utf-8")
+        docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
+        self.assertIn("TCG still uses JIT code generation", settings)
+        self.assertNotIn("Slower compatibility fallback", settings)
+        self.assertIn("tcg,tb-size=128,split-wx=on", builder)
+        self.assertIn(' : "tcg"', builder)
+        self.assertIn("QEMU TCG uses JIT code generation", docs)
+
     def test_linux_arm32_translator_requires_linux_syscall_abi(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "ExecutionBackendRouter.swift").read_text(encoding="utf-8")
