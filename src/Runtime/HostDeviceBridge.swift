@@ -16,6 +16,7 @@ final class HostDeviceBridge {
         case outsideSharedDirectory
         case unavailableDeviceInformation
         case fileTooLarge
+        case fileChangedDuringTransfer
 
         var errorDescription: String? {
             switch self {
@@ -23,6 +24,7 @@ final class HostDeviceBridge {
             case .outsideSharedDirectory: return "The requested file is outside the i-Steam shared directory."
             case .unavailableDeviceInformation: return "Host device information is unavailable."
             case .fileTooLarge: return "The shared file exceeds the 64 MiB transfer limit."
+            case .fileChangedDuringTransfer: return "The shared file changed while it was being transferred."
             }
         }
     }
@@ -109,6 +111,9 @@ final class HostDeviceBridge {
             guard copiedBytes <= maximumInMemoryTransferBytes else {
                 throw BridgeError.fileTooLarge
             }
+            guard copiedBytes == sourceSize else {
+                throw BridgeError.fileChangedDuringTransfer
+            }
             try output?.synchronize()
             try output?.close()
             output = nil
@@ -152,6 +157,9 @@ final class HostDeviceBridge {
         }
         guard data.count <= maximumInMemoryTransferBytes else {
             throw BridgeError.fileTooLarge
+        }
+        guard data.count == size else {
+            throw BridgeError.fileChangedDuringTransfer
         }
         return data
     }

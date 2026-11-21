@@ -293,6 +293,9 @@ required = {
         "withAccess(to: source)",
         "maximumInMemoryTransferBytes = 64 * 1024 * 1024",
         "case fileTooLarge",
+        "case fileChangedDuringTransfer",
+        "copiedBytes == sourceSize",
+        "data.count == size",
     ],
     "src/Steam/DroidDeckFeatureServices.swift": [
         "NSFileCoordinator()",

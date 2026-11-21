@@ -90,9 +90,11 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("input.read(upToCount:", receive)
         self.assertIn("output?.write(contentsOf:", receive)
         self.assertIn("copiedSize == copiedBytes", receive)
+        self.assertIn("copiedBytes == sourceSize", receive)
         self.assertNotIn("copyItem(at:", receive)
         self.assertIn("maximumInMemoryTransferBytes + 1", read)
         self.assertIn("handle.read(upToCount:", read)
+        self.assertIn("data.count == size", read)
 
     def test_translation_cache_pruning_keeps_newest_entry_last_on_timestamp_ties(self):
         root = Path(__file__).resolve().parents[2]
