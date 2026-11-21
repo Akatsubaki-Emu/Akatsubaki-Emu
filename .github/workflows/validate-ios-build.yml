@@ -66,12 +66,13 @@ jobs:
             scripts/tests/test_linux_process_stack.swift \
             -o "$RUNNER_TEMP/test-linux-process-stack"
           "$RUNNER_TEMP/test-linux-process-stack"
-      - name: Test x86-64 interpreter register moves and syscall path
+      - name: Test x86-64 interpreter ALU, memory, stack and syscall path
         if: matrix.scheme == 'iSteam'
         run: |
           set -euo pipefail
           swiftc -parse-as-library -swift-version 5 \
             src/Runtime/X86_64ALU.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
             src/Runtime/X86_64Interpreter.swift \
             scripts/tests/test_x86_64_interpreter.swift \
             -o "$RUNNER_TEMP/test-x86-64-interpreter"

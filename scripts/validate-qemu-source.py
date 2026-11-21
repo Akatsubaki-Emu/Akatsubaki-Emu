@@ -510,6 +510,7 @@ required = {
         "func releaseAllButtons()",
     ],
     ".github/workflows/validate-ios-build.yml": [
+        "src/Runtime/LinuxSyscallDispatcher.swift",
         "Test VNC key-state source arbitration",
         "scripts/tests/test_vnc_key_state.swift",
     ],
