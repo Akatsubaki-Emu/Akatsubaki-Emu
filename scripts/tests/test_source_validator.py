@@ -188,5 +188,15 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("private func rotateLatestLog() -> Bool", source)
 
 
+    def test_pe_string_scan_maps_one_contiguous_file_range(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "WindowsPEImage.swift").read_text(encoding="utf-8")
+        reader = source.split("private func readCString", 1)[1].split("\n    private static func require", 1)[0]
+        self.assertIn("let offset = try fileOffset(forRVA: rva)", reader)
+        self.assertIn("let available = try contiguousFileLength(forRVA: rva)", reader)
+        self.assertIn("file[range].firstIndex(of: 0)", reader)
+        self.assertNotIn("for delta in 0..<limit", reader)
+
+
 if __name__ == "__main__":
     unittest.main()

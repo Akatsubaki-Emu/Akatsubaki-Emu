@@ -19,7 +19,8 @@ struct WindowsPEImageTests {
         importDirectoryRVA: UInt32,
         importDirectorySize: UInt32,
         relocationDirectoryRVA: UInt32 = 0,
-        relocationDirectorySize: UInt32 = 0
+        relocationDirectorySize: UInt32 = 0,
+        libraryNameRVA: UInt32 = 0x1030
     ) -> Data {
         var bytes = [UInt8](repeating: 0, count: 0x600)
         bytes[0] = 0x4d
@@ -53,10 +54,13 @@ struct WindowsPEImageTests {
 
         let descriptor = 0x200 + Int(importDirectoryRVA - 0x1000)
         put32(0x1040, at: descriptor, in: &bytes)
-        put32(0x1030, at: descriptor + 12, in: &bytes)
+        put32(libraryNameRVA, at: descriptor + 12, in: &bytes)
         put32(0x1050, at: descriptor + 16, in: &bytes)
+        let libraryOffset = libraryNameRVA >= 0x1000
+            ? 0x200 + Int(libraryNameRVA - 0x1000)
+            : Int(libraryNameRVA)
         for (index, byte) in (Array("KERNEL32.dll".utf8) + [0]).enumerated() {
-            bytes[0x230 + index] = byte
+            bytes[libraryOffset + index] = byte
         }
         put64(0x1060, at: 0x240, in: &bytes)
         put16(0, at: 0x260, in: &bytes)
@@ -91,6 +95,16 @@ struct WindowsPEImageTests {
             throw NSError(domain: "WindowsPEImageTests", code: 3,
                           userInfo: [NSLocalizedDescriptionKey: "Header RVA range crossing SizeOfHeaders was accepted"])
         } catch WindowsPEImage.ParseError.unmappedRVA(_) {
+        }
+
+        do {
+            _ = try WindowsPEImage.parse(
+                makeImage(importDirectoryRVA: 0x1000, importDirectorySize: 40,
+                          libraryNameRVA: 0x11F8)
+            )
+            throw NSError(domain: "WindowsPEImageTests", code: 6,
+                          userInfo: [NSLocalizedDescriptionKey: "PE string scanning crossed a section raw-data boundary"])
+        } catch WindowsPEImage.ParseError.malformed(_) {
         }
 
         do {

@@ -53,6 +53,8 @@ required = {
         "end <= UInt64(sizeOfHeaders)",
         "import directory range is invalid",
         "relocation directory range is invalid",
+        "private func contiguousFileLength(forRVA rva: UInt32) throws -> Int",
+        "file[range].firstIndex(of: 0)",
         "Section(name: name,\n                virtualAddress:",
         "virtualSize: try u32(data, offset + 8)",
         "rawOffset: try u32(data, offset + 20)",
@@ -99,6 +101,7 @@ required = {
         "Header RVA range crossing SizeOfHeaders was accepted",
         "Import directory smaller than one descriptor was accepted",
         "Relocation directory smaller than one block was accepted",
+        "PE string scanning crossed a section raw-data boundary",
     ],
     "src/Runtime/RuntimeComponentManifest.swift": [
         "resolvingSymlinksInPath()",

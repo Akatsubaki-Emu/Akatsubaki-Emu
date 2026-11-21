@@ -271,26 +271,35 @@ struct WindowsPEImage {
         return result
     }
 
+    private func contiguousFileLength(forRVA rva: UInt32) throws -> Int {
+        if rva < sizeOfHeaders { return Int(sizeOfHeaders - rva) }
+        for section in sections {
+            let start = UInt64(section.virtualAddress)
+            guard UInt64(rva) >= start else { continue }
+            let delta = UInt64(rva) - start
+            if delta < UInt64(section.rawSize) {
+                return Int(UInt64(section.rawSize) - delta)
+            }
+        }
+        throw ParseError.unmappedRVA(rva)
+    }
+
     private func readCString(atRVA rva: UInt32, limit: Int) throws -> String {
         guard limit > 0 else { throw ParseError.malformed("invalid PE string limit") }
-        var bytes: [UInt8] = []
-        bytes.reserveCapacity(min(limit, 256))
-        for delta in 0..<limit {
-            let address = UInt64(rva) + UInt64(delta)
-            guard address <= UInt64(UInt32.max),
-                  let offset = try? fileOffset(forRVA: UInt32(address)) else {
-                break // Do not scan into an unrelated section or file region.
-            }
-            let byte = file[offset]
-            if byte == 0 {
-                guard let value = String(bytes: bytes, encoding: .ascii), !value.isEmpty else {
-                    throw ParseError.malformed("invalid PE string")
-                }
-                return value
-            }
-            bytes.append(byte)
+        let offset = try fileOffset(forRVA: rva)
+        let available = try contiguousFileLength(forRVA: rva)
+        let scanLength = min(limit, available)
+        guard scanLength > 0 else { throw ParseError.unmappedRVA(rva) }
+        let range = offset..<(offset + scanLength)
+        guard let terminator = file[range].firstIndex(of: 0) else {
+            throw ParseError.malformed("unterminated PE string within its mapped section")
         }
-        throw ParseError.malformed("unterminated PE string within its mapped section")
+        guard terminator > offset,
+              let value = String(bytes: file[offset..<terminator], encoding: .ascii),
+              !value.isEmpty else {
+            throw ParseError.malformed("invalid PE string")
+        }
+        return value
     }
 
     private static func require(_ data: Data, _ offset: Int, _ length: Int, _ field: String) throws {
