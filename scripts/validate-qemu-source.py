@@ -452,6 +452,15 @@ required = {
         "antiCheatAssessment == .notRequested",
         "return dynamicTranslationBackend != nil",
         "Cached AOT translations require a dynamic engine",
+        "case .linuxARM32ELF:",
+        "required = [.linuxSyscallABI]",
+    ],
+    "scripts/tests/test_execution_backend_router.swift": [
+        "let translatorOnly = RuntimeBackendAvailability(installed: [.a32rt])",
+        "translatorOnlyPlan.missingRequiredLayers == [.linuxSyscallABI]",
+        "!translatorOnlyPlan.isExecutableWithInstalledBackends",
+        "withABIPlan.isExecutableWithInstalledBackends",
+        "fullSystemPlan.fullSystemFallback == .qemuTCG",
     ],
     "src/Core/RuntimeSettings.swift": [
         "?? .windowsVM",
@@ -690,6 +699,7 @@ required = {
         "static_cast<uint64_t>(amount) == pageLength",
     ],
     ".gitlab-ci.yml": [
+        "test_execution_backend_router.swift",
         "test_static_elf_execution.swift",
         "test_native_guest_memory.cpp",
         "g++ -std=c++17 -Wall -Wextra -Werror",

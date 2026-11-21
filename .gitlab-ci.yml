@@ -27,6 +27,8 @@ swift-runtime-tests:
     - /tmp/test-linux-stack
     - swiftc -parse-as-library -swift-version 5 src/Runtime/LinuxSyscallDispatcher.swift scripts/tests/test_linux_syscall_dispatcher.swift -o /tmp/test-linux-syscalls
     - /tmp/test-linux-syscalls
+    - swiftc -parse-as-library -swift-version 5 src/Runtime/ExecutionBackendRouter.swift scripts/tests/test_execution_backend_router.swift -o /tmp/test-backend-router
+    - /tmp/test-backend-router
 
 native-memory-tests:
   stage: validate

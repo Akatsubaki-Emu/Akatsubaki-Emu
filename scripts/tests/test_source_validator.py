@@ -305,6 +305,15 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("test_qemu_runtime_does_not_cancel_in_progress_release_build", tests)
 
 
+    def test_linux_arm32_translator_requires_linux_syscall_abi(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "ExecutionBackendRouter.swift").read_text(encoding="utf-8")
+        arm32 = source.split("case .linuxARM32ELF:", 1)[1].split("case .nativeARM64:", 1)[0]
+        self.assertIn("required = [.linuxSyscallABI]", arm32)
+        harness = (root / "scripts" / "tests" / "test_execution_backend_router.swift").read_text(encoding="utf-8")
+        self.assertIn("!translatorOnlyPlan.isExecutableWithInstalledBackends", harness)
+        self.assertIn("withABIPlan.isExecutableWithInstalledBackends", harness)
+
     def test_guest_machine_pause_works_between_bounded_execution_batches(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")

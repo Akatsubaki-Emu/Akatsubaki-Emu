@@ -251,6 +251,7 @@ enum RuntimeBackendRouter {
                     parallel = [.audio, .input, .networking, .storage]
                 }
             case .linuxARM32ELF:
+                required = [.linuxSyscallABI]
                 if availability.contains(.a32rt) {
                     architectureBackend = .a32rt
                     stages = [.dynamicTranslation]
