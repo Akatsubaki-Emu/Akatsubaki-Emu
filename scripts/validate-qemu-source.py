@@ -464,8 +464,9 @@ required = {
         "var requiresUEFI: Bool",
         "bootWindows: true, bootUEFI: true",
         "bootWindows: false, bootUEFI: false",
-        "bootWindows: false, bootUEFI: true",    ],
-        "src/Core/VMConfigurationValidation.swift": [,
+        "bootWindows: false, bootUEFI: true",
+    ],
+    "src/Core/VMConfigurationValidation.swift": [
         "guard architecture == .x86_64",
         "case .unsupportedArchitecture(let architecture)",
         "if gpu != .virtioGPU",

@@ -58,6 +58,13 @@ final class GuestMemory {
         return bytes[Int(offset)]
     }
 
+    @discardableResult
+    func writeByte(_ value: UInt8, offset: UInt64) -> Bool {
+        guard offset < size else { return false }
+        bytes[Int(offset)] = value
+        return true
+    }
+
     func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int? {
         guard offset <= size else { return nil }
         let count = Int(min(UInt64(buffer.count), size - offset))
@@ -223,6 +230,9 @@ struct StaticELFExecutionTests {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let memory = GuestMemory(size: 16 * 1024 * 1024)
+        precondition(memory.writeByte(0xA5, offset: memory.size - 1))
+        precondition(memory.readByte(offset: memory.size - 1) == 0xA5)
+        precondition(!memory.writeByte(0xA5, offset: memory.size))
         let image = try ELF64Loader().load(url, into: memory, expectedArchitecture: .x86_64)
         let stack = try LinuxProcessStackBuilder().build(
             executablePath: url.path,
