@@ -13,15 +13,23 @@ enum QEMURuntimeStatus {
         let bundlePrefix = bundleRoot.path.hasSuffix("/") ? bundleRoot.path : bundleRoot.path + "/"
         let dataDirectory = bundle.bundleURL.appendingPathComponent("QEMU", isDirectory: true)
             .resolvingSymlinksInPath().standardizedFileURL
+        var dataIsDirectory: ObjCBool = false
         guard dataDirectory.path.hasPrefix(bundlePrefix),
-              fm.fileExists(atPath: dataDirectory.path) else {
-            return .unavailable("The QEMU data directory is missing from the app bundle.")
+              fm.fileExists(atPath: dataDirectory.path, isDirectory: &dataIsDirectory),
+              dataIsDirectory.boolValue else {
+            return .unavailable("The QEMU data directory is missing or unsafe in the app bundle.")
         }
 
-        // Prefer the build-generated manifest. This avoids relying on a filename
-        // that may change between UTM releases or packaging layouts.
+        // Prefer the build-generated manifest. Resolve it before reading so a
+        // bundle symlink cannot redirect manifest inspection outside the bundle.
+        let dataPrefix = dataDirectory.path.hasSuffix("/") ? dataDirectory.path : dataDirectory.path + "/"
         let manifest = dataDirectory.appendingPathComponent("runtime-library-path.txt")
-        if let rawPath = try? String(contentsOf: manifest, encoding: .utf8) {
+            .resolvingSymlinksInPath().standardizedFileURL
+        let manifestValues = try? manifest.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        if manifest.path.hasPrefix(dataPrefix),
+           manifestValues?.isRegularFile == true,
+           let manifestSize = manifestValues?.fileSize, manifestSize <= 4096,
+           let rawPath = try? String(contentsOf: manifest, encoding: .utf8) {
             let relativePath = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
             if !relativePath.isEmpty,
                !relativePath.hasPrefix("/"),

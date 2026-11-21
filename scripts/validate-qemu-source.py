@@ -92,6 +92,9 @@ required = {
         "static _Thread_local char error_copy",
     ],
     "src/QEMU/QEMURuntimeStatus.swift": [
+        "dataIsDirectory.boolValue",
+        "manifest.path.hasPrefix(dataPrefix)",
+        "manifestSize <= 4096",
         "isteam_qemu_validate_library(",
         "validateLoadableLibrary(library, dataDirectory: dataDirectory)",
         "The bundled QEMU library failed its load/export validation.",
