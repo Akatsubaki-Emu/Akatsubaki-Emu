@@ -134,7 +134,8 @@ final class GameRuntimeProfileStore {
             let existingData = try Data(contentsOf: destination)
             guard existingData.count <= 1024 * 1024,
                   let existing = try? decoder.decode(GameRuntimeProfile.self, from: existingData),
-                  existing.gameID == value.gameID else {
+                  existing.gameID == value.gameID,
+                  (try? existing.validate()) != nil else {
                 throw GameRuntimeProfile.ProfileError.corruptStoredProfile
             }
         }
@@ -152,7 +153,8 @@ final class GameRuntimeProfileStore {
               let size = values.fileSize, size <= 1024 * 1024,
               let data = try? Data(contentsOf: profileURL),
               data.count <= 1024 * 1024,
-              let value = try? decoder.decode(GameRuntimeProfile.self, from: data) else { return nil }
+              let value = try? decoder.decode(GameRuntimeProfile.self, from: data),
+              (try? value.validate()) != nil else { return nil }
         return value
     }
 
