@@ -215,13 +215,25 @@ struct WindowsPEImage {
     }
 
     private func readCString(atRVA rva: UInt32, limit: Int) throws -> String {
-        let offset = try fileOffset(forRVA: rva)
-        let bytes = file[offset..<(offset + min(limit, file.count - offset))]
-        guard let terminator = bytes.firstIndex(of: 0),
-              let value = String(bytes: bytes[..<terminator], encoding: .ascii), !value.isEmpty else {
-            throw ParseError.malformed("invalid or unterminated PE string")
+        guard limit > 0 else { throw ParseError.malformed("invalid PE string limit") }
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(min(limit, 256))
+        for delta in 0..<limit {
+            let address = UInt64(rva) + UInt64(delta)
+            guard address <= UInt64(UInt32.max),
+                  let offset = try? fileOffset(forRVA: UInt32(address)) else {
+                break // Do not scan into an unrelated section or file region.
+            }
+            let byte = file[offset]
+            if byte == 0 {
+                guard let value = String(bytes: bytes, encoding: .ascii), !value.isEmpty else {
+                    throw ParseError.malformed("invalid PE string")
+                }
+                return value
+            }
+            bytes.append(byte)
         }
-        return value
+        throw ParseError.malformed("unterminated PE string within its mapped section")
     }
 
     private static func require(_ data: Data, _ offset: Int, _ length: Int, _ field: String) throws {
