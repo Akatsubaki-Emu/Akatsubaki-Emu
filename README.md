@@ -34,7 +34,7 @@ Choose the build channel and platform below. Nightly builds contain recent chang
 | **Main** | [Download iOS IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/main) | [Download tvOS IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/main) | [Download visionOS app](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/main) |
 | **Nightly** | [Download nightly IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) | [Download nightly IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) | [Download visionOS nightly](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) |
 
-Each release contains both platform packages and SHA-256 checksum files. Open the release page and choose the asset for your device. These are unsigned prototype packages and must be signed before installation.
+Each release contains all three platform packages and SHA-256 checksum files. Open the release page and choose the asset for your device. These are unsigned prototype packages and must be signed before installation.
 
 ### Add the AltStore source
 
@@ -83,10 +83,10 @@ The Android DroidDeck source is not a direct iOS runtime: FEX/Proton, Turnip, Ga
 
 - A Mac running a compatible version of Xcode.
 - XcodeGen, installable with Homebrew: `brew install xcodegen`.
-- Git and an iPhone/iPad or Apple TV simulator for testing.
+- Git and an iPhone/iPad, Apple TV, or Apple Vision Pro simulator for testing.
 - Physical-device installation requires appropriate signing and provisioning.
 
-The project currently declares iOS 16 and tvOS 17 deployment targets. Confirm the current project settings and CI logs for exact SDK compatibility.
+The project currently declares iOS 16, tvOS 17, and visionOS 1.0 deployment targets. Confirm the current project settings and CI logs for exact SDK compatibility.
 
 ### Installation notes
 
@@ -109,6 +109,7 @@ Open `iSteam.xcodeproj` in Xcode and choose a scheme:
 - `iSteam` — iOS main build.
 - `iSteamNightly` — iOS nightly build.
 - `iSteamTV` — tvOS prototype.
+- `iSteamVision` — visionOS app.
 
 For hosted builds, use the [Build & Release workflow](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions/workflows/release.yml).
 
@@ -136,7 +137,6 @@ Bug reports, documentation improvements, and focused pull requests are welcome. 
 - [tvOS status and roadmap](docs/TVOS.md)
 - [Host-device bridge](docs/HOST_DEVICE_BRIDGE.md)
 - [Hybrid runtime architecture and roadmap](docs/HYBRID_RUNTIME_ARCHITECTURE.md)
-- [Hybrid runtime routing architecture](docs/HYBRID_RUNTIME_ARCHITECTURE.md)
 - [QEMU runtime build and failure diagnostics](docs/QEMU_BUILD_WORKFLOW.md)
 - [DroidDeck feature-port plan](docs/DROIDDECK_PORT_PLAN.md)
 - [DroidDeck port status](docs/DROIDDECK_PORT_STATUS.md)

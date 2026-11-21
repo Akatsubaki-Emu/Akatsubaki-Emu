@@ -6,6 +6,10 @@ on:
     branches: [main]
     paths-ignore:
       - .github/workflows/release.yml
+      - README.md
+      - CONTRIBUTING.md
+      - INSTALL.md
+      - LICENSE
       - docs/**
   schedule:
     - cron: "0 2 * * *"

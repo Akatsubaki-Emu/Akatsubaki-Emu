@@ -86,17 +86,6 @@ class SourceValidatorTests(unittest.TestCase):
         receive = source.split("func receiveFile", 1)[1].split("func readSharedFile", 1)[0]
         read = source.split("func readSharedFile", 1)[1].split("func writeSharedFile", 1)[0]
         self.assertIn("sourceSize <= maximumInMemoryTransferBytes", receive)
-        self.assertIn("copiedSize <= maximumInMemoryTransferBytes", receive)
-        self.assertIn("maximumInMemoryTransferBytes + 1", read)
-        self.assertIn("handle.read(upToCount:", read)
-
-
-    def test_host_shared_file_import_and_read_enforce_the_transfer_limit(self):
-        root = Path(__file__).resolve().parents[2]
-        source = (root / "src" / "Runtime" / "HostDeviceBridge.swift").read_text(encoding="utf-8")
-        receive = source.split("func receiveFile", 1)[1].split("func readSharedFile", 1)[0]
-        read = source.split("func readSharedFile", 1)[1].split("func writeSharedFile", 1)[0]
-        self.assertIn("sourceSize <= maximumInMemoryTransferBytes", receive)
         self.assertIn("maximumCopyBytes = maximumInMemoryTransferBytes + 1", receive)
         self.assertIn("input.read(upToCount:", receive)
         self.assertIn("output?.write(contentsOf:", receive)
