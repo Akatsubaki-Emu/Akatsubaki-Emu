@@ -528,7 +528,9 @@ final class X86_64Interpreter: GuestCPUBackend {
                     registers[decoded.reg] = width64
                         ? result.value
                         : UInt64(UInt32(truncatingIfNeeded: result.value))
-                } else if [UInt8(0x82), 0x83, 0x84, 0x85, 0x88, 0x89, 0x8C, 0x8D, 0x8E, 0x8F].contains(second) {
+                } else if (second >= 0x82 && second <= 0x85)
+                    || (second >= 0x88 && second <= 0x89)
+                    || (second >= 0x8C && second <= 0x8F) {
                     guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
                     guard let takeBranch = X86_64ALU.condition(second & 0x0F, flags: flags) else {
                         rip = instructionAddress
