@@ -40,9 +40,11 @@ final class GameLibraryTransferStore {
         defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
 
         let coordinator = NSFileCoordinator()
+        let writeOptions: NSFileCoordinator.WritingOptions =
+            FileManager.default.fileExists(atPath: destination.path) ? .forReplacing : []
         var coordinationError: NSError?
         var writeError: Error?
-        coordinator.coordinate(writingItemAt: destination, options: .forReplacing,
+        coordinator.coordinate(writingItemAt: destination, options: writeOptions,
                                error: &coordinationError) { writableURL in
             do {
                 try data.write(to: writableURL, options: .atomic)
