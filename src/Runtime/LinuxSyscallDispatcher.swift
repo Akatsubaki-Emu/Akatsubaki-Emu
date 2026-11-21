@@ -241,7 +241,16 @@ final class LinuxSyscallDispatcher {
         guard length <= 256 * 1024, length <= UInt64(Int.max) else { return errno(22) }
         if length == 0 { return 0 }
         var generator = SystemRandomNumberGenerator()
-        let data = Data((0..<Int(length)).map { _ in UInt8.random(in: 0...255, using: &generator) })
+        let count = Int(length)
+        var data = Data(count: count)
+        let generated = data.withUnsafeMutableBytes { bytes -> Bool in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            for index in 0..<count {
+                base[index] = UInt8.random(in: 0...255, using: &generator)
+            }
+            return true
+        }
+        guard generated else { return errno(12) }
         return memory.write(data, offset: address) ? length : errno(14)
     }
 
