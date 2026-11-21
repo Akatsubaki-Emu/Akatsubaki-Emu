@@ -361,7 +361,7 @@ final class QEMUVNCClient {
         guard let (connection, x, y) = pointer else { return }
         let message = Data([5, 0, UInt8((x >> 8) & 0xff), UInt8(x & 0xff),
                             UInt8((y >> 8) & 0xff), UInt8(y & 0xff)])
-        Task { try? await self.send(message, to: connection) }
+        enqueueSend(message, to: connection)
     }
 
     func sendButton(_ name: String, down: Bool) {
@@ -397,7 +397,7 @@ final class QEMUVNCClient {
                             UInt8((value >> 24) & 0xff), UInt8((value >> 16) & 0xff),
                             UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
         guard let connection = withStateLock({ connection }) else { return }
-        Task { try? await self.send(message, to: connection) }
+        enqueueSend(message, to: connection)
     }
 
     private static func keysym(for key: String) -> UInt32? {
