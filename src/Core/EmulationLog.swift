@@ -23,7 +23,7 @@ final class EmulationLog {
                size.intValue >= self.maximumLogBytes {
                 let previous = self.url.deletingLastPathComponent().appendingPathComponent("emulation.previous.log")
                 try? self.fm.removeItem(at: previous)
-                try? self.fm.moveItem(at: self.url, to: previous)
+                _ = try? self.fm.moveItem(at: self.url, to: previous)
             }
             if let handle = try? FileHandle(forWritingTo: self.url) {
                 try? handle.seekToEnd()

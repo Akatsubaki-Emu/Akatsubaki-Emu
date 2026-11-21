@@ -42,7 +42,7 @@ if [ -d "$APP/Frameworks" ]; then
   cp -R "$APP/Frameworks"/. "$OUT/Frameworks/"
 fi
 
-find "$APP" -type f \\( -name '*.dylib' -o -name 'QEMU' -o -name 'qemu-*softmmu*' \\) -print \
+find "$APP" -type f \( -name '*.dylib' -o -name 'QEMU' -o -name 'qemu-*softmmu*' \) -print \
   | tee "$OUT/runtime-file-inventory.txt"
 
 candidate=""

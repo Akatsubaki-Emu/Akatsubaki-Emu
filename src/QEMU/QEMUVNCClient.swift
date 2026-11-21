@@ -325,7 +325,7 @@ final class QEMUVNCClient {
                         throw ClientError.protocolError("QEMU framebuffer update exceeded the 64 MiB transfer limit.")
                     }
                     updateBytes += rectangleBytes
-                    let pixels = try await receiveExactly(rectangleBytes)
+                    let pixels = try await receiveExactly(rectangleBytes, from: connection)
                     withStateLock {
                         // The reader task owns framebuffer updates; the lock also
                         // protects snapshots consumed by the UI/render thread.
