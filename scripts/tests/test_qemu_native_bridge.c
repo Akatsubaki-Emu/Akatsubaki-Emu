@@ -48,6 +48,26 @@ int main(int argc, char **argv) {
     void *probe = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
     assert(probe != NULL);
 
+    char argumentError[512] = {0};
+    const char *tooManyArguments[4097];
+    for (size_t index = 0; index < sizeof(tooManyArguments) / sizeof(tooManyArguments[0]); ++index) {
+        tooManyArguments[index] = "argument";
+    }
+    assert(!isteam_qemu_start(4097, tooManyArguments, argv[1],
+                              argumentError, (int)sizeof(argumentError)));
+    assert(strstr(argumentError, "too many arguments") != NULL);
+
+    char *oversizedArgument = malloc(1024 * 1024 + 2);
+    assert(oversizedArgument != NULL);
+    memset(oversizedArgument, 'x', 1024 * 1024 + 1);
+    oversizedArgument[1024 * 1024 + 1] = '\0';
+    const char *oversizedArguments[] = {oversizedArgument};
+    memset(argumentError, 0, sizeof(argumentError));
+    assert(!isteam_qemu_start(1, oversizedArguments, argv[1],
+                              argumentError, (int)sizeof(argumentError)));
+    assert(strstr(argumentError, "size limits") != NULL);
+    free(oversizedArgument);
+
     pthread_barrier_t barrier;
     assert(pthread_barrier_init(&barrier, NULL, 3) == 0);
     StartRequest first = {.barrier = &barrier, .library = argv[1], .started = false, .error = {0}};

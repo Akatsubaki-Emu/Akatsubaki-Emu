@@ -30,7 +30,8 @@ final class GuestBlockDevice {
         let granted = url.startAccessingSecurityScopedResource()
         do {
             let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-            guard values.isRegularFile == true, let size = values.fileSize, size >= 0 else {
+            guard values.isRegularFile == true, let size = values.fileSize, size >= 0,
+                  UInt64(size) % sectorSize == 0 else {
                 throw DeviceError.invalidGeometry
             }
             let openedHandle = try readOnly ? FileHandle(forReadingFrom: url) : FileHandle(forUpdating: url)

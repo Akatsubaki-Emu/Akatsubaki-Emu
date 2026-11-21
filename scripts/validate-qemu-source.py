@@ -37,6 +37,7 @@ required = {
         "overlapping virtual sections",
         "overlapping raw sections",
         "entry point is not backed by executable section data",
+        "entry - $0.guestAddress < $0.fileSize",
     ],
     "iSteam/JITCoordinator.swift": [
         "if #available(iOS 26.0, *)",
@@ -131,6 +132,11 @@ required = {
         'dlsym(library, "qemu_system_shutdown_request")',
         "static bool g_starting = false;",
         "static _Thread_local char error_copy",
+        "ISTEAM_QEMU_MAX_ARGUMENTS 4096",
+        "ISTEAM_QEMU_MAX_ARGUMENT_BYTES",
+        "ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES",
+        "strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u)",
+        "error_buffer && error_capacity > 0",
     ],
     "src/QEMU/QEMURuntimeStatus.swift": [
         "bundleRoot = bundle.bundleURL.resolvingSymlinksInPath()",
@@ -192,6 +198,7 @@ required = {
     ],
     "src/Runtime/GuestBlockDevice.swift": [
         "case invalidGeometry, outOfBounds, readOnly, shortRead",
+        "UInt64(size) % sectorSize == 0",
         "static let maximumTransferBytes = 16 * 1024 * 1024",
         "byteCount <= UInt64(Self.maximumTransferBytes)",
         "data.count <= Self.maximumTransferBytes",

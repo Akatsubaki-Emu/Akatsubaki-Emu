@@ -15,6 +15,9 @@
 
 extern char **environ;
 #define ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI 4
+#define ISTEAM_QEMU_MAX_ARGUMENTS 4096
+#define ISTEAM_QEMU_MAX_ARGUMENT_BYTES (1024u * 1024u)
+#define ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES (8u * 1024u * 1024u)
 
 typedef int (*qemu_init_fn)(int, const char *[], const char *[]);
 typedef void (*qemu_main_loop_fn)(void);
@@ -120,12 +123,14 @@ bool isteam_qemu_validate_library(const char *library_path,
     dlclose(library);
 
     if (!has_init || !has_main_loop || !has_cleanup || !has_shutdown) {
+        if (error_buffer && error_capacity > 0) {
             snprintf(error_buffer, (size_t)error_capacity,
                      "QEMU library is missing required lifecycle exports: %s%s%s%s",
                      has_init ? "" : "qemu_init ",
                      has_main_loop ? "" : "qemu_main_loop ",
                      has_cleanup ? "" : "qemu_cleanup ",
                      has_shutdown ? "" : "qemu_system_shutdown_request");
+        }
         return false;
     }
 
@@ -135,9 +140,24 @@ bool isteam_qemu_validate_library(const char *library_path,
 
 bool isteam_qemu_start(int argc, const char * const *argv,
                        const char *library_path, char *error_buffer, int error_capacity) {
-    if (argc < 1 || !argv || !library_path || !library_path[0]) {
-        if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "Invalid QEMU launch arguments");
+    if (argc < 1 || argc > ISTEAM_QEMU_MAX_ARGUMENTS || !argv || !library_path || !library_path[0]) {
+        if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "Invalid QEMU launch arguments or too many arguments");
         return false;
+    }
+
+    size_t total_argument_bytes = 0;
+    for (int i = 0; i < argc; ++i) {
+        if (!argv[i]) {
+            if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "QEMU argument %d is null", i);
+            return false;
+        }
+        const size_t argument_length = strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u);
+        if (argument_length > ISTEAM_QEMU_MAX_ARGUMENT_BYTES
+            || total_argument_bytes > ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES - (argument_length + 1u)) {
+            if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "QEMU arguments exceed the configured size limits");
+            return false;
+        }
+        total_argument_bytes += argument_length + 1u;
     }
 
     pthread_mutex_lock(&g_lock);

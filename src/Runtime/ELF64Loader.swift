@@ -135,7 +135,7 @@ final class ELF64Loader {
         guard segments.contains(where: {
             ($0.flags & 0x1) != 0
                 && entry >= $0.guestAddress
-                && entry - $0.guestAddress < $0.memorySize
+                && entry - $0.guestAddress < $0.fileSize
         }) else { throw LoadError.invalidSegment }
 
         // Start from a clean address space so bytes from a previously loaded image
