@@ -151,6 +151,7 @@ required = {
 
     "src/Core/VMSaveSlotStore.swift": [
         "maximumMetadataBytes = 1 * 1024 * 1024",
+        "values.isRegularFile == true",
         "data.count <= maximumMetadataBytes",
         "bookmark.count <= maximumMetadataBytes / 2",
         "legacySafeFilename(_ name: String)",

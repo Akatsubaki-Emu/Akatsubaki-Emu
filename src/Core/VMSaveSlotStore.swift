@@ -132,7 +132,8 @@ final class VMSaveSlotStore {
 
     func lastSession() -> (configuration: VMConfiguration, diskImageURL: URL)? {
         let url = directory.appendingPathComponent("last-session.json")
-        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true,
               let size = values.fileSize, size <= maximumMetadataBytes,
               let data = try? Data(contentsOf: url), data.count <= maximumMetadataBytes,
               let session = try? decoder.decode(Session.self, from: data),

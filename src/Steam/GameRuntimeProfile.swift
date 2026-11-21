@@ -184,7 +184,8 @@ final class GameRuntimeProfileStore {
 
     var allProfiles: [GameRuntimeProfile] {
         profileFiles.compactMap { file in
-            guard let values = try? file.resourceValues(forKeys: [.fileSizeKey]),
+            guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true,
                   let size = values.fileSize, size <= 1024 * 1024,
                   let data = try? Data(contentsOf: file), data.count <= 1024 * 1024,
                   let profile = try? decoder.decode(GameRuntimeProfile.self, from: data),
