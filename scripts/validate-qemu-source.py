@@ -9,11 +9,13 @@ required = {
         "case 0: // FramebufferUpdate",
         "func tapKey(_ key: String)",
         "numberOfColours = Int(Self.u16(header, 3))",
+        "private static let maxFramebufferBytes = 64 * 1024 * 1024",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         '"-vnc", "127.0.0.1:0"',
         '"-device", configuration.gpu.rawValue',
-        'configuration.name == "SteamOS Gaming Mode"',
+        'let machine = "q35,usb=on"',
+        '"-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"',
     ],
     "src/Display/VMDisplayViewController.swift": [
         "vncClient.onFrame", "vncClient.start()", "vncClient.tapKey(key)"
@@ -57,8 +59,31 @@ required = {
         "private func withStateLock<T>",
         "let completion = QEMUOneShotCompletion()",
     ],
+    "iSteam/QEMUNativeBridge.c": [
+        "static bool g_starting = false;",
+        "static _Thread_local char error_copy",
+    ],
+    "src/Core/VMSaveSlotStore.swift": [
+        "startAccessingSecurityScopedResource()",
+    ],
+    "src/Runtime/HostDeviceBridge.swift": [
+        "resolvingSymlinksInPath()",
+        "withAccess(to: source)",
+    ],
+    "src/Steam/DroidDeckFeatureServices.swift": [
+        "NSFileCoordinator()",
+        "writingItemAt: destination",
+    ],
     "iSteam/LaunchSetupViewController.swift": [
         '"SteamOS Gaming Mode"', "VMConfiguration.defaultSteamOS",
+    ],
+    "src/GPU/MetalGPUBackend.swift": [
+        "view.framebufferOnly = false",
+    ],
+    "src/Display/ControllerInputManager.swift": [
+        "GCController.stopWirelessControllerDiscovery()",
+        "pad.leftTrigger",
+        "pad.dpad.up",
     ],
     "src/Display/TouchGamepadView.swift": [
         'iSteam.touchGamepad.layout.v3',
@@ -160,4 +185,4 @@ else:
 
 if failed:
     raise SystemExit(1)
-print("QEMU bridge, runtime packaging guards, SteamOS mode, and adaptive gamepad source checks passed.")
+print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")
