@@ -83,6 +83,11 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
         self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
 
+    def test_qemu_runtime_does_not_cancel_in_progress_release_build(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("cancel-in-progress: false", source)
+
     def test_qemu_workflow_installs_both_spirv_dependencies(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
         source = workflow.read_text(encoding="utf-8")

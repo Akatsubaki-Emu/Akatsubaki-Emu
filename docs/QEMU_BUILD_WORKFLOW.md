@@ -19,7 +19,7 @@ This note documents the iOS device-arm64 QEMU runtime build in `.github/workflow
 - `scripts/patch_qemu_meson_ios.py` — patches QEMU's Meson feature probe and adds the compiler-runtime force-load argument to the emulator-specific link-argument list consumed by the generated shared-library target.
 - `scripts/verify_qemu_meson_link.py` — inspects the generated Ninja link edge for `libqemu-x86_64-softmmu.dylib`; verifies the actual link configuration rather than checking only environment variables or source text.
 - `scripts/tests/test_qemu_build_patches.py` — regression tests idempotence, expected patch insertion and fail-closed linker verification.
-- `.github/workflows/build-qemu-runtime.yml` — reusable/manual runtime build, cache fingerprint and same-run artifact upload.
+- `.github/workflows/build-qemu-runtime.yml` — reusable/manual runtime build, cache fingerprint, non-cancelling concurrency policy and same-run artifact upload.
 - `.github/workflows/release.yml` — runtime dependency ordering and required artifact download before the iOS IPA is packaged.
 - `.github/workflows/validate-repository.yml` — strict YAML checks, both-direction mirror preservation, workflow contract checks and Python patcher tests.
 
