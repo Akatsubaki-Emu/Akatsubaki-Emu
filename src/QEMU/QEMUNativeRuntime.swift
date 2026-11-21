@@ -173,11 +173,22 @@ final class QEMUNativeRuntime {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let stem = template.deletingPathExtension().lastPathComponent
         let destination = directory.appendingPathComponent("\(stem)-\(configurationID.uuidString)-\(size)-\(modified).fd")
+        let fileManager = FileManager.default
         let existingSize = try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize
         if existingSize != size {
-            try? FileManager.default.removeItem(at: destination)
-            try FileManager.default.copyItem(at: template, to: destination)
+            let temporary = directory.appendingPathComponent("\(UUID().uuidString).tmp")
+            defer { try? fileManager.removeItem(at: temporary) }
+            try fileManager.copyItem(at: template, to: temporary)
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+            if fileManager.fileExists(atPath: destination.path) {
+                _ = try fileManager.replaceItemAt(destination, withItemAt: temporary)
+            } else {
+                try fileManager.moveItem(at: temporary, to: destination)
+            }
         }
+        // Bundle templates are read-only; the private copy must be writable
+        // or QEMU cannot persist the guest's UEFI boot variables.
+        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
         return destination
     }
 
