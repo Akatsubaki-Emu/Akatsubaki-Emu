@@ -34,6 +34,13 @@ final class GameArtworkStore {
         guard let data = imageData, data.count <= maxBytes,
               let image = CGImageSourceCreateWithData(data as CFData, nil),
               CGImageSourceGetCount(image) > 0,
+              CGImageSourceGetCount(image) <= 200,
+              let properties = CGImageSourceCopyPropertiesAtIndex(image, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int,
+              width > 0, height > 0,
+              UInt64(width) * UInt64(height) <= 16 * 1024 * 1024,
+              CGImageSourceCreateImageAtIndex(image, 0, nil) != nil,
               let type = CGImageSourceGetType(image) as String?,
               ["public.jpeg", "public.png", "public.heic", "public.webp", "com.compuserve.gif"].contains(type) else {
             throw ArtworkError.invalidImage
