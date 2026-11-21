@@ -108,8 +108,10 @@ final class ELF64Loader {
             }
             if type == 6 {
                 guard fileOffset == phoff,
+                      fileOffset <= UInt64(data.count),
                       fileSize >= programHeaderTableSize,
-                      memorySize >= programHeaderTableSize,
+                      fileSize <= UInt64(data.count) - fileOffset,
+                      memorySize >= fileSize,
                       declaredProgramHeaderAddress == nil else {
                     throw LoadError.invalidProgramHeaderTable
                 }

@@ -126,6 +126,8 @@ required = {
         "entry - $0.guestAddress < $0.fileSize",
         "programHeaderAddress",
         "programHeadersNotMapped",
+        "fileSize <= UInt64(data.count) - fileOffset",
+        "memorySize >= fileSize",
         "declaredProgramHeaderAddress",
         "mappedProgramHeaderAddress",
         "fileOffset == phoff",
@@ -311,6 +313,12 @@ required = {
         "startAccessingSecurityScopedResource()",
         "FileHandle(forUpdating: url)",
         "handle.synchronize()",
+    ],
+    "scripts/tests/test_elf_loader_program_headers.swift": [
+        "Mismatched PT_PHDR virtual address was accepted",
+        "Mismatched PT_PHDR file offset was accepted",
+        "Truncated PT_PHDR table size was accepted",
+        "Truncated PT_PHDR memory size was accepted",
     ],
     "src/Runtime/GuestMemory.swift": [
         "private let native: OpaquePointer?",
