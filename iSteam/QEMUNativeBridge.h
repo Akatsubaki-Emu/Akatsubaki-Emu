@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #if defined(__clang__)
-#define ISTEAM_NONNULL ISTEAM_NONNULL
+#define ISTEAM_NONNULL _Nonnull
 #else
 #define ISTEAM_NONNULL
 #endif
@@ -30,7 +30,7 @@ const char * ISTEAM_NONNULL isteam_qemu_last_error(void);
 
 #ifdef __cplusplus
 }
-#undef ISTEAM_NONNULL
-
 #endif
+
+#undef ISTEAM_NONNULL
 #endif
