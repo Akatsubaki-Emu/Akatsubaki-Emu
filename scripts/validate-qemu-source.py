@@ -45,13 +45,11 @@ required = {
         "rootPrefix",
     ],
     "src/Runtime/ELF64Loader.swift": [
-        "memory.clear()",
         "($0.flags & 0x1) != 0",
         "loadable executable segment",
     ],
     "src/Runtime/X86_64Interpreter.swift": [
         "let is64Bit = rex & 0x08 != 0",
-        "if requested == 0",
         "32-bit GPR writes zero-extend",
         "PUSH RSP stores the pre-decrement value.",
         "POP RSP loads the popped value directly",
@@ -73,6 +71,8 @@ required = {
     "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
         "dlopen(library_path, RTLD_NOW | RTLD_LOCAL)",
+        "malloc(argument_length + 1)",
+        "memcpy(copied_argv[i], argument, argument_length + 1)",
         'dlsym(library, "qemu_init")',
         'dlsym(library, "qemu_main_loop")',
         'dlsym(library, "qemu_cleanup")',
@@ -150,11 +150,24 @@ required = {
     ],
     "src/GPU/MetalGPUBackend.swift": [
         "view.framebufferOnly = false",
+        "view.autoResizeDrawable = false",
+        "view.drawableSize = CGSize(width: frameWidth, height: frameHeight)",
+        "source.width == drawable.texture.width",
+    ],
+    "src/Display/VMDisplayViewController.swift": [
+        "private let configuration: VMConfiguration",
+        "self.configuration = configuration",
+    ],
+    "iSteam/QEMUNativeBridge.h": [
+        "#define ISTEAM_NONNULL _Nonnull",
+        "#define ISTEAM_NONNULL",
     ],
     "src/Display/ControllerInputManager.swift": [
         "GCController.stopWirelessControllerDiscovery()",
         "pad.leftTrigger",
         "pad.dpad.up",
+        "if let leftThumbstickButton = pad.leftThumbstickButton",
+        "if let rightThumbstickButton = pad.rightThumbstickButton",
     ],
     "src/Display/TouchGamepadView.swift": [
         'iSteam.touchGamepad.layout.v3',
