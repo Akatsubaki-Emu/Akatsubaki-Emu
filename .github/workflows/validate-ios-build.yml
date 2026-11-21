@@ -45,9 +45,10 @@ jobs:
         if: matrix.scheme == 'iSteam'
         run: |
           set -euo pipefail
-          swiftc -parse-as-library -swift-version 5 \
-            src/Runtime/X86_64Interpreter.swift \
-            scripts/tests/test_x86_64_interpreter.swift \
+          swiftc -parse-as-library -swift-version 5 \\
+            src/Runtime/X86_64ALU.swift \\
+            src/Runtime/X86_64Interpreter.swift \\
+            scripts/tests/test_x86_64_interpreter.swift \\
             -o "$RUNNER_TEMP/test-x86-64-interpreter"
           "$RUNNER_TEMP/test-x86-64-interpreter"
       - name: Test game library filtering, ordering, and tag collection

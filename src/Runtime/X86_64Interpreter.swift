@@ -9,6 +9,7 @@ final class X86_64Interpreter: GuestCPUBackend {
     private let memory: GuestMemory
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
+    private var flags: UInt64 = 0x2
     private var halted = false
     private let stopLock = NSLock()
     private var stopRequested = false
@@ -22,6 +23,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             throw GuestEngineError.backendNotInstalled(.x86_64)
         }
         registers = [UInt64](repeating: 0, count: 16)
+        flags = 0x2
         registers[4] = memory.size >= 8 ? memory.size - 8 : 0 // RSP
         rip = entryPoint
         instructionCount = 0
@@ -29,6 +31,13 @@ final class X86_64Interpreter: GuestCPUBackend {
         stopLock.lock()
         stopRequested = false
         stopLock.unlock()
+    }
+
+    var instructionPointer: UInt64 { rip }
+    var conditionFlags: UInt64 { flags }
+
+    func registerValue(_ index: Int) -> UInt64? {
+        registers.indices.contains(index) ? registers[index] : nil
     }
 
     func requestStop() {
@@ -124,28 +133,72 @@ final class X86_64Interpreter: GuestCPUBackend {
                     registers[index] = value
                     registers[4] &+= 8
                 }
-            case 0x31, 0x33: // XOR r/m32,r32 or r32,r/m32; register-only subset
+            case 0x01, 0x03, 0x29, 0x2B, 0x31, 0x33, 0x39, 0x3B, 0x85:
                 guard let modrm = fetchByte(), modrm >> 6 == 3 else {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)
                 }
                 let reg = Int((modrm >> 3) & 7) | (rex & 0x04 != 0 ? 8 : 0)
                 let rm = Int(modrm & 7) | (rex & 0x01 != 0 ? 8 : 0)
-                let is64Bit = rex & 0x08 != 0
-                if is64Bit {
-                    if opcode == 0x31 { registers[rm] ^= registers[reg] }
-                    else { registers[reg] ^= registers[rm] }
-                } else {
-                    // 32-bit GPR writes zero-extend into the corresponding 64-bit register.
-                    if opcode == 0x31 {
-                        registers[rm] = UInt64(UInt32(truncatingIfNeeded: registers[rm])
-                            ^ UInt32(truncatingIfNeeded: registers[reg]))
-                    } else {
-                        registers[reg] = UInt64(UInt32(truncatingIfNeeded: registers[reg])
-                            ^ UInt32(truncatingIfNeeded: registers[rm]))
-                    }
+                let width64 = rex & 0x08 != 0
+                let destination = (opcode == 0x03 || opcode == 0x2B || opcode == 0x33 || opcode == 0x3B) ? reg : rm
+                let lhs = registers[destination]
+                let rhs = registers[destination == reg ? rm : reg]
+                let result: X86_64ALU.Result
+                switch opcode {
+                case 0x01, 0x03:
+                    result = X86_64ALU.add(lhs, rhs, width64: width64, flags: flags)
+                case 0x29, 0x2B, 0x39, 0x3B:
+                    result = X86_64ALU.subtract(lhs, rhs, width64: width64, flags: flags)
+                case 0x31, 0x33:
+                    result = X86_64ALU.xor(lhs, rhs, width64: width64, flags: flags)
+                default:
+                    result = X86_64ALU.and(lhs, rhs, width64: width64, flags: flags)
                 }
-                // This minimal core does not yet model x86 condition flags.
+                flags = result.flags
+                if opcode != 0x39 && opcode != 0x3B && opcode != 0x85 {
+                    registers[destination] = result.value
+                }
+            case 0x81, 0x83:
+                guard let modrm = fetchByte(), modrm >> 6 == 3 else {
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                let group = (modrm >> 3) & 7
+                let destination = Int(modrm & 7) | (rex & 0x01 != 0 ? 8 : 0)
+                let width64 = rex & 0x08 != 0
+                let rawImmediate: UInt64
+                if opcode == 0x83 {
+                    guard let immediate = fetchByte() else { return .memoryFault(address: rip) }
+                    rawImmediate = width64
+                        ? UInt64(bitPattern: Int64(Int8(bitPattern: immediate)))
+                        : UInt64(UInt32(bitPattern: Int32(Int8(bitPattern: immediate))))
+                } else {
+                    guard let immediate = fetchUInt32() else { return .memoryFault(address: rip) }
+                    rawImmediate = width64
+                        ? UInt64(bitPattern: Int64(Int32(bitPattern: immediate)))
+                        : UInt64(immediate)
+                }
+                let lhs = registers[destination]
+                let result: X86_64ALU.Result
+                switch group {
+                case 0: result = X86_64ALU.add(lhs, rawImmediate, width64: width64, flags: flags)
+                case 4: result = X86_64ALU.and(lhs, rawImmediate, width64: width64, flags: flags)
+                case 5, 7: result = X86_64ALU.subtract(lhs, rawImmediate, width64: width64, flags: flags)
+                case 6: result = X86_64ALU.xor(lhs, rawImmediate, width64: width64, flags: flags)
+                default:
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                flags = result.flags
+                if group != 7 { registers[destination] = result.value }
+            case 0x72, 0x73, 0x74, 0x75, 0x78, 0x79, 0x7C, 0x7D, 0x7E, 0x7F:
+                guard let raw = fetchByte(),
+                      let takeBranch = X86_64ALU.condition(opcode & 0x0F, flags: flags) else {
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                if takeBranch { rip = addSigned(Int8(bitPattern: raw), to: rip) }
             case 0x0F: // Two-byte opcode map
                 guard let second = fetchByte() else { return .memoryFault(address: rip) }
                 if second == 0x05 { // SYSCALL — small Linux x86-64 userspace ABI subset
@@ -185,6 +238,10 @@ final class X86_64Interpreter: GuestCPUBackend {
                         rip = instructionAddress
                         return .backendUnavailable("Unsupported Linux x86-64 syscall \(number)")
                     }
+                } else if [UInt8(0x82), 0x83, 0x84, 0x85, 0x88, 0x89, 0x8C, 0x8D, 0x8E, 0x8F].contains(second),
+                          let raw = fetchUInt32(),
+                          let takeBranch = X86_64ALU.condition(second & 0x0F, flags: flags) {
+                    if takeBranch { rip = addSigned(Int32(bitPattern: raw), to: rip) }
                 } else {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)

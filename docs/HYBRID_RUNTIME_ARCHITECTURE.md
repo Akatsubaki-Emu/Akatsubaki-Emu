@@ -40,7 +40,7 @@
 - **Box64:** a C/Swift bridge can look for an already-loaded Box64 entry point. It does not bundle Box64, provide a Linux rootfs/syscall ABI, or prove game execution.
 - **Wine/Proton:** not integrated.
 - **QEMU:** `QEMURuntimeStatus` asks the native bridge to `dlopen` the candidate with `RTLD_NOW` and resolve `qemu_init`, `qemu_main_loop`, `qemu_cleanup`, and `qemu_system_shutdown_request`. `RuntimeCapabilityRegistry` records this as `loadable`, not `operational`, so it cannot yet make QEMU selectable in the planner. The bridge is deliberately one-shot per app process because QEMU global-state reinitialization is not proven safe. Guest boot, firmware compatibility, device-level graceful stop, display/input and persistence remain unverified. QEMU remains full-system only, not a PE process translator.
-- **Interpreter:** tiny x86-64 diagnostic subset only.
+- **Interpreter:** diagnostic x86-64 subset with 32/64-bit register moves, register-only ADD/SUB/CMP/AND/XOR, sign-extended immediate arithmetic, condition flags (CF/PF/AF/ZF/SF/OF), and selected short/near conditional branches. Memory operands, SIMD, atomics, exceptions, paging, and most Linux syscalls remain unsupported; this is not a general game backend.
 - **a32rt:** not integrated.
 - **Graphics:** Metal framebuffer presentation exists; DirectX→Vulkan→Metal guest translation is not integrated.
 - **Audio/input/network/storage:** host and prototype services exist in parts, but complete guest-device adapters are not proven.

@@ -110,10 +110,10 @@ required = {
         "orderedSegments",
         "entry - $0.guestAddress < $0.fileSize",
     ],
-    "src/Runtime/X86_64Interpreter.swift": [
+    "src/Runtime/X86_64ALU.swift": [\n        "static func add(",\n        "static func subtract(",\n        "static func condition(",\n        "static func makeFlags(",\n    ],\n    "src/Runtime/X86_64Interpreter.swift": [
         "case 0xB8...0xBF: // MOV r32, imm32 or MOV r64, imm64",
         "registers[index] = UInt64(immediate)",
-        "let is64Bit = rex & 0x08 != 0",
+        "let width64 = rex & 0x08 != 0",\n        "X86_64ALU.add(lhs, rhs",\n        "X86_64ALU.subtract(lhs, rawImmediate",\n        "X86_64ALU.condition(opcode & 0x0F",
         "32-bit GPR writes zero-extend",
         "PUSH RSP stores the pre-decrement value.",
         "POP RSP loads the popped value directly",

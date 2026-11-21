@@ -130,12 +130,58 @@ struct InterpreterTests {
         let faultExit = try fault.run(maxInstructions: 1)
         precondition(faultExit == .memoryFault(address: 1))
 
+        let arithmeticMemory = GuestMemory(size: 128)
+        let arithmeticProgram: [UInt8] = [
+            0xB8, 0xFF, 0xFF, 0xFF, 0xFF,
+            0x83, 0xC0, 0x01,
+            0x74, 0x05,
+            0xBB, 0x01, 0x00, 0x00, 0x00,
+            0xBB, 0x02, 0x00, 0x00, 0x00,
+            0x0F, 0x0B
+        ]
+        precondition(arithmeticMemory.write(Data(arithmeticProgram), offset: 0))
+        let arithmetic = X86_64Interpreter(memory: arithmeticMemory)
+        try arithmetic.reset(entryPoint: 0)
+        let arithmeticExit = try arithmetic.run(maxInstructions: 16)
+        precondition(arithmeticExit == .unsupportedInstruction(address: 20))
+        precondition(arithmetic.registerValue(3) == 2)
+        precondition(arithmetic.conditionFlags & X86_64ALU.zero != 0)
+        precondition(arithmetic.conditionFlags & X86_64ALU.carry != 0)
+
+        let signedMemory = GuestMemory(size: 128)
+        let signedProgram: [UInt8] = [
+            0xB8, 0x01, 0x00, 0x00, 0x00,
+            0x83, 0xF8, 0x02,
+            0x7C, 0x05,
+            0xBB, 0x01, 0x00, 0x00, 0x00,
+            0xBB, 0x02, 0x00, 0x00, 0x00,
+            0x0F, 0x0B
+        ]
+        precondition(signedMemory.write(Data(signedProgram), offset: 0))
+        let signed = X86_64Interpreter(memory: signedMemory)
+        try signed.reset(entryPoint: 0)
+        let signedExit = try signed.run(maxInstructions: 16)
+        precondition(signedExit == .unsupportedInstruction(address: 20))
+        precondition(signed.registerValue(3) == 1)
+        precondition(signed.conditionFlags & X86_64ALU.carry != 0)
+        precondition(signed.conditionFlags & X86_64ALU.sign != 0)
+
+        let xorMemory = GuestMemory(size: 32)
+        precondition(xorMemory.write(Data([0x31, 0xC0, 0x0F, 0x0B]), offset: 0))
+        let xor = X86_64Interpreter(memory: xorMemory)
+        try xor.reset(entryPoint: 0)
+        let xorExit = try xor.run(maxInstructions: 4)
+        precondition(xorExit == .unsupportedInstruction(address: 2))
+        precondition(xor.registerValue(0) == 0)
+        precondition(xor.conditionFlags & X86_64ALU.zero != 0)
+        precondition(xor.conditionFlags & X86_64ALU.carry == 0)
+
         let unsupportedMemory = GuestMemory(size: 4)
         precondition(unsupportedMemory.write(Data([0x0F, 0x0B]), offset: 0))
         let unsupported = X86_64Interpreter(memory: unsupportedMemory)
         try unsupported.reset(entryPoint: 0)
         let unsupportedExit = try unsupported.run(maxInstructions: 1)
         precondition(unsupportedExit == .unsupportedInstruction(address: 0))
-        print("x86-64 interpreter MOV32, syscall, budget, stop/resume, and fault tests passed")
+        print("x86-64 interpreter register, ALU flags, conditional branch, syscall, budget and fault tests passed")
     }
 }
