@@ -171,12 +171,10 @@ required = {
         "games.count <= 10_000",
         "GameRuntimeProfileStore.shared.removeProfile(for: id)",
     ],
-    "src/Steam/GameRuntimeProfile.swift": [
+    "src/Steam/GameRuntimeProfile.swift": [ [
         "var hasUnreadableProfiles: Bool",
         "profile.validate()",
         "corruptStoredProfile",
-    ],
-    "src/Steam/GameRuntimeProfile.swift":
         "launchArguments.count <= 256",
         "environment.count <= 128",
         "compatibilityNotes.utf8.count <= 16_384",
