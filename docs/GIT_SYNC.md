@@ -6,16 +6,16 @@
 - **GitHub:** https://github.com/Akatsubaki-Emu/Akatsubaki-Emu
 - **Branch:** `main`
 
-The project retains both configured synchronization directions:
+GitHub is the canonical source repository; GitLab is its mirror. Both configured synchronization directions are retained for recovery and owner-directed workflows:
 
-1. **GitLab → GitHub:** the owner-configured GitLab push mirror publishes GitLab commits to GitHub. This is configured in GitLab project settings, not by a repository workflow.
-2. **GitHub → GitLab:** `.github/workflows/blank.yml` pushes GitHub main commits to GitLab main using the existing `GITLAB_TOKEN` secret. This workflow has been restored byte-for-byte from the commit immediately before its accidental deletion and is intentionally left unchanged.
+1. **GitHub → GitLab:** `.github/workflows/blank.yml` pushes canonical GitHub main commits to GitLab main using the existing `GITLAB_TOKEN` secret. This workflow has been restored byte-for-byte from the commit immediately before its accidental deletion and is intentionally left unchanged.
+2. **GitLab → GitHub:** the owner-configured GitLab push mirror can publish owner-requested GitLab commits to canonical GitHub. This is configured in GitLab project settings, not by a repository workflow.
 
 Do not edit, rename, disable, or delete `.github/workflows/blank.yml` without explicit owner approval. The scheduled `.github/workflows/mirror-from-gitlab.yml` polling workflow has been removed because the owner-configured GitLab push mirror already handles GitLab → GitHub synchronization. The GitLab CI configuration has also been removed; CI/CD runs on GitHub Actions.
 
 ## Important bidirectional-mirror caution
 
-Two active push directions can race or create divergent histories if both sides receive independent commits. The GitHub → GitLab workflow contains ancestry checks and refuses some unsafe updates, but that is not a complete distributed synchronization protocol. Prefer making ordinary source commits in GitLab and letting its push mirror update GitHub. If GitHub-only commits are intentionally made, verify both refs and the sync workflow result before continuing. Never force-push either side to resolve a divergence without explicit review.
+Two active push directions can race or create divergent histories if both sides receive independent commits. The GitHub → GitLab workflow contains ancestry checks and refuses some unsafe updates, but that is not a complete distributed synchronization protocol. Make ordinary source changes on canonical GitHub and let the retained GitHub → GitLab workflow update the mirror. If the owner explicitly requests direct GitLab commits, verify that the GitLab → GitHub push mirror has caught up before making further canonical changes. Never force-push either side to resolve a divergence without explicit review.
 
 ## GitHub Actions CI/CD
 
