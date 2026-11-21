@@ -120,12 +120,12 @@ bool isteam_qemu_validate_library(const char *library_path,
     dlclose(library);
 
     if (!has_init || !has_main_loop || !has_cleanup || !has_shutdown) {
-        if (error_buffer && error_capacity > 0)
             snprintf(error_buffer, (size_t)error_capacity,
-                     "QEMU library is missing required lifecycle exports: %s%s%s",
+                     "QEMU library is missing required lifecycle exports: %s%s%s%s",
                      has_init ? "" : "qemu_init ",
                      has_main_loop ? "" : "qemu_main_loop ",
-                     has_cleanup ? "" : "qemu_cleanup");
+                     has_cleanup ? "" : "qemu_cleanup ",
+                     has_shutdown ? "" : "qemu_system_shutdown_request");
         return false;
     }
 
@@ -239,17 +239,18 @@ bool isteam_qemu_start(int argc, const char * const *argv,
 
 void isteam_qemu_request_stop(void) {
     pthread_mutex_lock(&g_lock);
-    bool active = g_thread_created || g_running;
-    bool can_request_now = g_running;
-    qemu_shutdown_request_fn shutdown_fn = g_qemu_shutdown;
-    if (active && !can_request_now) g_stop_requested = true;
-    pthread_mutex_unlock(&g_lock);
-
-    if (active && can_request_now && shutdown_fn) {
-        shutdown_fn(ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI);
-    } else if (active && can_request_now) {
-        set_error("This QEMU build does not export qemu_system_shutdown_request; graceful stop is unavailable.");
+    const bool active = g_thread_created || g_running;
+    if (active && !g_running) {
+        g_stop_requested = true;
+    } else if (active && g_qemu_shutdown) {
+        // Keep the library loaded while calling its function pointer. The
+        // worker must acquire this mutex before clearing the pointer/dlclose.
+        g_qemu_shutdown(ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI);
+    } else if (active) {
+        snprintf(g_error, sizeof(g_error),
+                 "This QEMU build does not export qemu_system_shutdown_request; graceful stop is unavailable.");
     }
+    pthread_mutex_unlock(&g_lock);
 }
 
 bool isteam_qemu_is_running(void) {
