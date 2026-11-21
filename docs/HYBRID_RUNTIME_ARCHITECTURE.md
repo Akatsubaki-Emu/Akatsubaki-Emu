@@ -1,9 +1,10 @@
 # Kenran Butō (絢爛舞踏) — Hybrid runtime composition
 
 - **System name:** Kenran Butō (絢爛舞踏).
-- **Status:** composable execution-policy prototype; most specialist runtimes are not integrated.
-- **Component naming:** Kenran Butō AOT is the static x86-64 → ARM64 translator; Kenran Butō Cache stores translated code; Kenran Butō Router selects backends and fallback; Kenran Butō Runtime orchestrates execution; Kenran Butō Graphics owns graphics translation. These are architectural labels and do not imply that the implementations are complete.
+- **Status:** composable execution-policy prototype; the translation-cache artifact layer is implemented, but no production translator or Windows/Linux userspace stack is integrated.
+- **Component naming:** Kenran Butō AOT is the planned static x86-64 → ARM64 translator; Kenran Butō Cache stores validated translated-code artifacts; Kenran Butō Router selects backends and fallback; Kenran Butō Runtime orchestrates execution; Kenran Butō Graphics owns graphics translation. These names do not imply that missing implementations are complete.
 - **Planner:** `src/Runtime/ExecutionBackendRouter.swift`
+- **Cache:** `src/Performance/TranslationCache.swift`
 - **Launch entry point:** `src/Steam/GameLauncher.swift` → `src/Runtime/WindowsRuntime.swift`
 - **Related code:** `src/Runtime/WindowsPEImage.swift`, `src/Runtime/WindowsPELoader.swift`, `src/Runtime/X86_64Interpreter.swift`, `iSteam/Box64Bridge.*`, `src/QEMU/`, `src/Windows/`, `src/GPU/`.
 
@@ -32,8 +33,9 @@
 
 ## What is actually integrated today
 
+- **Translation cache:** stores versioned translated-code artifacts using a cache identity that includes guest-code SHA-256, guest architecture, translator identity/version, host architecture, CPU features and guest ABI. Each artifact has an integrity digest, is written atomically, is rejected and removed if corrupt or mismatched, and is bounded to 8 MiB per code artifact, 512 entries and 256 MiB total. Cache entries can be explicitly invalidated. The cache returns bytes only; it does not allocate executable memory, invoke JIT, or execute code. No translator currently consumes or produces these artifacts.
 - **Windows PE:** `WindowsPEImage` performs bounded metadata inspection; `WindowsPELoader` is read-only inspection. No PE image mapping, executable memory, import resolver, AOT translator or Windows process execution engine is integrated.
-- **Static AOT:** no complete x86-64→ARM64 code generator/relinker is integrated. The existing translation cache is only file storage.
+- **Static AOT:** no complete x86-64→ARM64 decoder, semantic IR, code generator or relinker is integrated.
 - **FEXCore:** not integrated or packaged.
 - **Box64:** a C/Swift bridge can look for an already-loaded Box64 entry point. It does not bundle Box64, provide a Linux rootfs/syscall ABI, or prove game execution.
 - **Wine/Proton:** not integrated.
@@ -48,7 +50,7 @@ The planner's availability set must be populated only by concrete runtime probes
 ## Performance policy
 
 - Prefer native ARM64 guest code when its ABI is already compatible.
-- Use cached AOT translations for stable code; invalidate by source hash, translator version, CPU feature set and ABI.
+- Reuse cached AOT translations only when source hash, translator version, CPU feature set, host architecture and guest ABI match.
 - Use exactly one dynamic translator per process; prefer FEX or Box64 only after compatibility and measured performance checks.
 - Compile hot blocks asynchronously where permitted; never block the render/input thread for translation.
 - Keep QEMU for whole-machine requirements rather than routing every simple process through it.

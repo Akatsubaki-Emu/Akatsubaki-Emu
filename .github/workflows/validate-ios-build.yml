@@ -31,6 +31,15 @@ jobs:
             destination: generic/platform=visionOS Simulator
     steps:
       - uses: actions/checkout@v4
+      - name: Test translation cache integrity and invalidation
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Core/EmulationLog.swift \
+            src/Performance/TranslationCache.swift \
+            scripts/tests/test_translation_cache.swift \
+            -o "$RUNNER_TEMP/test-translation-cache"
+          "$RUNNER_TEMP/test-translation-cache"
       - name: Validate runtime bridge and packaging contracts
         run: python3 scripts/validate-qemu-source.py
       - name: Install XcodeGen
