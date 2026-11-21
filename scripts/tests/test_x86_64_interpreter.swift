@@ -686,6 +686,13 @@ struct InterpreterTests {
         precondition(rexByteExit == .unsupportedInstruction(address: 3))
         precondition(rexByte.registerValue(8) == 0x7F)
 
+        let unsupportedC6Memory = GuestMemory(size: 16)
+        precondition(unsupportedC6Memory.write(Data([0xC6, 0x0D]), offset: 0))
+        let unsupportedC6 = X86_64Interpreter(memory: unsupportedC6Memory)
+        try unsupportedC6.reset(entryPoint: 0)
+        let unsupportedC6Exit = try unsupportedC6.run(maxInstructions: 2)
+        precondition(unsupportedC6Exit == .unsupportedInstruction(address: 0))
+
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [
             0xB8, 0x0C, 0x00, 0x00, 0x00,

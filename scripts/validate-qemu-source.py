@@ -268,6 +268,7 @@ required = {
         "private func readByteRegister(_ encodedIndex: Int, rex: UInt8) -> UInt8",
         "private func writeByteRegister(_ value: UInt8, encodedIndex: Int, rex: UInt8)",
         "private func writeByteOperand(_ value: UInt8, to operand: Operand, modrm: UInt8, rex: UInt8) -> Bool",
+        "guard ((modrm >> 3) & 7) == 0 else {",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
@@ -335,6 +336,7 @@ required = {
         "precondition(byteLoad.registerValue(0) == 0xAB)",
         "precondition(byteImmediateStoreMemory.readByte(offset: 0x20) == 0x7F)",
         "precondition(rexByte.registerValue(8) == 0x7F)",
+        "precondition(unsupportedC6Exit == .unsupportedInstruction(address: 0))",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",

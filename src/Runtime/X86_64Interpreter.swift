@@ -269,7 +269,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                 }
             case 0xC6: // MOV r/m8, imm8
                 guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
-                guard (modrm >> 3) & 7 == 0 else {
+                guard ((modrm >> 3) & 7) == 0 else {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)
                 }
