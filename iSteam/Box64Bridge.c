@@ -4,8 +4,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <pthread.h>
 
 typedef int (*box64_main_fn)(int, char **);
+
+static pthread_mutex_t g_box64_working_directory_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static box64_main_fn resolveBox64Main(void) {
     box64_main_fn fn = (box64_main_fn)dlsym(RTLD_DEFAULT, "box64_library_main");
