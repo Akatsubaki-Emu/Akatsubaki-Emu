@@ -134,9 +134,12 @@ required = {
         "mappedRanges.first?.lowerBound ?? mmapCursor",
         "insertMappedRange(address..<end)",
     ],
-    "scripts/tests/test_native_guest_memory.cpp": [
+        "scripts/tests/test_native_guest_memory.cpp": [
         "1ULL << 30",
         "isteam_guest_memory_allocated_pages",
+        "constexpr uint64_t partialSize = pageSize + 17;",
+        "isteam_guest_memory_zero(partial, pageSize, partialSize - pageSize)",
+        "isteam_guest_memory_allocated_pages(partial) == 0",
     ],
     "scripts/tests/test_linux_syscall_dispatcher.swift": [
         "Linux x86-64 brk/mmap/munmap/mprotect/time/random/identity and reset tests passed",
@@ -597,11 +600,7 @@ required = {
         "const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);",
         "static_cast<uint64_t>(amount) == pageLength",
     ],
-    "scripts/tests/test_native_guest_memory.cpp": [
-        "constexpr uint64_t partialSize = pageSize + 17;",
-        "isteam_guest_memory_zero(partial, pageSize, partialSize - pageSize)",
-        "isteam_guest_memory_allocated_pages(partial) == 0",
-    ],
+    
     ".gitlab-ci.yml": [
         "test_static_elf_execution.swift",
         "test_native_guest_memory.cpp",
