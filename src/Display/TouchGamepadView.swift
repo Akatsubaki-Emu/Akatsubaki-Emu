@@ -140,6 +140,10 @@ final class TouchGamepadView: UIView {
         }
     }
 
+    func releaseAllButtons() {
+        releaseButtons()
+    }
+
     private func releaseButtons() {
         for button in buttons {
             if let key = button.accessibilityIdentifier {
