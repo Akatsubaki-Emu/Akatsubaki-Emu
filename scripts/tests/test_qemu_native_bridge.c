@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
     memset(argumentError, 0, sizeof(argumentError));
     assert(!isteam_qemu_start(1, oversizedArguments, argv[1],
                               argumentError, (int)sizeof(argumentError)));
-    assert(strstr(argumentError, "size limits") != NULL);
+    assert(strstr(argumentError, "QEMU arguments exceed the configured size limits") != NULL);
     free(oversizedArgument);
 
     pthread_barrier_t barrier;
