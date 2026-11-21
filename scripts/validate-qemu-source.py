@@ -319,7 +319,7 @@ required = {
         "precondition(highByte.registerValue(0) == 24)",
         "precondition(test64.conditionFlags & X86_64ALU.zero == 0)",
         "precondition(unsupportedF7Exit == .unsupportedInstruction(address: 0))",
-        "0x0F, 0xBE, 0x0D, 0x0C, 0x00, 0x00, 0x00",
+        "0x0F, 0xBE, 0x0D, 0x12, 0x00, 0x00, 0x00",
         "precondition(shiftLeft.registerValue(0) == 0)",
         "precondition(shiftRight.registerValue(0) == 0x4000_0000)",
         "precondition(shiftArithmetic.registerValue(0) == 0xC000_0000)",
