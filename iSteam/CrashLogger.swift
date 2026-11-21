@@ -106,7 +106,9 @@ final class CrashLogger {
 
     func clear() {
         queue.async {
+            let previous = self.directory.appendingPathComponent("previous-crash.log")
             try? self.fileManager.removeItem(at: self.latestLogURL)
+            try? self.fileManager.removeItem(at: previous)
         }
     }
 }
