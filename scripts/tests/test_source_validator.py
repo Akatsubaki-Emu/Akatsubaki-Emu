@@ -241,5 +241,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("log.write(\"[guest stdout] \" + text[start..<end])", write_case)
 
 
+    def test_gitlab_ci_runs_all_runtime_and_python_regression_suites(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("scripts/tests/test_elf_loader_program_headers.swift", workflow)
+        self.assertIn("scripts/tests/test_windows_pe_image.swift", workflow)
+        self.assertIn("scripts/tests/test_static_elf_execution.swift", workflow)
+        self.assertIn("python -m unittest discover -s scripts/tests -p 'test_*.py'", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()

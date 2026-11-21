@@ -1,5 +1,12 @@
 import Foundation
 
+#if os(Linux)
+extension URL {
+    func startAccessingSecurityScopedResource() -> Bool { false }
+    func stopAccessingSecurityScopedResource() {}
+}
+#endif
+
 @main
 struct WindowsPEImageTests {
     static func put16(_ value: UInt16, at offset: Int, in bytes: inout [UInt8]) {

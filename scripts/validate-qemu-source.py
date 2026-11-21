@@ -78,7 +78,7 @@ required = {
         "guard rotateLatestLog() else { return }",
         "private func rotateLatestLog() -> Bool",
         "performSynchronouslyOnQueue",
-        "details.prefix(500_000)",
+        "boundedString(details, maximumBytes: 500_000)",
         "data.write(to: latestLogURL, options: .atomic)",
         "maximumLogBytes = 5 * 1024 * 1024",
         "previous-crash.log",
@@ -102,6 +102,7 @@ required = {
         "Import directory smaller than one descriptor was accepted",
         "Relocation directory smaller than one block was accepted",
         "PE string scanning crossed a section raw-data boundary",
+        "func startAccessingSecurityScopedResource() -> Bool { false }",
     ],
     "src/Runtime/RuntimeComponentManifest.swift": [
         "resolvingSymlinksInPath()",
@@ -354,6 +355,7 @@ required = {
     ],
     "scripts/tests/test_elf_loader_program_headers.swift": [
         "Mismatched PT_PHDR virtual address was accepted",
+        "GuestMemory(size: 8 * 1024 * 1024)",
         "Mismatched PT_PHDR file offset was accepted",
         "Truncated PT_PHDR table size was accepted",
         "Truncated PT_PHDR memory size was accepted",
@@ -534,6 +536,8 @@ required = {
     ],
     ".gitlab-ci.yml": [
         "test_static_elf_execution.swift",
+        "test_windows_pe_image.swift",
+        "python -m unittest discover -s scripts/tests -p 'test_*.py'",
     ],
     ".github/workflows/validate-ios-build.yml": [
         "src/Runtime/LinuxSyscallDispatcher.swift",

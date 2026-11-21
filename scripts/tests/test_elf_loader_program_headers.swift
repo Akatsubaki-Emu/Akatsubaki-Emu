@@ -96,7 +96,7 @@ struct ELFProgramHeaderTests {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".elf")
         try data.write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
-        return try ELF64Loader().load(url, into: GuestMemory(size: 4 * 1024 * 1024),
+        return try ELF64Loader().load(url, into: GuestMemory(size: 8 * 1024 * 1024),
                                       expectedArchitecture: .x86_64)
     }
     static func main() throws {
