@@ -414,8 +414,8 @@ if "--extra-ldflags=-Wl,-force_load" in qemu_workflow:
 
 # A release IPA must never be published without its native QEMU runtime.
 release_workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
-release_concurrency_start = release_workflow.find("\\nconcurrency:\\n")
-release_concurrency_end = release_workflow.find("\\njobs:", release_concurrency_start)
+release_concurrency_start = release_workflow.find("\nconcurrency:\n")
+release_concurrency_end = release_workflow.find("\njobs:", release_concurrency_start)
 if release_concurrency_start < 0 or release_concurrency_end < 0:
     print("release workflow: concurrency policy is missing", file=sys.stderr)
     failed = True
