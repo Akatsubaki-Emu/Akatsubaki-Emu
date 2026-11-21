@@ -41,12 +41,24 @@ final class QEMUNativeRuntime {
         } else if configuration.name == "SteamOS Gaming Mode" {
             guard let uefi = Self.findUEFIFirmware(in: dataDirectory) else {
                 throw RuntimeError.runtimeUnavailable(
-                    "SteamOS Gaming Mode requires an x86_64 UEFI firmware file (OVMF_CODE.fd or edk2-x86_64-code.fd) in the bundled QEMU data directory."
+                    "SteamOS Gaming Mode requires an x86_64 UEFI code image (OVMF_CODE.fd or edk2-x86_64-code.fd) in the bundled QEMU data directory."
                 )
             }
             selectedFirmware = uefi
         } else {
             selectedFirmware = nil
+        }
+
+        let selectedFirmwareVariables: URL?
+        if selectedFirmware != nil {
+            guard let variablesTemplate = Self.findUEFIVariables(in: dataDirectory) else {
+                throw RuntimeError.runtimeUnavailable(
+                    "UEFI code was found, but no writable variable-store template (OVMF_VARS.fd or edk2-x86_64-vars.fd) is bundled."
+                )
+            }
+            selectedFirmwareVariables = try Self.makeWritableUEFIVariables(from: variablesTemplate)
+        } else {
+            selectedFirmwareVariables = nil
         }
 
         var newlyScoped: [URL] = []
@@ -67,7 +79,8 @@ final class QEMUNativeRuntime {
         }
 
         let args = QEMUCommandBuilder(configuration: configuration)
-            .arguments(diskImage: diskImage, firmware: selectedFirmware) + ["-L", dataDirectory.path]
+            .arguments(diskImage: diskImage, firmware: selectedFirmware,
+                       firmwareVariables: selectedFirmwareVariables) + ["-L", dataDirectory.path]
         let arguments = ["qemu-system-\(configuration.architecture.rawValue)"] + args
         let strings: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) }
         defer { strings.forEach { if let value = $0 { free(value) } } }
@@ -117,6 +130,37 @@ final class QEMUNativeRuntime {
             }
         }
         return nil
+    }
+
+    private static func findUEFIVariables(in directory: URL) -> URL? {
+        let names = ["OVMF_VARS.fd", "edk2-x86_64-vars.fd"]
+        for name in names {
+            let candidate = directory.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+        }
+        if let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil) {
+            for case let url as URL in enumerator where names.contains(url.lastPathComponent) {
+                return url
+            }
+        }
+        return nil
+    }
+
+    /// UEFI variable stores are writable guest state. Keep a per-template copy
+    /// in Application Support so QEMU never writes into the signed app bundle.
+    private static func makeWritableUEFIVariables(from template: URL) throws -> URL {
+        let values = try template.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        let size = values.fileSize ?? 0
+        let modified = Int(values.contentModificationDate?.timeIntervalSince1970 ?? 0)
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("AkatsubakiEmu/QEMU/firmware", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let stem = template.deletingPathExtension().lastPathComponent
+        let destination = directory.appendingPathComponent("\(stem)-\(size)-\(modified).fd")
+        if !FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.copyItem(at: template, to: destination)
+        }
+        return destination
     }
 
     func stop() {
