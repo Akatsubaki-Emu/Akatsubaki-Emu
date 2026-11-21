@@ -54,7 +54,7 @@ final class CrashLogger {
         if let attributes = try? fileManager.attributesOfItem(atPath: latestLogURL.path),
            let size = attributes[.size] as? NSNumber,
            size.int64Value > maximumExistingSize {
-            rotateLatestLog()
+            guard rotateLatestLog() else { return }
         }
 
         if let handle = try? FileHandle(forWritingTo: latestLogURL) {
@@ -70,11 +70,18 @@ final class CrashLogger {
         }
     }
 
-    private func rotateLatestLog() {
+    private func rotateLatestLog() -> Bool {
         let previous = directory.appendingPathComponent("previous-crash.log")
-        try? fileManager.removeItem(at: previous)
-        if fileManager.fileExists(atPath: latestLogURL.path) {
-            try? fileManager.moveItem(at: latestLogURL, to: previous)
+        do {
+            if fileManager.fileExists(atPath: previous.path) {
+                try fileManager.removeItem(at: previous)
+            }
+            if fileManager.fileExists(atPath: latestLogURL.path) {
+                try fileManager.moveItem(at: latestLogURL, to: previous)
+            }
+            return true
+        } catch {
+            return false
         }
     }
 
@@ -103,7 +110,7 @@ final class CrashLogger {
 
         performSynchronouslyOnQueue {
             try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            rotateLatestLog()
+            _ = rotateLatestLog()
             guard let data = report.data(using: .utf8), data.count <= maximumLogBytes else { return }
             try? data.write(to: latestLogURL, options: .atomic)
         }

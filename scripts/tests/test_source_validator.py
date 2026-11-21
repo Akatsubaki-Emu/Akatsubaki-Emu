@@ -181,5 +181,12 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("size.int64Value > maximumExistingSize", source)
 
 
+    def test_crash_logger_does_not_append_when_rotation_fails(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "CrashLogger.swift").read_text(encoding="utf-8")
+        self.assertIn("guard rotateLatestLog() else { return }", source)
+        self.assertIn("private func rotateLatestLog() -> Bool", source)
+
+
 if __name__ == "__main__":
     unittest.main()

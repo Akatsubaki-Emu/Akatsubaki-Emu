@@ -73,6 +73,8 @@ required = {
         "queueKey = DispatchSpecificKey<UInt8>()",
         "String(decoding: value.utf8.prefix(maximumBytes), as: UTF8.self)",
         "Int64(maximumLogBytes - data.count)",
+        "guard rotateLatestLog() else { return }",
+        "private func rotateLatestLog() -> Bool",
         "performSynchronouslyOnQueue",
         "details.prefix(500_000)",
         "data.write(to: latestLogURL, options: .atomic)",
