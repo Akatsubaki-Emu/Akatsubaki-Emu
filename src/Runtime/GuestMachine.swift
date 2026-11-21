@@ -6,6 +6,7 @@ protocol GuestCPUBackend: AnyObject {
     var instructionCount: UInt64 { get }
     func reset(entryPoint: UInt64) throws
     func setInitialStackPointer(_ pointer: UInt64) throws
+    func configureLinuxProcess(programBreak: UInt64, stackBase: UInt64) throws
     func run(maxInstructions: UInt64) throws -> GuestCPUExit
     func requestStop()
     func resume()
@@ -55,9 +56,17 @@ final class GuestMachine {
     private var hasLoadedImage = false
     private var loadedEntryPoint: UInt64?
     private var initialStackPointer: UInt64?
+    private var initialProgramBreak: UInt64?
+    private var initialStackBase: UInt64?
     private let executionLock = NSLock()
     private let activeCPULock = NSLock()
     private var activeCPU: GuestCPUBackend?
+
+    private static func alignGuestAddress(_ address: UInt64) throws -> UInt64 {
+        let (sum, overflow) = address.addingReportingOverflow(4095)
+        guard !overflow else { throw GuestEngineError.invalidState("The ELF image end address overflows the guest address space.") }
+        return sum & ~UInt64(4095)
+    }
 
     private func withExecutionLock<T>(_ body: () throws -> T) rethrows -> T {
         executionLock.lock()
@@ -160,6 +169,8 @@ final class GuestMachine {
                 hasLoadedImage = false
                 loadedEntryPoint = nil
                 initialStackPointer = nil
+                initialProgramBreak = nil
+                initialStackBase = nil
                 guard configuration.architecture == .x86_64 else {
                     throw GuestEngineError.backendNotInstalled(configuration.architecture)
                 }
@@ -178,7 +189,11 @@ final class GuestMachine {
                 )
                 try cpu.reset(entryPoint: image.entryPoint)
                 try cpu.setInitialStackPointer(stack.stackPointer)
+                let programBreak = try Self.alignGuestAddress(image.maximumGuestAddress)
+                try cpu.configureLinuxProcess(programBreak: programBreak, stackBase: stack.stackBase)
                 initialStackPointer = stack.stackPointer
+                initialProgramBreak = programBreak
+                initialStackBase = stack.stackBase
                 loadedEntryPoint = image.entryPoint
                 hasLoadedImage = true
                 lastExit = nil
@@ -273,6 +288,8 @@ final class GuestMachine {
             hasLoadedImage = false
             loadedEntryPoint = nil
             initialStackPointer = nil
+            initialProgramBreak = nil
+            initialStackBase = nil
             state = .stopped
             lastExit = nil
         }

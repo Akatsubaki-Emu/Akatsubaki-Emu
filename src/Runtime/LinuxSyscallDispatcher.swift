@@ -1,0 +1,239 @@
+import Foundation
+
+final class LinuxSyscallDispatcher {
+    enum Outcome {
+        case returned(UInt64)
+        case exited(Int32)
+    }
+
+    private let memory: GuestMemory
+    private let log: EmulationLog
+    private var initialProgramBreak: UInt64 = 0
+    private var programBreak: UInt64 = 0
+    private var mmapCursor: UInt64 = 0
+    private var stackBase: UInt64 = 0
+    private var mappedRanges: [Range<UInt64>] = []
+
+    init(memory: GuestMemory, log: EmulationLog = .shared) {
+        self.memory = memory
+        self.log = log
+    }
+
+    func configure(programBreak: UInt64, stackBase: UInt64) throws {
+        let initial = Self.alignUp(programBreak)
+        guard initial <= memory.size, stackBase <= memory.size,
+              initial <= stackBase, stackBase >= 4096 else {
+            throw GuestEngineError.invalidState("The Linux heap/stack layout is outside guest memory.")
+        }
+        initialProgramBreak = initial
+        self.programBreak = initial
+        self.stackBase = stackBase
+        let (minimumCursor, overflow) = initial.addingReportingOverflow(0x10000)
+        let preferred = max(overflow ? initial : minimumCursor, 0x10000000)
+        mmapCursor = preferred < stackBase ? preferred : Self.alignUp(minimumCursor)
+        mappedRanges.removeAll(keepingCapacity: true)
+    }
+
+    func reset() {
+        if programBreak > initialProgramBreak {
+            _ = memory.zero(offset: initialProgramBreak, length: programBreak - initialProgramBreak)
+        }
+        for range in mappedRanges {
+            _ = memory.zero(offset: range.lowerBound, length: range.upperBound - range.lowerBound)
+        }
+        programBreak = initialProgramBreak
+        mappedRanges.removeAll(keepingCapacity: true)
+        let (minimumCursor, overflow) = initialProgramBreak.addingReportingOverflow(0x10000)
+        let preferred = max(overflow ? initialProgramBreak : minimumCursor, 0x10000000)
+        mmapCursor = preferred < stackBase ? preferred : Self.alignUp(minimumCursor)
+    }
+
+    func dispatch(number: UInt64, arguments: [UInt64]) -> Outcome? {
+        guard arguments.count >= 6 else { return nil }
+        let a = arguments
+        switch number {
+        case 0:
+            return .returned(a[0] == 0 ? 0 : errno(9))
+        case 1:
+            let descriptor = a[0]
+            let address = a[1]
+            let requested = a[2]
+            guard descriptor == 1 || descriptor == 2 else { return .returned(errno(9)) }
+            if requested == 0 { return .returned(0) }
+            guard requested <= 1_048_576, requested <= UInt64(Int.max),
+                  let bytes = memory.read(offset: address, length: Int(requested)) else {
+                return .returned(errno(14))
+            }
+            if let text = String(data: bytes, encoding: .utf8), !text.isEmpty {
+                log.write("[guest stdout] " + text)
+            } else if !bytes.isEmpty {
+                log.write("[guest stdout] <\(bytes.count) non-UTF8 bytes>")
+            }
+            return .returned(requested)
+        case 3:
+            return .returned(a[0] <= 2 ? 0 : errno(9))
+        case 9:
+            return .returned(mapAnonymous(address: a[0], length: a[1], flags: a[3]))
+        case 10:
+            return .returned(validateRange(address: a[0], length: a[1]) ? 0 : errno(22))
+        case 11:
+            return .returned(unmap(address: a[0], length: a[1]))
+        case 12:
+            return .returned(setBreak(a[0]))
+        case 28:
+            return .returned(validateRange(address: a[0], length: a[1]) ? 0 : errno(22))
+        case 39, 186:
+            return .returned(1)
+        case 96:
+            return .returned(writeTimeval(at: a[0], timezone: a[1]))
+        case 102, 104, 107, 108:
+            return .returned(0)
+        case 158:
+            return .returned(errno(38))
+        case 202:
+            let operation = a[1] & 0x7F
+            return .returned(operation == 1 ? 0 : errno(11))
+        case 218:
+            return .returned(1)
+        case 228:
+            return .returned(writeTimespec(clock: a[0], at: a[1]))
+        case 231, 60:
+            return .exited(Int32(truncatingIfNeeded: a[0]))
+        case 273:
+            return .returned(0)
+        case 318:
+            return .returned(getRandom(at: a[0], length: a[1]))
+        case 334:
+            return .returned(errno(38))
+        default:
+            return nil
+        }
+    }
+
+    private func setBreak(_ requested: UInt64) -> UInt64 {
+        if requested == 0 { return programBreak }
+        let firstMapping = mappedRanges.map(\.lowerBound).min() ?? mmapCursor
+        let upperLimit = min(firstMapping, stackBase >= 4096 ? stackBase - 4096 : 0)
+        guard requested >= initialProgramBreak, requested <= upperLimit,
+              requested <= memory.size else { return programBreak }
+        if requested > programBreak {
+            guard memory.zero(offset: programBreak, length: requested - programBreak) else { return programBreak }
+        } else if requested < programBreak {
+            guard memory.zero(offset: requested, length: programBreak - requested) else { return programBreak }
+        }
+        programBreak = requested
+        return programBreak
+    }
+
+    private func mapAnonymous(address requested: UInt64, length: UInt64, flags: UInt64) -> UInt64 {
+        let mapType = flags & 0x03
+        guard length > 0, length <= memory.size, flags & 0x20 != 0,
+              mapType == 1 || mapType == 2 else { return errno(22) }
+        let (rounded, overflow) = length.addingReportingOverflow(4095)
+        guard !overflow else { return errno(12) }
+        let size = rounded & ~UInt64(4095)
+        let limit = stackBase >= 4096 ? stackBase - 4096 : 0
+        let fixed = flags & 0x10 != 0 || flags & 0x100000 != 0
+        let noReplace = flags & 0x100000 != 0
+        var address: UInt64
+        if fixed {
+            guard requested & 0xFFF == 0 else { return errno(22) }
+            address = requested
+        } else {
+            let hint = requested >= mmapCursor ? requested : mmapCursor
+            address = Self.alignUp(hint)
+            for range in mappedRanges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+                let (candidateEnd, candidateOverflow) = address.addingReportingOverflow(size)
+                if candidateOverflow { return errno(12) }
+                if address < range.upperBound && range.lowerBound < candidateEnd {
+                    address = Self.alignUp(range.upperBound)
+                }
+            }
+        }
+        let (end, endOverflow) = address.addingReportingOverflow(size)
+        guard !endOverflow, address >= programBreak, end <= limit, end <= memory.size else {
+            return errno(12)
+        }
+        if mappedRanges.contains(where: { address < $0.upperBound && $0.lowerBound < end }) {
+            return noReplace ? errno(17) : errno(12)
+        }
+        guard memory.zero(offset: address, length: size) else { return errno(12) }
+        mappedRanges.append(address..<end)
+        if !fixed { mmapCursor = end }
+        return address
+    }
+
+    private func unmap(address: UInt64, length: UInt64) -> UInt64 {
+        guard address & 0xFFF == 0, length > 0 else { return errno(22) }
+        let (rounded, overflow) = length.addingReportingOverflow(4095)
+        guard !overflow else { return errno(22) }
+        let size = rounded & ~UInt64(4095)
+        let (end, endOverflow) = address.addingReportingOverflow(size)
+        let limit = stackBase >= 4096 ? stackBase - 4096 : 0
+        guard !endOverflow, address >= initialProgramBreak, end <= limit, end <= memory.size else {
+            return errno(22)
+        }
+        guard memory.zero(offset: address, length: size) else { return errno(22) }
+        var remaining: [Range<UInt64>] = []
+        for range in mappedRanges {
+            if range.upperBound <= address || range.lowerBound >= end {
+                remaining.append(range)
+            } else {
+                if range.lowerBound < address { remaining.append(range.lowerBound..<address) }
+                if range.upperBound > end { remaining.append(end..<range.upperBound) }
+            }
+        }
+        mappedRanges = remaining
+        return 0
+    }
+
+    private func validateRange(address: UInt64, length: UInt64) -> Bool {
+        guard address & 0xFFF == 0, length > 0 else { return false }
+        let (end, overflow) = address.addingReportingOverflow(length)
+        let limit = stackBase >= 4096 ? stackBase - 4096 : 0
+        return !overflow && address >= initialProgramBreak && end <= limit && end <= memory.size
+    }
+
+    private func getRandom(at address: UInt64, length: UInt64) -> UInt64 {
+        guard length <= 256 * 1024, length <= UInt64(Int.max) else { return errno(22) }
+        if length == 0 { return 0 }
+        var generator = SystemRandomNumberGenerator()
+        let data = Data((0..<Int(length)).map { _ in UInt8.random(in: 0...255, using: &generator) })
+        return memory.write(data, offset: address) ? length : errno(14)
+    }
+
+    private func writeTimespec(clock: UInt64, at address: UInt64) -> UInt64 {
+        let interval: TimeInterval
+        switch clock {
+        case 0: interval = Date().timeIntervalSince1970
+        case 1: interval = ProcessInfo.processInfo.systemUptime
+        default: return errno(22)
+        }
+        let seconds = UInt64(max(0, interval))
+        let nanoseconds = UInt64(max(0, (interval - floor(interval)) * 1_000_000_000))
+        let (nanosecondsAddress, overflow) = address.addingReportingOverflow(8)
+        guard !overflow, memory.writeUInt64(seconds, offset: address),
+              memory.writeUInt64(nanoseconds, offset: nanosecondsAddress) else { return errno(14) }
+        return 0
+    }
+
+    private func writeTimeval(at address: UInt64, timezone: UInt64) -> UInt64 {
+        let interval = Date().timeIntervalSince1970
+        let seconds = UInt64(max(0, interval))
+        let microseconds = UInt64(max(0, (interval - floor(interval)) * 1_000_000))
+        let (microsecondsAddress, overflow) = address.addingReportingOverflow(8)
+        guard !overflow, memory.writeUInt64(seconds, offset: address),
+              memory.writeUInt64(microseconds, offset: microsecondsAddress) else { return errno(14) }
+        if timezone != 0 { _ = memory.zero(offset: timezone, length: 8) }
+        return 0
+    }
+
+    private func errno(_ value: Int64) -> UInt64 {
+        UInt64(bitPattern: -value)
+    }
+
+    private static func alignUp(_ value: UInt64) -> UInt64 {
+        let (sum, overflow) = value.addingReportingOverflow(4095)
+        return overflow ? UInt64.max & ~UInt64(4095) : sum & ~UInt64(4095)
+    }
+}

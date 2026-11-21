@@ -13,6 +13,7 @@ struct LinuxProcessStackBuilder {
         let environmentVectorAddress: UInt64
         let randomAddress: UInt64
         let executableNameAddress: UInt64
+        let stackBase: UInt64
     }
 
     enum BuildError: LocalizedError {
@@ -139,7 +140,8 @@ struct LinuxProcessStackBuilder {
                       argumentVectorAddress: argumentVectorAddress,
                       environmentVectorAddress: environmentVectorAddress,
                       randomAddress: randomAddress,
-                      executableNameAddress: argumentPointers[0])
+                      executableNameAddress: argumentPointers[0],
+                      stackBase: stackBase)
     }
 
     private static func makeRandomBytes() -> Data {

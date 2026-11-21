@@ -7,6 +7,7 @@ final class X86_64Interpreter: GuestCPUBackend {
     let architecture: VMConfiguration.Architecture = .x86_64
     private(set) var instructionCount: UInt64 = 0
     private let memory: GuestMemory
+    private let syscallDispatcher: LinuxSyscallDispatcher
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
     private var flags: UInt64 = 0x2
@@ -16,6 +17,7 @@ final class X86_64Interpreter: GuestCPUBackend {
 
     init(memory: GuestMemory) {
         self.memory = memory
+        syscallDispatcher = LinuxSyscallDispatcher(memory: memory)
     }
 
     func reset(entryPoint: UInt64) throws {
@@ -24,6 +26,7 @@ final class X86_64Interpreter: GuestCPUBackend {
         }
         registers = [UInt64](repeating: 0, count: 16)
         flags = 0x2
+        syscallDispatcher.reset()
         registers[4] = memory.size >= 8 ? memory.size - 8 : 0 // RSP
         rip = entryPoint
         instructionCount = 0
@@ -35,6 +38,10 @@ final class X86_64Interpreter: GuestCPUBackend {
 
     var instructionPointer: UInt64 { rip }
     var conditionFlags: UInt64 { flags }
+
+    func configureLinuxProcess(programBreak: UInt64, stackBase: UInt64) throws {
+        try syscallDispatcher.configure(programBreak: programBreak, stackBase: stackBase)
+    }
 
     func setInitialStackPointer(_ pointer: UInt64) throws {
         guard pointer & 0xF == 0, memory.size >= 8, pointer <= memory.size - 8 else {
@@ -322,42 +329,21 @@ final class X86_64Interpreter: GuestCPUBackend {
                 if takeBranch { rip = addSigned(Int8(bitPattern: raw), to: rip) }
             case 0x0F: // Two-byte opcode map
                 guard let second = fetchByte() else { return .memoryFault(address: rip) }
-                if second == 0x05 { // SYSCALL — small Linux x86-64 userspace ABI subset
-                    let number = registers[0] // RAX
-                    switch number {
-                    case 60, 231: // exit / exit_group
+                if second == 0x05 {
+                    let number = registers[0]
+                    let arguments = [registers[7], registers[6], registers[2],
+                                     registers[10], registers[8], registers[9]]
+                    guard let outcome = syscallDispatcher.dispatch(number: number, arguments: arguments) else {
+                        rip = instructionAddress
+                        return .backendUnavailable("Unsupported Linux x86-64 syscall \(number)")
+                    }
+                    switch outcome {
+                    case .returned(let value):
+                        registers[0] = value
+                    case .exited:
                         halted = true
                         instructionCount &+= 1
                         return .halted
-                    case 1: // write(fd, buffer, count)
-                        let descriptor = registers[7] // RDI
-                        let address = registers[6] // RSI
-                        let requested = registers[2] // RDX
-                        guard descriptor == 1 || descriptor == 2 else {
-                            registers[0] = UInt64(bitPattern: Int64(-9)) // -EBADF
-                            break
-                        }
-                        if requested == 0 {
-                            registers[0] = 0
-                            break
-                        }
-                        guard requested <= 1_048_576,
-                              requested <= UInt64(Int.max),
-                              let bytes = memory.read(offset: address, length: Int(requested)) else {
-                            registers[0] = UInt64(bitPattern: Int64(-14)) // -EFAULT
-                            break
-                        }
-                        if let text = String(data: bytes, encoding: .utf8), !text.isEmpty {
-                            EmulationLog.shared.write("[guest stdout] " + text)
-                        } else if !bytes.isEmpty {
-                            EmulationLog.shared.write("[guest stdout] <\(bytes.count) non-UTF8 bytes>")
-                        }
-                        registers[0] = requested
-                    default:
-                        // Make unsupported syscalls explicit instead of silently
-                        // pretending a guest OS or full Linux ABI is available.
-                        rip = instructionAddress
-                        return .backendUnavailable("Unsupported Linux x86-64 syscall \(number)")
                     }
                 } else if [UInt8(0x82), 0x83, 0x84, 0x85, 0x88, 0x89, 0x8C, 0x8D, 0x8E, 0x8F].contains(second) {
                     guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }

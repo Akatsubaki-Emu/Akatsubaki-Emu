@@ -9,6 +9,7 @@ protocol GuestCPUBackend {
     var instructionCount: UInt64 { get }
     func reset(entryPoint: UInt64) throws
     func setInitialStackPointer(_ pointer: UInt64) throws
+    func configureLinuxProcess(programBreak: UInt64, stackBase: UInt64) throws
     func requestStop()
     func resume()
     func run(maxInstructions: UInt64) throws -> GuestCPUExit
@@ -24,6 +25,7 @@ enum GuestCPUExit: Equatable {
 enum GuestEngineError: Error {
     case backendNotInstalled(VMConfiguration.Architecture)
     case invalidInstructionBudget
+    case invalidState(String)
 }
 
 final class GuestMemory {
@@ -65,6 +67,12 @@ final class GuestMemory {
         for shift in 0..<4 {
             bytes[index + shift] = UInt8(truncatingIfNeeded: value >> (shift * 8))
         }
+        return true
+    }
+
+    func zero(offset: UInt64, length: UInt64) -> Bool {
+        guard offset <= size, length <= size - offset, length <= UInt64(Int.max) else { return false }
+        bytes.replaceSubrange(Int(offset)..<Int(offset + length), with: repeatElement(0, count: Int(length)))
         return true
     }
 
@@ -301,12 +309,30 @@ struct InterpreterTests {
         precondition(retImmediateExit == .unsupportedInstruction(address: 3))
         precondition(retImmediate.registerValue(4) == 0x110)
 
+        let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
+        let syscallProgram: [UInt8] = [
+            0xB8, 0x0C, 0x00, 0x00, 0x00,
+            0xBF, 0x00, 0x20, 0x00, 0x00,
+            0x0F, 0x05,
+            0xB8, 0x0C, 0x00, 0x00, 0x00,
+            0x31, 0xFF,
+            0x0F, 0x05,
+            0x0F, 0x0B
+        ]
+        precondition(syscallMemory.write(Data(syscallProgram), offset: 0))
+        let syscallInterpreter = X86_64Interpreter(memory: syscallMemory)
+        try syscallInterpreter.reset(entryPoint: 0)
+        try syscallInterpreter.configureLinuxProcess(programBreak: 0x1000, stackBase: 0x3F0000)
+        let syscallExit = try syscallInterpreter.run(maxInstructions: 12)
+        precondition(syscallExit == .unsupportedInstruction(address: 22))
+        precondition(syscallInterpreter.registerValue(0) == 0x2000)
+
         let unsupportedMemory = GuestMemory(size: 4)
         precondition(unsupportedMemory.write(Data([0x0F, 0x0B]), offset: 0))
         let unsupported = X86_64Interpreter(memory: unsupportedMemory)
         try unsupported.reset(entryPoint: 0)
         let unsupportedExit = try unsupported.run(maxInstructions: 1)
         precondition(unsupportedExit == .unsupportedInstruction(address: 0))
-        print("x86-64 interpreter register, memory addressing, ALU flags, stack frames, indirect control flow, syscall, budget and fault tests passed")
+        print("x86-64 interpreter register, memory addressing, ALU flags, stack frames, indirect control flow, brk syscall, budget and fault tests passed")
     }
 }

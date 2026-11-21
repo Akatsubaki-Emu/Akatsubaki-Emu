@@ -57,6 +57,7 @@ struct LinuxProcessStackTests {
         )
 
         precondition(result.stackPointer & 0xF == 0)
+        precondition(result.stackBase == 0x300000)
         precondition(memory.readUInt64(offset: result.stackPointer) == 2)
         precondition(memory.readString(offset: memory.readUInt64(offset: result.argumentVectorAddress)!) == "/bin/hello")
         precondition(memory.readString(offset: memory.readUInt64(offset: result.argumentVectorAddress + 8)!) == "--version")

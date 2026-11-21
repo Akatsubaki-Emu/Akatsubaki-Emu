@@ -48,6 +48,15 @@ jobs:
           swiftc -parse-as-library -swift-version 5 src/Runtime/ELF64Loader.swift scripts/tests/test_elf_loader_program_headers.swift -o "$RUNNER_TEMP/test-elf-phdr"
           "$RUNNER_TEMP/test-elf-phdr"
 
+      - name: Test Linux x86-64 syscall memory model
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            scripts/tests/test_linux_syscall_dispatcher.swift \
+            -o "$RUNNER_TEMP/test-linux-syscalls"
+          "$RUNNER_TEMP/test-linux-syscalls"
       - name: Test Linux x86-64 process stack and auxiliary vector
         if: matrix.scheme == 'iSteam'
         run: |

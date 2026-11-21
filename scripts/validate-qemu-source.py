@@ -107,6 +107,19 @@ required = {
         "resolvingSymlinksInPath()",
         "rootPrefix",
     ],
+    "src/Runtime/LinuxSyscallDispatcher.swift": [
+        "func configure(programBreak: UInt64, stackBase: UInt64) throws",
+        "case 9:",
+        "case 12:",
+        "case 228:",
+        "case 318:",
+        "private func mapAnonymous(",
+        "private func setBreak(",
+    ],
+    "scripts/tests/test_linux_syscall_dispatcher.swift": [
+        "Linux x86-64 brk/mmap/munmap/mprotect/time/random/identity and reset tests passed",
+        "dispatcher.dispatch(number: 9999",
+    ],
     "src/Runtime/LinuxProcessStackBuilder.swift": [
         "struct ProgramHeaders",
         "static let stackSize = 1024 * 1024",
@@ -144,6 +157,7 @@ required = {
     ],
     "src/Runtime/X86_64Interpreter.swift": [
         "func setInitialStackPointer(_ pointer: UInt64) throws",
+        "func configureLinuxProcess(programBreak: UInt64, stackBase: UInt64) throws",
         "registers[4] = pointer",
         "case 0xB8...0xBF: // MOV r32, imm32 or MOV r64, imm64",
         "registers[index] = UInt64(immediate)",
@@ -183,6 +197,7 @@ required = {
         "precondition(leave.registerValue(4) == 0x200)",
         "precondition(indirect.registerValue(3) == 0x42)",
         "precondition(retImmediate.registerValue(4) == 0x110)",
+        "syscallInterpreter.configureLinuxProcess(programBreak: 0x1000, stackBase: 0x3F0000)",
         "precondition(orInterpreter.registerValue(0) == 3)",
         "precondition(c7.registerValue(0) == 0x12345678)",
         "precondition(truncatedShortExit == .memoryFault(address: 1))",
@@ -328,6 +343,7 @@ required = {
         "func loadELFImage(at url: URL, arguments: [String] = [], environment: [String: String] = [:])",
         "LinuxProcessStackBuilder().build(",
         "cpu.setInitialStackPointer(stack.stackPointer)",
+        "cpu.configureLinuxProcess(programBreak: programBreak, stackBase: stack.stackBase)",
         "initialStackPointer",
         "loadedEntryPoint",
         "backend.reset(entryPoint: loadedEntryPoint)",
