@@ -247,7 +247,7 @@ required = {
         "fchdir(originalDirectory)",
     ],
     "iSteam/JIT26Protocol.c": [
-        "#if defined(__arm64__) && !TARGET_OS_TV",
+        "#if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR",
         "iSteamJITIsSupported",
     ],
     "src/Core/EmulationLog.swift": [

@@ -1,5 +1,9 @@
 #include "JIT26Protocol.h"
-#if defined(__aarch64__)
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+#if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR
 __attribute__((noinline, optnone, naked))
 void iSteamJITDetach(void) {
     __asm__ volatile("mov x16, #0\n"
