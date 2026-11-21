@@ -15,7 +15,12 @@ struct WindowsPEImageTests {
         for index in 0..<8 { bytes[offset + index] = UInt8((value >> (index * 8)) & 0xff) }
     }
 
-    static func makeImage(importDirectoryRVA: UInt32, importDirectorySize: UInt32) -> Data {
+    static func makeImage(
+        importDirectoryRVA: UInt32,
+        importDirectorySize: UInt32,
+        relocationDirectoryRVA: UInt32 = 0,
+        relocationDirectorySize: UInt32 = 0
+    ) -> Data {
         var bytes = [UInt8](repeating: 0, count: 0x600)
         bytes[0] = 0x4d
         bytes[1] = 0x5a
@@ -35,6 +40,8 @@ struct WindowsPEImageTests {
         put32(16, at: optional + 108, in: &bytes)
         put32(importDirectoryRVA, at: optional + 120, in: &bytes)
         put32(importDirectorySize, at: optional + 124, in: &bytes)
+        put32(relocationDirectoryRVA, at: optional + 152, in: &bytes)
+        put32(relocationDirectorySize, at: optional + 156, in: &bytes)
 
         let section = optional + 0xF0
         for (index, byte) in Array(".text".utf8).enumerated() { bytes[section + index] = byte }
@@ -77,6 +84,32 @@ struct WindowsPEImageTests {
             throw NSError(domain: "WindowsPEImageTests", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "Import descriptor crossing raw section boundary was accepted"])
         } catch WindowsPEImage.ParseError.unmappedRVA(_) {
+        }
+
+        do {
+            _ = try valid.fileOffset(forRVA: 0x1F4, length: 20)
+            throw NSError(domain: "WindowsPEImageTests", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "Header RVA range crossing SizeOfHeaders was accepted"])
+        } catch WindowsPEImage.ParseError.unmappedRVA(_) {
+        }
+
+        do {
+            _ = try WindowsPEImage.parse(
+                makeImage(importDirectoryRVA: 0x1000, importDirectorySize: 1)
+            )
+            throw NSError(domain: "WindowsPEImageTests", code: 4,
+                          userInfo: [NSLocalizedDescriptionKey: "Import directory smaller than one descriptor was accepted"])
+        } catch WindowsPEImage.ParseError.malformed(_) {
+        }
+
+        do {
+            _ = try WindowsPEImage.parse(
+                makeImage(importDirectoryRVA: 0x1000, importDirectorySize: 40,
+                          relocationDirectoryRVA: 0x1000, relocationDirectorySize: 1)
+            )
+            throw NSError(domain: "WindowsPEImageTests", code: 5,
+                          userInfo: [NSLocalizedDescriptionKey: "Relocation directory smaller than one block was accepted"])
+        } catch WindowsPEImage.ParseError.malformed(_) {
         }
 
         print("Windows PE import directory mapping tests passed")

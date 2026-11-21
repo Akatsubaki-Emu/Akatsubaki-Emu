@@ -50,6 +50,9 @@ required = {
         "unterminated PE string within its mapped section",
         "let descriptorRVA = UInt64(directory.rva) + UInt64(index) * 20",
         "fileOffset(forRVA: UInt32(descriptorRVA), length: 20)",
+        "end <= UInt64(sizeOfHeaders)",
+        "import directory range is invalid",
+        "relocation directory range is invalid",
         "Section(name: name,\n                virtualAddress:",
         "virtualSize: try u32(data, offset + 8)",
         "rawOffset: try u32(data, offset + 20)",
@@ -89,6 +92,9 @@ required = {
     "scripts/tests/test_windows_pe_image.swift": [
         "makeImage(importDirectoryRVA: UInt32, importDirectorySize: UInt32)",
         "Import descriptor crossing raw section boundary was accepted",
+        "Header RVA range crossing SizeOfHeaders was accepted",
+        "Import directory smaller than one descriptor was accepted",
+        "Relocation directory smaller than one block was accepted",
     ],
     "src/Runtime/RuntimeComponentManifest.swift": [
         "resolvingSymlinksInPath()",

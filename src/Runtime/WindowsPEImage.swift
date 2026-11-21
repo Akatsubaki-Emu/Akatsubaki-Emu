@@ -163,7 +163,9 @@ struct WindowsPEImage {
         let end = UInt64(rva) + UInt64(length)
         guard end <= UInt64(sizeOfImage) else { throw ParseError.unmappedRVA(rva) }
         if rva < sizeOfHeaders {
-            guard end <= UInt64(file.count) else { throw ParseError.unmappedRVA(rva) }
+            guard end <= UInt64(sizeOfHeaders), end <= UInt64(file.count) else {
+                throw ParseError.unmappedRVA(rva)
+            }
             return Int(rva)
         }
         for section in sections {
@@ -183,7 +185,10 @@ struct WindowsPEImage {
     private func readImports() throws -> [Import] {
         guard directories.count > 1 else { return [] }
         let directory = directories[1]
-        guard directory.rva != 0, directory.size >= 20 else { return [] }
+        if directory.rva == 0 && directory.size == 0 { return [] }
+        guard directory.rva != 0, directory.size >= 20 else {
+            throw ParseError.malformed("import directory range is invalid")
+        }
         let directoryEnd = UInt64(directory.rva) + UInt64(directory.size)
         guard directoryEnd <= UInt64(sizeOfImage) else {
             throw ParseError.malformed("import directory exceeds image")
@@ -232,7 +237,10 @@ struct WindowsPEImage {
     private func readRelocations() throws -> [Relocation] {
         guard directories.count > 5 else { return [] }
         let directory = directories[5]
-        guard directory.rva != 0, directory.size >= 8 else { return [] }
+        if directory.rva == 0 && directory.size == 0 { return [] }
+        guard directory.rva != 0, directory.size >= 8 else {
+            throw ParseError.malformed("relocation directory range is invalid")
+        }
         let end = UInt64(directory.rva) + UInt64(directory.size)
         guard end <= UInt64(sizeOfImage) else { throw ParseError.malformed("relocation directory exceeds image") }
         var cursor = UInt64(directory.rva)
