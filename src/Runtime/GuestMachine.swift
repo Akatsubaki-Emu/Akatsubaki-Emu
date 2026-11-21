@@ -124,7 +124,7 @@ final class GuestMachine {
         guard backend.architecture == configuration.architecture else {
             throw GuestEngineError.backendNotInstalled(configuration.architecture)
         }
-        try withExecutionLock {
+        withExecutionLock {
             cpu?.requestStop()
             backend.resume()
             cpu = backend
