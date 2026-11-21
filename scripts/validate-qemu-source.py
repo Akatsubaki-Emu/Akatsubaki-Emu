@@ -393,7 +393,7 @@ required = {
         "Self.escapeDriveValue(diskImage.path)",
         "replacingOccurrences(of: \",\", with: \",,\")",
         "tcg,tb-size=128,split-wx=on",
-        "configuration.accelerator == .jit ? \\"tcg,tb-size=128,split-wx=on\\" : \\"tcg,tb-size=64,split-wx=on\\"",
+        'configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg,tb-size=64,split-wx=on"',
     ],
     "src/Core/VMEngine.swift": [
         "var onStateChange: ((State) -> Void)?",
