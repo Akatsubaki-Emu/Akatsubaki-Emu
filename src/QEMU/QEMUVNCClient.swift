@@ -101,7 +101,7 @@ final class QEMUVNCClient {
         let previousConnection = withStateLock { () -> NWConnection? in
             let previous = connection
             connection = nil
-            isConnected = false
+            connected = false
             pressedKeys.removeAll()
             return previous
         }
