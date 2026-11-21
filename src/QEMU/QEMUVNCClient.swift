@@ -1,10 +1,16 @@
 import Foundation
 import Network
 
+/// Pointer coordinates retained without allocating packets for superseded motion.
+private struct VNCPointerPosition: Sendable {
+    let x: UInt16
+    let y: UInt16
+}
+
 /// Thread-safe one-shot gate for NWConnection callbacks that may arrive
 /// concurrently while an async continuation is waiting.
 private final class VNCPointerSendBatch: @unchecked Sendable {
-    var latestMessage: Data?
+    var latestPosition: VNCPointerPosition?
     var scheduled = false
 }
 
@@ -461,26 +467,29 @@ final class QEMUVNCClient {
             guard nextX != pointerX || nextY != pointerY else { return }
             pointerX = nextX
             pointerY = nextY
-            let message = Data([5, 0, UInt8((pointerX >> 8) & 0xff), UInt8(pointerX & 0xff),
-                                UInt8((pointerY >> 8) & 0xff), UInt8(pointerY & 0xff)])
             guard let batch = pointerSendBatch else { return }
-            batch.latestMessage = message
+            batch.latestPosition = VNCPointerPosition(x: UInt16(pointerX), y: UInt16(pointerY))
             guard !batch.scheduled else { return }
             batch.scheduled = true
             let group = pendingSendGroup
             group.enter()
             sendQueue.async { [self] in
-                let latestMessage = withStateLock { () -> Data? in
-                    let latest = batch.latestMessage
-                    batch.latestMessage = nil
+                let latestPosition = withStateLock { () -> VNCPointerPosition? in
+                    let latest = batch.latestPosition
+                    batch.latestPosition = nil
                     batch.scheduled = false
                     return latest
                 }
-                guard let latestMessage else {
+                guard let latestPosition else {
                     group.leave()
                     return
                 }
-                connection.send(content: latestMessage, completion: .contentProcessed { error in
+                let message = Data([
+                    5, 0,
+                    UInt8(latestPosition.x >> 8), UInt8(latestPosition.x & 0xff),
+                    UInt8(latestPosition.y >> 8), UInt8(latestPosition.y & 0xff)
+                ])
+                connection.send(content: message, completion: .contentProcessed { error in
                     if let error {
                         EmulationLog.shared.write("QEMU VNC pointer send failed: \(error.localizedDescription)")
                     }
