@@ -189,6 +189,7 @@ required = {
         "width <= 8192, height <= 8192",
         "width <= (16 * 1024 * 1024) / height",
         "CGImageSourceCreateImageAtIndex(image, 0, nil) != nil",
+        "org.webmproject.webp",
     ],
     "src/Runtime/ExternalDriveStore.swift": [
         "maximumBytes: Int? = nil",
