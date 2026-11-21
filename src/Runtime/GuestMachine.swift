@@ -254,13 +254,4 @@ final class GuestMachine {
         }
     }
 
-    func stop() {
-        cpu?.requestStop()
-        withExecutionLock {
-            cpu?.requestStop()
-            memory.clear()
-            state = .stopped
-            lastExit = nil
-        }
-    }
 }
