@@ -476,6 +476,57 @@ struct InterpreterTests {
         precondition(shiftCLExit == .unsupportedInstruction(address: 12))
         precondition(shiftCL.registerValue(0) == 4)
 
+        let testImmediateMemory = GuestMemory(size: 32)
+        precondition(testImmediateMemory.write(Data([0xB8, 0x00, 0x00, 0x00, 0x80,
+                                                     0xF7, 0xC0, 0x01, 0x00, 0x00, 0x00,
+                                                     0x0F, 0x0B]), offset: 0))
+        let testImmediate = X86_64Interpreter(memory: testImmediateMemory)
+        try testImmediate.reset(entryPoint: 0)
+        let testImmediateExit = try testImmediate.run(maxInstructions: 4)
+        precondition(testImmediateExit == .unsupportedInstruction(address: 11))
+        precondition(testImmediate.registerValue(0) == 0x8000_0000)
+        precondition(testImmediate.conditionFlags & X86_64ALU.zero != 0)
+
+        let notMemory = GuestMemory(size: 32)
+        precondition(notMemory.write(Data([0xB8, 0x78, 0x56, 0x34, 0x12,
+                                           0xF7, 0xD0, 0x0F, 0x0B]), offset: 0))
+        let notInterpreter = X86_64Interpreter(memory: notMemory)
+        try notInterpreter.reset(entryPoint: 0)
+        let notExit = try notInterpreter.run(maxInstructions: 4)
+        precondition(notExit == .unsupportedInstruction(address: 7))
+        precondition(notInterpreter.registerValue(0) == 0xEDCB_A987)
+
+        let negMemory = GuestMemory(size: 32)
+        precondition(negMemory.write(Data([0xB8, 0x01, 0x00, 0x00, 0x00,
+                                           0xF7, 0xD8, 0x0F, 0x0B]), offset: 0))
+        let negInterpreter = X86_64Interpreter(memory: negMemory)
+        try negInterpreter.reset(entryPoint: 0)
+        let negExit = try negInterpreter.run(maxInstructions: 4)
+        precondition(negExit == .unsupportedInstruction(address: 7))
+        precondition(negInterpreter.registerValue(0) == 0xFFFF_FFFF)
+        precondition(negInterpreter.conditionFlags & X86_64ALU.carry != 0)
+
+        let incMemory = GuestMemory(size: 32)
+        precondition(incMemory.write(Data([0xB8, 0xFF, 0xFF, 0xFF, 0xFF,
+                                           0xFF, 0xC0, 0x0F, 0x0B]), offset: 0))
+        let incInterpreter = X86_64Interpreter(memory: incMemory)
+        try incInterpreter.reset(entryPoint: 0)
+        let incExit = try incInterpreter.run(maxInstructions: 4)
+        precondition(incExit == .unsupportedInstruction(address: 7))
+        precondition(incInterpreter.registerValue(0) == 0)
+        precondition(incInterpreter.conditionFlags & X86_64ALU.zero != 0)
+        precondition(incInterpreter.conditionFlags & X86_64ALU.carry == 0)
+
+        let decMemory = GuestMemory(size: 32)
+        precondition(decMemory.write(Data([0xB8, 0x00, 0x00, 0x00, 0x00,
+                                           0xFF, 0xC8, 0x0F, 0x0B]), offset: 0))
+        let decInterpreter = X86_64Interpreter(memory: decMemory)
+        try decInterpreter.reset(entryPoint: 0)
+        let decExit = try decInterpreter.run(maxInstructions: 4)
+        precondition(decExit == .unsupportedInstruction(address: 7))
+        precondition(decInterpreter.registerValue(0) == 0xFFFF_FFFF)
+        precondition(decInterpreter.conditionFlags & X86_64ALU.carry == 0)
+
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [
             0xB8, 0x0C, 0x00, 0x00, 0x00,
