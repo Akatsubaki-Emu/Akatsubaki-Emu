@@ -318,10 +318,11 @@ class SourceValidatorTests(unittest.TestCase):
         settings = (root / "src" / "Core" / "RuntimeSettings.swift").read_text(encoding="utf-8")
         builder = (root / "src" / "QEMU" / "QEMUCommandBuilder.swift").read_text(encoding="utf-8")
         docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
-        self.assertIn("TCG still uses JIT code generation", settings)
+        self.assertIn("TCG with a 64 MiB split-WX translation buffer; still requires JIT executable memory", settings)
+        self.assertIn("?? .linuxVM", settings)
         self.assertNotIn("Slower compatibility fallback", settings)
         self.assertIn("tcg,tb-size=128,split-wx=on", builder)
-        self.assertIn(' : "tcg"', builder)
+        self.assertIn("tcg,tb-size=64,split-wx=on", builder)
         self.assertIn("QEMU TCG uses JIT code generation", docs)
 
     def test_linux_arm32_translator_requires_linux_syscall_abi(self):

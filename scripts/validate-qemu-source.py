@@ -383,7 +383,7 @@ required = {
         "Self.escapeDriveValue(diskImage.path)",
         "replacingOccurrences(of: \",\", with: \",,\")",
         "tcg,tb-size=128,split-wx=on",
-        "configuration.accelerator == .jit ? \\"tcg,tb-size=128,split-wx=on\\" : \\"tcg,tb-size=64,split-wx=on\\"",
+        "tcg,tb-size=64,split-wx=on",
     ],
     "src/Core/VMEngine.swift": [
         "var onStateChange: ((State) -> Void)?",
@@ -471,7 +471,7 @@ required = {
         "fullSystemPlan.fullSystemFallback == .qemuTCG",
     ],
     "src/Core/RuntimeSettings.swift": [
-        "?? .windowsVM",
+        "?? .linuxVM",
         "Uses the configured QEMU TCG translation profile",
         "TCG with a 128 MiB translation-block cache and split-WX enabled",
         "TCG with a 64 MiB split-WX translation buffer; still requires JIT executable memory",
