@@ -45,6 +45,7 @@ required = {
         "performSynchronouslyOnQueue",
         "details.prefix(500_000)",
         "data.write(to: latestLogURL, options: .atomic)",
+        "maximumLogBytes = 5 * 1024 * 1024",
         "previous-crash.log",
     ],
     "iSteam/ELFValidator.swift": [
@@ -281,10 +282,6 @@ required = {
     "src/Core/EmulationLog.swift": [
         "maximumLogBytes = 5 * 1024 * 1024",
         "emulation.previous.log",
-    ],
-    "iSteam/CrashLogger.swift": [
-        "maximumLogBytes = 5 * 1024 * 1024",
-        "previous-crash.log",
     ],
     "src/Display/ControllerInputManager.swift": [
         "GCController.stopWirelessControllerDiscovery()",
