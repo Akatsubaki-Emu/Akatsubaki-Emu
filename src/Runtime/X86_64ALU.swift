@@ -176,21 +176,19 @@ enum X86_64ALU {
     }
 
     static func condition(_ code: UInt8, flags: UInt64) -> Bool {
-        let cf = flags & carry != 0
-        let zf = flags & zero != 0
-        let sf = flags & sign != 0
-        let of = flags & overflow != 0
         switch code & 0x0F {
-        case 0x2: return cf
-        case 0x3: return !cf
-        case 0x4: return zf
-        case 0x5: return !zf
-        case 0x8: return sf
-        case 0x9: return !sf
-        case 0xC: return sf != of
-        case 0xD: return sf == of
-        case 0xE: return zf || (sf != of)
-        case 0xF: return !zf && (sf == of)
+        case 0x2: return flags & carry != 0
+        case 0x3: return flags & carry == 0
+        case 0x4: return flags & zero != 0
+        case 0x5: return flags & zero == 0
+        case 0x8: return flags & sign != 0
+        case 0x9: return flags & sign == 0
+        case 0xC: return (flags & sign != 0) != (flags & overflow != 0)
+        case 0xD: return (flags & sign != 0) == (flags & overflow != 0)
+        case 0xE:
+            return flags & zero != 0 || (flags & sign != 0) != (flags & overflow != 0)
+        case 0xF:
+            return flags & zero == 0 && (flags & sign != 0) == (flags & overflow != 0)
         default: return false
         }
     }

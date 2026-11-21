@@ -869,6 +869,35 @@ struct InterpreterTests {
         precondition(wordBoundaryMemory.readUInt16Calls == 1)
         precondition(wordBoundaryMemory.readByteCalls == 0)
 
+        for code in UInt8(0)...UInt8(15) {
+            for combination in 0..<16 {
+                var flags: UInt64 = 0
+                if combination & 0x1 != 0 { flags |= X86_64ALU.carry }
+                if combination & 0x2 != 0 { flags |= X86_64ALU.zero }
+                if combination & 0x4 != 0 { flags |= X86_64ALU.sign }
+                if combination & 0x8 != 0 { flags |= X86_64ALU.overflow }
+                let cf = combination & 0x1 != 0
+                let zf = combination & 0x2 != 0
+                let sf = combination & 0x4 != 0
+                let of = combination & 0x8 != 0
+                let expected: Bool
+                switch code {
+                case 0x2: expected = cf
+                case 0x3: expected = !cf
+                case 0x4: expected = zf
+                case 0x5: expected = !zf
+                case 0x8: expected = sf
+                case 0x9: expected = !sf
+                case 0xC: expected = sf != of
+                case 0xD: expected = sf == of
+                case 0xE: expected = zf || (sf != of)
+                case 0xF: expected = !zf && (sf == of)
+                default: expected = false
+                }
+                precondition(X86_64ALU.condition(code, flags: flags) == expected)
+            }
+        }
+
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
