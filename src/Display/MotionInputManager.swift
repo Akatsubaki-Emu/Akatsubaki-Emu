@@ -16,16 +16,20 @@ final class MotionInputManager {
 
     var isAvailable: Bool { motion.isDeviceMotionAvailable }
     var isRunning: Bool { motion.isDeviceMotionActive }
+    private let stateLock = NSLock()
+    private var cachedSensitivity: Double = {
+        let stored = UserDefaults.standard.double(forKey: "iSteam.motionSensitivity")
+        return stored > 0 ? min(stored, 5) : 1
+    }()
+
     var sensitivity: Double {
-        get {
-            let stored = UserDefaults.standard.double(forKey: "iSteam.motionSensitivity")
-            return stored > 0 ? min(stored, 5) : 1
-        }
+        get { withStateLock { cachedSensitivity } }
         set {
-            UserDefaults.standard.set(min(max(newValue, 0.1), 5), forKey: "iSteam.motionSensitivity")
+            let normalized = min(max(newValue, 0.1), 5)
+            withStateLock { cachedSensitivity = normalized }
+            UserDefaults.standard.set(normalized, forKey: "iSteam.motionSensitivity")
         }
     }
-    private let stateLock = NSLock()
     private var orientationHandler: ((Double, Double, Double) -> Void)?
     private var lookDeltaHandler: ((Double, Double) -> Void)?
     private var previousYaw: Double?
@@ -66,7 +70,7 @@ final class MotionInputManager {
                     var deltaYaw = yaw - oldYaw
                     if deltaYaw > .pi { deltaYaw -= 2 * .pi }
                     if deltaYaw < -.pi { deltaYaw += 2 * .pi }
-                    let scale = self.sensitivity
+                    let scale = self.cachedSensitivity
                     delta = (deltaYaw * scale, (pitch - oldPitch) * scale)
                 }
                 self.previousYaw = yaw
