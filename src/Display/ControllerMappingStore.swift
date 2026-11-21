@@ -25,7 +25,7 @@ struct ControllerMappingProfile: Codable, Equatable {
         guard (0...0.8).contains(leftDeadzone),
               (0...0.8).contains(rightDeadzone),
               buttonActions.count <= 64,
-              buttonActions.allSatisfy({ !$0.key.isEmpty && !$0.key.contains("\0") && !$0.value.contains("\0") }) else {
+              buttonActions.allSatisfy({ !$0.key.isEmpty && $0.key.utf8.count <= 64 && $0.value.utf8.count <= 64 && !$0.key.contains("\0") && !$0.value.contains("\0") }) else {
             throw MappingError.invalidProfile
         }
     }

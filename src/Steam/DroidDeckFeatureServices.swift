@@ -36,6 +36,7 @@ final class GameLibraryTransferStore {
             profiles: GameRuntimeProfileStore.shared.allProfiles
         )
         let data = try encoder.encode(backup)
+        guard data.count <= 20 * 1024 * 1024 else { throw TransferError.backupTooLarge }
         let scoped = destination.startAccessingSecurityScopedResource()
         defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
 
@@ -74,9 +75,18 @@ final class GameLibraryTransferStore {
         var seen = Set<UUID>()
         for game in backup.games {
             guard !game.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  game.name.utf8.count <= 256,
                   !game.name.contains("\0"),
+                  game.executablePath.utf8.count <= 4096,
+                  game.workingDirectory.utf8.count <= 4096,
                   !game.executablePath.contains("\0"),
                   !game.workingDirectory.contains("\0"),
+                  game.launchArguments.count <= 256,
+                  game.launchArguments.allSatisfy({ $0.utf8.count <= 4096 && !$0.contains("\0") }),
+                  game.tags.count <= 128,
+                  game.tags.allSatisfy({ $0.utf8.count <= 128 && !$0.contains("\0") }),
+                  (game.notes?.utf8.count ?? 0) <= 16_384,
+                  (game.coverArtPath?.utf8.count ?? 0) <= 4096,
                   seen.insert(game.id).inserted else {
                 throw TransferError.invalidEntry
             }

@@ -61,8 +61,12 @@ struct GameRuntimeProfile: Codable, Equatable, Identifiable {
         guard (24...120).contains(targetFPS) else { throw ProfileError.invalidFrameRate }
         guard (256...16384).contains(memoryMB) else { throw ProfileError.invalidMemory }
         guard (1...16).contains(cpuCount) else { throw ProfileError.invalidCPUCount }
-        guard environment.keys.allSatisfy({ !$0.isEmpty && !$0.contains("=") && !$0.contains("\0") }),
-              environment.values.allSatisfy({ !$0.contains("\0") }) else {
+        guard launchArguments.count <= 256,
+              launchArguments.allSatisfy({ $0.utf8.count <= 4096 && !$0.contains("\0") }),
+              environment.count <= 128,
+              environment.keys.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 256 && !$0.contains("=") && !$0.contains("\0") }),
+              environment.values.allSatisfy({ $0.utf8.count <= 4096 && !$0.contains("\0") }),
+              compatibilityNotes.utf8.count <= 16_384 else {
             throw ProfileError.invalidEnvironment
         }
     }
