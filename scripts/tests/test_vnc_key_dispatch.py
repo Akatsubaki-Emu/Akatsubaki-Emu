@@ -33,5 +33,13 @@ class VNCKeyDispatchTests(unittest.TestCase):
         self.assertIn(guard, body)
         self.assertLess(body.index(guard), body.index("movementSources[source] = normalizedMask"))
 
+    def test_duplicate_key_source_transitions_return_before_set_mutation(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "QEMU" / "VNCKeyState.swift").read_text(encoding="utf-8")
+        body = source.split("mutating func setKey", 1)[1].split("mutating func setMovement", 1)[0]
+        self.assertIn("guard sources.insert(source).inserted else { return nil }", body)
+        self.assertIn("guard sources.remove(source) != nil else { return nil }", body)
+        self.assertIn("} else {\n            return nil\n        }", body)
+
 if __name__ == "__main__":
     unittest.main()

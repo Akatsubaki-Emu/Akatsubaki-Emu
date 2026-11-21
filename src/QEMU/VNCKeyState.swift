@@ -27,14 +27,18 @@ struct VNCKeyState {
         guard !source.isEmpty else { return nil }
         let wasPressed = pressedKeys.contains(keysym)
         if isDown {
-            keySources[keysym, default: []].insert(source)
+            var sources = keySources[keysym] ?? []
+            guard sources.insert(source).inserted else { return nil }
+            keySources[keysym] = sources
         } else if var sources = keySources[keysym] {
-            sources.remove(source)
+            guard sources.remove(source) != nil else { return nil }
             if sources.isEmpty {
                 keySources.removeValue(forKey: keysym)
             } else {
                 keySources[keysym] = sources
             }
+        } else {
+            return nil
         }
         let shouldBePressed = keySources[keysym]?.isEmpty == false
             || movementMask & Self.movementMask(for: keysym) != 0

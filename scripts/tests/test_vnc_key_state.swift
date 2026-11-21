@@ -11,10 +11,14 @@ struct VNCKeyStateTests {
         var state = VNCKeyState()
         expect(state.setKey(space, source: "keyboard:SPACE", isDown: true) == .init(keysym: space, isDown: true),
                "first key source must send key-down")
+        expect(state.setKey(space, source: "keyboard:SPACE", isDown: true) == nil,
+               "repeated key-down from the same source must be ignored")
         expect(state.setKey(space, source: "controller:one:A", isDown: true) == nil,
                "second source must not send a duplicate key-down")
         expect(state.setKey(space, source: "keyboard:SPACE", isDown: false) == nil,
                "keyboard source release preserves a controller-held key")
+        expect(state.setKey(space, source: "keyboard:SPACE", isDown: false) == nil,
+               "repeated key-up from an inactive source must be ignored")
         expect(state.isPressed(space), "key must remain held by the controller source")
         expect(state.setKey(space, source: "controller:one:A", isDown: false) == .init(keysym: space, isDown: false),
                "last key source must send key-up")
