@@ -346,8 +346,6 @@ final class QEMUVNCClient {
         case "cancel": key = "ESC"
         case "west": key = "E"
         case "north": key = "Q"
-        case "menu": key = "ENTER"
-        case "previous": key = "TAB"
         case "LT", "L2", "lt": key = "SHIFT"
         case "RT", "R2", "rt": key = "CTRL"
         case "L3", "l3": key = "C"
