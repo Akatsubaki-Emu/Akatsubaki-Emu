@@ -329,11 +329,26 @@ final class QEMUVNCClient {
                     withStateLock {
                         // The reader task owns framebuffer updates; the lock also
                         // protects snapshots consumed by the UI/render thread.
-                        for row in 0..<height {
-                            let sourceStart = row * width * 4
-                            let destinationStart = ((y + row) * framebufferWidth + x) * 4
-                            framebuffer.replaceSubrange(destinationStart..<(destinationStart + width * 4),
-                                                        with: pixels[sourceStart..<(sourceStart + width * 4)])
+                        let rowBytes = width * 4
+                        let framebufferRowBytes = framebufferWidth * 4
+                        pixels.withUnsafeBytes { source in
+                            framebuffer.withUnsafeMutableBytes { destination in
+                                guard let sourceBase = source.baseAddress,
+                                      let destinationBase = destination.baseAddress else { return }
+                                if x == 0 && width == framebufferWidth {
+                                    let destinationStart = y * framebufferRowBytes
+                                    destinationBase.advanced(by: destinationStart)
+                                        .copyMemory(from: sourceBase, byteCount: rectangleBytes)
+                                } else {
+                                    for row in 0..<height {
+                                        let sourceStart = row * rowBytes
+                                        let destinationStart = (y + row) * framebufferRowBytes + x * 4
+                                        destinationBase.advanced(by: destinationStart)
+                                            .copyMemory(from: sourceBase.advanced(by: sourceStart),
+                                                        byteCount: rowBytes)
+                                    }
+                                }
+                            }
                         }
                     }
                 }

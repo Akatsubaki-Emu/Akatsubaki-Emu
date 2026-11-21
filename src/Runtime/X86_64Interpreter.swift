@@ -48,10 +48,12 @@ final class X86_64Interpreter: GuestCPUBackend {
         if halted { return .halted }
         var executed: UInt64 = 0
         while executed < maxInstructions {
-            stopLock.lock()
-            let shouldStop = stopRequested
-            stopLock.unlock()
-            if shouldStop { return .interrupted }
+            if executed & 0xff == 0 {
+                stopLock.lock()
+                let shouldStop = stopRequested
+                stopLock.unlock()
+                if shouldStop { return .interrupted }
+            }
 
             let instructionAddress = rip
             guard var opcode = fetchByte() else { return .memoryFault(address: rip) }
@@ -90,7 +92,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                 let target = addSigned(Int32(bitPattern: raw), to: rip)
                 guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
                 registers[4] -= 8
-                guard memory.write(littleEndianBytes(rip), offset: registers[4]) else {
+                guard memory.writeUInt64(rip, offset: registers[4]) else {
                     return .memoryFault(address: registers[4])
                 }
                 rip = target
@@ -105,7 +107,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                 let value = registers[index] // PUSH RSP stores the pre-decrement value.
                 guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
                 registers[4] -= 8
-                guard memory.write(littleEndianBytes(value), offset: registers[4]) else {
+                guard memory.writeUInt64(value, offset: registers[4]) else {
                     return .memoryFault(address: registers[4])
                 }
             case 0x58...0x5F: // POP r64
@@ -197,50 +199,25 @@ final class X86_64Interpreter: GuestCPUBackend {
     }
 
     private func fetchByte() -> UInt8? {
-        guard let data = memory.read(offset: rip, length: 1), let value = data.first else { return nil }
+        guard let value = memory.readByte(offset: rip) else { return nil }
         rip &+= 1
         return value
     }
 
     private func fetchUInt32() -> UInt32? {
-        guard let data = memory.read(offset: rip, length: 4), data.count == 4 else { return nil }
-        let value: UInt32? = data.withUnsafeBytes { raw in
-            guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return nil }
-            var result: UInt32 = 0
-            return isteam_read_le32(base, raw.count, 0, &result) ? result : nil
-        }
-        guard let value else { return nil }
+        guard let value = memory.readUInt32(offset: rip) else { return nil }
         rip &+= 4
         return value
     }
 
     private func fetchUInt64() -> UInt64? {
-        guard let data = memory.read(offset: rip, length: 8), data.count == 8 else { return nil }
-        let value: UInt64? = data.withUnsafeBytes { raw in
-            guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return nil }
-            var result: UInt64 = 0
-            return isteam_read_le64(base, raw.count, 0, &result) ? result : nil
-        }
-        guard let value else { return nil }
+        guard let value = memory.readUInt64(offset: rip) else { return nil }
         rip &+= 8
         return value
     }
 
     private func readUInt64(at address: UInt64) -> UInt64? {
-        guard let data = memory.read(offset: address, length: 8), data.count == 8 else { return nil }
-        return data.withUnsafeBytes { raw in
-            guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return nil }
-            var result: UInt64 = 0
-            return isteam_read_le64(base, raw.count, 0, &result) ? result : nil
-        }
-    }
-
-    private func littleEndianBytes(_ value: UInt64) -> Data {
-        var bytes = [UInt8](repeating: 0, count: 8)
-        bytes.withUnsafeMutableBufferPointer { buffer in
-            if let base = buffer.baseAddress { isteam_write_le64(base, value) }
-        }
-        return Data(bytes)
+        memory.readUInt64(offset: address)
     }
 
     private func addSigned(_ displacement: Int8, to base: UInt64) -> UInt64 {

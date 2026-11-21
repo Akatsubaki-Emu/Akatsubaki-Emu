@@ -28,6 +28,45 @@ final class GuestMemory {
         return success ? data : nil
     }
 
+    func readByte(offset: UInt64) -> UInt8? {
+        guard let native, offset < size else { return nil }
+        var value: UInt8 = 0
+        let success = withUnsafeMutablePointer(to: &value) { pointer in
+            isteam_guest_memory_read(native, offset, pointer, 1)
+        }
+        return success ? value : nil
+    }
+
+    func readUInt32(offset: UInt64) -> UInt32? {
+        guard let native, offset <= size, 4 <= size - offset else { return nil }
+        var value: UInt32 = 0
+        let success = withUnsafeMutableBytes(of: &value) { bytes -> Bool in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_read(native, offset, base, 4)
+        }
+        return success ? UInt32(littleEndian: value) : nil
+    }
+
+    func readUInt64(offset: UInt64) -> UInt64? {
+        guard let native, offset <= size, 8 <= size - offset else { return nil }
+        var value: UInt64 = 0
+        let success = withUnsafeMutableBytes(of: &value) { bytes -> Bool in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_read(native, offset, base, 8)
+        }
+        return success ? UInt64(littleEndian: value) : nil
+    }
+
+    @discardableResult
+    func writeUInt64(_ value: UInt64, offset: UInt64) -> Bool {
+        guard let native, offset <= size, 8 <= size - offset else { return false }
+        var littleEndian = value.littleEndian
+        return withUnsafeBytes(of: &littleEndian) { bytes in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_write(native, offset, base, 8)
+        }
+    }
+
     @discardableResult
     func write(_ data: Data, offset: UInt64) -> Bool {
         guard let native, offset <= size, UInt64(data.count) <= size - offset else { return false }

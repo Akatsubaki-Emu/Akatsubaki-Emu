@@ -49,6 +49,17 @@ bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
 
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        const uint64_t lastAddress = offset + length - 1;
+        if (offset / pageSize == lastAddress / pageSize) {
+            const size_t pageOffset = static_cast<size_t>(offset % pageSize);
+            const auto found = memory->pages.find(offset / pageSize);
+            if (found == memory->pages.end() || !found->second) {
+                std::memset(destination, 0, length);
+            } else {
+                std::memcpy(destination, found->second->data() + pageOffset, length);
+            }
+            return true;
+        }
         size_t completed = 0;
         while (completed < length) {
             const uint64_t address = offset + completed;
@@ -81,6 +92,20 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
 
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        const uint64_t lastAddress = offset + length - 1;
+        if (offset / pageSize == lastAddress / pageSize) {
+            const uint64_t pageIndex = offset / pageSize;
+            const size_t pageOffset = static_cast<size_t>(offset % pageSize);
+            auto found = memory->pages.find(pageIndex);
+            if (found == memory->pages.end()) {
+                auto page = std::unique_ptr<Page>(new (std::nothrow) Page{});
+                if (!page) return false;
+                found = memory->pages.emplace(pageIndex, std::move(page)).first;
+            }
+            if (!found->second) return false;
+            std::memcpy(found->second->data() + pageOffset, source, length);
+            return true;
+        }
         size_t completed = 0;
         while (completed < length) {
             const uint64_t address = offset + completed;
@@ -128,7 +153,11 @@ bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
                 std::min(end - address, pageSize - pageOffset));
             const auto found = memory->pages.find(pageIndex);
             if (found != memory->pages.end() && found->second) {
-                std::memset(found->second->data() + pageOffset, 0, amount);
+                if (pageOffset == 0 && amount == pageSize) {
+                    memory->pages.erase(found);
+                } else {
+                    std::memset(found->second->data() + pageOffset, 0, amount);
+                }
             }
             address += amount;
         }

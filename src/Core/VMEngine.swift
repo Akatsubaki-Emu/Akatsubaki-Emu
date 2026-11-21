@@ -90,6 +90,7 @@ final class VMEngine {
         if candidate.isRunning {
             setState(.running)
             startupDeadline = nil
+            monitor?.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1), leeway: .milliseconds(100))
             EmulationLog.shared.write("QEMU main loop is active. Guest OS boot is not independently verified.")
             return
         }

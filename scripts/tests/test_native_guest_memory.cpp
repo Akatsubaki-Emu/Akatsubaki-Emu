@@ -1,8 +1,10 @@
 #include "NativeGuestMemory.h"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <random>
 #include <vector>
 
 int main() {
@@ -41,11 +43,41 @@ int main() {
     for (uint8_t value : roundTrip) assert(value == 0);
     assert(isteam_guest_memory_allocated_pages(memory) == 2);
 
+    // Whole-page zeroing releases backing pages instead of retaining empty pages.
+    assert(isteam_guest_memory_zero(memory, 0, pageSize));
+    assert(isteam_guest_memory_allocated_pages(memory) == 1);
+    std::array<uint8_t, 32> releasedPage{};
+    releasedPage.fill(0xA5);
+    assert(isteam_guest_memory_read(memory, 0, releasedPage.data(), releasedPage.size()));
+    for (uint8_t value : releasedPage) assert(value == 0);
+    assert(isteam_guest_memory_zero(memory, pageSize, pageSize));
+    assert(isteam_guest_memory_allocated_pages(memory) == 0);
+
     // Range validation must reject overflow/out-of-bounds without mutation.
     assert(!isteam_guest_memory_read(memory, pageSize * 3, roundTrip.data(), 1));
     assert(!isteam_guest_memory_write(memory, pageSize * 3, payload.data(), 1));
     assert(!isteam_guest_memory_zero(memory, pageSize * 3, 1));
     assert(!isteam_guest_memory_read(memory, UINT64_MAX, roundTrip.data(), 2));
+
+    std::vector<uint8_t> reference(pageSize * 3, 0);
+    std::mt19937 random(0xA7A75u);
+    for (int iteration = 0; iteration < 2000; ++iteration) {
+        const size_t offset = random() % reference.size();
+        const size_t length = random() % (reference.size() - offset + 1);
+        if (iteration % 3 == 0) {
+            std::vector<uint8_t> bytes(length);
+            for (uint8_t &byte : bytes) byte = static_cast<uint8_t>(random());
+            assert(isteam_guest_memory_write(memory, offset, bytes.data(), bytes.size()));
+            std::copy(bytes.begin(), bytes.end(), reference.begin() + offset);
+        } else if (iteration % 3 == 1) {
+            assert(isteam_guest_memory_zero(memory, offset, length));
+            std::fill(reference.begin() + offset, reference.begin() + offset + length, 0);
+        } else {
+            std::vector<uint8_t> actual(length);
+            assert(isteam_guest_memory_read(memory, offset, actual.data(), actual.size()));
+            assert(std::equal(actual.begin(), actual.end(), reference.begin() + offset));
+        }
+    }
 
     isteam_guest_memory_clear(memory);
     assert(isteam_guest_memory_allocated_pages(memory) == 0);

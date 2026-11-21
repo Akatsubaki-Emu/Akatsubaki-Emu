@@ -15,6 +15,7 @@ final class VMDisplayViewController: UIViewController {
     private let keyboardToggle = UIButton(type: .system)
     private let functionKeyBar = UIStackView()
     private var keyboardObservers: [NSObjectProtocol] = []
+    private var lastMotionStatusUpdate: TimeInterval = 0
 
     init(configuration: VMConfiguration, diskImage: URL) {
         self.configuration = configuration
@@ -255,13 +256,14 @@ final class VMDisplayViewController: UIViewController {
     private func configureMotionInput() {
         let motion = MotionInputManager.shared
         motion.onOrientation = { [weak self] yaw, pitch, roll in
+            guard let self else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            guard now - self.lastMotionStatusUpdate >= 0.25 else { return }
+            self.lastMotionStatusUpdate = now
+            let summary = String(format: "MOTION • Y %.2f P %.2f R %.2f", yaw, pitch, roll)
             DispatchQueue.main.async {
-                self?.status.text = String(format: "MOTION • Y %.2f P %.2f R %.2f", yaw, pitch, roll)
+                self.status.text = summary
             }
-        }
-        motion.onLookDelta = { yaw, pitch in
-            guard VRSettings.shared.pointerLockEnabled else { return }
-            EmulationLog.shared.write(String(format: "Motion look Δx=%.4f Δy=%.4f", yaw, pitch))
         }
         if vrSettings.mode == .cardboard { motion.start() }
     }
