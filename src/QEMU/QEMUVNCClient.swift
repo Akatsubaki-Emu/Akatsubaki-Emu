@@ -414,8 +414,14 @@ final class QEMUVNCClient {
             guard connected, let connection, framebufferWidth > 0, framebufferHeight > 0 else { return }
             let boundedX = max(-Float(framebufferWidth), min(Float(framebufferWidth), dx * 12))
             let boundedY = max(-Float(framebufferHeight), min(Float(framebufferHeight), dy * 12))
-            pointerX = min(max(pointerX + Int(boundedX), 0), framebufferWidth - 1)
-            pointerY = min(max(pointerY - Int(boundedY), 0), framebufferHeight - 1)
+            let deltaX = Int(boundedX)
+            let deltaY = Int(boundedY)
+            guard deltaX != 0 || deltaY != 0 else { return }
+            let nextX = min(max(pointerX + deltaX, 0), framebufferWidth - 1)
+            let nextY = min(max(pointerY - deltaY, 0), framebufferHeight - 1)
+            guard nextX != pointerX || nextY != pointerY else { return }
+            pointerX = nextX
+            pointerY = nextY
             let message = Data([5, 0, UInt8((pointerX >> 8) & 0xff), UInt8(pointerX & 0xff),
                                 UInt8((pointerY >> 8) & 0xff), UInt8(pointerY & 0xff)])
             enqueueSend(message, to: connection, in: pendingSendGroup)
