@@ -750,10 +750,7 @@ final class X86_64Interpreter: GuestCPUBackend {
         case .register(let index):
             return UInt16(truncatingIfNeeded: registers[index])
         case .memory(let address):
-            let (nextAddress, overflow) = address.addingReportingOverflow(1)
-            guard !overflow, let low = memory.readByte(offset: address),
-                  let high = memory.readByte(offset: nextAddress) else { return nil }
-            return UInt16(low) | UInt16(high) << 8
+            return memory.readUInt16(offset: address)
         }
     }
 

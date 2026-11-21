@@ -37,6 +37,16 @@ final class GuestMemory {
         return success ? value : nil
     }
 
+    func readUInt16(offset: UInt64) -> UInt16? {
+        guard let native, offset <= size, 2 <= size - offset else { return nil }
+        var value: UInt16 = 0
+        let success = withUnsafeMutableBytes(of: &value) { bytes -> Bool in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_read(native, offset, base, 2)
+        }
+        return success ? UInt16(littleEndian: value) : nil
+    }
+
     @discardableResult
     func writeByte(_ value: UInt8, offset: UInt64) -> Bool {
         guard let native, offset < size else { return false }

@@ -58,6 +58,12 @@ final class GuestMemory {
         return bytes[Int(offset)]
     }
 
+    func readUInt16(offset: UInt64) -> UInt16? {
+        guard offset <= size, size - offset >= 2 else { return nil }
+        let index = Int(offset)
+        return UInt16(bytes[index]) | UInt16(bytes[index + 1]) << 8
+    }
+
     @discardableResult
     func writeByte(_ value: UInt8, offset: UInt64) -> Bool {
         guard offset < size else { return false }

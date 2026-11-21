@@ -32,6 +32,7 @@ final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
     private(set) var readByteCalls = 0
+    private(set) var readUInt16Calls = 0
     private(set) var readPrefixCalls = 0
 
     init(size: UInt64) {
@@ -43,6 +44,13 @@ final class GuestMemory {
         readByteCalls += 1
         guard offset < size else { return nil }
         return bytes[Int(offset)]
+    }
+
+    func readUInt16(offset: UInt64) -> UInt16? {
+        readUInt16Calls += 1
+        guard offset <= size, size - offset >= 2 else { return nil }
+        let index = Int(offset)
+        return UInt16(bytes[index]) | UInt16(bytes[index + 1]) << 8
     }
 
     func writeByte(_ value: UInt8, offset: UInt64) -> Bool {
@@ -829,6 +837,38 @@ struct InterpreterTests {
         precondition(selfModifyingMemory.readByte(offset: 11) == 0xF4)
         precondition(selfModifyingMemory.readPrefixCalls == 3)
 
-        print("x86-64 interpreter register, memory addressing, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
+        let zeroExtendMemory = GuestMemory(size: 256)
+        precondition(zeroExtendMemory.write(Data([0x0F, 0xB7, 0x05, 0x79, 0x00, 0x00, 0x00, 0xF4]), offset: 0))
+        precondition(zeroExtendMemory.write(Data([0xFF, 0x80]), offset: 0x80))
+        let zeroExtend = X86_64Interpreter(memory: zeroExtendMemory)
+        try zeroExtend.reset(entryPoint: 0)
+        let zeroExtendExit = try zeroExtend.run(maxInstructions: 4)
+        precondition(zeroExtendExit == .halted)
+        precondition(zeroExtend.registerValue(0) == 0x80FF)
+        precondition(zeroExtendMemory.readUInt16Calls == 1)
+        precondition(zeroExtendMemory.readByteCalls == 0)
+
+        let signExtendMemory = GuestMemory(size: 256)
+        precondition(signExtendMemory.write(Data([0x0F, 0xBF, 0x05, 0x79, 0x00, 0x00, 0x00, 0xF4]), offset: 0))
+        precondition(signExtendMemory.write(Data([0xFF, 0x80]), offset: 0x80))
+        let signExtend = X86_64Interpreter(memory: signExtendMemory)
+        try signExtend.reset(entryPoint: 0)
+        let signExtendExit = try signExtend.run(maxInstructions: 4)
+        precondition(signExtendExit == .halted)
+        precondition(signExtend.registerValue(0) == 0xFFFFFFFFFFFF80FF)
+        precondition(signExtendMemory.readUInt16Calls == 1)
+        precondition(signExtendMemory.readByteCalls == 0)
+
+        let wordBoundaryMemory = GuestMemory(size: 256)
+        precondition(wordBoundaryMemory.write(Data([0x0F, 0xB7, 0x05, 0xF8, 0x00, 0x00, 0x00]), offset: 0))
+        precondition(wordBoundaryMemory.writeByte(0xA5, offset: 255))
+        let wordBoundary = X86_64Interpreter(memory: wordBoundaryMemory)
+        try wordBoundary.reset(entryPoint: 0)
+        let wordBoundaryExit = try wordBoundary.run(maxInstructions: 1)
+        precondition(wordBoundaryExit == .memoryFault(address: 255))
+        precondition(wordBoundaryMemory.readUInt16Calls == 1)
+        precondition(wordBoundaryMemory.readByteCalls == 0)
+
+        print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
