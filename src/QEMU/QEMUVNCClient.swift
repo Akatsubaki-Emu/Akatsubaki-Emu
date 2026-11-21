@@ -187,14 +187,14 @@ final class QEMUVNCClient {
     /// from independent Tasks could reorder a release ahead of its press.
     private func enqueueSend(_ data: Data, to connection: NWConnection,
                              in group: DispatchGroup? = nil) {
-        let group = group ?? pendingSendGroup
-        group.enter()
+        let selectedGroup = group ?? withStateLock { pendingSendGroup }
+        selectedGroup.enter()
         sendQueue.async {
             connection.send(content: data, completion: .contentProcessed { error in
                 if let error {
                     EmulationLog.shared.write("QEMU VNC send failed: \\(error.localizedDescription)")
                 }
-                group.leave()
+                selectedGroup.leave()
             })
         }
     }
@@ -363,7 +363,7 @@ final class QEMUVNCClient {
     func sendKey(_ key: String, down: Bool) {
         guard let keysym = Self.keysym(for: key) else { return }
         withStateLock {
-            guard let connection else { return }
+            guard connected, let connection else { return }
             let wasPressed = pressedKeys.contains(keysym)
             if down { buttonKeys.insert(keysym) }
             else { buttonKeys.remove(keysym) }
@@ -379,7 +379,7 @@ final class QEMUVNCClient {
     func tapKey(_ key: String) {
         guard let keysym = Self.keysym(for: key) else { return }
         withStateLock {
-            guard let connection, !pressedKeys.contains(keysym) else { return }
+            guard connected, let connection, !pressedKeys.contains(keysym) else { return }
             enqueueSend(Self.keyEvent(keysym, down: true), to: connection)
             enqueueSend(Self.keyEvent(keysym, down: false), to: connection)
         }
@@ -392,7 +392,7 @@ final class QEMUVNCClient {
         ].filter { !$0.isEmpty }.compactMap { Self.keysym(for: $0) })
 
         withStateLock {
-            guard let connection else { return }
+            guard connected, let connection else { return }
             let previouslyPressed = pressedKeys
             movementKeys = desired
             let shouldBePressed = buttonKeys.union(movementKeys)
@@ -408,7 +408,7 @@ final class QEMUVNCClient {
 
     func movePointer(dx: Float, dy: Float) {
         withStateLock {
-            guard let connection, framebufferWidth > 0, framebufferHeight > 0 else { return }
+            guard connected, let connection, framebufferWidth > 0, framebufferHeight > 0 else { return }
             pointerX = min(max(pointerX + Int(dx * 12), 0), framebufferWidth - 1)
             pointerY = min(max(pointerY - Int(dy * 12), 0), framebufferHeight - 1)
             let message = Data([5, 0, UInt8((pointerX >> 8) & 0xff), UInt8(pointerX & 0xff),
@@ -444,14 +444,6 @@ final class QEMUVNCClient {
         sendKey(key, down: down)
     }
 
-    private func sendKeysym(_ keysym: UInt32, down: Bool) {
-        let value = keysym
-        let message = Data([4, down ? 1 : 0, 0, 0,
-                            UInt8((value >> 24) & 0xff), UInt8((value >> 16) & 0xff),
-                            UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
-        guard let connection = withStateLock({ connection }) else { return }
-        enqueueSend(message, to: connection)
-    }
 
     private static func keysym(for key: String) -> UInt32? {
         let value = key.uppercased()
