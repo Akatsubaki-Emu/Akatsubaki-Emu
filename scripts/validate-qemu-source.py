@@ -111,6 +111,8 @@ required = {
         "func configure(programBreak: UInt64, stackBase: UInt64) throws",
         "private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64?",
         "private func validateRange(address: UInt64, length: UInt64) -> UInt64",
+        "while start < text.endIndex",
+        "guard a[4] == UInt64.max, a[5] == 0",
         "case 9:",
         "case 12:",
         "case 228:",
@@ -126,6 +128,8 @@ required = {
         "precondition(noReplaceValue == UInt64(bitPattern: Int64(-17)))",
         "precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-12)))",
         "precondition(badTimezoneValue == UInt64(bitPattern: Int64(-14)))",
+        "precondition(invalidMmapFDValue == UInt64(bitPattern: Int64(-22)))",
+        "precondition(written == 12_000)",
     ],
     "src/Runtime/LinuxProcessStackBuilder.swift": [
         "struct ProgramHeaders",

@@ -67,7 +67,12 @@ final class LinuxSyscallDispatcher {
                 return .returned(errno(14))
             }
             if let text = String(data: bytes, encoding: .utf8), !text.isEmpty {
-                log.write("[guest stdout] " + text)
+                var start = text.startIndex
+                while start < text.endIndex {
+                    let end = text.index(start, offsetBy: 4096, limitedBy: text.endIndex) ?? text.endIndex
+                    log.write("[guest stdout] " + text[start..<end])
+                    start = end
+                }
             } else if !bytes.isEmpty {
                 log.write("[guest stdout] <\(bytes.count) non-UTF8 bytes>")
             }
@@ -75,6 +80,7 @@ final class LinuxSyscallDispatcher {
         case 3:
             return .returned(a[0] <= 2 ? 0 : errno(9))
         case 9:
+            guard a[4] == UInt64.max, a[5] == 0 else { return .returned(errno(22)) }
             return .returned(mapAnonymous(address: a[0], length: a[1], flags: a[3]))
         case 10:
             return .returned(validateRange(address: a[0], length: a[1]))

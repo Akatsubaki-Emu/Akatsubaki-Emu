@@ -232,5 +232,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertLess(load.index("try cpu.reset(entryPoint: 0)"), load.index("ELF64Loader().load"))
 
 
+    def test_linux_syscall_write_splits_large_utf8_output_without_truncation(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
+        write_case = source.split("case 1:", 1)[1].split("case 3:", 1)[0]
+        self.assertIn("while start < text.endIndex", write_case)
+        self.assertIn("offsetBy: 4096", write_case)
+        self.assertIn("log.write(\"[guest stdout] \" + text[start..<end])", write_case)
+
+
 if __name__ == "__main__":
     unittest.main()

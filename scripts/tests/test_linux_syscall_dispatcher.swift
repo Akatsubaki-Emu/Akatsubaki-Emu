@@ -105,6 +105,20 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let protectionAfterUnmapValue) = protectionAfterUnmap else { preconditionFailure() }
         precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-12)))
 
+        let invalidMmapFD = dispatcher.dispatch(number: 9, arguments: [0, 4096, 3, 0x22, 0, 0])!
+        guard case .returned(let invalidMmapFDValue) = invalidMmapFD else { preconditionFailure() }
+        precondition(invalidMmapFDValue == UInt64(bitPattern: Int64(-22)))
+
+        let outputLog = EmulationLog()
+        let outputDispatcher = LinuxSyscallDispatcher(memory: memory, log: outputLog)
+        try outputDispatcher.configure(programBreak: 0x41000, stackBase: 0x3F0000)
+        let output = String(repeating: "x", count: 12_000)
+        precondition(memory.write(Data(output.utf8), offset: 0x3F1000))
+        let write = outputDispatcher.dispatch(number: 1, arguments: [1, 0x3F1000, 12_000, 0, 0, 0])!
+        guard case .returned(let written) = write else { preconditionFailure() }
+        precondition(written == 12_000)
+        precondition(outputLog.messages.map { $0.replacingOccurrences(of: "[guest stdout] ", with: "") }.joined() == output)
+
         let random = dispatcher.dispatch(number: 318, arguments: [0x40800, 32, 0, 0, 0, 0])!
         guard case .returned(let randomValue) = random else { preconditionFailure() }
         precondition(randomValue == 32)
