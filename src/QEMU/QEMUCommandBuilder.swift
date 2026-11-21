@@ -24,7 +24,8 @@ enum QEMUDiskImageFormat: String {
 struct QEMUCommandBuilder {
     let configuration: VMConfiguration
 
-    func arguments(diskImage: URL? = nil, firmware: URL? = nil) -> [String] {
+    func arguments(diskImage: URL? = nil, firmware: URL? = nil,
+                   firmwareVariables: URL? = nil) -> [String] {
         // -nodefaults disables implicit input devices. VNC keyboard/pointer events
         // therefore need an explicit USB controller, keyboard and tablet for every guest.
         let machine = "q35,usb=on"
@@ -53,6 +54,9 @@ struct QEMUCommandBuilder {
         args += ["-vnc", "127.0.0.1:0"]
         if let firmware {
             args += ["-drive", "if=pflash,format=raw,readonly=on,file=\(Self.escapeDriveValue(firmware.path))"]
+        }
+        if let firmwareVariables {
+            args += ["-drive", "if=pflash,format=raw,file=\(Self.escapeDriveValue(firmwareVariables.path))"]
         }
         if let diskImage {
             if bootFromISO {
