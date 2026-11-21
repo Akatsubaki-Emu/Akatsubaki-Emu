@@ -43,8 +43,12 @@ class QEMUBuildPatchTests(unittest.TestCase):
         self.assertEqual(updated.count("emulator_link_args += "), 1)
 
     def test_qemu_meson_patch_fails_if_emulator_link_anchor_changes(self):
-        with self.assertRaises(SystemExit):
-            patch_qemu_meson_ios.patch_source("project('qemu', 'c')\n", "/toolchain/libclang_rt.ios.a")
+        source = (
+            "project('qemu', 'c')\n"
+            "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
+        )
+        with self.assertRaisesRegex(SystemExit, "emulator_link_args declaration not found"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
 
     def test_utm_patch_is_idempotent_and_verifies_actual_qemu_link(self):
         source = '''#!/bin/sh
@@ -82,7 +86,7 @@ build unrelated.dylib: c_LINKER other
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
   LINK_ARGS = -lm
 '''
-        with self.assertRaises(SystemExit):
+        with self.assertRaisesRegex(SystemExit, "emulator-specific link arguments"):
             verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
 
 
