@@ -537,6 +537,7 @@ required = {
     ],
     ".gitlab-ci.yml": [
         "test_static_elf_execution.swift",
+        "test_vnc_key_state.swift",
         "test_windows_pe_image.swift",
         "python -m unittest discover -s scripts/tests -p 'test_*.py'",
     ],

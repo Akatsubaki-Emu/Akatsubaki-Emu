@@ -247,6 +247,7 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("scripts/tests/test_elf_loader_program_headers.swift", workflow)
         self.assertIn("scripts/tests/test_windows_pe_image.swift", workflow)
         self.assertIn("scripts/tests/test_static_elf_execution.swift", workflow)
+        self.assertIn("scripts/tests/test_vnc_key_state.swift", workflow)
         self.assertIn("python -m unittest discover -s scripts/tests -p 'test_*.py'", workflow)
 
 
