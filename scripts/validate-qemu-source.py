@@ -40,6 +40,13 @@ required = {
         "host = \"enable-jit\"",
         "script-name",
     ],
+    "iSteam/CrashLogger.swift": [
+        "queueKey = DispatchSpecificKey<UInt8>()",
+        "performSynchronouslyOnQueue",
+        "details.prefix(500_000)",
+        "data.write(to: latestLogURL, options: .atomic)",
+        "previous-crash.log",
+    ],
     "iSteam/ELFValidator.swift": [
         "guard fileType == 2",
         "unsupportedFileType",
