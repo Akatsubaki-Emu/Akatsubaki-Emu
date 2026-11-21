@@ -22,7 +22,7 @@ final class HostDeviceBridge {
             case .invalidPath: return "The requested host path is invalid."
             case .outsideSharedDirectory: return "The requested file is outside the i-Steam shared directory."
             case .unavailableDeviceInformation: return "Host device information is unavailable."
-            case .fileTooLarge: return "The shared file exceeds the 64 MiB in-memory transfer limit."
+            case .fileTooLarge: return "The shared file exceeds the 64 MiB transfer limit."
             }
         }
     }
@@ -89,20 +89,38 @@ final class HostDeviceBridge {
             let temporary = destination.deletingLastPathComponent()
                 .appendingPathComponent(".\(UUID().uuidString).receive")
             defer { try? fm.removeItem(at: temporary) }
-            try fm.copyItem(at: coordinatedSource, to: temporary)
+            guard fm.createFile(atPath: temporary.path, contents: nil) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
 
-            // Recheck the copied file before replacing an existing destination:
-            // the provider may have changed the source between metadata and copy.
+            let input = try FileHandle(forReadingFrom: coordinatedSource)
+            defer { try? input.close() }
+            var output: FileHandle? = try FileHandle(forWritingTo: temporary)
+            defer { try? output?.close() }
+            var copiedBytes = 0
+            let maximumCopyBytes = maximumInMemoryTransferBytes + 1
+            while copiedBytes < maximumCopyBytes {
+                let remaining = maximumCopyBytes - copiedBytes
+                let chunk = try input.read(upToCount: min(64 * 1024, remaining)) ?? Data()
+                if chunk.isEmpty { break }
+                try output?.write(contentsOf: chunk)
+                copiedBytes += chunk.count
+            }
+            guard copiedBytes <= maximumInMemoryTransferBytes else {
+                throw BridgeError.fileTooLarge
+            }
+            try output?.synchronize()
+            try output?.close()
+            output = nil
+
+            // Verify the temporary file before replacing an existing destination.
             let copiedValues = try temporary.resourceValues(
                 forKeys: [.isRegularFileKey, .fileSizeKey]
             )
             guard copiedValues.isRegularFile == true,
                   let copiedSize = copiedValues.fileSize,
-                  copiedSize >= 0 else {
+                  copiedSize == copiedBytes else {
                 throw BridgeError.invalidPath
-            }
-            guard copiedSize <= maximumInMemoryTransferBytes else {
-                throw BridgeError.fileTooLarge
             }
 
             if fm.fileExists(atPath: destination.path) {

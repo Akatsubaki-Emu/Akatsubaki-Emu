@@ -275,7 +275,12 @@ final class TranslationCache {
             total = sum.overflow ? UInt64.max : sum.partialValue
         }
 
-        entries.sort { $0.modified < $1.modified }
+        entries.sort {
+            if $0.url == newestFile { return false }
+            if $1.url == newestFile { return true }
+            if $0.modified != $1.modified { return $0.modified < $1.modified }
+            return $0.url.lastPathComponent < $1.url.lastPathComponent
+        }
         while entries.count > Self.maximumEntries || total > Self.maximumCacheBytes {
             guard let oldest = entries.first, oldest.url != newestFile else { break }
             entries.removeFirst()

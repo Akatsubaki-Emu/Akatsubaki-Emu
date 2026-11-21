@@ -29,16 +29,16 @@
 
 Choose the build channel and platform below. Nightly builds contain recent changes and may be unstable; Main is the project's main release channel.
 
-| Channel | iOS | tvOS |
-| --- | --- | --- |
-| **Main** | [Download iOS IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/main) | [Download tvOS IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/main) |
-| **Nightly** | [Download nightly IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) | [Download nightly IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) |
+| Channel | iOS | tvOS | visionOS |
+| --- | --- | --- | --- |
+| **Main** | [Download iOS IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/main) | [Download tvOS IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/main) | [Download visionOS app](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/main) |
+| **Nightly** | [Download nightly IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) | [Download nightly IPA](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) | [Download visionOS nightly](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) |
 
 Each release contains both platform packages and SHA-256 checksum files. Open the release page and choose the asset for your device. These are unsigned prototype packages and must be signed before installation.
 
 ### Add the AltStore source
 
-Use the source URL below in a compatible AltStore-based app. Source availability depends on the GitHub Pages website publishing workflow and its configured repository token.
+Use the source URL below in a compatible AltStore-based app. The website repository refreshes the official AltStore/PAL manifests from published app releases; feed updates may lag a new release until that updater runs.
 
 ```text
 https://akatsubaki-emu.github.io/AltSource.json
