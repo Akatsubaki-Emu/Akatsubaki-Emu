@@ -90,10 +90,10 @@ final class HostDeviceBridge {
     func readSharedFile(relativePath: String) throws -> Data {
         let url = try sharedFileURL(relativePath: relativePath)
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-        guard values.isRegularFile == true,
-              let size = values.fileSize, size <= maximumInMemoryTransferBytes else {
-            throw BridgeError.fileTooLarge
+        guard values.isRegularFile == true, let size = values.fileSize else {
+            throw BridgeError.invalidPath
         }
+        guard size <= maximumInMemoryTransferBytes else { throw BridgeError.fileTooLarge }
         return try Data(contentsOf: url)
     }
 
