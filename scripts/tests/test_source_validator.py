@@ -27,6 +27,21 @@ class SourceValidatorTests(unittest.TestCase):
         duplicates = sorted({key for key in keys if keys.count(key) > 1})
         self.assertFalse(duplicates, f"duplicate required source-contract keys: {duplicates}")
 
+        for key, value in zip(assignment.value.keys, assignment.value.values):
+            if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
+                continue
+            if not isinstance(value, ast.List):
+                continue
+            tokens = [
+                item.value for item in value.elts
+                if isinstance(item, ast.Constant) and isinstance(item.value, str)
+            ]
+            duplicate_tokens = sorted({token for token in tokens if tokens.count(token) > 1})
+            self.assertFalse(
+                duplicate_tokens,
+                f"duplicate source-contract tokens for {key.value}: {duplicate_tokens}",
+            )
+
     def test_guest_machine_has_one_serialized_stop_entry_point(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
