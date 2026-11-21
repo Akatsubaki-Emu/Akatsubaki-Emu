@@ -232,7 +232,8 @@ final class TranslationCache {
                   let size = values.fileSize,
                   size >= 0 else { continue }
             count += 1
-            total += UInt64(size)
+            let sum = total.addingReportingOverflow(UInt64(size))
+            total = sum.overflow ? UInt64.max : sum.partialValue
         }
         return Statistics(entryCount: count, totalBytes: total)
     }

@@ -21,6 +21,10 @@ struct TranslationCacheTests {
         guard try cache.load(identity) == translated else {
             fatalError("Stored translation did not round-trip")
         }
+        try cache.invalidate(identity)
+        guard try cache.load(identity) == nil else {
+            fatalError("Invalidated translation was still returned")
+        }
 
         let changedTranslator = TranslationCacheIdentity(
             guestCodeSHA256: identity.guestCodeSHA256,
@@ -35,10 +39,17 @@ struct TranslationCacheTests {
             fatalError("A translation from a different translator version was reused")
         }
 
+        try cache.store(translated, for: identity)
         let artifact = try cache.path(for: identity)
-        try Data("corrupt".utf8).write(to: artifact, options: .atomic)
+        let original = try Data(contentsOf: artifact)
+        guard var envelope = try JSONSerialization.jsonObject(with: original) as? [String: Any] else {
+            fatalError("Translation cache envelope was not a JSON object")
+        }
+        envelope["codeSHA256"] = String(repeating: "0", count: 64)
+        let tampered = try JSONSerialization.data(withJSONObject: envelope, options: [.sortedKeys])
+        try tampered.write(to: artifact, options: .atomic)
         guard try cache.load(identity) == nil else {
-            fatalError("Corrupt translation was accepted")
+            fatalError("Translation with an invalid checksum was accepted")
         }
         guard try cache.statistics().entryCount == 0 else {
             fatalError("Corrupt cache entry was not removed")
@@ -66,6 +77,6 @@ struct TranslationCacheTests {
         }
 
         try cache.removeAll()
-        print("Translation cache integrity, version isolation, corruption rejection, and bounds tests passed.")
+        print("Translation cache round-trip, invalidation, version isolation, checksum rejection, and bounds tests passed.")
     }
 }
