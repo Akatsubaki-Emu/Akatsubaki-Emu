@@ -55,6 +55,18 @@ struct VNCKeyStateTests {
         expect(state.releaseAll() == [.init(keysym: space, isDown: false)],
                "releaseAll clears every source")
         expect(!state.isPressed(space), "releaseAll must leave no held keys")
+        expect(state.setMovement(0x03, source: "touchgamepad") == [
+            .init(keysym: 0x41, isDown: true), .init(keysym: 0x44, isDown: true)
+        ], "diagonal movement must press both directions")
+        expect(state.setMovement(0x01, source: "controller:one").isEmpty,
+               "a second source holding left must not duplicate the press")
+        expect(state.setMovement(0, source: "touchgamepad") == [
+            .init(keysym: 0x44, isDown: false)
+        ], "releasing one source must only release directions no longer held")
+        expect(state.setMovement(0, source: "controller:one") == [
+            .init(keysym: 0x41, isDown: false)
+        ], "last source release must clear the cached direction")
+
         print("VNC key-state tests passed")
     }
 }

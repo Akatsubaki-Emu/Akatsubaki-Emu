@@ -10,6 +10,8 @@ struct VNCKeyState {
 
     private var keySources: [UInt32: Set<String>] = [:]
     private var movementSources: [String: UInt8] = [:]
+    private var movementSourceCounts = [Int](repeating: 0, count: 4)
+    private var movementMask: UInt8 = 0
     private(set) var pressedKeys = Set<UInt32>()
 
     static func movementMask(for x: Float, y: Float) -> UInt8 {
@@ -45,11 +47,21 @@ struct VNCKeyState {
     mutating func setMovement(_ mask: UInt8, source: String) -> [Event] {
         guard !source.isEmpty else { return [] }
         let previousMask = movementMask
+        let previousSourceMask = movementSources[source] ?? 0
         let normalizedMask = mask & 0x0f
         if normalizedMask == 0 {
             movementSources.removeValue(forKey: source)
         } else {
             movementSources[source] = normalizedMask
+        }
+        for (index, movement) in Self.movementKeys.enumerated() {
+            let wasActive = previousSourceMask & movement.mask != 0
+            let isActive = normalizedMask & movement.mask != 0
+            guard wasActive != isActive else { continue }
+            if isActive { movementSourceCounts[index] += 1 }
+            else { movementSourceCounts[index] -= 1 }
+            if movementSourceCounts[index] > 0 { movementMask |= movement.mask }
+            else { movementMask &= ~movement.mask }
         }
         let changedMask = previousMask ^ movementMask
         var events: [Event] = []
@@ -69,6 +81,8 @@ struct VNCKeyState {
         let events = pressedKeys.sorted().map { Event(keysym: $0, isDown: false) }
         keySources.removeAll()
         movementSources.removeAll()
+        movementSourceCounts = [Int](repeating: 0, count: Self.movementKeys.count)
+        movementMask = 0
         pressedKeys.removeAll()
         return events
     }
@@ -77,9 +91,6 @@ struct VNCKeyState {
         pressedKeys.contains(keysym)
     }
 
-    private var movementMask: UInt8 {
-        movementSources.values.reduce(UInt8(0)) { $0 | $1 }
-    }
 
     private static func movementMask(for keysym: UInt32) -> UInt8 {
         movementKeys.first(where: { $0.keysym == keysym })?.mask ?? 0
