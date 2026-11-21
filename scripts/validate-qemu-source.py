@@ -6,7 +6,12 @@ import sys
 required = {
     "src/QEMU/QEMUVNCClient.swift": [
         "pendingSendGroup.enter()",
-        "pendingSendGroup.notify(queue: queue)",
+        "private var pendingSendGroup = DispatchGroup()",
+        "private var buttonKeys = Set<UInt32>()",
+        "private var movementKeys = Set<UInt32>()",
+        "pendingSendGroup = DispatchGroup()",
+        "guard self.connection === connection else { return false }",
+        "previousGroup.notify(queue: queue)",
         "framebufferWidth = width",
         "width <= Self.maxFramebufferBytes / height / 4",
         "for attempt in 0..<120",
