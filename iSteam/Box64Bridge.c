@@ -30,12 +30,21 @@ int box64Run(const char *executable, const char *workingDirectory,
     if (!fn) return -2;
 
     if (!workingDirectory || !workingDirectory[0]) return -EINVAL;
+
+    // chdir is process-wide. Serialize Box64 invocations and always restore the
+    // host directory so concurrent guest launches cannot corrupt each other's paths.
+    pthread_mutex_lock(&g_box64_working_directory_lock);
     int originalDirectory = open(".", O_RDONLY | O_CLOEXEC);
-    if (originalDirectory < 0) return -errno;
+    if (originalDirectory < 0) {
+        int error = errno;
+        pthread_mutex_unlock(&g_box64_working_directory_lock);
+        return -error;
+    }
 
     if (chdir(workingDirectory) != 0) {
         int error = errno;
         close(originalDirectory);
+        pthread_mutex_unlock(&g_box64_working_directory_lock);
         return -error;
     }
 
@@ -44,9 +53,11 @@ int box64Run(const char *executable, const char *workingDirectory,
     if (fchdir(originalDirectory) != 0) {
         int error = errno;
         close(originalDirectory);
+        pthread_mutex_unlock(&g_box64_working_directory_lock);
         return -error;
     }
     close(originalDirectory);
+    pthread_mutex_unlock(&g_box64_working_directory_lock);
     errno = executionErrno;
     return result;
 }
