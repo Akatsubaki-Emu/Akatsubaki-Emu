@@ -31,10 +31,12 @@ final class GameLibraryTransferStore {
     }
 
     func export(to destination: URL) throws {
-        let backup = GameLibraryBackup(
-            games: GameStore.shared.games,
-            profiles: GameRuntimeProfileStore.shared.allProfiles
-        )
+        let games = GameStore.shared.games
+        let gameIDs = Set(games.map(\.id))
+        let profiles = GameRuntimeProfileStore.shared.allProfiles.filter {
+            gameIDs.contains($0.gameID)
+        }
+        let backup = GameLibraryBackup(games: games, profiles: profiles)
         let data = try encoder.encode(backup)
         guard data.count <= 20 * 1024 * 1024 else { throw TransferError.backupTooLarge }
         let scoped = destination.startAccessingSecurityScopedResource()

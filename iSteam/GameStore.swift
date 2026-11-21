@@ -114,7 +114,11 @@ final class GameStore {
     }
 
     func remove(id: UUID) {
-        save(games.filter { $0.id != id })
+        guard save(games.filter { $0.id != id }) else { return }
+        // Remove metadata and artwork only after the library entry is safely
+        // removed, avoiding orphaned profile records in future backups.
+        try? GameRuntimeProfileStore.shared.removeProfile(for: id)
+        try? GameArtworkStore.shared.removeArtwork(for: id)
     }
 
     func game(id: UUID) -> GameEntry? {
