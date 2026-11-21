@@ -83,6 +83,8 @@ required = {
         "entry - $0.guestAddress < $0.fileSize",
     ],
     "src/Runtime/X86_64Interpreter.swift": [
+        "case 0xB8...0xBF: // MOV r32, imm32 or MOV r64, imm64",
+        "registers[index] = UInt64(immediate)",
         "let is64Bit = rex & 0x08 != 0",
         "32-bit GPR writes zero-extend",
         "PUSH RSP stores the pre-decrement value.",

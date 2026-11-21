@@ -74,13 +74,15 @@ final class X86_64Interpreter: GuestCPUBackend {
             case 0xCC: // INT3
                 rip = instructionAddress
                 return .unsupportedInstruction(address: instructionAddress)
-            case 0xB8...0xBF: // MOV r64, imm64 (REX.W)
-                guard rex & 0x08 != 0, let immediate = fetchUInt64() else {
-                    rip = instructionAddress
-                    return .unsupportedInstruction(address: instructionAddress)
-                }
+            case 0xB8...0xBF: // MOV r32, imm32 or MOV r64, imm64
                 let index = Int(opcode - 0xB8) | (rex & 0x01 != 0 ? 8 : 0)
-                registers[index] = immediate
+                if rex & 0x08 != 0 {
+                    guard let immediate = fetchUInt64() else { return .memoryFault(address: rip) }
+                    registers[index] = immediate
+                } else {
+                    guard let immediate = fetchUInt32() else { return .memoryFault(address: rip) }
+                    registers[index] = UInt64(immediate)
+                }
             case 0xEB: // JMP rel8
                 guard let raw = fetchByte() else { return .memoryFault(address: rip) }
                 rip = addSigned(Int8(bitPattern: raw), to: rip)

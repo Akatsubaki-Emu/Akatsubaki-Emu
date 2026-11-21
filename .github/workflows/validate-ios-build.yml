@@ -40,6 +40,15 @@ jobs:
             scripts/tests/test_translation_cache.swift \
             -o "$RUNNER_TEMP/test-translation-cache"
           "$RUNNER_TEMP/test-translation-cache"
+      - name: Test x86-64 interpreter register moves and syscall path
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/X86_64Interpreter.swift \
+            scripts/tests/test_x86_64_interpreter.swift \
+            -o "$RUNNER_TEMP/test-x86-64-interpreter"
+          "$RUNNER_TEMP/test-x86-64-interpreter"
       - name: Validate runtime bridge and packaging contracts
         run: python3 scripts/validate-qemu-source.py
       - name: Install XcodeGen
