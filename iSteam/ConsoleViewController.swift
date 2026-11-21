@@ -58,7 +58,7 @@ final class ConsoleViewController: UIViewController {
         let available = Box64Bridge.isAvailable
 
         textView.text = """
-        iSteam
+        Akatsubaki Emu
         ======
 
         Game:

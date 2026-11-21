@@ -10,7 +10,7 @@ final class LibraryViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "i-Steam"
+        title = "Akatsubaki Emu"
         view.backgroundColor = .black
         stack.axis = .vertical
         stack.alignment = .fill
@@ -25,7 +25,7 @@ final class LibraryViewController: UIViewController {
             stack.heightAnchor.constraint(equalToConstant: 300)
         ])
         let heading = UILabel()
-        heading.text = "i-Steam"
+        heading.text = "Akatsubaki Emu"
         heading.font = .systemFont(ofSize: 44, weight: .bold)
         heading.textAlignment = .center
         stack.addArrangedSubview(heading)
@@ -35,7 +35,7 @@ final class LibraryViewController: UIViewController {
         stack.addArrangedSubview(makeButton("Steam Store") { [weak self] in
             let alert = UIAlertController(
                 title: "Steam Store",
-                message: "Embedded web browsing is not available in the tvOS build. Use the iOS build to browse the Steam Store inside i-Steam.",
+                message: "Embedded web browsing is not available in the tvOS build. Use the iOS build to browse the Steam Store inside Akatsubaki Emu.",
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: "OK", style: .default))
@@ -66,7 +66,7 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "iSteam"
+        title = "Akatsubaki Emu"
         view.backgroundColor = .systemGroupedBackground
         navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Settings", style: .plain, target: self, action: #selector(openSettings))
         buildMenu()
@@ -111,7 +111,7 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
         stack.addArrangedSubview(makeButton("Browse External Drive", detail: "Open USB, SD card, or Files-provider storage", symbol: "externaldrive", primary: false) { [weak self] in self?.browseExternalDrive() })
         stack.addArrangedSubview(makeButton("Import Game / Executable", detail: "Add a Windows PE or Linux ELF file", symbol: "plus.rectangle.on.folder", primary: false) { [weak self] in self?.importGame() })
         stack.addArrangedSubview(makeButton("Export Library Backup", detail: "Save game metadata and per-game profiles as JSON", symbol: "square.and.arrow.up", primary: false) { [weak self] in self?.exportLibraryBackup() })
-        stack.addArrangedSubview(makeButton("Import Library Backup", detail: "Merge a validated i-Steam JSON backup", symbol: "square.and.arrow.down", primary: false) { [weak self] in self?.importLibraryBackup() })
+        stack.addArrangedSubview(makeButton("Import Library Backup", detail: "Merge a validated Akatsubaki Emu JSON backup", symbol: "square.and.arrow.down", primary: false) { [weak self] in self?.importLibraryBackup() })
         stack.addArrangedSubview(makeButton("Runtime Capability Report", detail: "See which DroidDeck-style engines are actually available", symbol: "checkmark.shield", primary: false) { [weak self] in self?.showRuntimeCapabilities() })
         stack.addArrangedSubview(makeButton("Settings", detail: "Display, VM, input, and diagnostics", symbol: "gearshape", primary: false) { [weak self] in self?.openSettings() })
         statusLabel.textColor = .secondaryLabel
@@ -174,7 +174,7 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
             showMessage("Steam Store", "The Steam Store URL is invalid.")
             return
         }
-        // Use WKWebView so the store stays embedded in i-Steam on iOS and tvOS.
+        // Use WKWebView so the store stays embedded in Akatsubaki Emu on iOS and tvOS.
         let browser = SteamStoreViewController(url: url)
         present(UINavigationController(rootViewController: browser), animated: true)
     }
