@@ -264,9 +264,7 @@ final class VMDisplayViewController: UIViewController {
         super.viewDidDisappear(animated)
         keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
         keyboardObservers.removeAll()
-        MotionInputManager.shared.stop()
-        gamepad?.releaseAllButtons()
-        ControllerInputManager.shared.stop()
+        releaseGuestInputs()
         vncClient.stop()
         engine.stop()
         virtioGPU.stop()
