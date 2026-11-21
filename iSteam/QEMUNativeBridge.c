@@ -50,13 +50,6 @@ static void clear_starting(void) {
     pthread_mutex_unlock(&g_lock);
 }
 
-static char *duplicate_string(const char *value) {
-    size_t length = strlen(value) + 1;
-    char *copy = malloc(length);
-    if (copy) memcpy(copy, value, length);
-    return copy;
-}
-
 static void release_arguments(void) {
     if (!g_argv) return;
     for (int i = 0; i < g_argc; ++i) free(g_argv[i]);
