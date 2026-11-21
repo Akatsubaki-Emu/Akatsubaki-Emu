@@ -78,6 +78,17 @@ required = {
     "src/Core/VMSaveSlotStore.swift": [
         "startAccessingSecurityScopedResource()",
     ],
+    "src/Runtime/ExecutionBackendRouter.swift": [
+        "antiCheatAssessment == .notRequested",
+        "return dynamicTranslationBackend != nil",
+    ],
+    "src/Runtime/X86_64Interpreter.swift": [
+        "PUSH RSP stores the pre-decrement value.",
+        "POP RSP loads the popped value directly",
+    ],
+    "src/Performance/TranslationCache.swift": [
+        "SHA256.hash(data: Data(key.utf8))",
+    ],
     "src/Runtime/HostDeviceBridge.swift": [
         "resolvingSymlinksInPath()",
         "withAccess(to: source)",

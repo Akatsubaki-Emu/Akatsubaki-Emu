@@ -154,7 +154,13 @@ struct RuntimeExecutionPlan {
     }
 
     var isExecutableWithInstalledBackends: Bool {
-        selectedBackend != nil && missingRequiredLayers.isEmpty
+        guard missingRequiredLayers.isEmpty,
+              antiCheatAssessment == .notRequested else { return false }
+        // AOT cache hits still need one dynamic translator for misses and
+        // invalidated blocks. The diagnostic interpreter is never a general
+        // Linux executable backend.
+        if fullSystemFallback != nil || architectureBackend != nil { return true }
+        return dynamicTranslationBackend != nil
     }
 }
 
@@ -266,6 +272,8 @@ enum RuntimeBackendRouter {
         let selected = staticBackend ?? dynamicBackend ?? architectureBackend ?? fullSystem ?? interpreter
         if selected == nil {
             explanation.append("No installed compatible backend is available. Missing integrations are not inferred from source files.")
+        } else if dynamicBackend == nil && interpreter != nil && staticBackend == nil {
+            explanation.append("The x86 interpreter is diagnostic only; it cannot execute arbitrary Linux binaries or replace FEXCore/Box64.")
         } else {
             explanation.append("Preferred backend candidate: \(selected!.rawValue). Its own startup and guest validation must still succeed.")
         }

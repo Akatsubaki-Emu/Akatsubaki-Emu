@@ -102,9 +102,10 @@ final class X86_64Interpreter: GuestCPUBackend {
                 rip = target
             case 0x50...0x57: // PUSH r64
                 let index = Int(opcode - 0x50) | (rex & 0x01 != 0 ? 8 : 0)
+                let value = registers[index] // PUSH RSP stores the pre-decrement value.
                 guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
                 registers[4] -= 8
-                guard memory.write(littleEndianBytes(registers[index]), offset: registers[4]) else {
+                guard memory.write(littleEndianBytes(value), offset: registers[4]) else {
                     return .memoryFault(address: registers[4])
                 }
             case 0x58...0x5F: // POP r64
@@ -112,8 +113,13 @@ final class X86_64Interpreter: GuestCPUBackend {
                 guard let value = readUInt64(at: registers[4]) else {
                     return .memoryFault(address: registers[4])
                 }
-                registers[index] = value
-                registers[4] &+= 8
+                if index == 4 {
+                    // POP RSP loads the popped value directly; it does not add 8.
+                    registers[4] = value
+                } else {
+                    registers[index] = value
+                    registers[4] &+= 8
+                }
             case 0x31, 0x33: // XOR r/m32,r32 or r32,r/m32; register-only subset
                 guard let modrm = fetchByte(), modrm >> 6 == 3 else {
                     rip = instructionAddress
