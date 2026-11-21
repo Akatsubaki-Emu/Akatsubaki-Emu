@@ -22,6 +22,9 @@ required = {
     ],
     "src/Runtime/WindowsPEImage.swift": [
         "unterminated PE string within its mapped section",
+        "Section(name: name,\n                virtualAddress:",
+        "virtualSize: try u32(data, offset + 8)",
+        "rawOffset: try u32(data, offset + 20)",
     ],
     "iSteam/ELFValidator.swift": [
         "guard fileType == 2",
@@ -30,6 +33,8 @@ required = {
     "iSteam/LaunchSetupViewController.swift": [
         "guestControl.selectedSegmentIndex = 2",
         "executable-library route currently accepts Windows PE metadata only",
+        "\"SteamOS Gaming Mode\"",
+        "VMConfiguration.defaultSteamOS",
     ],
     "src/Performance/TranslationCache.swift": [
         "SHA256.hash(data: Data(key.utf8))",
@@ -45,6 +50,8 @@ required = {
     "src/Runtime/X86_64Interpreter.swift": [
         "let is64Bit = rex & 0x08 != 0",
         "32-bit GPR writes zero-extend",
+        "PUSH RSP stores the pre-decrement value.",
+        "POP RSP loads the popped value directly",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         '"-vnc", "127.0.0.1:0"',
@@ -86,11 +93,6 @@ required = {
         "capabilities.backendAvailability",
         '"[runtime-capability] "',
     ],
-    "src/Runtime/WindowsPEImage.swift": [
-        "Section(name: name,\n                virtualAddress:",
-        "virtualSize: try u32(data, offset + 8)",
-        "rawOffset: try u32(data, offset + 20)",
-    ],
 
 
     "src/Core/VMSaveSlotStore.swift": [
@@ -100,13 +102,6 @@ required = {
         "antiCheatAssessment == .notRequested",
         "return dynamicTranslationBackend != nil",
     ],
-    "src/Runtime/X86_64Interpreter.swift": [
-        "PUSH RSP stores the pre-decrement value.",
-        "POP RSP loads the popped value directly",
-    ],
-    "src/Performance/TranslationCache.swift": [
-        "SHA256.hash(data: Data(key.utf8))",
-    ],
     "src/Runtime/HostDeviceBridge.swift": [
         "resolvingSymlinksInPath()",
         "withAccess(to: source)",
@@ -114,9 +109,6 @@ required = {
     "src/Steam/DroidDeckFeatureServices.swift": [
         "NSFileCoordinator()",
         "writingItemAt: destination",
-    ],
-    "iSteam/LaunchSetupViewController.swift": [
-        '"SteamOS Gaming Mode"', "VMConfiguration.defaultSteamOS",
     ],
     "src/GPU/MetalGPUBackend.swift": [
         "view.framebufferOnly = false",
