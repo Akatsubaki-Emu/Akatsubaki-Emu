@@ -70,10 +70,10 @@ struct GameRuntimeProfile: Codable, Equatable, Identifiable {
               environment.keys.allSatisfy({ key in
                   let bytes = Array(key.utf8)
                   guard let first = bytes.first else { return false }
-                  let validFirst = (65...90).contains(first) || (97...122).contains(first) || first == 95
+                  let validFirst = (UInt8(65)...UInt8(90)).contains(first) || (UInt8(97)...UInt8(122)).contains(first) || first == UInt8(95)
                   return validFirst && bytes.dropFirst().allSatisfy {
-                      (65...90).contains($0) || (97...122).contains($0)
-                          || (48...57).contains($0) || $0 == 95
+                      (UInt8(65)...UInt8(90)).contains($0) || (UInt8(97)...UInt8(122)).contains($0)
+                          || (UInt8(48)...UInt8(57)).contains($0) || $0 == UInt8(95)
                   }
               }),
               environment.values.allSatisfy({ $0.utf8.count <= 4096 && !$0.contains("\0") }),
