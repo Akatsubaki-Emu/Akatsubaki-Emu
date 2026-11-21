@@ -42,7 +42,7 @@ final class GameArtworkStore {
               width <= (16 * 1024 * 1024) / height,
               CGImageSourceCreateImageAtIndex(image, 0, nil) != nil,
               let type = CGImageSourceGetType(image) as String?,
-              ["public.jpeg", "public.png", "public.heic", "public.webp", "com.compuserve.gif"].contains(type) else {
+              ["public.jpeg", "public.png", "public.heic", "public.webp", "org.webmproject.webp", "com.compuserve.gif"].contains(type) else {
             throw ArtworkError.invalidImage
         }
         let ext: String
@@ -50,7 +50,7 @@ final class GameArtworkStore {
         case "public.jpeg": ext = "jpg"
         case "public.png": ext = "png"
         case "public.heic": ext = "heic"
-        case "public.webp": ext = "webp"
+        case "public.webp", "org.webmproject.webp": ext = "webp"
         default: ext = "gif"
         }
         let destination = directory.appendingPathComponent(gameID.uuidString).appendingPathExtension(ext)
