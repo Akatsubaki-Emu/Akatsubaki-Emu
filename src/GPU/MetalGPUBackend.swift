@@ -19,12 +19,16 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     /// Submitted textures are immutable after publication, so an in-flight GPU blit
     /// cannot race a CPU write to the same texture.
     private var framebuffer: MTLTexture?
+    private var drawableWidth: Int
+    private var drawableHeight: Int
     private let targetFrameRate: Int
     private let maxFramebufferBytes = 64 * 1024 * 1024
 
     init(width: Int, height: Int, frameRate: Int) {
         self.width = max(1, width)
         self.height = max(1, height)
+        self.drawableWidth = max(1, width)
+        self.drawableHeight = max(1, height)
         self.targetFrameRate = max(1, frameRate)
         device = MTLCreateSystemDefaultDevice()
         queue = device?.makeCommandQueue()
@@ -32,6 +36,9 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         super.init()
         view.colorPixelFormat = .bgra8Unorm
         view.framebufferOnly = false
+        view.autoResizeDrawable = false
+        view.drawableSize = CGSize(width: self.width, height: self.height)
+        view.contentMode = .scaleAspectFit
         view.enableSetNeedsDisplay = true
         view.isPaused = true
         view.clearColor = MTLClearColor(red: 0.025, green: 0.03, blue: 0.045, alpha: 1)
@@ -83,10 +90,17 @@ final class MetalGPUBackend: NSObject, GPUBackend {
 
         textureLock.lock()
         framebuffer = commandTexture
+        let needsDrawableResize = drawableWidth != frameWidth || drawableHeight != frameHeight
+        drawableWidth = frameWidth
+        drawableHeight = frameHeight
         textureLock.unlock()
 
         DispatchQueue.main.async { [weak self] in
-            self?.view.setNeedsDisplay()
+            guard let self else { return }
+            if needsDrawableResize {
+                self.view.drawableSize = CGSize(width: frameWidth, height: frameHeight)
+            }
+            self.view.setNeedsDisplay()
         }
         _ = queue // The queue is used by the view delegate for presentation.
     }
@@ -118,12 +132,16 @@ extension MetalGPUBackend: MTKViewDelegate {
 
         if let source {
             guard let blit = commandBuffer.makeBlitCommandEncoder() else { return }
-            let copyWidth = min(source.width, drawable.texture.width)
-            let copyHeight = min(source.height, drawable.texture.height)
-            guard copyWidth > 0, copyHeight > 0 else {
+            // Keep the drawable at the guest framebuffer's native pixel size.
+            // Copying only min(source, drawable) silently cropped larger guest
+            // frames and left the rest of the drawable undefined.
+            guard source.width == drawable.texture.width,
+                  source.height == drawable.texture.height else {
                 blit.endEncoding()
                 return
             }
+            let copyWidth = source.width
+            let copyHeight = source.height
             blit.copy(
                 from: source,
                 sourceSlice: 0,
