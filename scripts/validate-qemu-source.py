@@ -100,6 +100,7 @@ required = {
         'dlsym(library, "qemu_init")',
         'dlsym(library, "qemu_main_loop")',
         'dlsym(library, "qemu_cleanup")',
+        'dlsym(library, "qemu_system_shutdown_request")',
         "static bool g_starting = false;",
         "static _Thread_local char error_copy",
     ],

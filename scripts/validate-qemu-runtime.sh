@@ -38,7 +38,7 @@ echo "== Defined external lifecycle symbols =="
 # -U excludes undefined imports. Do not fall back to plain nm -g: that can
 # mistake an undefined reference for an exported implementation.
 symbols="$(nm -gU "$library")"
-for symbol in qemu_init qemu_main_loop qemu_cleanup; do
+for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request; do
   if ! grep -Eq "[[:space:]][A-Za-z][[:space:]]_?${symbol}$" <<<"$symbols"; then
     echo "Missing required defined export: $symbol" >&2
     exit 3
@@ -46,14 +46,8 @@ for symbol in qemu_init qemu_main_loop qemu_cleanup; do
   echo "Found required export: $symbol"
 done
 
-if grep -Eq '[[:space:]][A-Za-z][[:space:]]_?qemu_system_shutdown_request$' <<<"$symbols"; then
-  echo "Found optional graceful-shutdown export: qemu_system_shutdown_request"
-else
-  echo "Optional export absent: qemu_system_shutdown_request (graceful stop unavailable)"
-fi
-
 echo "== Code signature =="
 codesign --verify --strict "$library"
 
-echo "QEMU runtime architecture, required exports, and code signature verified."
+echo "QEMU runtime architecture, lifecycle/shutdown exports, and code signature verified."
 echo "This does not prove dependent libraries load or that a guest boots."
