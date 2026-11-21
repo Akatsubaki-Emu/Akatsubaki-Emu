@@ -155,7 +155,7 @@ required = {
     ],
     "src/Steam/GameArtworkStore.swift": [
         "CGImageSourceGetCount(image) <= 200",
-        "UInt64(width) * UInt64(height) <= 16 * 1024 * 1024",
+        "width <= (16 * 1024 * 1024) / height",
         "CGImageSourceCreateImageAtIndex(image, 0, nil) != nil",
     ],
     "src/Runtime/ExternalDriveStore.swift": [

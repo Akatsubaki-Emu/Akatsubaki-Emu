@@ -39,7 +39,7 @@ final class GameArtworkStore {
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0,
-              UInt64(width) * UInt64(height) <= 16 * 1024 * 1024,
+              width <= (16 * 1024 * 1024) / height,
               CGImageSourceCreateImageAtIndex(image, 0, nil) != nil,
               let type = CGImageSourceGetType(image) as String?,
               ["public.jpeg", "public.png", "public.heic", "public.webp", "com.compuserve.gif"].contains(type) else {
