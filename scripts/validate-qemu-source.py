@@ -145,6 +145,7 @@ required = {
     "src/Core/VMSaveSlotStore.swift": [
         "maximumMetadataBytes = 1 * 1024 * 1024",
         "data.count <= maximumMetadataBytes",
+        "bookmark.count <= maximumMetadataBytes / 2",
         "startAccessingSecurityScopedResource()",
     ],
     "src/Runtime/ExecutionBackendRouter.swift": [

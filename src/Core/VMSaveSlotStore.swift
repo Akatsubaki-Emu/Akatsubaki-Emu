@@ -29,6 +29,13 @@ final class VMSaveSlotStore {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     }
 
+    enum StoreError: LocalizedError {
+        case metadataTooLarge
+        var errorDescription: String? {
+            "Saved VM metadata exceeds the 1 MiB safety limit."
+        }
+    }
+
     private func safeFilename(_ name: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_ "))
         let clean = String(name.unicodeScalars.filter { allowed.contains($0) }).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -39,7 +46,9 @@ final class VMSaveSlotStore {
         var saved = configuration
         saved.name = name
         let url = directory.appendingPathComponent(safeFilename(name) + ".json")
-        try encoder.encode(saved).write(to: url, options: .atomic)
+        let data = try encoder.encode(saved)
+        guard data.count <= maximumMetadataBytes else { throw StoreError.metadataTooLarge }
+        try data.write(to: url, options: .atomic)
     }
 
     func configuration(named name: String) -> VMConfiguration? {
@@ -66,13 +75,16 @@ final class VMSaveSlotStore {
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )
+        guard bookmark.count <= maximumMetadataBytes / 2 else { throw StoreError.metadataTooLarge }
         let session = Session(
             configuration: configuration,
             gameID: gameID,
             savedAt: Date(),
             diskImageBookmark: bookmark
         )
-        try encoder.encode(session).write(to: directory.appendingPathComponent("last-session.json"), options: .atomic)
+        let data = try encoder.encode(session)
+        guard data.count <= maximumMetadataBytes else { throw StoreError.metadataTooLarge }
+        try data.write(to: directory.appendingPathComponent("last-session.json"), options: .atomic)
     }
 
     func lastSession() -> (configuration: VMConfiguration, diskImageURL: URL)? {
