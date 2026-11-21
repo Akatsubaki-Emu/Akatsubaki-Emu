@@ -31,7 +31,7 @@ permissions:
 
 concurrency:
   group: isteam-release${{ github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && '-main' || '' }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   # This reusable workflow runs inside this run and uploads the artifact here.

@@ -459,7 +459,7 @@ else:
     release_concurrency = release_workflow[release_concurrency_start:release_concurrency_end]
     for token in [
         "group: isteam-release${{ github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && '-main' || '' }}",
-        "cancel-in-progress: true",
+        "cancel-in-progress: false",
     ]:
         if token not in release_concurrency:
             print(f"release workflow: concurrency policy missing {token!r}", file=sys.stderr)
