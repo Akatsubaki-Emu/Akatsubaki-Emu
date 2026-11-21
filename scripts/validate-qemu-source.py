@@ -92,7 +92,8 @@ required = {
         "executable-library route currently accepts Windows PE metadata only",
         "SteamOS Gaming Mode",
         "VMConfiguration.defaultSteamOS",
-    ],    "src/Performance/TranslationCache.swift": [
+    ],
+    "src/Performance/TranslationCache.swift": [
         "SHA256.hash(data: Data(key.utf8))",
     ],
     "scripts/tests/test_windows_pe_image.swift": [
@@ -134,7 +135,7 @@ required = {
         "mappedRanges.first?.lowerBound ?? mmapCursor",
         "insertMappedRange(address..<end)",
     ],
-        "scripts/tests/test_native_guest_memory.cpp": [
+    "scripts/tests/test_native_guest_memory.cpp": [
         "1ULL << 30",
         "isteam_guest_memory_allocated_pages",
         "constexpr uint64_t partialSize = pageSize + 17;",
@@ -179,7 +180,7 @@ required = {
         "memorySize >= fileSize",
         "maximumGuestAddress",
     ],
-        "src/Runtime/X86_64ALU.swift": [
+    "src/Runtime/X86_64ALU.swift": [
         "static func add(",
         "static func and(",
         "static func or(",
@@ -365,8 +366,6 @@ required = {
         "WindowsPELoader().load(executable)",
         "directoryValues?.isDirectory == true",
     ],
-
-
     "src/Core/VMSaveSlotStore.swift": [
         "maximumMetadataBytes = 1 * 1024 * 1024",
         "values.isRegularFile == true",
@@ -600,7 +599,6 @@ required = {
         "const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);",
         "static_cast<uint64_t>(amount) == pageLength",
     ],
-    
     ".gitlab-ci.yml": [
         "test_static_elf_execution.swift",
         "test_native_guest_memory.cpp",
