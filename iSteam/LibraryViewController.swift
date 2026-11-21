@@ -272,7 +272,7 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
             return
         }
         do {
-            let format = try ExternalDriveStore.shared.withAccess(to: source) { readableSource -> GuestExecutableFormat in
+            _ = try ExternalDriveStore.shared.withAccess(to: source) { readableSource -> GuestExecutableFormat in
                 let formatResult = GuestProcessManager.shared.inspect(readableSource)
                 guard case let .success(format) = formatResult,
                       format == .windowsPE || format == .linuxELF else {
