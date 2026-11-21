@@ -1,4 +1,17 @@
 # Xcode
+# Generated Xcode projects and build products
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+build/
+.build/
+*.xcarchive/
+*.xcresult/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+.DS_Store
+
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
 
