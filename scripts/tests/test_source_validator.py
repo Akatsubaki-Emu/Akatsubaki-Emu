@@ -313,5 +313,24 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("if state == .configured", pause)
         self.assertIn("state = .paused", pause)
 
+
+    def test_controller_profile_cache_and_metal_pool_release_contracts(self):
+        root = Path(__file__).resolve().parents[2]
+        controller = (root / "src" / "Display" / "ControllerMappingStore.swift").read_text(encoding="utf-8")
+        metal = (root / "src" / "GPU" / "MetalGPUBackend.swift").read_text(encoding="utf-8")
+
+        profile = controller.split("var profile: ControllerMappingProfile", 1)[1].split("func reset()", 1)[0]
+        self.assertIn("private var cachedProfile: ControllerMappingProfile?", controller)
+        self.assertIn("if let cachedProfile { return cachedProfile }", profile)
+        self.assertIn("cachedProfile = value", profile)
+        self.assertIn("cachedProfile = newValue", profile)
+        self.assertIn("cachedProfile = .standard", controller)
+        self.assertIn("private var framebufferSlots: [FramebufferSlot] = []", metal)
+        stop = metal.split("func stop()", 1)[1].split("func submit", 1)[0]
+        self.assertIn("framebufferGeneration &+= 1", stop)
+        self.assertIn("framebuffer = nil", stop)
+        self.assertIn("framebufferSlots.removeAll(keepingCapacity: false)", stop)
+
+
 if __name__ == "__main__":
     unittest.main()

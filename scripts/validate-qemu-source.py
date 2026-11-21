@@ -613,6 +613,7 @@ required = {
         "view.drawableSize = CGSize(width: frameWidth, height: frameHeight)",
         "source.texture.width == drawable.texture.width",
         "source.texture.height == drawable.texture.height",
+        "framebufferSlots.removeAll(keepingCapacity: false)",
     ],
     "iSteam/QEMUNativeBridge.h": [
         "#define ISTEAM_NONNULL _Nonnull",
@@ -666,6 +667,11 @@ required = {
     ],
     "src/Display/ControllerMappingStore.swift": [
         "!$0.value.isEmpty",
+        "private var cachedProfile: ControllerMappingProfile?",
+        "if let cachedProfile { return cachedProfile }",
+        "private func loadProfile()",
+        "cachedProfile = newValue",
+        "cachedProfile = .standard",
     ],
     "src/Display/TouchGamepadView.swift": [
         "iSteam.touchGamepad.layout.v3",
