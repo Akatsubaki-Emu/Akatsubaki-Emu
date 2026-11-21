@@ -120,7 +120,7 @@ final class LinuxSyscallDispatcher {
 
     private func setBreak(_ requested: UInt64) -> UInt64 {
         if requested == 0 { return programBreak }
-        let firstMapping = mappedRanges.map(\.lowerBound).min() ?? mmapCursor
+        let firstMapping = mappedRanges.first?.lowerBound ?? mmapCursor
         let upperLimit = min(firstMapping, stackBase >= 4096 ? stackBase - 4096 : 0)
         guard requested >= initialProgramBreak, requested <= upperLimit,
               requested <= memory.size else { return programBreak }
@@ -167,14 +167,19 @@ final class LinuxSyscallDispatcher {
             guard fixed, unmap(address: address, length: size) == 0 else { return errno(12) }
         }
         guard memory.zero(offset: address, length: size) else { return errno(12) }
-        mappedRanges.append(address..<end)
+        insertMappedRange(address..<end)
         if !fixed { mmapCursor = max(mmapCursor, end) }
         return address
     }
 
+    private func insertMappedRange(_ newRange: Range<UInt64>) {
+        let index = mappedRanges.firstIndex(where: { $0.lowerBound > newRange.lowerBound }) ?? mappedRanges.endIndex
+        mappedRanges.insert(newRange, at: index)
+    }
+
     private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64? {
         var candidate = Self.alignUp(max(start, programBreak))
-        for range in mappedRanges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+        for range in mappedRanges {
             let (candidateEnd, overflow) = candidate.addingReportingOverflow(size)
             if overflow { return nil }
             if candidate < range.upperBound && range.lowerBound < candidateEnd {
@@ -222,7 +227,7 @@ final class LinuxSyscallDispatcher {
             cursor = min(end, programBreak)
             if cursor == end { return 0 }
         }
-        for range in mappedRanges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+        for range in mappedRanges {
             if range.upperBound <= cursor { continue }
             if range.lowerBound > cursor { return errno(12) }
             cursor = min(end, range.upperBound)
