@@ -90,7 +90,7 @@ required = {
         "SHA256.hash(data: Data(key.utf8))",
     ],
     "scripts/tests/test_windows_pe_image.swift": [
-        "makeImage(importDirectoryRVA: UInt32, importDirectorySize: UInt32)",
+        "relocationDirectoryRVA: UInt32 = 0",
         "Import descriptor crossing raw section boundary was accepted",
         "Header RVA range crossing SizeOfHeaders was accepted",
         "Import directory smaller than one descriptor was accepted",
