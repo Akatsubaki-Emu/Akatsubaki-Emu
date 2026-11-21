@@ -11,7 +11,7 @@ class LinuxGetRandomAllocationTests(unittest.TestCase):
         self.assertIn("data.withUnsafeMutableBytes", random)
         self.assertIn("generator.next().littleEndian", random)
         self.assertIn("MemoryLayout<UInt64>.size", random)
-        self.assertIn("copyMemory(from: sourceBase", random)
+        self.assertIn("update(from: sourceBase.assumingMemoryBound(to: UInt8.self)", random)
         self.assertNotIn("UInt8.random", random)
         self.assertNotIn("(0..<Int(length)).map", random)
 

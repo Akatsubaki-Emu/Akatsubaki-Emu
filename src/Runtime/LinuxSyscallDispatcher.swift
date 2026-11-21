@@ -276,7 +276,7 @@ final class LinuxSyscallDispatcher {
                 var word = generator.next().littleEndian
                 let copied = withUnsafeBytes(of: &word) { source -> Bool in
                     guard let sourceBase = source.baseAddress else { return false }
-                    base.advanced(by: offset).copyMemory(from: sourceBase, byteCount: MemoryLayout<UInt64>.size)
+                    base.advanced(by: offset).update(from: sourceBase.assumingMemoryBound(to: UInt8.self), count: MemoryLayout<UInt64>.size)
                     return true
                 }
                 guard copied else { return false }
@@ -286,7 +286,7 @@ final class LinuxSyscallDispatcher {
                 var word = generator.next().littleEndian
                 let copied = withUnsafeBytes(of: &word) { source -> Bool in
                     guard let sourceBase = source.baseAddress else { return false }
-                    base.advanced(by: offset).copyMemory(from: sourceBase, byteCount: count - offset)
+                    base.advanced(by: offset).update(from: sourceBase.assumingMemoryBound(to: UInt8.self), count: count - offset)
                     return true
                 }
                 guard copied else { return false }
