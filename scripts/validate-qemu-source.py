@@ -111,7 +111,7 @@ required = {
     "src/Runtime/LinuxSyscallDispatcher.swift": [
         "func configure(programBreak: UInt64, stackBase: UInt64) throws",
         "private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64?",
-        "private func insertMappedRange(_ range: Range<UInt64>)",
+        "private func insertMappedRange(_ newRange: Range<UInt64>)",
         "private func validateRange(address: UInt64, length: UInt64) -> UInt64",
         "while start < text.endIndex",
         "guard a[4] == UInt64.max, a[5] == 0",
