@@ -32,6 +32,7 @@ final class QEMUVNCClient {
 
     private let queue = DispatchQueue(label: "com.xthrx.isteam.qemu-vnc")
     private let sendQueue = DispatchQueue(label: "com.xthrx.isteam.qemu-vnc.send")
+    private let pendingSendGroup = DispatchGroup()
     private let lock = NSLock()
     private var connection: NWConnection?
 
@@ -67,6 +68,10 @@ final class QEMUVNCClient {
             for attempt in 0..<120 {
                 if Task.isCancelled { return }
                 let candidate = NWConnection(host: "127.0.0.1", port: endpointPort, using: .tcp)
+                if Task.isCancelled {
+                    candidate.cancel()
+                    return
+                }
                 self.withStateLock {
                     self.connection = candidate
                 }
@@ -81,13 +86,14 @@ final class QEMUVNCClient {
                     break
                 } catch {
                     lastError = error
-                    candidate.cancel()
                     if Task.isCancelled { return }
+                    candidate.cancel()
                     if attempt < 119 {
                         try? await Task.sleep(nanoseconds: 500_000_000)
                     }
                 }
             }
+            if Task.isCancelled { return }
             self.withStateLock {
                 self.connected = false
             }
@@ -105,7 +111,13 @@ final class QEMUVNCClient {
             pressedKeys.removeAll()
             return previous
         }
-        previousConnection?.cancel()
+        if let previousConnection {
+            // All queued key-up/pointer writes are allowed to complete before
+            // cancelling the socket. This prevents held guest keys on exit.
+            pendingSendGroup.notify(queue: queue) {
+                previousConnection.cancel()
+            }
+        }
     }
 
     private func waitUntilReady(_ connection: NWConnection) async throws {
@@ -161,19 +173,23 @@ final class QEMUVNCClient {
     /// packets can originate from different UI/controller threads; sending them
     /// from independent Tasks could reorder a release ahead of its press.
     private func enqueueSend(_ data: Data, to connection: NWConnection) {
+        pendingSendGroup.enter()
         sendQueue.async {
             connection.send(content: data, completion: .contentProcessed { error in
                 if let error {
                     EmulationLog.shared.write("QEMU VNC send failed: \(error.localizedDescription)")
                 }
+                self.pendingSendGroup.leave()
             })
         }
     }
 
     private func send(_ data: Data, to connection: NWConnection) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            pendingSendGroup.enter()
             sendQueue.async {
                 connection.send(content: data, completion: .contentProcessed { error in
+                    self.pendingSendGroup.leave()
                     if let error {
                         continuation.resume(throwing: ClientError.connection(error.localizedDescription))
                     } else {
