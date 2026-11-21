@@ -194,6 +194,11 @@ required = {
 
         "guard let adjustment = fetchUInt16() else",
         "return .memoryFault(address: operandAddress(decoded.operand))",    ],
+    "scripts/tests/test_static_elf_execution.swift": [
+        "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
+        "hello from static ELF",
+        "interpreter.run(maxInstructions: 64)",
+    ],
     "scripts/tests/test_linux_process_stack.swift": [
         "auxiliary[3] == 0x40040",
         "auxiliary[25] == result.randomAddress",
@@ -526,6 +531,9 @@ required = {
         "saveLayout()",
         "releaseButtons()",
         "func releaseAllButtons()",
+    ],
+    ".gitlab-ci.yml": [
+        "test_static_elf_execution.swift",
     ],
     ".github/workflows/validate-ios-build.yml": [
         "src/Runtime/LinuxSyscallDispatcher.swift",
