@@ -42,7 +42,7 @@ struct QEMUCommandBuilder {
         let gpu = configuration.bootWindows ? "VGA" : configuration.gpu.rawValue
         let networkDevice = configuration.bootWindows ? "e1000e" : "virtio-net-pci"
         var args = [
-            "-machine", machine, "-nodefaults",
+            "-machine", machine, "-nodefaults", "-display", "none",
             "-m", "\(configuration.memoryMB)", "-smp", "\(configuration.cpuCount)",
             "-cpu", "max",
             "-accel", configuration.accelerator == .jit ? "tcg,tb-size=512,split-wx=on" : "tcg",
