@@ -16,6 +16,8 @@ enum ELFValidator {
     }
 
     static func validate(url: URL) throws {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
 

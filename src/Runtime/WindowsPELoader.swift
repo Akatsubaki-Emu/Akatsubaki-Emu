@@ -34,6 +34,8 @@ final class WindowsPELoader {
     }
 
     func load(_ url: URL) throws -> Image {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let data: Data
         do {
             data = try Data(contentsOf: url, options: [.mappedIfSafe])

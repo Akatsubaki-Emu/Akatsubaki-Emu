@@ -272,11 +272,21 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
             return
         }
         do {
-            let formatResult = GuestProcessManager.shared.inspect(source)
-            guard case let .success(format) = formatResult, format == .windowsPE || format == .linuxELF else {
-                throw NSError(domain: "iSteam.Import", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported executable. Import a Windows PE or Linux ELF executable."])
+            let format = try ExternalDriveStore.shared.withAccess(to: source) { readableSource -> GuestExecutableFormat in
+                let formatResult = GuestProcessManager.shared.inspect(readableSource)
+                guard case let .success(format) = formatResult,
+                      format == .windowsPE || format == .linuxELF else {
+                    throw NSError(domain: "iSteam.Import", code: 1, userInfo: [
+                        NSLocalizedDescriptionKey: "Unsupported executable. Import a Windows PE or Linux ELF executable."
+                    ])
+                }
+                if format == .windowsPE {
+                    _ = try WindowsPELoader().load(readableSource)
+                } else {
+                    try ELFValidator.validate(url: readableSource)
+                }
+                return format
             }
-            if format == .windowsPE { _ = try WindowsPELoader().load(source) } else { try ELFValidator.validate(url: source) }
             let fm = FileManager.default
             let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             let dir = support.appendingPathComponent("Games", isDirectory: true)

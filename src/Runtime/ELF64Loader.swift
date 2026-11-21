@@ -41,6 +41,8 @@ final class ELF64Loader {
 
     func load(_ url: URL, into memory: GuestMemory,
               expectedArchitecture: VMConfiguration.Architecture) throws -> Image {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let data: Data
         do { data = try Data(contentsOf: url, options: [.mappedIfSafe]) }
         catch { throw LoadError.unreadable }

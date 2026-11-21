@@ -42,7 +42,9 @@ struct WindowsPEImage {
     private let file: Data
 
     static func parse(url: URL) throws -> WindowsPEImage {
-        try parse(Data(contentsOf: url, options: [.mappedIfSafe]))
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        return try parse(Data(contentsOf: url, options: [.mappedIfSafe]))
     }
 
     static func parse(_ data: Data) throws -> WindowsPEImage {
