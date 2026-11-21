@@ -207,6 +207,14 @@ struct InterpreterTests {
         precondition(sib.registerValue(3) == 0x1122334455667788)
         precondition(sibMemory.readUInt64(offset: 0x108) == 0x1122334455667788)
 
+        let leaMemory = GuestMemory(size: 256)
+        precondition(leaMemory.write(Data([0x48, 0x8D, 0x1D, 0x79, 0x00, 0x00, 0x00, 0x0F, 0x0B]), offset: 0))
+        let lea = X86_64Interpreter(memory: leaMemory)
+        try lea.reset(entryPoint: 0)
+        let leaExit = try lea.run(maxInstructions: 4)
+        precondition(leaExit == .unsupportedInstruction(address: 7))
+        precondition(lea.registerValue(3) == 128)
+
         let unsupportedMemory = GuestMemory(size: 4)
         precondition(unsupportedMemory.write(Data([0x0F, 0x0B]), offset: 0))
         let unsupported = X86_64Interpreter(memory: unsupportedMemory)

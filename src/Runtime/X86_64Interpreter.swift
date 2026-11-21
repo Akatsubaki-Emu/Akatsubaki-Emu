@@ -150,12 +150,16 @@ final class X86_64Interpreter: GuestCPUBackend {
                     registers[sourceRegister] = width64 ? value : UInt64(UInt32(truncatingIfNeeded: value))
                 }
             case 0x8D:
-                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex),
-                      case .memory(let address) = decoded.operand else {
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
+                }
+                guard case .memory(let address) = decoded.operand else {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)
                 }
-                registers[decoded.reg] = address
+                registers[decoded.reg] = rex & 0x08 != 0
+                    ? address
+                    : UInt64(UInt32(truncatingIfNeeded: address))
             case 0x01, 0x03, 0x29, 0x2B, 0x31, 0x33, 0x39, 0x3B, 0x85:
                 guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
                     return .memoryFault(address: rip)
@@ -358,7 +362,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             return width64 ? registers[index] : UInt64(UInt32(truncatingIfNeeded: registers[index]))
         case .memory(let address):
             if width64 { return memory.readUInt64(offset: address) }
-            return memory.readUInt32(offset: address).map(UInt64.init)
+            return memory.readUInt32(offset: address).map { UInt64($0) }
         }
     }
 
