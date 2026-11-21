@@ -165,7 +165,7 @@ required = {
         "static func and(",
         "static func or(",
         "static func multiply(",
-        "static func shift("
+        "static func shift(",
         "static func subtract(",
         "static func condition(",
         "static func makeFlags("
