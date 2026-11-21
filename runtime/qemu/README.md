@@ -17,8 +17,9 @@ The native bridge in `iSteam/QEMUNativeBridge.c` requires these exported symbols
 - `qemu_init`
 - `qemu_main_loop`
 - `qemu_cleanup`
+- `qemu_system_shutdown_request`
 
-`qemu_system_shutdown_request` is optional. If it is absent, the bridge can start QEMU but cannot request graceful guest shutdown.
+The shutdown symbol is required. The bridge rejects a runtime that cannot request graceful shutdown; actual shutdown behavior still requires physical-device validation.
 
 The Swift runtime locator is `src/QEMU/QEMURuntimeStatus.swift`; the lifecycle owner is `src/QEMU/QEMUNativeRuntime.swift`. The locator reads the generated manifest and resolves the library inside the app bundle. The native bridge then loads it with `dlopen` and resolves the lifecycle symbols with `dlsym`.
 
@@ -30,7 +31,7 @@ Run:
 bash scripts/validate-qemu-runtime.sh /path/to/the/manifest-selected-QEMU-library
 ```
 
-The validator requires Apple tooling and checks that the file is Mach-O, contains the device `arm64` architecture, exports all three required symbols as defined external symbols, and passes strict code-signature verification. It reports the optional shutdown symbol separately.
+The validator requires Apple tooling and checks that the file is Mach-O, contains the device `arm64` architecture, exports all four required lifecycle/shutdown symbols as defined external symbols, and passes strict code-signature verification.
 
 This is a packaging check only. It does not prove that the library's dependencies load, that QEMU initializes, or that a guest boots.
 
@@ -38,7 +39,7 @@ This is a packaging check only. It does not prove that the library's dependencie
 
 - Native bridge and Swift manifest-based runtime locator: present in source.
 - UTM/QEMU runtime binary: must be produced by the runtime workflow and embedded by the release workflow.
-- Physical-device runtime startup, guest boot, display, input, graceful shutdown, and disk persistence: not verified by this validator.
+- Physical-device runtime startup, guest boot, display, input, graceful shutdown, and disk persistence: not verified by this validator. The native bridge is one-shot per app process; relaunch Akatsubaki Emu before starting another QEMU session.
 - The current app runtime configuration is for x86_64 guests; this artifact is not an ARM64 guest runtime.
 - tvOS and visionOS need separately built and validated platform runtimes; the iOS binary must not be reused blindly.
 
