@@ -147,7 +147,7 @@ Bug reports, documentation improvements, and focused pull requests are welcome. 
 
 ## Credits and technical references
 
-These projects are research references; listing them does not mean their code is bundled here or that their maintainers endorse i-Steam.
+These projects are research references; listing them does not mean their code is bundled here or that their maintainers endorse Akatsubaki Emu.
 
 - [QEMU](https://www.qemu.org/) — full-system emulation reference.
 - [Box64](https://github.com/ptitSeb/box64) — x86-64 user-mode emulation reference.

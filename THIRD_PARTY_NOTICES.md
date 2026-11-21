@@ -2,7 +2,7 @@
 
 ## UTM (reference implementation)
 
-i-Steam's QEMU integration references and adapts lifecycle and launcher patterns from UTM:
+Akatsubaki Emu's QEMU integration references and adapts lifecycle and launcher patterns from UTM:
 
 - Project: https://github.com/utmapp/UTM
 - Relevant reference files: `Services/UTMQemuSystem.m`, `Configuration/UTMQemuConfiguration+Arguments.swift`, and `QEMULauncher/Bootstrap.c`

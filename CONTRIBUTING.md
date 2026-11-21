@@ -1,8 +1,8 @@
-# Contributing to i-Steam
+# Contributing to Akatsubaki Emu
 
-Thanks for your interest in contributing to i-Steam! Bug reports, documentation improvements, testing, and focused code changes are welcome.
+Thanks for your interest in contributing to Akatsubaki Emu! Bug reports, documentation improvements, testing, and focused code changes are welcome.
 
-i-Steam is an experimental project. Please help us distinguish prototypes from implemented and tested features, and avoid describing functionality as working until it has been verified.
+Akatsubaki Emu is an experimental project. Please help us distinguish prototypes from implemented and tested features, and avoid describing functionality as working until it has been verified.
 
 ## Before you start
 
@@ -28,7 +28,7 @@ Please include as much of the following as you can:
 - What actually happened, including any error message.
 - Device model, iOS/iPadOS or tvOS version, and whether you used a simulator or physical device.
 - The app version, commit, release tag, or workflow run involved.
-- Relevant build logs, crash logs, screenshots, or a link to the failing [GitHub Actions run](https://github.com/I-Steam/I-steam/actions) or [GitLab pipeline](https://gitlab.com/chantinlongxthrx/I-steam/-/pipelines).
+- Relevant build logs, crash logs, screenshots, or a link to the failing [GitHub Actions run](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions) or [GitLab pipeline](https://gitlab.com/chantinlongxthrx/I-steam/-/pipelines).
 
 Remove Apple IDs, signing credentials, access tokens, private URLs, and other sensitive information from logs before sharing them. Never publish certificates, provisioning profiles, private keys, or account credentials.
 
@@ -38,8 +38,8 @@ Building the Apple targets requires a Mac with a compatible version of Xcode and
 
 ```sh
 brew install xcodegen
-git clone https://github.com/I-Steam/I-steam.git
-cd I-steam
+git clone https://github.com/Akatsubaki-Emu/Akatsubaki-Emu.git
+cd Akatsubaki-Emu
 xcodegen generate --spec project.yml
 ```
 
@@ -102,4 +102,4 @@ Be respectful, constructive, and welcoming. Critique ideas and code rather than 
 
 By submitting a contribution, you agree that it may be distributed under the project's [GNU General Public License v3.0](LICENSE). You must have the right to submit the code and must preserve applicable third-party copyright notices and license terms.
 
-Thank you for helping improve i-Steam!
+Thank you for helping improve Akatsubaki Emu!
