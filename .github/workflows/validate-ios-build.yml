@@ -79,6 +79,15 @@ jobs:
             scripts/tests/test_linux_process_stack.swift \
             -o "$RUNNER_TEMP/test-linux-process-stack"
           "$RUNNER_TEMP/test-linux-process-stack"
+      - name: Test hybrid runtime backend routing
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/ExecutionBackendRouter.swift \
+            scripts/tests/test_execution_backend_router.swift \
+            -o "$RUNNER_TEMP/test-backend-router"
+          "$RUNNER_TEMP/test-backend-router"
       - name: Test x86-64 interpreter ALU, memory, stack and syscall path
         if: matrix.scheme == 'iSteam'
         run: |
