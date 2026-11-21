@@ -1,4 +1,5 @@
 #include "NativeGuestMemory.h"
+
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -6,24 +7,155 @@
 #include <mutex>
 #include <new>
 #include <unordered_map>
-namespace { constexpr uint64_t pageSize = 4096; using Page = std::array<uint8_t, pageSize>; }
-struct ISteamGuestMemory { explicit ISteamGuestMemory(uint64_t n): size(n) {} uint64_t size; std::unordered_map<uint64_t,std::unique_ptr<Page>> pages; mutable std::mutex mutex; };
+
+namespace {
+constexpr uint64_t pageSize = 4096;
+using Page = std::array<uint8_t, pageSize>;
+}
+
+struct ISteamGuestMemory {
+    explicit ISteamGuestMemory(uint64_t byteCount) : size(byteCount) {}
+
+    uint64_t size;
+    std::unordered_map<uint64_t, std::unique_ptr<Page>> pages;
+    mutable std::mutex mutex;
+};
+
 extern "C" {
-ISteamGuestMemory *isteam_guest_memory_create(uint64_t size) { try { return new ISteamGuestMemory(size); } catch (...) { return nullptr; } }
-void isteam_guest_memory_destroy(ISteamGuestMemory *m) { delete m; }
-uint64_t isteam_guest_memory_size(const ISteamGuestMemory *m) { return m ? m->size : 0; }
-bool isteam_guest_memory_read(ISteamGuestMemory *m,uint64_t off,uint8_t *dst,size_t len) {
- if(!m||(len&&!dst)||off>m->size||len>m->size-off)return false;if(!len)return true;std::lock_guard<std::mutex> g(m->mutex);size_t done=0;
- while(done<len){uint64_t at=off+done,idx=at/pageSize;size_t in=at%pageSize,n=std::min(len-done,(size_t)pageSize-in);auto it=m->pages.find(idx);if(it==m->pages.end())std::memset(dst+done,0,n);else std::memcpy(dst+done,it->second->data()+in,n);done+=n;}return true;
+
+ISteamGuestMemory *isteam_guest_memory_create(uint64_t size) {
+    try {
+        return new ISteamGuestMemory(size);
+    } catch (...) {
+        return nullptr;
+    }
 }
-bool isteam_guest_memory_write(ISteamGuestMemory *m,uint64_t off,const uint8_t *src,size_t len) {
- if(!m||(len&&!src)||off>m->size||len>m->size-off)return false;if(!len)return true;std::lock_guard<std::mutex> g(m->mutex);size_t done=0;
- while(done<len){uint64_t at=off+done,idx=at/pageSize;size_t in=at%pageSize,n=std::min(len-done,(size_t)pageSize-in);auto &p=m->pages[idx];if(!p)p.reset(new(std::nothrow) Page{});if(!p)return false;std::memcpy(p->data()+in,src+done,n);done+=n;}return true;
+
+void isteam_guest_memory_destroy(ISteamGuestMemory *memory) {
+    delete memory;
 }
-bool isteam_guest_memory_zero(ISteamGuestMemory *m,uint64_t off,uint64_t len) {
- if(!m||off>m->size||len>m->size-off)return false;if(!len)return true;std::lock_guard<std::mutex> g(m->mutex);uint64_t end=off+len;
- for(uint64_t at=off;at<end;){uint64_t idx=at/pageSize;size_t in=at%pageSize,n=(size_t)std::min(end-at,pageSize-in);auto it=m->pages.find(idx);if(it!=m->pages.end())std::memset(it->second->data()+in,0,n);at+=n;}return true;
+
+uint64_t isteam_guest_memory_size(const ISteamGuestMemory *memory) {
+    return memory ? memory->size : 0;
 }
-void isteam_guest_memory_clear(ISteamGuestMemory *m){if(!m)return;std::lock_guard<std::mutex> g(m->mutex);m->pages.clear();}
-size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *m){if(!m)return 0;std::lock_guard<std::mutex> g(m->mutex);return m->pages.size();}
+
+bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
+                              uint8_t *destination, size_t length) {
+    if (!memory || (length && !destination)
+        || offset > memory->size || length > memory->size - offset) {
+        return false;
+    }
+    if (!length) return true;
+
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        size_t completed = 0;
+        while (completed < length) {
+            const uint64_t address = offset + completed;
+            const uint64_t pageIndex = address / pageSize;
+            const size_t pageOffset = static_cast<size_t>(address % pageSize);
+            const size_t amount = std::min(length - completed,
+                                           static_cast<size_t>(pageSize) - pageOffset);
+            const auto found = memory->pages.find(pageIndex);
+            if (found == memory->pages.end() || !found->second) {
+                std::memset(destination + completed, 0, amount);
+            } else {
+                std::memcpy(destination + completed,
+                            found->second->data() + pageOffset, amount);
+            }
+            completed += amount;
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
+                               const uint8_t *source, size_t length) {
+    if (!memory || (length && !source)
+        || offset > memory->size || length > memory->size - offset) {
+        return false;
+    }
+    if (!length) return true;
+
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        size_t completed = 0;
+        while (completed < length) {
+            const uint64_t address = offset + completed;
+            const uint64_t pageIndex = address / pageSize;
+            const size_t pageOffset = static_cast<size_t>(address % pageSize);
+            const size_t amount = std::min(length - completed,
+                                           static_cast<size_t>(pageSize) - pageOffset);
+
+            auto found = memory->pages.find(pageIndex);
+            if (found == memory->pages.end()) {
+                // Allocate before inserting. The old operator[] path left a
+                // null map entry on allocation failure and could throw from
+                // unordered_map growth across this C ABI boundary.
+                auto page = std::unique_ptr<Page>(new (std::nothrow) Page{});
+                if (!page) return false;
+                found = memory->pages.emplace(pageIndex, std::move(page)).first;
+            }
+            if (!found->second) return false;
+
+            std::memcpy(found->second->data() + pageOffset,
+                        source + completed, amount);
+            completed += amount;
+        }
+        return true;
+    } catch (...) {
+        // No C++ allocation/locking exception may escape into Swift/C callers.
+        return false;
+    }
+}
+
+bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
+                              uint64_t length) {
+    if (!memory || offset > memory->size || length > memory->size - offset) {
+        return false;
+    }
+    if (!length) return true;
+
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        const uint64_t end = offset + length;
+        for (uint64_t address = offset; address < end;) {
+            const uint64_t pageIndex = address / pageSize;
+            const size_t pageOffset = static_cast<size_t>(address % pageSize);
+            const size_t amount = static_cast<size_t>(
+                std::min(end - address, pageSize - pageOffset));
+            const auto found = memory->pages.find(pageIndex);
+            if (found != memory->pages.end() && found->second) {
+                std::memset(found->second->data() + pageOffset, 0, amount);
+            }
+            address += amount;
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+void isteam_guest_memory_clear(ISteamGuestMemory *memory) {
+    if (!memory) return;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        memory->pages.clear();
+    } catch (...) {
+        // This void API has no error channel; keep exceptions inside C++.
+    }
+}
+
+size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory) {
+    if (!memory) return 0;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        return memory->pages.size();
+    } catch (...) {
+        return 0;
+    }
+}
+
 }
