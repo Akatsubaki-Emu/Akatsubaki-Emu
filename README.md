@@ -170,7 +170,7 @@ Akatsubaki Emu is not affiliated with, endorsed by, or sponsored by Valve Corpor
 
 ## Repository synchronization
 
-GitHub is the canonical source repository: [Akatsubaki-Emu/Akatsubaki-Emu](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu). GitLab at [chantinlongxthrx/I-steam](https://gitlab.com/chantinlongxthrx/I-steam) is the mirror. The configured GitLab-to-GitHub push mirror and the existing GitHub-to-GitLab synchronization are retained; avoid making competing edits on both hosts and check the latest commit before changing either side. CI/CD (validation, QEMU runtime builds, platform builds, releases, and AltStore publishing) runs through GitHub Actions; GitLab CI is not used. See [`docs/GIT_SYNC.md`](docs/GIT_SYNC.md) for synchronization details and cautions.
+GitHub is the canonical source repository: [Akatsubaki-Emu/Akatsubaki-Emu](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu). GitLab at [chantinlongxthrx/I-steam](https://gitlab.com/chantinlongxthrx/I-steam) is the mirror. The configured GitLab-to-GitHub push mirror and the existing GitHub-to-GitLab synchronization are retained; avoid making competing edits on both hosts and check the latest commit before changing either side. GitLab CI (`.gitlab-ci.yml`) runs supplemental Swift runtime, native guest-memory, and Python source-contract/regression tests. GitHub Actions remains responsible for Apple-platform simulator builds, QEMU/UTM runtime builds, releases, and the website's AltStore/PAL publishing workflow. GitLab CI jobs are currently blocked before execution by the project's runner quota; see the latest pipeline before treating tests as passed. See [`docs/GIT_SYNC.md`](docs/GIT_SYNC.md) for synchronization details and cautions.
 
 
 ## QEMU runtime build workflow
