@@ -679,7 +679,7 @@ required = {
     ],
     "src/Display/TouchGamepadView.swift": [
         "iSteam.touchGamepad.layout.v3",
-        "else if !restoreLayout()",
+        "if !restoreLayout() {",
         "control.center.x / bounds.width",
         "saveLayout()",
         "releaseButtons()",

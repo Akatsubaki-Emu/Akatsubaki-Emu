@@ -14,7 +14,6 @@ final class TouchGamepadView: UIView {
     // Stage Manager window resizing instead of restoring controls off-screen.
     private let layoutKey = "iSteam.touchGamepad.layout.v3"
     private var editMode = false
-    private var didApplyLayout = false
     private var lastBoundsSize: CGSize = .zero
     private var editButtonControl: UIButton!
 
@@ -71,12 +70,9 @@ final class TouchGamepadView: UIView {
         super.layoutSubviews()
         if bounds.size != lastBoundsSize {
             lastBoundsSize = bounds.size
-            if !didApplyLayout {
-                didApplyLayout = true
-                applyDefaultLayout()
-            } else if !restoreLayout() {
-                // Restore normalized coordinates in both modes so resizing the
-                // window cannot strand controls off-screen while editing.
+            // Restore saved normalized coordinates on first display and on
+            // every later resize, including while edit mode is active.
+            if !restoreLayout() {
                 applyDefaultLayout()
             }
         }

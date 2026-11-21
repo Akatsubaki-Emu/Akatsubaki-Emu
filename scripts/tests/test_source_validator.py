@@ -345,8 +345,9 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Display" / "TouchGamepadView.swift").read_text(encoding="utf-8")
         layout = source.split("override func layoutSubviews()", 1)[1].split("private func installEditGesturesIfNeeded", 1)[0]
-        self.assertIn("else if !restoreLayout()", layout)
-        self.assertNotIn("if !editMode, !restoreLayout()", layout)
+        self.assertIn("if !restoreLayout() {", layout)
+        self.assertNotIn("didApplyLayout", source)
+        self.assertNotIn("applyDefaultLayout()\n            } else if", layout)
 
 
 if __name__ == "__main__":
