@@ -52,11 +52,31 @@ final class GuestMachine {
     private(set) var lastExit: GuestCPUExit?
     private var cpu: GuestCPUBackend?
     private let executionLock = NSLock()
+    private let activeCPULock = NSLock()
+    private var activeCPU: GuestCPUBackend?
 
     private func withExecutionLock<T>(_ body: () throws -> T) rethrows -> T {
         executionLock.lock()
         defer { executionLock.unlock() }
         return try body()
+    }
+
+    private func setActiveCPU(_ backend: GuestCPUBackend?) {
+        activeCPULock.lock()
+        activeCPU = backend
+        activeCPULock.unlock()
+    }
+
+    /// Requests interruption without waiting for executionLock, which is held
+    /// for the duration of runBatch. The lock protects the backend reference
+    /// while installCPUBackend swaps it between batches.
+    @discardableResult
+    private func requestActiveStop() -> Bool {
+        activeCPULock.lock()
+        let backend = activeCPU
+        activeCPULock.unlock()
+        backend?.requestStop()
+        return backend != nil
     }
 
     init(configuration: VMConfiguration, memorySize: UInt64? = nil) {
@@ -117,13 +137,12 @@ final class GuestMachine {
     @discardableResult
     func loadELFImage(at url: URL) throws -> ELF64Loader.Image {
         guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
-        guard let cpu else {
-            let error = GuestEngineError.backendNotInstalled(configuration.architecture)
-            state = .failed(error.localizedDescription)
-            throw error
-        }
-
         return try withExecutionLock {
+            guard let cpu else {
+                let error = GuestEngineError.backendNotInstalled(configuration.architecture)
+                state = .failed(error.localizedDescription)
+                throw error
+            }
             do {
                 let image = try ELF64Loader().load(url, into: memory,
                                                    expectedArchitecture: configuration.architecture)
@@ -141,12 +160,12 @@ final class GuestMachine {
     /// Resets CPU registers only. Loaded guest memory is deliberately preserved.
     func reset(entryPoint: UInt64) throws {
         guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
-        guard let cpu else {
-            let error = GuestEngineError.backendNotInstalled(configuration.architecture)
-            state = .failed(error.localizedDescription)
-            throw error
-        }
         try withExecutionLock {
+            guard let cpu else {
+                let error = GuestEngineError.backendNotInstalled(configuration.architecture)
+                state = .failed(error.localizedDescription)
+                throw error
+            }
             do {
                 try cpu.reset(entryPoint: entryPoint)
                 lastExit = nil
@@ -163,42 +182,54 @@ final class GuestMachine {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
         return try withExecutionLock {
-        guard state == .configured else {
-            throw GuestEngineError.invalidState("The guest must be configured before running; resume a paused guest or load/reset an image first.")
-        }
-        guard let cpu else {
-            let error = GuestEngineError.backendNotInstalled(configuration.architecture)
-            state = .failed(error.localizedDescription)
-            throw error
-        }
-        state = .running
-        do {
-            let exit = try cpu.run(maxInstructions: maxInstructions)
-            lastExit = exit
-            switch exit {
-            case .instructionLimit: state = .configured
-            case .interrupted: state = .paused
-            case .halted: state = .stopped
-            case .unsupportedInstruction, .memoryFault, .backendUnavailable:
-                state = .failed(String(describing: exit))
+            guard state == .configured else {
+                throw GuestEngineError.invalidState("The guest must be configured before running; resume a paused guest or load/reset an image first.")
             }
-            return exit
-        } catch {
-            state = .failed(error.localizedDescription)
-            throw error
-        }
+            guard let cpu else {
+                let error = GuestEngineError.backendNotInstalled(configuration.architecture)
+                state = .failed(error.localizedDescription)
+                throw error
+            }
+
+            setActiveCPU(cpu)
+            defer { setActiveCPU(nil) }
+            state = .running
+            do {
+                let exit = try cpu.run(maxInstructions: maxInstructions)
+                lastExit = exit
+                switch exit {
+                case .instructionLimit: state = .configured
+                case .interrupted: state = .paused
+                case .halted: state = .stopped
+                case .unsupportedInstruction, .memoryFault, .backendUnavailable:
+                    state = .failed(String(describing: exit))
+                }
+                return exit
+            } catch {
+                state = .failed(error.localizedDescription)
+                throw error
+            }
         }
     }
 
     func pause() {
-        let activeCPU = cpu
-        activeCPU?.requestStop()
+        let wasExecuting = requestActiveStop()
         withExecutionLock {
-            if state == .running {
+            // runBatch normally records .paused after observing the stop request.
+            // If its instruction budget ended first, preserve the user's pause.
+            if wasExecuting && state == .configured {
                 state = .paused
-            } else if state != .paused {
-                activeCPU?.resume()
             }
+        }
+    }
+
+    func stop() {
+        requestActiveStop()
+        withExecutionLock {
+            cpu?.requestStop()
+            memory.clear()
+            state = .stopped
+            lastExit = nil
         }
     }
 
