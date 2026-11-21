@@ -31,6 +31,7 @@ final class GameLibraryTransferStore {
     }
 
     func export(to destination: URL) throws {
+        guard GameStore.shared.isReadable else { throw TransferError.libraryUnreadable }
         let games = GameStore.shared.games
         let gameIDs = Set(games.map(\.id))
         let profiles = GameRuntimeProfileStore.shared.allProfiles.filter {
@@ -147,6 +148,7 @@ final class GameLibraryTransferStore {
         case invalidEntry
         case invalidProfile
         case librarySaveFailed
+        case libraryUnreadable
 
         var errorDescription: String? {
             switch self {
@@ -162,6 +164,8 @@ final class GameLibraryTransferStore {
                 return "The backup contains an invalid, duplicate, or orphaned game profile."
             case .librarySaveFailed:
                 return "The game library could not be saved. Existing data was preserved and the imported profiles were rolled back."
+            case .libraryUnreadable:
+                return "The existing game library is unreadable; export was stopped to avoid creating an incomplete backup."
             }
         }
     }

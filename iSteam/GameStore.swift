@@ -40,6 +40,19 @@ struct GameEntry: Codable, Identifiable, Equatable {
         self.notes = notes
     }
 
+    func validate() -> Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && name.utf8.count <= 256 && !name.contains("\0")
+            && executablePath.utf8.count <= 4096 && !executablePath.contains("\0")
+            && workingDirectory.utf8.count <= 4096 && !workingDirectory.contains("\0")
+            && launchArguments.count <= 256
+            && launchArguments.allSatisfy { $0.utf8.count <= 4096 && !$0.contains("\0") }
+            && tags.count <= 128
+            && tags.allSatisfy { $0.utf8.count <= 128 && !$0.contains("\0") }
+            && (notes?.utf8.count ?? 0) <= 16_384
+            && (coverArtPath?.utf8.count ?? 0) <= 4096
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id, name, executablePath, workingDirectory, launchArguments
         case coverArtPath, isFavorite, tags, lastPlayedAt, addedAt, notes
@@ -73,8 +86,14 @@ final class GameStore {
 
     private func loadGames() -> [GameEntry]? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
-        return try? decoder.decode([GameEntry].self, from: data)
+        guard let decoded = try? decoder.decode([GameEntry].self, from: data),
+              decoded.count <= 10_000,
+              Set(decoded.map(\.id)).count == decoded.count,
+              decoded.allSatisfy({ $0.validate() }) else { return nil }
+        return decoded
     }
+
+    var isReadable: Bool { loadGames() != nil }
 
     var games: [GameEntry] {
         guard let value = loadGames() else {
@@ -91,7 +110,11 @@ final class GameStore {
             EmulationLog.shared.write("Game library save blocked because existing data could not be decoded")
             return false
         }
-        guard let data = try? encoder.encode(games) else {
+        guard games.count <= 10_000,
+              Set(games.map(\.id)).count == games.count,
+              games.allSatisfy({ $0.validate() }),
+              let data = try? encoder.encode(games),
+              data.count <= 20 * 1024 * 1024 else {
             EmulationLog.shared.write("Game library could not be encoded; existing saved data was left unchanged")
             return false
         }
