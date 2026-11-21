@@ -60,7 +60,7 @@ required = {
         'let machine = "q35,usb=on"',
         '"-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"',
         "escapeDriveValue(_ path: String)",
-        "replacingOccurrences(of: \",\" , with: \",\" )",
+        'replacingOccurrences(of: ",", with: ",,")',
     ],
     "src/Display/VMDisplayViewController.swift": [
         "vncClient.onFrame", "vncClient.start()", "vncClient.tapKey(key)"
