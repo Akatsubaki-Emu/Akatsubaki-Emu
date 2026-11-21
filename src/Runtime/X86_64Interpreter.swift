@@ -184,6 +184,43 @@ final class X86_64Interpreter: GuestCPUBackend {
                 guard writeOperand(value, to: decoded.operand, width64: width64) else {
                     return .memoryFault(address: operandAddress(decoded.operand))
                 }
+            case 0x63: // MOVSXD r32/r64, r/m32
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
+                }
+                guard let raw = readOperand(decoded.operand, width64: false) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
+                let signed = Int64(Int32(bitPattern: UInt32(truncatingIfNeeded: raw)))
+                let value = rex & 0x08 != 0
+                    ? UInt64(bitPattern: signed)
+                    : UInt64(UInt32(truncatingIfNeeded: signed))
+                registers[decoded.reg] = value
+            case 0x69, 0x6B: // IMUL r32/r64, r/m32/r/m64, immediate
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
+                }
+                let width64 = rex & 0x08 != 0
+                let immediate: UInt64
+                if opcode == 0x69 {
+                    guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
+                    immediate = width64
+                        ? UInt64(bitPattern: Int64(Int32(bitPattern: raw)))
+                        : UInt64(UInt32(bitPattern: Int32(bitPattern: raw)))
+                } else {
+                    guard let raw = fetchByte() else { return .memoryFault(address: rip) }
+                    immediate = width64
+                        ? UInt64(bitPattern: Int64(Int8(bitPattern: raw)))
+                        : UInt64(UInt32(bitPattern: Int32(Int8(bitPattern: raw))))
+                }
+                guard let source = readOperand(decoded.operand, width64: width64) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
+                let result = X86_64ALU.multiply(source, immediate, width64: width64, flags: flags)
+                flags = result.flags
+                registers[decoded.reg] = width64
+                    ? result.value
+                    : UInt64(UInt32(truncatingIfNeeded: result.value))
             case 0x68, 0x6A:
                 let value: UInt64
                 if opcode == 0x68 {
@@ -349,6 +386,20 @@ final class X86_64Interpreter: GuestCPUBackend {
                         instructionCount &+= 1
                         return .halted
                     }
+                } else if second == 0xAF { // IMUL r32/r64, r/m32/r/m64
+                    guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                        return .memoryFault(address: rip)
+                    }
+                    let width64 = rex & 0x08 != 0
+                    guard let source = readOperand(decoded.operand, width64: width64) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                    let result = X86_64ALU.multiply(registers[decoded.reg], source,
+                                                    width64: width64, flags: flags)
+                    flags = result.flags
+                    registers[decoded.reg] = width64
+                        ? result.value
+                        : UInt64(UInt32(truncatingIfNeeded: result.value))
                 } else if [UInt8(0x82), 0x83, 0x84, 0x85, 0x88, 0x89, 0x8C, 0x8D, 0x8E, 0x8F].contains(second) {
                     guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
                     guard let takeBranch = X86_64ALU.condition(second & 0x0F, flags: flags) else {

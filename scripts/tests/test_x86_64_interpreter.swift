@@ -352,6 +352,48 @@ struct InterpreterTests {
         let indirectFaultExit = try indirectFault.run(maxInstructions: 1)
         precondition(indirectFaultExit == .memoryFault(address: 0x1006))
 
+        let movsxdMemory = GuestMemory(size: 32)
+        precondition(movsxdMemory.write(Data([0xB8, 0xFF, 0xFF, 0xFF, 0xFF,
+                                               0x48, 0x63, 0xC0, 0x0F, 0x0B]), offset: 0))
+        let movsxd = X86_64Interpreter(memory: movsxdMemory)
+        try movsxd.reset(entryPoint: 0)
+        let movsxdExit = try movsxd.run(maxInstructions: 4)
+        precondition(movsxdExit == .unsupportedInstruction(address: 8))
+        precondition(movsxd.registerValue(0) == UInt64.max)
+
+        let imulMemory = GuestMemory(size: 64)
+        precondition(imulMemory.write(Data([0x48, 0xC7, 0xC0, 0xFE, 0xFF, 0xFF, 0xFF,
+                                            0xBB, 0x03, 0x00, 0x00, 0x00,
+                                            0x48, 0x0F, 0xAF, 0xC3, 0x0F, 0x0B]), offset: 0))
+        let imul = X86_64Interpreter(memory: imulMemory)
+        try imul.reset(entryPoint: 0)
+        let imulExit = try imul.run(maxInstructions: 8)
+        precondition(imulExit == .unsupportedInstruction(address: 16))
+        precondition(imul.registerValue(0) == UInt64.max - 5)
+        precondition(imul.conditionFlags & X86_64ALU.carry == 0)
+        precondition(imul.conditionFlags & X86_64ALU.overflow == 0)
+
+        let imulOverflowMemory = GuestMemory(size: 32)
+        precondition(imulOverflowMemory.write(Data([0xB8, 0xFF, 0xFF, 0xFF, 0x7F,
+                                                    0x6B, 0xC0, 0x02, 0x0F, 0x0B]), offset: 0))
+        let imulOverflow = X86_64Interpreter(memory: imulOverflowMemory)
+        try imulOverflow.reset(entryPoint: 0)
+        let imulOverflowExit = try imulOverflow.run(maxInstructions: 4)
+        precondition(imulOverflowExit == .unsupportedInstruction(address: 8))
+        precondition(imulOverflow.registerValue(0) == 0xFFFF_FFFE)
+        precondition(imulOverflow.conditionFlags & X86_64ALU.carry != 0)
+        precondition(imulOverflow.conditionFlags & X86_64ALU.overflow != 0)
+
+        let imulImmediateMemory = GuestMemory(size: 32)
+        precondition(imulImmediateMemory.write(Data([0xB8, 0x04, 0x00, 0x00, 0x00,
+                                                     0x69, 0xC0, 0xFE, 0xFF, 0xFF, 0xFF,
+                                                     0x0F, 0x0B]), offset: 0))
+        let imulImmediate = X86_64Interpreter(memory: imulImmediateMemory)
+        try imulImmediate.reset(entryPoint: 0)
+        let imulImmediateExit = try imulImmediate.run(maxInstructions: 4)
+        precondition(imulImmediateExit == .unsupportedInstruction(address: 11))
+        precondition(imulImmediate.registerValue(0) == 0xFFFF_FFF8)
+
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [
             0xB8, 0x0C, 0x00, 0x00, 0x00,

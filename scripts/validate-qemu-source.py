@@ -163,6 +163,7 @@ required = {
     "src/Runtime/X86_64ALU.swift": [
         "static func add(",
         "static func or(",
+        "static func multiply("
         "static func subtract(",
         "static func condition(",
         "static func makeFlags(",
@@ -180,6 +181,9 @@ required = {
         "case 0x89, 0x8B:",
                 "case 0x8D:",
         "case 0xC7:",
+        "case 0x63:",
+        "case 0x69, 0x6B:",
+        "second == 0xAF",
         "case 0xFF:",
         "case 0xC9:",
         "case 0xC2:",

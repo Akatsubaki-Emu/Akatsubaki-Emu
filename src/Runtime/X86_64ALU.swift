@@ -61,6 +61,27 @@ enum X86_64ALU {
             auxiliary: false, overflow: false, previous: flags))
     }
 
+    static func multiply(_ lhs: UInt64, _ rhs: UInt64, width64: Bool, flags: UInt64) -> Result {
+        let value: UInt64
+        let overflowOut: Bool
+        if width64 {
+            let product = Int64(bitPattern: lhs).multipliedFullWidth(by: Int64(bitPattern: rhs))
+            value = product.low
+            let expectedHigh: Int64 = value & (UInt64(1) << 63) == 0 ? 0 : -1
+            overflowOut = product.high != expectedHigh
+        } else {
+            let left = Int64(Int32(bitPattern: UInt32(truncatingIfNeeded: lhs)))
+            let right = Int64(Int32(bitPattern: UInt32(truncatingIfNeeded: rhs)))
+            let product = left * right
+            let low = UInt32(truncatingIfNeeded: product)
+            value = UInt64(low)
+            overflowOut = product != Int64(Int32(bitPattern: low))
+        }
+        var newFlags = flags & ~(carry | overflow)
+        if overflowOut { newFlags |= carry | overflow }
+        return Result(value: value, flags: newFlags)
+    }
+
     static func condition(_ code: UInt8, flags: UInt64) -> Bool? {
         let cf = flags & carry != 0
         let zf = flags & zero != 0
