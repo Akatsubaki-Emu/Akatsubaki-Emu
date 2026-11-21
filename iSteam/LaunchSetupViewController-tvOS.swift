@@ -52,7 +52,8 @@ final class LaunchSetupViewController: UIViewController {
     }
 
     private func launch(_ configuration: VMConfiguration) {
-        UserDefaults.standard.set(configuration.bootWindows ? "Windows VM" : "Linux VM", forKey: "iSteam.lastVMMode")
+        let mode = configuration.name == "SteamOS Gaming Mode" ? "SteamOS VM" : (configuration.bootWindows ? "Windows VM" : "Linux VM")
+        UserDefaults.standard.set(mode, forKey: "iSteam.lastVMMode")
         navigationController?.pushViewController(VMDisplayViewController(configuration: configuration), animated: true)
     }
 }
