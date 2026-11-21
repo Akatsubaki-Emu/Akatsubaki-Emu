@@ -30,6 +30,8 @@ struct VNCKeyStateTests {
 
         expect(state.setMovement(0x01, source: "touchgamepad").count == 1,
                "touch movement must press its direction")
+        expect(state.setMovement(0x01, source: "touchgamepad").isEmpty,
+               "unchanged movement samples must be ignored")
         expect(state.setMovement(0x01, source: "controller:one:left").isEmpty,
                "controller movement must share an already held direction")
         expect(state.setMovement(0, source: "touchgamepad").isEmpty,

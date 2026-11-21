@@ -25,5 +25,13 @@ class VNCKeyDispatchTests(unittest.TestCase):
         self.assertIn("base[1] = 1", helper)
         self.assertIn("base[9] = 0", helper)
 
+    def test_unchanged_movement_mask_skips_source_map_write(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "QEMU" / "VNCKeyState.swift").read_text(encoding="utf-8")
+        body = source.split("mutating func setMovement", 1)[1].split("mutating func releaseAll", 1)[0]
+        guard = "guard normalizedMask != previousSourceMask else { return [] }"
+        self.assertIn(guard, body)
+        self.assertLess(body.index(guard), body.index("movementSources[source] = normalizedMask"))
+
 if __name__ == "__main__":
     unittest.main()

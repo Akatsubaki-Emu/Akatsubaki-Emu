@@ -49,6 +49,7 @@ struct VNCKeyState {
         let previousMask = movementMask
         let previousSourceMask = movementSources[source] ?? 0
         let normalizedMask = mask & 0x0f
+        guard normalizedMask != previousSourceMask else { return [] }
         if normalizedMask == 0 {
             movementSources.removeValue(forKey: source)
         } else {
