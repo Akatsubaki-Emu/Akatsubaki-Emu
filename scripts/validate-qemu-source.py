@@ -23,7 +23,7 @@ required = {
     ],
     "src/Runtime/WindowsPELoader.swift": [
         "fileSize <= 512 * 1024 * 1024",
-        "case tooLarge",
+        "case unreadableFile, tooSmall, tooLarge",
         "WindowsPEImage.parse(data)",
         "is64Bit: true",
     ],
