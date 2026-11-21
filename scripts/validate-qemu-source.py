@@ -45,11 +45,13 @@ required = {
         "rootPrefix",
     ],
     "src/Runtime/ELF64Loader.swift": [
+        "memory.clear()",
         "($0.flags & 0x1) != 0",
         "loadable executable segment",
     ],
     "src/Runtime/X86_64Interpreter.swift": [
         "let is64Bit = rex & 0x08 != 0",
+        "if requested == 0",
         "32-bit GPR writes zero-extend",
         "PUSH RSP stores the pre-decrement value.",
         "POP RSP loads the popped value directly",

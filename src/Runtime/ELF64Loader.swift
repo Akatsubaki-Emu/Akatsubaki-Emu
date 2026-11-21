@@ -114,6 +114,9 @@ final class ELF64Loader {
                 && entry - $0.guestAddress < $0.memorySize
         }) else { throw LoadError.invalidSegment }
 
+        // Start from a clean address space so bytes from a previously loaded image
+        // cannot survive outside the new PT_LOAD ranges.
+        memory.clear()
         for (segment, _) in pending {
             guard memory.zero(offset: segment.guestAddress, length: segment.memorySize) else {
                 throw LoadError.segmentOutsideGuestMemory

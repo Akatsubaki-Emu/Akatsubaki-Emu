@@ -159,6 +159,10 @@ final class X86_64Interpreter: GuestCPUBackend {
                             registers[0] = UInt64(bitPattern: Int64(-9)) // -EBADF
                             break
                         }
+                        if requested == 0 {
+                            registers[0] = 0
+                            break
+                        }
                         guard requested <= 1_048_576,
                               requested <= UInt64(Int.max),
                               let bytes = memory.read(offset: address, length: Int(requested)) else {
