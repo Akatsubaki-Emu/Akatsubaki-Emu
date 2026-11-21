@@ -9,8 +9,12 @@ enum QEMURuntimeStatus {
 
     static func inspect(bundle: Bundle = .main) -> QEMURuntimeStatus {
         let fm = FileManager.default
+        let bundleRoot = bundle.bundleURL.resolvingSymlinksInPath().standardizedFileURL
+        let bundlePrefix = bundleRoot.path.hasSuffix("/") ? bundleRoot.path : bundleRoot.path + "/"
         let dataDirectory = bundle.bundleURL.appendingPathComponent("QEMU", isDirectory: true)
-        guard fm.fileExists(atPath: dataDirectory.path) else {
+            .resolvingSymlinksInPath().standardizedFileURL
+        guard dataDirectory.path.hasPrefix(bundlePrefix),
+              fm.fileExists(atPath: dataDirectory.path) else {
             return .unavailable("The QEMU data directory is missing from the app bundle.")
         }
 
@@ -21,10 +25,14 @@ enum QEMURuntimeStatus {
             let relativePath = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
             if !relativePath.isEmpty,
                !relativePath.hasPrefix("/"),
-               !relativePath.split(separator: "/").contains("..") {
+               !relativePath.contains("\\"),
+               !relativePath.split(separator: "/").contains(".."),
+               !relativePath.split(separator: "/").contains(".") {
                 let library = bundle.bundleURL.appendingPathComponent(relativePath)
+                    .standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
                 var isDirectory: ObjCBool = false
-                if fm.fileExists(atPath: library.path, isDirectory: &isDirectory),
+                if library.path.hasPrefix(bundlePrefix),
+                   fm.fileExists(atPath: library.path, isDirectory: &isDirectory),
                    !isDirectory.boolValue {
                     return validateLoadableLibrary(library, dataDirectory: dataDirectory)
                 }
@@ -58,10 +66,12 @@ enum QEMURuntimeStatus {
         }
 
         guard let library = candidates.first(where: {
+            let resolved = $0.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
             var isDirectory: ObjCBool = false
-            return fm.fileExists(atPath: $0.path, isDirectory: &isDirectory)
+            return resolved.path.hasPrefix(bundlePrefix)
+                && fm.fileExists(atPath: resolved.path, isDirectory: &isDirectory)
                 && !isDirectory.boolValue
-        }) else {
+        })?.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL else {
             return .unavailable("No embedded x86_64 QEMU device library was found. Run the UTM runtime packaging workflow, embed its Frameworks and QEMU directories, and code-sign nested code.")
         }
         return validateLoadableLibrary(library, dataDirectory: dataDirectory)
