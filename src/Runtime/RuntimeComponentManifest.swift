@@ -61,9 +61,13 @@ enum RuntimeComponentVerifier {
         guard !relative.isEmpty, !relative.hasPrefix("/"),
               !relative.split(separator: "/").contains(".."),
               !relative.contains("\\") else { return .unsafePath(componentID: component.id) }
-        let standardizedRoot = root.standardizedFileURL
+        let standardizedRoot = root.resolvingSymlinksInPath().standardizedFileURL
+        let rootPrefix = standardizedRoot.path.hasSuffix("/") ? standardizedRoot.path : standardizedRoot.path + "/"
         let candidate = root.appendingPathComponent(relative).standardizedFileURL
-        guard candidate.path.hasPrefix(standardizedRoot.path + "/") else { return .unsafePath(componentID: component.id) }
+            .resolvingSymlinksInPath().standardizedFileURL
+        // Resolve existing symlink components before the containment check;
+        // standardizedFileURL alone does not prevent a bundle symlink escaping root.
+        guard candidate.path.hasPrefix(rootPrefix) else { return .unsafePath(componentID: component.id) }
         guard let values = try? candidate.resourceValues(forKeys: [.isRegularFileKey]),
               values.isRegularFile == true, let stream = InputStream(url: candidate) else {
             return .missing(componentID: component.id)

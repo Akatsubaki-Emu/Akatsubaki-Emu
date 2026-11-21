@@ -278,7 +278,10 @@ final class QEMUVNCClient {
     }
 
     private func requestFramebufferUpdate(incremental: Bool, connection: NWConnection) async throws {
-        try await send(Data([3, incremental ? 1 : 0, 0, 0,
+        // RFB FramebufferUpdateRequest is exactly 10 bytes:
+        // type, incremental, x(2), y(2), width(2), height(2).
+        try await send(Data([3, incremental ? 1 : 0,
+                             0, 0, 0, 0,
                              UInt8((framebufferWidth >> 8) & 0xff), UInt8(framebufferWidth & 0xff),
                              UInt8((framebufferHeight >> 8) & 0xff), UInt8(framebufferHeight & 0xff)]),
                        to: connection)

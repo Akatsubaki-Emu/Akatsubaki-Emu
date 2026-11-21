@@ -106,8 +106,12 @@ final class ELF64Loader {
         }
 
         guard !segments.isEmpty else { throw LoadError.noLoadableSegments }
+        // The entry point must land inside a loadable executable segment.
+        // Merely being within a writable/data PT_LOAD region is not sufficient.
         guard segments.contains(where: {
-            entry >= $0.guestAddress && entry - $0.guestAddress < $0.memorySize
+            ($0.flags & 0x1) != 0
+                && entry >= $0.guestAddress
+                && entry - $0.guestAddress < $0.memorySize
         }) else { throw LoadError.invalidSegment }
 
         for (segment, _) in pending {

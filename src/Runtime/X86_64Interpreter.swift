@@ -121,8 +121,20 @@ final class X86_64Interpreter: GuestCPUBackend {
                 }
                 let reg = Int((modrm >> 3) & 7) | (rex & 0x04 != 0 ? 8 : 0)
                 let rm = Int(modrm & 7) | (rex & 0x01 != 0 ? 8 : 0)
-                if opcode == 0x31 { registers[rm] ^= registers[reg] }
-                else { registers[reg] ^= registers[rm] }
+                let is64Bit = rex & 0x08 != 0
+                if is64Bit {
+                    if opcode == 0x31 { registers[rm] ^= registers[reg] }
+                    else { registers[reg] ^= registers[rm] }
+                } else {
+                    // 32-bit GPR writes zero-extend into the corresponding 64-bit register.
+                    if opcode == 0x31 {
+                        registers[rm] = UInt64(UInt32(truncatingIfNeeded: registers[rm])
+                            ^ UInt32(truncatingIfNeeded: registers[reg]))
+                    } else {
+                        registers[reg] = UInt64(UInt32(truncatingIfNeeded: registers[reg])
+                            ^ UInt32(truncatingIfNeeded: registers[rm]))
+                    }
+                }
                 // This minimal core does not yet model x86 condition flags.
             case 0x0F: // Two-byte opcode map
                 guard let second = fetchByte() else { return .memoryFault(address: rip) }
