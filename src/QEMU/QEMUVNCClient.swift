@@ -243,6 +243,34 @@ final class QEMUVNCClient {
               UInt8((keysym >> 8) & 0xff), UInt8(keysym & 0xff)])
     }
 
+    private static func keyTapEvents(_ keysym: UInt32) -> Data {
+        var data = Data(count: 16)
+        data.withUnsafeMutableBytes { bytes in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
+            let b0 = UInt8((keysym >> 24) & 0xff)
+            let b1 = UInt8((keysym >> 16) & 0xff)
+            let b2 = UInt8((keysym >> 8) & 0xff)
+            let b3 = UInt8(keysym & 0xff)
+            base[0] = 4
+            base[1] = 1
+            base[2] = 0
+            base[3] = 0
+            base[4] = b0
+            base[5] = b1
+            base[6] = b2
+            base[7] = b3
+            base[8] = 4
+            base[9] = 0
+            base[10] = 0
+            base[11] = 0
+            base[12] = b0
+            base[13] = b1
+            base[14] = b2
+            base[15] = b3
+        }
+        return data
+    }
+
     private static func keyEvents(_ events: [VNCKeyState.Event]) -> Data {
         var data = Data()
         data.reserveCapacity(events.count * 8)
@@ -434,11 +462,7 @@ final class QEMUVNCClient {
         guard let keysym = Self.keysym(for: key) else { return }
         withStateLock {
             guard connected, let connection, !keyState.isPressed(keysym) else { return }
-            let events = [
-                VNCKeyState.Event(keysym: keysym, isDown: true),
-                VNCKeyState.Event(keysym: keysym, isDown: false)
-            ]
-            enqueueSend(Self.keyEvents(events), to: connection, in: pendingSendGroup)
+            enqueueSend(Self.keyTapEvents(keysym), to: connection, in: pendingSendGroup)
         }
     }
 
