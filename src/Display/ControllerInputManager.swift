@@ -25,7 +25,26 @@ final class ControllerInputManager {
         configure(controller)
     }
 
-    @objc private func disconnect(_ note: Notification) {}
+    @objc private func disconnect(_ note: Notification) {
+        guard let controller = note.object as? GCController else { return }
+        // A controller can disappear while a stick or button is held. Release
+        // every guest input so the guest cannot remain stuck in movement/fire.
+        onMove?(0, 0)
+        onLook?(0, 0)
+        if let pad = controller.extendedGamepad {
+            let buttons: [(GCControllerButtonInput, String)] = [
+                (pad.buttonA, "A"), (pad.buttonB, "B"), (pad.buttonX, "X"),
+                (pad.buttonY, "Y"), (pad.buttonMenu, "Start"),
+                (pad.leftShoulder, "LB"), (pad.rightShoulder, "RB")
+            ]
+            for (_, name) in buttons {
+                onButton?(ControllerMappingStore.shared.profile.action(for: name), false)
+            }
+            pad.leftThumbstick.valueChangedHandler = nil
+            pad.rightThumbstick.valueChangedHandler = nil
+            for (button, _) in buttons { button.valueChangedHandler = nil }
+        }
+    }
 
     private func configure(_ controller: GCController) {
         guard let pad = controller.extendedGamepad else { return }

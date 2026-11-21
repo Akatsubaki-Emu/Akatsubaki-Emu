@@ -75,7 +75,11 @@ final class TouchGamepadView: UIView {
                 didApplyLayout = true
                 applyDefaultLayout()
             }
-            if !editMode { restoreLayout() }
+            if !editMode, !restoreLayout() {
+                // No saved layout (or an obsolete layout shape): recompute defaults
+                // for the new bounds instead of leaving controls at old coordinates.
+                applyDefaultLayout()
+            }
         }
         editButtonControl.frame = CGRect(x: bounds.midX - 52, y: 12, width: 104, height: 30)
         if editMode { installEditGesturesIfNeeded() }
@@ -189,10 +193,11 @@ final class TouchGamepadView: UIView {
         UserDefaults.standard.set(entries, forKey: layoutKey)
     }
 
-    private func restoreLayout() {
+    @discardableResult
+    private func restoreLayout() -> Bool {
         guard bounds.width > 0, bounds.height > 0,
               let entries = UserDefaults.standard.array(forKey: layoutKey) as? [[String: CGFloat]],
-              entries.count == buttons.count + 2 else { return }
+              entries.count == buttons.count + 2 else { return false }
         let controls = [leftStick as UIView, rightStick as UIView] + buttons
         for (index, control) in controls.enumerated() {
             let item = entries[index]
@@ -206,6 +211,7 @@ final class TouchGamepadView: UIView {
             )
             if let button = control as? UIButton { button.layer.cornerRadius = min(width, height) / 2 }
         }
+        return true
     }
 }
 

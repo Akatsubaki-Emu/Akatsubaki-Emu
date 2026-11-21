@@ -91,6 +91,8 @@ jobs:
 
           release = Path(".github/workflows/release.yml").read_text()
           qemu = Path(".github/workflows/build-qemu-runtime.yml").read_text()
+          # Keep Actions expressions literal while this run block is expanded.
+          pages_token_expression = "$" + "{{ secrets.PAGES_TOKEN }}"
           required_release = [
               "platform: [iOS, tvOS, visionOS]",
               "uses: ./.github/workflows/build-qemu-runtime.yml",
@@ -98,7 +100,7 @@ jobs:
               "actions/download-artifact@v4",
               "name: iSteam-qemu-runtime-ios-arm64",
               "if-no-files-found: error",
-              "PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}",
+              "PAGES_TOKEN: " + pages_token_expression,
           ]
           missing = [item for item in required_release if item not in release]
           if missing:
@@ -111,7 +113,10 @@ jobs:
               raise SystemExit("QEMU dependency cache key must be versioned.")
           if "steps.utm-source.outputs.commit" not in qemu:
               raise SystemExit("QEMU cache key must include the checked-out UTM revision.")
-          if "group: qemu-runtime-ios-arm64-${{ github.ref }}-${{ github.workflow }}" not in qemu:
+          expected_group = (
+              "group: qemu-runtime-ios-arm64-" + "$" + "{{ github.ref }}" + "-" + "$" + "{{ github.workflow }}"
+          )
+          if expected_group not in qemu:
               raise SystemExit("QEMU concurrency must isolate workflow/ref executions.")
           for token in [
               "scripts/patch_utm_qemu_ios.py",
