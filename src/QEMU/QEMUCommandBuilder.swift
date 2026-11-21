@@ -49,17 +49,22 @@ struct QEMUCommandBuilder {
         // consumes raw framebuffer rectangles and routes keyboard/pointer events.
         args += ["-vnc", "127.0.0.1:0"]
         if let firmware {
-            args += ["-drive", "if=pflash,format=raw,readonly=on,file=\(firmware.path)"]
+            args += ["-drive", "if=pflash,format=raw,readonly=on,file=\(Self.escapeDriveValue(firmware.path))"]
         }
         if let diskImage {
             if bootFromISO {
                 args += ["-cdrom", diskImage.path]
             } else {
                 let format = QEMUDiskImageFormat.detect(at: diskImage).rawValue
-                args += ["-drive", "if=virtio,format=\(format),file=\(diskImage.path)"]
+                args += ["-drive", "if=virtio,format=\(format),file=\(Self.escapeDriveValue(diskImage.path))"]
             }
         }
         return args
+    }
+
+    /// QEMU drive options are comma-delimited; double literal commas in file paths.
+    private static func escapeDriveValue(_ path: String) -> String {
+        path.replacingOccurrences(of: ",", with: ",,")
     }
 
     private static func isISO9660(_ url: URL) -> Bool {

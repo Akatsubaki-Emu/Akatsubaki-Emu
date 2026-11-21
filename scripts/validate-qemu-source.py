@@ -10,6 +10,7 @@ required = {
         "func tapKey(_ key: String)",
         "numberOfColours = Int(Self.u16(header, 3))",
         "private static let maxFramebufferBytes = 64 * 1024 * 1024",
+        "private let sendQueue = DispatchQueue(label: \"com.xthrx.isteam.qemu-vnc.send\")",
         "private final class QEMUOneShotCompletion: @unchecked Sendable",
         "private func withStateLock<T>",
         "let completion = QEMUOneShotCompletion()",
@@ -58,6 +59,8 @@ required = {
         '"-device", configuration.gpu.rawValue',
         'let machine = "q35,usb=on"',
         '"-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"',
+        "escapeDriveValue(_ path: String)",
+        "replacingOccurrences(of: \",\" , with: \",\" )",
     ],
     "src/Display/VMDisplayViewController.swift": [
         "vncClient.onFrame", "vncClient.start()", "vncClient.tapKey(key)"
