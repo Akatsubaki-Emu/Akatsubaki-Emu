@@ -61,10 +61,18 @@ extension GameStore {
 
     var allTags: [String] {
         var seen = Set<String>()
-        return games.flatMap(\.tags)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && seen.insert($0.folding(options: .caseInsensitive, locale: .current)).inserted }
-            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        var tags: [String] = []
+        for game in games {
+            for rawTag in game.tags {
+                let tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !tag.isEmpty else { continue }
+                let key = tag.folding(options: .caseInsensitive, locale: .current)
+                if seen.insert(key).inserted {
+                    tags.append(tag)
+                }
+            }
+        }
+        return tags.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
     var recentlyPlayed: [GameEntry] {

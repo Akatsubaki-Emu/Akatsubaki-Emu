@@ -12,21 +12,11 @@ final class GameLauncher {
             return false
         }
 
-        do {
-            _ = try WindowsPELoader().load(executable)
-        } catch {
-            EmulationLog.shared.write("Game launcher rejected invalid or unsupported PE image: \(error.localizedDescription)")
-            return false
-        }
         let directoryValues = try? workingDirectory.resourceValues(forKeys: [.isDirectoryKey])
         guard directoryValues?.isDirectory == true else {
             EmulationLog.shared.write("Game launcher rejected a missing or non-directory working directory")
             return false
         }
-
-        let process = GuestProcess(executable: executable, workingDirectory: workingDirectory, format: format)
-        SteamLibrary.shared.prepare()
-        WindowsRuntime.shared.prepare()
 
         let capabilities = RuntimeCapabilityRegistry.current
         for message in capabilities.diagnostics {
@@ -49,6 +39,17 @@ final class GameLauncher {
             EmulationLog.shared.write("Game launch stopped: no verified Windows execution backend is installed.")
             return false
         }
+
+        do {
+            _ = try WindowsPELoader().load(executable)
+        } catch {
+            EmulationLog.shared.write("Game launcher rejected invalid or unsupported PE image: \(error.localizedDescription)")
+            return false
+        }
+
+        let process = GuestProcess(executable: executable, workingDirectory: workingDirectory, format: format)
+        SteamLibrary.shared.prepare()
+        WindowsRuntime.shared.prepare()
         return WindowsRuntime.shared.launch(process)
     }
 }
