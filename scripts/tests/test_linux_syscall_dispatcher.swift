@@ -75,10 +75,10 @@ struct LinuxSyscallDispatcherTests {
         let hinted = dispatcher.dispatch(number: 9, arguments: [0x48000, 4096, 3, 0x22, UInt64.max, 0])!
         guard case .returned(let hintedAddress) = hinted else { preconditionFailure() }
         precondition(hintedAddress == 0x48000)
-        precondition(memory.write(Data([7, 8, 9]), offset: hintedAddress)
+        precondition(memory.write(Data([7, 8, 9]), offset: hintedAddress))
         let hintedProtection = dispatcher.dispatch(number: 10, arguments: [hintedAddress, 4096, 1, 0, 0, 0])!
         guard case .returned(let hintedProtectionValue) = hintedProtection else { preconditionFailure() }
-        precondition(hintedProtectionValue == 0))
+        precondition(hintedProtectionValue == 0)
 
         precondition(memory.write(Data([4, 5, 6]), offset: mapped + 4096))
         let protection = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
