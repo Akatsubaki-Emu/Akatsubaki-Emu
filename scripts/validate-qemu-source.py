@@ -5,7 +5,7 @@ import sys
 
 required = {
     "src/QEMU/QEMUVNCClient.swift": [
-        "pendingSendGroup.enter()",
+        "group.enter()",
         "pendingSendGroup.notify(queue: queue)",
         "framebufferWidth = width",
         "width <= Self.maxFramebufferBytes / height / 4",
