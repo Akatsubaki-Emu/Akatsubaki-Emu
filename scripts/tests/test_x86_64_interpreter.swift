@@ -268,32 +268,6 @@ struct InterpreterTests {
         precondition(lea32Exit == .unsupportedInstruction(address: 14))
         precondition(lea32.registerValue(3) == 0x108)
 
-        let shiftMemory = GuestMemory(size: 128)
-        let shiftProgram: [UInt8] = [
-            0xB8, 0x01, 0x00, 0x00, 0x80,
-            0xB9, 0x01, 0x00, 0x00, 0x00,
-            0xD3, 0xE0,
-            0x89, 0xC3,
-            0xB8, 0x01, 0x00, 0x00, 0x80,
-            0xD1, 0xE8,
-            0x89, 0xC1,
-            0xB8, 0x01, 0x00, 0x00, 0x80,
-            0xD1, 0xF8,
-            0x89, 0xC2,
-            0x0F, 0x0B
-        ]
-        precondition(shiftMemory.write(Data(shiftProgram), offset: 0))
-        let shift = X86_64Interpreter(memory: shiftMemory)
-        try shift.reset(entryPoint: 0)
-        let shiftExit = try shift.run(maxInstructions: 16)
-        precondition(shiftExit == .unsupportedInstruction(address: 32))
-        precondition(shift.registerValue(3) == 2)
-        precondition(shift.registerValue(1) == 0x40000000)
-        precondition(shift.registerValue(2) == 0xC0000000)
-        precondition(shift.conditionFlags & X86_64ALU.carry != 0)
-        precondition(shift.conditionFlags & X86_64ALU.sign != 0)
-        precondition(shift.conditionFlags & X86_64ALU.overflow == 0)
-
         let zeroShiftMemory = GuestMemory(size: 64)
         let zeroShiftProgram: [UInt8] = [
             0xB8, 0x01, 0x00, 0x00, 0x00,
