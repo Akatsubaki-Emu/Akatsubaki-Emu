@@ -191,7 +191,7 @@ final class QEMUVNCClient {
         sendQueue.async {
             connection.send(content: data, completion: .contentProcessed { error in
                 if let error {
-                    EmulationLog.shared.write("QEMU VNC send failed: \\(error.localizedDescription)")
+                    EmulationLog.shared.write("QEMU VNC send failed: \(error.localizedDescription)")
                 }
                 group.leave()
             })

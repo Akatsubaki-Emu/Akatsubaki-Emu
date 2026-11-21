@@ -77,7 +77,7 @@ final class VMDisplayViewController: UIViewController {
                 self.releaseGuestInputs()
                 self.vncClient.stop()
             case .failed(let message):
-                self.status.text = "VM failed • \\(message)"
+                self.status.text = "VM failed • \(message)"
                 self.releaseGuestInputs()
                 self.vncClient.stop()
             }
