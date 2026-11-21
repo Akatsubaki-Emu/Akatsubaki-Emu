@@ -12,18 +12,35 @@ import verify_qemu_meson_link
 
 
 class QEMUBuildPatchTests(unittest.TestCase):
-    def test_qemu_meson_patch_is_idempotent_and_adds_compiler_runtime(self):
+    def test_qemu_meson_patch_is_idempotent_and_targets_emulator_link_args(self):
         source = (
             "project('qemu', 'c')\n"
             "config_host_data.set('CONFIG_POSIX_MEMALIGN', "
             "cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
+            "emulator_link_args = []\n"
+            "link_args = emulator_link_args\n"
         )
-        once = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
-        twice = patch_qemu_meson_ios.patch_source(once, "/toolchain/libclang_rt.ios.a")
+        runtime = "/toolchain/libclang_rt.ios.a"
+        once = patch_qemu_meson_ios.patch_source(source, runtime)
+        twice = patch_qemu_meson_ios.patch_source(once, runtime)
         self.assertEqual(once, twice)
         self.assertIn("config_host_data.set('CONFIG_POSIX_MEMALIGN', true)", twice)
-        self.assertIn("add_project_link_arguments('-Wl,-force_load,' + ios_compiler_rt, language: 'c')", twice)
-        self.assertLess(twice.index("project("), twice.index("add_project_link_arguments"))
+        self.assertIn("emulator_link_args += ['-Wl,-force_load," + runtime + "']", twice)
+        self.assertLess(twice.index("emulator_link_args = []"), twice.index("emulator_link_args +="))
+        self.assertIn("link_args = emulator_link_args", twice)
+        self.assertNotIn("add_project_link_arguments", twice)
+
+    def test_qemu_meson_patch_replaces_a_stale_runtime_path(self):
+        source = "project('qemu', 'c')\nemulator_link_args = []\n"
+        first = patch_qemu_meson_ios.patch_source(source, "/old/libclang_rt.ios.a")
+        updated = patch_qemu_meson_ios.patch_source(first, "/new/libclang_rt.ios.a")
+        self.assertNotIn("/old/libclang_rt.ios.a", updated)
+        self.assertIn("-Wl,-force_load,/new/libclang_rt.ios.a", updated)
+        self.assertEqual(updated.count("emulator_link_args += "), 1)
+
+    def test_qemu_meson_patch_fails_if_emulator_link_anchor_changes(self):
+        with self.assertRaises(SystemExit):
+            patch_qemu_meson_ios.patch_source("project('qemu', 'c')\n", "/toolchain/libclang_rt.ios.a")
 
     def test_utm_patch_is_idempotent_and_verifies_actual_qemu_link(self):
         source = '''#!/bin/sh

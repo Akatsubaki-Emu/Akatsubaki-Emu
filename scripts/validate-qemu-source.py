@@ -362,8 +362,8 @@ required = {
     ],
     "scripts/patch_qemu_meson_ios.py": [
         "CONFIG_POSIX_MEMALIGN', true)",
-        "add_project_link_arguments('-Wl,-force_load,' + ios_compiler_rt, language: 'c')",
-        "IOS_COMPILER_RT is required for the i-Steam iOS build",
+        "emulator_link_args += ['-Wl,-force_load,' + runtime_path]",
+        "A valid IOS_COMPILER_RT path is required",
     ],
     "scripts/verify_qemu_meson_link.py": [
         "build libqemu-x86_64-softmmu.dylib:",
@@ -393,7 +393,7 @@ for token in [
     "scripts/patch_utm_qemu_ios.py",
     "scripts/patch_qemu_meson_ios.py",
     "scripts/verify_qemu_meson_link.py",
-    "utm-ios-arm64-deps-v9-",
+    "utm-ios-arm64-deps-v10-",
     "steps.xcode.outputs.version",
 ]:
     if token not in qemu_workflow:

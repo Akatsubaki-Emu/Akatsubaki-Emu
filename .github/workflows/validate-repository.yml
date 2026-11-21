@@ -110,7 +110,7 @@ jobs:
               raise SystemExit("Release artifacts must not silently ignore missing files.")
           if "workflow_call:" not in qemu or "workflow_dispatch:" not in qemu:
               raise SystemExit("QEMU workflow must support both reusable and manual execution.")
-          if "utm-ios-arm64-deps-v9-" not in qemu:
+          if "utm-ios-arm64-deps-v10-" not in qemu:
               raise SystemExit("QEMU dependency cache key must be versioned.")
           if "steps.utm-source.outputs.commit" not in qemu:
               raise SystemExit("QEMU cache key must include the checked-out UTM revision.")
@@ -125,7 +125,7 @@ jobs:
               "scripts/verify_qemu_meson_link.py",
               "ISTEAM_QEMU_LINK_VERIFIER",
               "steps.xcode.outputs.version",
-              "utm-ios-arm64-deps-v9-",
+              "utm-ios-arm64-deps-v10-",
           ]:
               if token not in qemu:
                   raise SystemExit("QEMU build patch contract is missing: " + token)
