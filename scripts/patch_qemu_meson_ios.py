@@ -64,11 +64,12 @@ def patch_source(source: str, runtime_path: str) -> str:
         source = source.replace(anchor, anchor + "\n" + MARKER_COMMENT + "\n" + marker, 1)
         lines = source.splitlines()
 
-    if new_probe not in source or marker not in source:
+    patched = "\n".join(lines) + ("\n" if source.endswith("\n") else "")
+    if new_probe not in patched or marker not in patched:
         raise SystemExit("QEMU meson.build patch verification failed")
-    if "add_project_link_arguments('-Wl,-force_load,'" in source:
+    if "add_project_link_arguments('-Wl,-force_load,'" in patched:
         raise SystemExit("Obsolete project-level compiler-runtime patch remains")
-    return source
+    return patched
 
 
 def main() -> None:
