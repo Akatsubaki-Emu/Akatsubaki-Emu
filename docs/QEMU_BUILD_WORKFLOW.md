@@ -23,6 +23,19 @@ This note documents the iOS device-arm64 QEMU runtime build in `.github/workflow
 - `.github/workflows/release.yml` — runtime dependency ordering and required artifact download before the iOS IPA is packaged.
 - `.github/workflows/validate-repository.yml` — strict YAML checks, both-direction mirror preservation, workflow contract checks and Python patcher tests.
 
+## Runtime integration constraints
+
+The in-app QEMU command builder uses an explicit q35 device graph rather than relying on implicit devices disabled by `-nodefaults`:
+
+- An explicit ICH9 AHCI controller carries the guest disk and CD-ROM. Windows guests use the broadly supported AHCI path rather than requiring VirtIO storage drivers during installation.
+- Windows guests use standard VGA and E1000E networking; Linux guests use the configured VirtIO GPU and VirtIO networking.
+- USB keyboard/tablet devices are explicit. QEMU's monitor, serial and parallel consoles are disabled because the UI uses the loopback VNC client.
+- The QEMU VNC server binds to `127.0.0.1`; the app accepts only the no-authentication RFB method on that loopback connection. Framebuffer allocation is capped at 64 MiB.
+- SteamOS UEFI profiles require both a code image and a writable variable-store template. The app copies the template into per-configuration Application Support storage and passes it as the second pflash device; it never writes variables into the signed app bundle.
+- Runtime preflight requires `qemu_init`, `qemu_main_loop`, `qemu_cleanup`, and `qemu_system_shutdown_request`. A library without graceful shutdown is rejected rather than starting a VM that the app cannot safely stop.
+
+The launch picker currently accepts one bootable disk image or one ISO. An ISO can be used as live media, but a Windows installer cannot be completed until the UI exposes a separate writable destination disk. Do not describe ISO-based Windows installation as supported yet. No physical-device guest boot has been verified.
+
 ## Run locally on macOS
 
 ```sh

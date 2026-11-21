@@ -214,6 +214,7 @@ required = {
         "MotionInputManager.shared.stop()",
         "ControllerInputManager.shared.stop()",
         "vncClient.stop()",
+        "releaseGuestInputs()",
     ],    "src/Runtime/HostDeviceBridge.swift": [
         "resolvingSymlinksInPath()",
         "withAccess(to: source)",
