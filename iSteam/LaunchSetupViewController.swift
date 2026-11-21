@@ -23,7 +23,9 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         let lastGuest = UserDefaults.standard.string(forKey: "iSteam.lastGuest") ?? "Ubuntu"
         switch RuntimeSettings.shared.vmMode {
         case .windowsRuntime:
-            guestControl.selectedSegmentIndex = lastGuest == "Windows 10" ? 2 : 0
+            // Windows Runtime is an EXE-library route, so it must select the
+            // Windows guest profile even on a fresh install.
+            guestControl.selectedSegmentIndex = 2
             runtimeControl.selectedSegmentIndex = 1
         case .windowsVM:
             guestControl.selectedSegmentIndex = 2
@@ -215,7 +217,13 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         VRSettings.shared.mode = vrSwitch.isOn ? .cardboard : .flat
         UserDefaults.standard.set(persistSwitch.isOn, forKey: "iSteam.persistSessionData")
         UserDefaults.standard.set(config.bootWindows ? "Windows 10" : (config.name == "SteamOS Gaming Mode" ? "SteamOS" : "Ubuntu"), forKey: "iSteam.lastGuest")
-        let selectedMode: VMExecutionMode = runtimeControl.selectedSegmentIndex == 1 ? .windowsRuntime : (config.bootWindows ? .windowsVM : .linuxVM)
+        if runtimeControl.selectedSegmentIndex == 1 && !config.bootWindows {
+            statusLabel.text = "The executable-library route currently accepts Windows PE metadata only. Select Windows 10 or choose Full VM for Linux."
+            return
+        }
+        let selectedMode: VMExecutionMode = runtimeControl.selectedSegmentIndex == 1
+            ? .windowsRuntime
+            : (config.bootWindows ? .windowsVM : .linuxVM)
         RuntimeSettings.shared.vmMode = selectedMode
         UserDefaults.standard.set(config.bootWindows ? "Windows VM" : (config.name == "SteamOS Gaming Mode" ? "SteamOS Gaming Mode" : "Linux VM"), forKey: "iSteam.lastVMMode")
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "iSteam.lastLaunchDate")

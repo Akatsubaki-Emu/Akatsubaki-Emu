@@ -13,7 +13,7 @@ enum VMExecutionMode: String, CaseIterable {
     case linuxVM = "Linux VM"
     var detail: String {
         switch self {
-        case .windowsRuntime: return "LiveExec-style guest process path"
+        case .windowsRuntime: return "Windows PE library route; execution backend is not yet integrated"
         case .windowsVM: return "QEMU full Windows guest"
         case .linuxVM: return "QEMU Linux guest"
         }
