@@ -128,6 +128,12 @@ required = {
         "private func mapAnonymous(",
         "private func setBreak(",
     ],
+    "scripts/tests/test_guest_time_pair.py": [
+        "func writeUInt64Pair",
+        "isteam_guest_memory_write(native, offset, base, 16)",
+        "memory.writeUInt64Pair(seconds, nanoseconds, offset: address)",
+        "memory.writeUInt64Pair(seconds, microseconds, offset: address)",
+    ],
     "scripts/tests/test_linux_getrandom_allocation.py": [
         "var data = Data(count: count)",
         "data.withUnsafeMutableBytes",
@@ -233,9 +239,9 @@ required = {
         "PUSH RSP stores the pre-decrement value.",
         "POP RSP loads the popped value directly",
         "guard let adjustment = fetchUInt16() else",
-        "return .memoryFault(address: operandAddress(decoded.operand))"
-
-        "case 0xC3:",    ],
+        "return .memoryFault(address: operandAddress(decoded.operand))",
+        "case 0xC3:",
+    ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
         "hello from static ELF",
@@ -430,6 +436,8 @@ required = {
     "src/Runtime/GuestMemory.swift": [
         "private let native: OpaquePointer?",
         "var isAvailable: Bool",
+        "func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool",
+        "isteam_guest_memory_write(native, offset, base, 16)",
     ],
     "src/Runtime/GuestMachine.swift": [
         "func loadELFImage(at url: URL, arguments: [String] = [], environment: [String: String] = [:])",
@@ -613,6 +621,7 @@ required = {
         "test_vnc_key_state.swift",
         "test_windows_pe_image.swift",
         "python -m unittest discover -s scripts/tests -p 'test_*.py'",
+        "test_guest_time_pair.py",
     ],
     ".github/workflows/validate-ios-build.yml": [
         "src/Runtime/LinuxSyscallDispatcher.swift",

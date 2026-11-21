@@ -272,5 +272,15 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertNotIn("(0..<Int(length)).map", random)
 
 
+    def test_guest_time_structures_are_written_in_one_bounded_native_call(self):
+        root = Path(__file__).resolve().parents[2]
+        memory = (root / "src" / "Runtime" / "GuestMemory.swift").read_text(encoding="utf-8")
+        syscalls = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
+        pair = memory.split("func writeUInt64Pair", 1)[1].split("func writeUInt64(", 1)[0]
+        self.assertIn("isteam_guest_memory_write(native, offset, base, 16)", pair)
+        self.assertIn("memory.writeUInt64Pair(seconds, nanoseconds, offset: address)", syscalls)
+        self.assertIn("memory.writeUInt64Pair(seconds, microseconds, offset: address)", syscalls)
+
+
 if __name__ == "__main__":
     unittest.main()
