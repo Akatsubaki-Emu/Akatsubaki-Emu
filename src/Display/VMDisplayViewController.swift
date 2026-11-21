@@ -156,6 +156,7 @@ final class VMDisplayViewController: UIViewController {
         functionKeyBar.isHidden = true
 
         let panel = KeyboardOverlayView { [weak self] key in self?.emitKeyboardKey(key) }
+        panel.onKeyEvent = { [weak self] key, down in self?.vncClient.sendButton(key, down: down) }
         panel.translatesAutoresizingMaskIntoConstraints = false
         panel.isHidden = true
         view.addSubview(panel)
@@ -178,6 +179,7 @@ final class VMDisplayViewController: UIViewController {
     @objc private func toggleTouchKeyboard() {
         guard let panel = keyboardPanel else { return }
         panel.isHidden.toggle()
+        if panel.isHidden { panel.releaseAllKeys() }
         keyboardToggle.setTitle(panel.isHidden ? "⌨ Keyboard" : "⌨ Hide keyboard", for: .normal)
         if !panel.isHidden { functionKeyBar.isHidden = true }
         else { refreshHardwareKeyboardState() }
@@ -188,6 +190,7 @@ final class VMDisplayViewController: UIViewController {
     }
 
     private func releaseGuestInputs() {
+        keyboardPanel?.releaseAllKeys()
         gamepad?.releaseAllButtons()
         MotionInputManager.shared.stop()
         ControllerInputManager.shared.stop()
