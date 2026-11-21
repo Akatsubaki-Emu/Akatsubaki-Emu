@@ -362,7 +362,7 @@ required = {
     ],
     "scripts/patch_qemu_meson_ios.py": [
         "CONFIG_POSIX_MEMALIGN', true)",
-        "emulator_link_args += ['-Wl,-force_load,' + runtime_path]",
+        "emulator_link_args += ['-Wl,-force_load,",
         "A valid IOS_COMPILER_RT path is required",
     ],
     "scripts/verify_qemu_meson_link.py": [

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Patch QEMU's iOS feature and emulator-specific link configuration before configure."""
 from pathlib import Path
+import os
 import sys
 
 
@@ -50,7 +51,7 @@ def patch_source(source: str, runtime_path: str) -> str:
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: patch_qemu_meson_ios.py /path/to/qemu/meson.build")
-    runtime = Path(__import__("os").environ.get("IOS_COMPILER_RT", ""))
+    runtime = Path(os.environ.get("IOS_COMPILER_RT", ""))
     if not runtime.is_file():
         raise SystemExit("IOS_COMPILER_RT must point to an existing libclang_rt.ios.a")
     path = Path(sys.argv[1])
