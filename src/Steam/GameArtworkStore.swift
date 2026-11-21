@@ -38,7 +38,7 @@ final class GameArtworkStore {
               let properties = CGImageSourceCopyPropertiesAtIndex(image, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              width > 0, height > 0,
+              width > 0, height > 0, width <= 8192, height <= 8192,
               width <= (16 * 1024 * 1024) / height,
               CGImageSourceCreateImageAtIndex(image, 0, nil) != nil,
               let type = CGImageSourceGetType(image) as String?,
