@@ -332,5 +332,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("framebufferSlots.removeAll(keepingCapacity: false)", stop)
 
 
+    def test_shared_directory_symlink_cannot_redefine_host_file_root(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "HostDeviceBridge.swift").read_text(encoding="utf-8")
+        resolver = source.split("private func sharedFileURL", 1)[1].split("private static func machineIdentifier", 1)[0]
+        self.assertIn("let requestedRoot = sharedDirectoryURL.standardizedFileURL", resolver)
+        self.assertIn("guard resolvedRoot.path == root.path else", resolver)
+        self.assertIn("resolved.path.hasPrefix(rootPrefix)", resolver)
+
+
 if __name__ == "__main__":
     unittest.main()

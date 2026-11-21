@@ -182,12 +182,23 @@ final class HostDeviceBridge {
                 .contains(where: { $0 == "." || $0 == ".." }) else {
             throw BridgeError.invalidPath
         }
-        let root = sharedDirectoryURL.resolvingSymlinksInPath().standardizedFileURL
+        let requestedRoot = sharedDirectoryURL.standardizedFileURL
+        let parent = requestedRoot.deletingLastPathComponent()
+            .resolvingSymlinksInPath().standardizedFileURL
+        let root = parent.appendingPathComponent(
+            requestedRoot.lastPathComponent, isDirectory: true
+        ).standardizedFileURL
+        // Resolve the parent first so system path aliases are normalised, then
+        // reject a symlink at the GuestShared directory itself.
+        let resolvedRoot = root.resolvingSymlinksInPath().standardizedFileURL
+        guard resolvedRoot.path == root.path else {
+            throw BridgeError.outsideSharedDirectory
+        }
         let rootPrefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
         let url = root.appendingPathComponent(relativePath).standardizedFileURL
         // standardizedFileURL removes dot segments but does not resolve a
-        // symlinked parent. Resolve existing path components before accepting
-        // reads/writes so a shared-directory symlink cannot escape the sandbox.
+        // symlinked child. Resolve existing child components before accepting
+        // reads/writes so a nested symlink cannot escape the shared directory.
         let resolved = url.resolvingSymlinksInPath().standardizedFileURL
         guard resolved.path.hasPrefix(rootPrefix) else {
             throw BridgeError.outsideSharedDirectory

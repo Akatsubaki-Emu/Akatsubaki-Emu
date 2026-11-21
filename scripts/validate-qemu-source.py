@@ -595,6 +595,9 @@ required = {
     ],
     "src/Runtime/HostDeviceBridge.swift": [
         "resolvingSymlinksInPath()",
+        "let requestedRoot = sharedDirectoryURL.standardizedFileURL",
+        "let resolvedRoot = root.resolvingSymlinksInPath().standardizedFileURL",
+        "guard resolvedRoot.path == root.path else",
         "withAccess(to: source)",
         "maximumInMemoryTransferBytes = 64 * 1024 * 1024",
         "case fileTooLarge",
