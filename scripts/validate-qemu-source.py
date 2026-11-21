@@ -159,6 +159,8 @@ required = {
         "case .qemuInterpreter, .hypervisor: return .tcg",
     ],
     "src/Core/VMConfigurationValidation.swift": [
+        "guard architecture == .x86_64",
+        "case .unsupportedArchitecture(let architecture)",
         "framebufferBytes <= 64 * 1024 * 1024",
         "fit the 64 MiB framebuffer limit",
     ],

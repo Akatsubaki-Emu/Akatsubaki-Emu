@@ -6,6 +6,7 @@ import Foundation
 extension VMConfiguration {
     enum ValidationError: LocalizedError, Equatable {
         case emptyName
+        case unsupportedArchitecture(VMConfiguration.Architecture)
         case memoryOutOfRange(Int)
         case cpuCountOutOfRange(Int)
         case invalidResolution(width: Int, height: Int)
@@ -15,6 +16,8 @@ extension VMConfiguration {
             switch self {
             case .emptyName:
                 return "Give this VM a name before starting it."
+            case .unsupportedArchitecture(let architecture):
+                return "The current QEMU launch profile only supports x86-64 guests; \(architecture.rawValue) is not wired to a compatible machine yet."
             case .memoryOutOfRange(let value):
                 return "VM memory must be between 256 MB and 16384 MB (requested: \(value) MB)."
             case .cpuCountOutOfRange(let value):
@@ -30,6 +33,9 @@ extension VMConfiguration {
     func validateForStart() throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ValidationError.emptyName
+        }
+        guard architecture == .x86_64 else {
+            throw ValidationError.unsupportedArchitecture(architecture)
         }
         guard (256...16384).contains(memoryMB) else {
             throw ValidationError.memoryOutOfRange(memoryMB)
