@@ -25,6 +25,7 @@ static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static void *g_library = NULL;
 static pthread_t g_thread;
 static bool g_thread_created = false;
+static bool g_starting = false;
 static bool g_running = false;
 static bool g_stop_requested = false;
 /* UTM documents that QEMU cannot safely be relaunched in the same iOS process. */
@@ -40,6 +41,12 @@ static qemu_shutdown_request_fn g_qemu_shutdown = NULL;
 static void set_error(const char *message) {
     pthread_mutex_lock(&g_lock);
     snprintf(g_error, sizeof(g_error), "%s", message ? message : "Unknown QEMU error");
+    pthread_mutex_unlock(&g_lock);
+}
+
+static void clear_starting(void) {
+    pthread_mutex_lock(&g_lock);
+    g_starting = false;
     pthread_mutex_unlock(&g_lock);
 }
 
@@ -141,11 +148,15 @@ bool isteam_qemu_start(int argc, const char * const *argv,
         }
         return false;
     }
-    if (g_thread_created || g_running) {
+    if (g_starting || g_thread_created || g_running) {
         pthread_mutex_unlock(&g_lock);
-        if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "A QEMU session is already active");
+        if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "A QEMU session is already active or starting");
         return false;
     }
+    // Reserve the one-shot lifecycle before dlopen/argv allocation. Without
+    // this reservation two simultaneous callers can both pass the checks and
+    // overwrite process-global QEMU state before either worker is created.
+    g_starting = true;
     g_error[0] = '\0';
     g_stop_requested = false;
     pthread_mutex_unlock(&g_lock);
@@ -154,6 +165,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     if (!library) {
         const char *reason = dlerror();
         if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "Could not load bundled QEMU: %s", reason ? reason : "unknown loader error");
+        clear_starting();
         return false;
     }
 
@@ -164,6 +176,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     if (!init_fn || !loop_fn || !cleanup_fn) {
         dlclose(library);
         if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "QEMU library lacks required lifecycle symbols (qemu_init, qemu_main_loop, qemu_cleanup)");
+        clear_starting();
         return false;
     }
 
@@ -171,6 +184,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     if (!copied_argv) {
         dlclose(library);
         if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "Out of memory preparing QEMU arguments");
+        clear_starting();
         return false;
     }
     for (int i = 0; i < argc; ++i) {
@@ -180,6 +194,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
             free(copied_argv);
             dlclose(library);
             if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "Out of memory copying QEMU arguments");
+            clear_starting();
             return false;
         }
     }
@@ -196,6 +211,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     int result = pthread_create(&g_thread, NULL, qemu_thread_main, NULL);
     if (result != 0) {
         g_thread_created = false;
+        g_starting = false;
         g_library = NULL;
         g_qemu_init = NULL;
         g_qemu_main_loop = NULL;
@@ -210,6 +226,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
         if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "Could not create QEMU worker thread");
         return false;
     }
+    g_starting = false;
     g_has_started = true;
     pthread_detach(g_thread);
     pthread_mutex_unlock(&g_lock);
@@ -245,4 +262,11 @@ bool isteam_qemu_is_active(void) {
     return value;
 }
 
-const char *isteam_qemu_last_error(void) { return g_error; }
+const char *isteam_qemu_last_error(void) {
+    static _Thread_local char error_copy[sizeof(g_error)];
+    pthread_mutex_lock(&g_lock);
+    memcpy(error_copy, g_error, sizeof(error_copy));
+    pthread_mutex_unlock(&g_lock);
+    error_copy[sizeof(error_copy) - 1] = '\0';
+    return error_copy;
+}
