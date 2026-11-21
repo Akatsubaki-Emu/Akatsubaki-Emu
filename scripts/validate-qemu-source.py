@@ -229,6 +229,8 @@ required = {
     "src/Runtime/HostDeviceBridge.swift": [
         "resolvingSymlinksInPath()",
         "withAccess(to: source)",
+        "maximumInMemoryTransferBytes = 64 * 1024 * 1024",
+        "case fileTooLarge",
     ],
     "src/Steam/DroidDeckFeatureServices.swift": [
         "NSFileCoordinator()",

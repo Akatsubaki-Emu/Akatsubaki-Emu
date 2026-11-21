@@ -9,17 +9,20 @@ import UIKit
 final class HostDeviceBridge {
     static let shared = HostDeviceBridge()
     private init() {}
+    private let maximumInMemoryTransferBytes = 64 * 1024 * 1024
 
     enum BridgeError: LocalizedError {
         case invalidPath
         case outsideSharedDirectory
         case unavailableDeviceInformation
+        case fileTooLarge
 
         var errorDescription: String? {
             switch self {
             case .invalidPath: return "The requested host path is invalid."
             case .outsideSharedDirectory: return "The requested file is outside the i-Steam shared directory."
             case .unavailableDeviceInformation: return "Host device information is unavailable."
+            case .fileTooLarge: return "The shared file exceeds the 64 MiB in-memory transfer limit."
             }
         }
     }
@@ -86,10 +89,16 @@ final class HostDeviceBridge {
 
     func readSharedFile(relativePath: String) throws -> Data {
         let url = try sharedFileURL(relativePath: relativePath)
+        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        guard values.isRegularFile == true,
+              let size = values.fileSize, size <= maximumInMemoryTransferBytes else {
+            throw BridgeError.fileTooLarge
+        }
         return try Data(contentsOf: url)
     }
 
     func writeSharedFile(_ data: Data, relativePath: String) throws {
+        guard data.count <= maximumInMemoryTransferBytes else { throw BridgeError.fileTooLarge }
         let url = try sharedFileURL(relativePath: relativePath)
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
