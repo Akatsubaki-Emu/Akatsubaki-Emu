@@ -70,7 +70,7 @@ struct LinuxProcessStackBuilder {
         var cursor = Self.stackSize
 
         func pushString(_ value: String) throws -> UInt64 {
-            let bytes = Array(value.utf8)
+            let bytes = value.utf8
             let required = bytes.count + 1
             guard required <= cursor else { throw BuildError.insufficientSpace }
             cursor -= required
