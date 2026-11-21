@@ -347,7 +347,8 @@ required = {
         "firmwareVariables: selectedFirmwareVariables",
         "startAccessingSecurityScopedResource()",
         "releaseScopesWhenStopped()",
-    ],
+
+        "configuration.requiresUEFI",    ],
     "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
         "dlopen(library_path, RTLD_NOW | RTLD_LOCAL)",
@@ -412,7 +413,12 @@ required = {
         "static var defaultAccelerator: Accelerator",
         "case .automatic, .qemuJIT: return .jit",
         "case .qemuInterpreter, .hypervisor: return .tcg",
-    ],
+
+        "var bootUEFI: Bool? = nil",
+        "var requiresUEFI: Bool",
+        "bootWindows: true, bootUEFI: true",
+        "bootWindows: false, bootUEFI: false",
+        "bootWindows: false, bootUEFI: true",    ],
     "src/Core/VMConfigurationValidation.swift": [
         "guard architecture == .x86_64",
         "case .unsupportedArchitecture(let architecture)",
@@ -420,6 +426,9 @@ required = {
         "case .unsupportedGPU(let gpu)",
         "framebufferBytes <= 64 * 1024 * 1024",
         "fit the 64 MiB framebuffer limit",
+    ],
+    "scripts/tests/test_qemu_build_patches.py": [
+        "def test_windows_and_steamos_profiles_select_uefi_firmware",
     ],
     "scripts/tests/test_qemu_native_bridge.c": [
         "tooManyArguments[4097]",

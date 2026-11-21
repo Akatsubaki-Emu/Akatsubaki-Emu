@@ -38,10 +38,10 @@ final class QEMUNativeRuntime {
         let selectedFirmware: URL?
         if let firmware {
             selectedFirmware = firmware
-        } else if configuration.name == "SteamOS Gaming Mode" {
+        } else if configuration.requiresUEFI {
             guard let uefi = Self.findUEFIFirmware(in: dataDirectory) else {
                 throw RuntimeError.runtimeUnavailable(
-                    "SteamOS Gaming Mode requires an x86_64 UEFI code image (OVMF_CODE.fd or edk2-x86_64-code.fd) in the bundled QEMU data directory."
+                    "This VM profile requires an x86_64 UEFI code image (OVMF_CODE.fd or edk2-x86_64-code.fd) in the bundled QEMU data directory."
                 )
             }
             selectedFirmware = uefi

@@ -26,6 +26,9 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
     var displayHeight: Int
     var displayFPS: Int
     var bootWindows: Bool
+    var bootUEFI: Bool? = nil
+
+    var requiresUEFI: Bool { bootUEFI ?? (bootWindows || name == "SteamOS Gaming Mode") }
 
     static var defaultAccelerator: Accelerator {
         switch RuntimeSettings.shared.acceleration {
@@ -43,7 +46,7 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
             displayWidth: resolution.width,
             displayHeight: resolution.height,
             displayFPS: RuntimeSettings.shared.frameRate.value,
-            bootWindows: true
+            bootWindows: true, bootUEFI: true
         )
     }
 
@@ -55,7 +58,7 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
             displayWidth: resolution.width,
             displayHeight: resolution.height,
             displayFPS: RuntimeSettings.shared.frameRate.value,
-            bootWindows: false
+            bootWindows: false, bootUEFI: false
         )
     }
 
@@ -67,7 +70,7 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
             id: UUID(), name: "SteamOS Gaming Mode", architecture: .x86_64,
             memoryMB: 4096, cpuCount: 4, accelerator: defaultAccelerator, gpu: .virtioGPU,
             displayWidth: 1280, displayHeight: 800, displayFPS: 60,
-            bootWindows: false
+            bootWindows: false, bootUEFI: true
         )
     }
 }

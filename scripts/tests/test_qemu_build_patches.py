@@ -83,6 +83,17 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
         self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
 
+    def test_windows_and_steamos_profiles_select_uefi_firmware(self):
+        root = Path(__file__).resolve().parents[2]
+        configuration = (root / "src/Core/VMConfiguration.swift").read_text(encoding="utf-8")
+        runtime = (root / "src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        self.assertIn("var bootUEFI: Bool? = nil", configuration)
+        self.assertIn("var requiresUEFI: Bool", configuration)
+        self.assertIn("bootWindows: true, bootUEFI: true", configuration)
+        self.assertIn("bootWindows: false, bootUEFI: false", configuration)
+        self.assertIn("bootWindows: false, bootUEFI: true", configuration)
+        self.assertIn("configuration.requiresUEFI", runtime)
+
     def test_qemu_runtime_does_not_cancel_in_progress_release_build(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
         source = workflow.read_text(encoding="utf-8")
