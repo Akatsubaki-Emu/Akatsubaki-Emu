@@ -272,6 +272,10 @@ final class VMDisplayViewController: UIViewController {
                 self.status.text = summary
             }
         }
+        motion.onLookDelta = { [weak self] yaw, pitch in
+            guard VRSettings.shared.pointerLockEnabled else { return }
+            self?.vncClient.movePointer(dx: Float(yaw), dy: Float(pitch))
+        }
         if vrSettings.mode == .cardboard { motion.start() }
     }
 

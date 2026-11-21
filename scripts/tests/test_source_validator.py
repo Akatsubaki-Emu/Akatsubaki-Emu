@@ -163,5 +163,15 @@ class SourceValidatorTests(unittest.TestCase):
                     self.assertIn(token, source)
 
 
+    def test_motion_look_is_connected_to_guest_pointer_lock(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
+        motion = source.split("private func configureMotionInput()", 1)[1].split("\n    }", 1)[0]
+        self.assertIn("motion.onLookDelta =", motion)
+        self.assertIn("VRSettings.shared.pointerLockEnabled", motion)
+        self.assertIn("vncClient.movePointer(dx: Float(yaw), dy: Float(pitch))", motion)
+        self.assertIn("if vrSettings.mode == .cardboard { motion.start() }", motion)
+
+
 if __name__ == "__main__":
     unittest.main()
