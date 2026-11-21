@@ -21,22 +21,34 @@ final class GuestBlockDevice {
     let sectorCount: UInt64
     let readOnly: Bool
     private let handle: FileHandle
+    private let securityScopeGranted: Bool
     private let lock = NSLock()
 
     init(url: URL, sectorSize: UInt64 = GuestBlockDevice.defaultSectorSize, readOnly: Bool = false) throws {
         guard sectorSize > 0, sectorSize <= 65_536 else { throw DeviceError.invalidGeometry }
-        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-        guard values.isRegularFile == true, let size = values.fileSize, size >= 0 else {
-            throw DeviceError.invalidGeometry
+        let granted = url.startAccessingSecurityScopedResource()
+        do {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true, let size = values.fileSize, size >= 0 else {
+                throw DeviceError.invalidGeometry
+            }
+            let openedHandle = try readOnly ? FileHandle(forReadingFrom: url) : FileHandle(forUpdating: url)
+            self.url = url
+            self.sectorSize = sectorSize
+            self.sectorCount = UInt64(size) / sectorSize
+            self.readOnly = readOnly
+            self.handle = openedHandle
+            self.securityScopeGranted = granted
+        } catch {
+            if granted { url.stopAccessingSecurityScopedResource() }
+            throw error
         }
-        self.url = url
-        self.sectorSize = sectorSize
-        self.sectorCount = UInt64(size) / sectorSize
-        self.readOnly = readOnly
-        self.handle = try readOnly ? FileHandle(forReadingFrom: url) : FileHandle(forUpdating: url)
     }
 
-    deinit { try? handle.close() }
+    deinit {
+        try? handle.close()
+        if securityScopeGranted { url.stopAccessingSecurityScopedResource() }
+    }
     var capacityBytes: UInt64 { sectorCount * sectorSize }
 
     func read(lba: UInt64, count: UInt32 = 1) throws -> Data {

@@ -34,6 +34,7 @@ final class FramePacer {
         link = nil
         lastTimestamp = 0
         frames = 0
+        currentFPS = 0
     }
 
     @objc private func tick(_ display: CADisplayLink) {

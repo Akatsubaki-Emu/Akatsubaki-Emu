@@ -61,13 +61,19 @@ final class GameArtworkStore {
     }
 
     func artworkURL(for gameID: UUID) -> URL? {
-        guard let files = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return nil }
-        return files.first { $0.deletingPathExtension().lastPathComponent == gameID.uuidString }
+        guard let files = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
+        return files.filter { $0.deletingPathExtension().lastPathComponent == gameID.uuidString }
+            .sorted {
+                let left = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                let right = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                return left > right
+            }.first
     }
 
     func removeArtwork(for gameID: UUID) throws {
-        guard let url = artworkURL(for: gameID) else { return }
-        try fm.removeItem(at: url)
+        let files = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.deletingPathExtension().lastPathComponent == gameID.uuidString }
+        for file in files { try fm.removeItem(at: file) }
     }
 
     enum ArtworkError: LocalizedError {

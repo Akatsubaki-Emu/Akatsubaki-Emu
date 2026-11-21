@@ -16,9 +16,9 @@ final class PerformanceManager {
         Display maximum: \(DisplayCapabilities.maximumFramesPerSecond) Hz
         Selected target: \(RuntimeSettings.shared.frameRate.value) FPS
         GPU: \(MTLCreateSystemDefaultDevice() == nil ? "Unavailable" : "Metal")
-        Translation cache: enabled
-        Shader cache: enabled
-        Adaptive frame pacing: enabled
+        Translation cache: path-storage prototype; not connected to a translator
+        Shader cache: directory scaffold; no shader compiler integration
+        Frame pacing: CADisplayLink monitor prototype; not wired to QEMU scheduling
         """
     }
 }
