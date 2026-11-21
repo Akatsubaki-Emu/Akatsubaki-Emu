@@ -468,7 +468,9 @@ for token in [
     "scripts/patch_utm_qemu_ios.py",
     "scripts/patch_qemu_meson_ios.py",
     "scripts/verify_qemu_meson_link.py",
-    "utm-ios-arm64-deps-v10-",
+    "utm-ios-arm64-deps-v11-",
+    "spirv-tools",
+    "spirv-llvm-translator",
     "steps.xcode.outputs.version",
 ]:
     if token not in qemu_workflow:

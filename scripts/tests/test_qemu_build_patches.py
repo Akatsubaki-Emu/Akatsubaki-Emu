@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -56,6 +57,10 @@ generate_meson_cross() {
     echo "has_function_dup3 = false" >> $cross
 }
 QEMU_PLATFORM_BUILD_FLAGS="--enable-shared-lib --disable-cocoa --disable-sdl --disable-coreaudio --disable-slirp-smbd --enable-ucontext --with-coroutine=libucontext $HVF_FLAGS $TCI_BUILD_FLAGS"
+download () {
+    URL=$1
+    FILE="$(basename $URL)"
+}
 build () {
     if [ -z "$REBUILD" ]; then
         echo "${GREEN}Configuring ${NAME}...${NC}"
@@ -73,6 +78,16 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn('python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"', twice)
         self.assertIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"', twice)
         self.assertNotIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$DIR/build/build.ninja"', twice)
+        self.assertIn("http://ftp.gnu.org/gnu/libiconv/*", twice)
+        self.assertIn("https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}", twice)
+        shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
+        self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
+
+    def test_qemu_workflow_installs_both_spirv_dependencies(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("spirv-tools", source)
+        self.assertIn("spirv-llvm-translator", source)
 
     def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects

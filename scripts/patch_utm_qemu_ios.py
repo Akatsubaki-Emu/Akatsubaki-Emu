@@ -13,6 +13,21 @@ def replace_once(source: str, old: str, new: str, label: str) -> str:
 
 
 def patch_script(source: str) -> str:
+    download_hook = "download () {\n    URL=$1"
+    download_patch = (
+        "download () {\n"
+        "    URL=$1\n"
+        "    case \"$URL\" in\n"
+        "        http://ftp.gnu.org/gnu/libiconv/*)\n"
+        "            URL=\"https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}\"\n"
+        "            ;;\n"
+        "    esac"
+    )
+    source = replace_once(
+        source, download_hook, download_patch,
+        "GNU libiconv HTTPS download"
+    )
+
     cross_marker = 'echo "has_function_dup3 = false" >> $cross'
     cross_override = 'echo "has_function_posix_memalign = true" >> $cross'
     source = replace_once(
@@ -51,6 +66,8 @@ def patch_script(source: str) -> str:
     source = replace_once(source, configure_block, configure_with_check, "QEMU configure/build boundary")
 
     required = [
+        'http://ftp.gnu.org/gnu/libiconv/*',
+        'https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}',
         cross_override,
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
