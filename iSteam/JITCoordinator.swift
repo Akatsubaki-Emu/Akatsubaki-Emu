@@ -27,20 +27,27 @@ final class JITCoordinator {
     // Keep this conservative; signing/JIT helpers are responsible for granting it.
     var hasGetTaskAllow: Bool { false }
 
+    var isStikDebugAvailable: Bool {
+        #if os(iOS)
+        if #available(iOS 17.4, *) {
+            return true
+        }
+        #endif
+        return false
+    }
+
     var isJITProtocolSupported: Bool {
         #if os(iOS)
         if #available(iOS 26.0, *) {
             return iSteamJITIsSupported()
         }
         #endif
-        // The breakpoint protocol is specific to supported iOS releases;
-        // arm64 alone does not make it available on visionOS or older iOS.
         return false
     }
 
     func requestJIT(from controller: UIViewController?) {
-        guard isJITProtocolSupported else {
-            show("This device or build does not support the StikDebug JIT breakpoint protocol.", title: "JIT unavailable", on: controller)
+        guard isStikDebugAvailable else {
+            show("StikDebug JIT requires iOS 17.4 or later on a physical iOS device.", title: "JIT unavailable", on: controller)
             return
         }
 
@@ -57,11 +64,16 @@ final class JITCoordinator {
         var c = URLComponents()
         c.scheme = "stikdebug"
         c.host = "enable-jit"
-        c.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "bundle-id", value: bundleID),
-            URLQueryItem(name: "pid", value: String(getpid())),
-            URLQueryItem(name: "script-name", value: "universal.js")
+            URLQueryItem(name: "pid", value: String(getpid()))
         ]
+        // The iOS 26+ breakpoint protocol uses the universal script. Older
+        // supported iOS releases enable JIT through debugger attachment alone.
+        if #available(iOS 26.0, *), isJITProtocolSupported {
+            queryItems.append(URLQueryItem(name: "script-name", value: "universal.js"))
+        }
+        c.queryItems = queryItems
         guard let url = c.url else { return }
         UIApplication.shared.open(url, options: [:]) { [weak self, weak controller] opened in
             guard !opened else { return }
