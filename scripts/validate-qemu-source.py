@@ -10,6 +10,9 @@ required = {
         "func tapKey(_ key: String)",
         "numberOfColours = Int(Self.u16(header, 3))",
         "private static let maxFramebufferBytes = 64 * 1024 * 1024",
+        "private final class QEMUOneShotCompletion: @unchecked Sendable",
+        "private func withStateLock<T>",
+        "let completion = QEMUOneShotCompletion()",
         "RFB FramebufferUpdateRequest is exactly 10 bytes:",
         "0, 0, 0, 0,",
     ],
@@ -43,6 +46,8 @@ required = {
         'dlsym(library, "qemu_init")',
         'dlsym(library, "qemu_main_loop")',
         'dlsym(library, "qemu_cleanup")',
+        "static bool g_starting = false;",
+        "static _Thread_local char error_copy",
     ],
     "src/QEMU/QEMURuntimeStatus.swift": [
         "isteam_qemu_validate_library(",
@@ -68,15 +73,8 @@ required = {
         "virtualSize: try u32(data, offset + 8)",
         "rawOffset: try u32(data, offset + 20)",
     ],
-    "src/QEMU/QEMUVNCClient.swift": [
-        "private final class QEMUOneShotCompletion: @unchecked Sendable",
-        "private func withStateLock<T>",
-        "let completion = QEMUOneShotCompletion()",
-    ],
-    "iSteam/QEMUNativeBridge.c": [
-        "static bool g_starting = false;",
-        "static _Thread_local char error_copy",
-    ],
+
+
     "src/Core/VMSaveSlotStore.swift": [
         "startAccessingSecurityScopedResource()",
     ],
