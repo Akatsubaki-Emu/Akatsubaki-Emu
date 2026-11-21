@@ -27,6 +27,19 @@ class SourceValidatorTests(unittest.TestCase):
         duplicates = sorted({key for key in keys if keys.count(key) > 1})
         self.assertFalse(duplicates, f"duplicate required source-contract keys: {duplicates}")
 
+    def test_qemu_packager_has_one_complete_candidate_scan(self):
+        root = Path(__file__).resolve().parents[2]
+        package = (root / "scripts" / "package-utm-qemu-runtime.sh").read_text(encoding="utf-8")
+        runtime_validator = (root / "scripts" / "validate-qemu-runtime.sh").read_text(encoding="utf-8")
+        bridge = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
+
+        self.assertEqual(package.count('candidate=""'), 1)
+        self.assertEqual(package.count('candidate="$file"'), 1)
+        self.assertIn("qemu_system_shutdown_request", package)
+        self.assertIn("runtime-library-path.txt", package)
+        self.assertIn("qemu_system_shutdown_request", runtime_validator)
+        self.assertNotIn("duplicate_string", bridge)
+
 
 if __name__ == "__main__":
     unittest.main()
