@@ -146,6 +146,10 @@ required = {
         "maximumMetadataBytes = 1 * 1024 * 1024",
         "data.count <= maximumMetadataBytes",
         "bookmark.count <= maximumMetadataBytes / 2",
+        "legacySafeFilename(_ name: String)",
+        "safeFilename(_ name: String)",
+        "isValidName(_ name: String)",
+        "configuration.name == expectedName",
         "startAccessingSecurityScopedResource()",
     ],
     "src/Runtime/ExecutionBackendRouter.swift": [
