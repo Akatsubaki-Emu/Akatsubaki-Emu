@@ -350,10 +350,10 @@ final class QEMUVNCClient {
         case "RT", "R2", "rt": key = "CTRL"
         case "L3", "l3": key = "C"
         case "R3", "r3": key = "V"
-        case "DPadUp": key = "UP"
-        case "DPadDown": key = "DOWN"
-        case "DPadLeft": key = "LEFT"
-        case "DPadRight": key = "RIGHT"
+        case "DPadUp", "dpadup": key = "UP"
+        case "DPadDown", "dpaddown": key = "DOWN"
+        case "DPadLeft", "dpadleft": key = "LEFT"
+        case "DPadRight", "dpadright": key = "RIGHT"
         default: return
         }
         sendKey(key, down: down)
