@@ -67,9 +67,20 @@ final class ExternalDriveStore {
         return result
     }
 
-    func readDocument(at url: URL) throws -> Data {
+    func readDocument(at url: URL, maximumBytes: Int? = nil) throws -> Data {
         try withAccess(to: url) { coordinatedURL in
-            try Data(contentsOf: coordinatedURL, options: [.mappedIfSafe])
+            if let maximumBytes {
+                let values = try coordinatedURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                guard values.isRegularFile == true,
+                      values.fileSize.map({ $0 <= maximumBytes }) ?? true else {
+                    throw CocoaError(.fileReadTooLarge)
+                }
+            }
+            let data = try Data(contentsOf: coordinatedURL, options: [.mappedIfSafe])
+            if let maximumBytes, data.count > maximumBytes {
+                throw CocoaError(.fileReadTooLarge)
+            }
+            return data
         }
     }
 

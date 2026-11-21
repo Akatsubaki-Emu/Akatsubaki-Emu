@@ -50,6 +50,10 @@ final class GameCompatibilityDatabase {
 
     private func loadRecords() throws -> [GameCompatibilityRecord] {
         guard fm.fileExists(atPath: fileURL.path) else { return [] }
+        let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
+        guard let fileSize = values.fileSize, fileSize <= 5 * 1024 * 1024 else {
+            throw DatabaseError.corruptDatabase
+        }
         let data = try Data(contentsOf: fileURL)
         guard data.count <= 5 * 1024 * 1024,
               let records = try? decoder.decode([GameCompatibilityRecord].self, from: data) else {

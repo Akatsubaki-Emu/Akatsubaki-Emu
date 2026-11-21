@@ -119,6 +119,10 @@ final class GameRuntimeProfileStore {
         value.updatedAt = Date()
         let destination = url(for: value.gameID)
         if fm.fileExists(atPath: destination.path) {
+            let values = try destination.resourceValues(forKeys: [.fileSizeKey])
+            guard let existingSize = values.fileSize, existingSize <= 1024 * 1024 else {
+                throw GameRuntimeProfile.ProfileError.corruptStoredProfile
+            }
             let existingData = try Data(contentsOf: destination)
             guard existingData.count <= 1024 * 1024,
                   let existing = try? decoder.decode(GameRuntimeProfile.self, from: existingData),
@@ -135,7 +139,10 @@ final class GameRuntimeProfileStore {
     }
 
     func profile(for gameID: UUID) -> GameRuntimeProfile? {
-        guard let data = try? Data(contentsOf: url(for: gameID)),
+        let profileURL = url(for: gameID)
+        guard let values = try? profileURL.resourceValues(forKeys: [.fileSizeKey]),
+              let size = values.fileSize, size <= 1024 * 1024,
+              let data = try? Data(contentsOf: profileURL),
               data.count <= 1024 * 1024,
               let value = try? decoder.decode(GameRuntimeProfile.self, from: data) else { return nil }
         return value
@@ -149,7 +156,9 @@ final class GameRuntimeProfileStore {
     var allProfiles: [GameRuntimeProfile] {
         let files = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         return files.filter { $0.pathExtension == "json" }.compactMap { file in
-            guard let data = try? Data(contentsOf: file), data.count <= 1024 * 1024 else { return nil }
+            guard let values = try? file.resourceValues(forKeys: [.fileSizeKey]),
+                  let size = values.fileSize, size <= 1024 * 1024,
+                  let data = try? Data(contentsOf: file), data.count <= 1024 * 1024 else { return nil }
             return try? decoder.decode(GameRuntimeProfile.self, from: data)
         }.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
