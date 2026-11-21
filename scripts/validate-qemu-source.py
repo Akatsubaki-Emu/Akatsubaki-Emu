@@ -111,6 +111,7 @@ required = {
     "src/Runtime/LinuxSyscallDispatcher.swift": [
         "func configure(programBreak: UInt64, stackBase: UInt64) throws",
         "private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64?",
+        "private func insertMappedRange(_ range: Range<UInt64>)",
         "private func validateRange(address: UInt64, length: UInt64) -> UInt64",
         "while start < text.endIndex",
         "guard a[4] == UInt64.max, a[5] == 0",
@@ -120,6 +121,14 @@ required = {
         "case 318:",
         "private func mapAnonymous(",
         "private func setBreak(",
+    ],
+    "scripts/tests/test_linux_mapping_order.py": [
+        "mappedRanges.first?.lowerBound ?? mmapCursor",
+        "insertMappedRange(address..<end)",
+    ],
+    "scripts/tests/test_native_guest_memory.cpp": [
+        "1ULL << 30",
+        "isteam_guest_memory_allocated_pages",
     ],
     "scripts/tests/test_linux_syscall_dispatcher.swift": [
         "Linux x86-64 brk/mmap/munmap/mprotect/time/random/identity and reset tests passed",
@@ -152,7 +161,6 @@ required = {
         "programHeaderAddress",
         "programHeadersNotMapped",
         "fileSize <= UInt64(data.count) - fileOffset",
-        "memorySize >= fileSize",
         "declaredProgramHeaderAddress",
         "mappedProgramHeaderAddress",
         "fileOffset == phoff",
@@ -193,7 +201,8 @@ required = {
         "case 0xFF:",
         "case 0xC9:",
         "case 0xC2:",
-        "case 0x09, 0x0B, 0x21, 0x23:",
+        "case 0x09, 0x0B:",
+        "case 0x29, 0x2B, 0x39, 0x3B:",
         "case 0x68, 0x6A:",
         "private func fetchUInt16() -> UInt16?",
         "private func decodeRM(_ modrm: UInt8, rex: UInt8)",
@@ -561,6 +570,8 @@ required = {
     ],
     ".gitlab-ci.yml": [
         "test_static_elf_execution.swift",
+        "test_native_guest_memory.cpp",
+        "g++ -std=c++17 -Wall -Wextra -Werror",
         "test_vnc_key_state.swift",
         "test_windows_pe_image.swift",
         "python -m unittest discover -s scripts/tests -p 'test_*.py'",

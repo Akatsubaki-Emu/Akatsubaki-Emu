@@ -247,6 +247,8 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("scripts/tests/test_elf_loader_program_headers.swift", workflow)
         self.assertIn("scripts/tests/test_windows_pe_image.swift", workflow)
         self.assertIn("scripts/tests/test_static_elf_execution.swift", workflow)
+        self.assertIn("scripts/tests/test_native_guest_memory.cpp", workflow)
+        self.assertIn("g++ -std=c++17 -Wall -Wextra -Werror", workflow)
         self.assertIn("scripts/tests/test_vnc_key_state.swift", workflow)
         self.assertIn("scripts/tests/test_native_guest_memory.cpp", workflow)
         self.assertIn("g++ -std=c++17 -Wall -Wextra -Werror", workflow)
