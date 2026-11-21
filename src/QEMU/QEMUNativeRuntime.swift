@@ -25,6 +25,15 @@ final class QEMUNativeRuntime {
             )
         }
 
+        #if os(iOS)
+        if #available(iOS 17.4, *), JITCoordinator.shared.isStikDebugAvailable,
+           !JITCoordinator.shared.isJITReady {
+            throw RuntimeError.runtimeUnavailable(
+                "QEMU TCG needs executable memory. Enable JIT for Akatsubaki Emu with StikDebug, return to the app, and try again."
+            )
+        }
+        #endif
+
         let libraryURL: URL
         let dataDirectory: URL
         switch QEMURuntimeStatus.locate() {

@@ -45,7 +45,7 @@ struct QEMUCommandBuilder {
             "-machine", machine, "-nodefaults", "-display", "none",
             "-m", "\(configuration.memoryMB)", "-smp", "\(configuration.cpuCount)",
             "-cpu", "max",
-            "-accel", configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg",
+            "-accel", configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg,tb-size=64,split-wx=on",
             // Windows includes generic VGA/AHCI/E1000 drivers; Linux can use VirtIO.
             "-device", gpu,
             "-device", "ich9-ahci,id=sata0",

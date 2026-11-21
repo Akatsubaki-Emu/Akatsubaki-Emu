@@ -16,6 +16,12 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         physical_guard = "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)"
         self.assertEqual(source.count(physical_guard), 2)
 
+    def test_jit_ready_uses_the_attached_debugger_status(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("var isJITReady: Bool", source)
+        self.assertIn("return iSteamJITIsReady()", source)
+
     def test_ios_26_breakpoint_script_is_gated_to_supported_devices(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")

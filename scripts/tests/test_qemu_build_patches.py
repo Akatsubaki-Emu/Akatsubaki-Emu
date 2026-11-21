@@ -83,6 +83,19 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
         self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
 
+    def test_qemu_tcg_profiles_both_request_split_wx(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src/QEMU/QEMUCommandBuilder.swift").read_text(encoding="utf-8")
+        self.assertIn('"tcg,tb-size=128,split-wx=on"', source)
+        self.assertIn('"tcg,tb-size=64,split-wx=on"', source)
+
+    def test_qemu_runtime_rejects_tcg_when_stikdebug_jit_is_not_ready(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        self.assertIn("JITCoordinator.shared.isStikDebugAvailable", source)
+        self.assertIn("!JITCoordinator.shared.isJITReady", source)
+        self.assertIn("Enable JIT for Akatsubaki Emu with StikDebug", source)
+
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):
         root = Path(__file__).resolve().parents[2]
         configuration = (root / "src/Core/VMConfiguration.swift").read_text(encoding="utf-8")

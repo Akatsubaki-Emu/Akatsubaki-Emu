@@ -45,6 +45,15 @@ final class JITCoordinator {
         return false
     }
 
+    var isJITReady: Bool {
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        if #available(iOS 17.4, *) {
+            return iSteamJITIsReady()
+        }
+        #endif
+        return false
+    }
+
     func requestJIT(from controller: UIViewController?) {
         guard isStikDebugAvailable else {
             show("StikDebug JIT requires iOS 17.4 or later on a physical iOS device.", title: "JIT unavailable", on: controller)
