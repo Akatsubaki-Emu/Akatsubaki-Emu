@@ -111,11 +111,29 @@ final class GameLibraryTransferStore {
         let existingIDs = Set(current.map(\.id))
         let incoming = backup.games.filter { !existingIDs.contains($0.id) }
         current.append(contentsOf: incoming)
-        GameStore.shared.save(current)
 
-        for profile in backup.profiles where GameRuntimeProfileStore.shared.profile(for: profile.gameID) == nil {
-            try GameRuntimeProfileStore.shared.save(profile)
+        // Persist new profiles first, then publish the merged library. If any
+        // profile or the library write fails, roll back the newly created
+        // profile files so the import does not leave a half-applied backup.
+        let profilesToSave = backup.profiles.filter {
+            GameRuntimeProfileStore.shared.profile(for: $0.gameID) == nil
         }
+        var savedProfileIDs: [UUID] = []
+        do {
+            for profile in profilesToSave {
+                try GameRuntimeProfileStore.shared.save(profile)
+                savedProfileIDs.append(profile.gameID)
+            }
+            guard GameStore.shared.save(current) else {
+                throw TransferError.librarySaveFailed
+            }
+        } catch {
+            for gameID in savedProfileIDs {
+                try? GameRuntimeProfileStore.shared.removeProfile(for: gameID)
+            }
+            throw error
+        }
+
         EmulationLog.shared.write("Imported \(incoming.count) new game entries; executable paths remain untrusted metadata")
         return incoming.count
     }
@@ -126,6 +144,7 @@ final class GameLibraryTransferStore {
         case tooManyEntries
         case invalidEntry
         case invalidProfile
+        case librarySaveFailed
 
         var errorDescription: String? {
             switch self {
@@ -139,6 +158,8 @@ final class GameLibraryTransferStore {
                 return "The backup contains an invalid or duplicate game entry."
             case .invalidProfile:
                 return "The backup contains an invalid, duplicate, or orphaned game profile."
+            case .librarySaveFailed:
+                return "The game library could not be saved. Existing data was preserved and the imported profiles were rolled back."
             }
         }
     }

@@ -71,22 +71,32 @@ final class GameStore {
 
     private init() {}
 
+    private func loadGames() -> [GameEntry]? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
+        return try? decoder.decode([GameEntry].self, from: data)
+    }
+
     var games: [GameEntry] {
-        guard
-            let data = UserDefaults.standard.data(forKey: key),
-            let value = try? decoder.decode([GameEntry].self, from: data)
-        else {
+        guard let value = loadGames() else {
+            EmulationLog.shared.write("Game library data is unreadable; preserving the original data instead of treating it as an empty library")
             return []
         }
         return value
     }
 
-    func save(_ games: [GameEntry]) {
+    @discardableResult
+    func save(_ games: [GameEntry]) -> Bool {
+        // Never replace a corrupt existing library with an empty or partial one.
+        guard loadGames() != nil else {
+            EmulationLog.shared.write("Game library save blocked because existing data could not be decoded")
+            return false
+        }
         guard let data = try? encoder.encode(games) else {
             EmulationLog.shared.write("Game library could not be encoded; existing saved data was left unchanged")
-            return
+            return false
         }
         UserDefaults.standard.set(data, forKey: key)
+        return true
     }
 
     func add(_ game: GameEntry) {
