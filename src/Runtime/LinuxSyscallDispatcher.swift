@@ -117,7 +117,7 @@ final class LinuxSyscallDispatcher {
         case 273:
             return .returned(0)
         case 318:
-            return .returned(getRandom(at: a[0], length: a[1]))
+            return .returned(getRandom(at: a[0], length: a[1], flags: a[2]))
         case 334:
             return .returned(errno(38))
         default:
@@ -263,7 +263,8 @@ final class LinuxSyscallDispatcher {
         return errno(12)
     }
 
-    private func getRandom(at address: UInt64, length: UInt64) -> UInt64 {
+    private func getRandom(at address: UInt64, length: UInt64, flags: UInt64) -> UInt64 {
+        guard flags & ~UInt64(0x7) == 0 else { return errno(22) }
         guard length <= 256 * 1024, length <= UInt64(Int.max) else { return errno(22) }
         if length == 0 { return 0 }
         var generator = SystemRandomNumberGenerator()

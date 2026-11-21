@@ -144,6 +144,10 @@ struct LinuxSyscallDispatcherTests {
         precondition(unicodeWritten == UInt64(unicodeOutput.utf8.count))
         precondition(outputLog.messages.suffix(3).map { $0.replacingOccurrences(of: "[guest stdout] ", with: "") }.joined() == unicodeOutput)
 
+        let invalidRandomFlags = dispatcher.dispatch(number: 318, arguments: [0x40800, 8, 8, 0, 0, 0])!
+        guard case .returned(let invalidRandomFlagsValue) = invalidRandomFlags else { preconditionFailure() }
+        precondition(invalidRandomFlagsValue == UInt64(bitPattern: Int64(-22)))
+
         let random = dispatcher.dispatch(number: 318, arguments: [0x40800, 32, 0, 0, 0, 0])!
         guard case .returned(let randomValue) = random else { preconditionFailure() }
         precondition(randomValue == 32)

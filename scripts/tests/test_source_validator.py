@@ -269,6 +269,9 @@ class SourceValidatorTests(unittest.TestCase):
         random = source.split("private func getRandom", 1)[1].split("private func writeTimespec", 1)[0]
         self.assertIn("var data = Data(count: count)", random)
         self.assertIn("data.withUnsafeMutableBytes", random)
+        self.assertIn("generator.next().littleEndian", random)
+        self.assertIn("update(from: sourceBase.assumingMemoryBound(to: UInt8.self)", random)
+        self.assertIn("flags & ~UInt64(0x7)", random)
         self.assertNotIn("(0..<Int(length)).map", random)
 
 

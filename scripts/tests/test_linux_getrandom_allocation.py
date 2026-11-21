@@ -14,6 +14,7 @@ class LinuxGetRandomAllocationTests(unittest.TestCase):
         self.assertIn("update(from: sourceBase.assumingMemoryBound(to: UInt8.self)", random)
         self.assertNotIn("UInt8.random", random)
         self.assertNotIn("(0..<Int(length)).map", random)
+        self.assertIn("flags & ~UInt64(0x7)", random)
 
 
 if __name__ == "__main__":
