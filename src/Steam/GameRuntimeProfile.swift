@@ -161,13 +161,30 @@ final class GameRuntimeProfileStore {
         if fm.fileExists(atPath: file.path) { try fm.removeItem(at: file) }
     }
 
-    var allProfiles: [GameRuntimeProfile] {
-        let files = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        return files.filter { $0.pathExtension == "json" }.compactMap { file in
+    private var profileFiles: [URL] {
+        (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil))?
+            .filter { $0.pathExtension == "json" } ?? []
+    }
+
+    var hasUnreadableProfiles: Bool {
+        profileFiles.contains { file in
             guard let values = try? file.resourceValues(forKeys: [.fileSizeKey]),
                   let size = values.fileSize, size <= 1024 * 1024,
-                  let data = try? Data(contentsOf: file), data.count <= 1024 * 1024 else { return nil }
-            return try? decoder.decode(GameRuntimeProfile.self, from: data)
+                  let data = try? Data(contentsOf: file), data.count <= 1024 * 1024,
+                  let profile = try? decoder.decode(GameRuntimeProfile.self, from: data),
+                  (try? profile.validate()) != nil else { return true }
+            return false
+        }
+    }
+
+    var allProfiles: [GameRuntimeProfile] {
+        profileFiles.compactMap { file in
+            guard let values = try? file.resourceValues(forKeys: [.fileSizeKey]),
+                  let size = values.fileSize, size <= 1024 * 1024,
+                  let data = try? Data(contentsOf: file), data.count <= 1024 * 1024,
+                  let profile = try? decoder.decode(GameRuntimeProfile.self, from: data),
+                  (try? profile.validate()) != nil else { return nil }
+            return profile
         }.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 }

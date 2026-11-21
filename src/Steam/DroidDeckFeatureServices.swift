@@ -32,6 +32,9 @@ final class GameLibraryTransferStore {
 
     func export(to destination: URL) throws {
         guard GameStore.shared.isReadable else { throw TransferError.libraryUnreadable }
+        guard !GameRuntimeProfileStore.shared.hasUnreadableProfiles else {
+            throw TransferError.profileStoreUnreadable
+        }
         let games = GameStore.shared.games
         let gameIDs = Set(games.map(\.id))
         let profiles = GameRuntimeProfileStore.shared.allProfiles.filter {
@@ -149,6 +152,7 @@ final class GameLibraryTransferStore {
         case invalidProfile
         case librarySaveFailed
         case libraryUnreadable
+        case profileStoreUnreadable
 
         var errorDescription: String? {
             switch self {
@@ -166,6 +170,8 @@ final class GameLibraryTransferStore {
                 return "The game library could not be saved. Existing data was preserved and the imported profiles were rolled back."
             case .libraryUnreadable:
                 return "The existing game library is unreadable; export was stopped to avoid creating an incomplete backup."
+            case .profileStoreUnreadable:
+                return "One or more per-game profiles are unreadable; export was stopped to avoid creating an incomplete backup."
             }
         }
     }
