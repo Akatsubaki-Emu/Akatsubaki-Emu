@@ -5,21 +5,20 @@ import Foundation
 final class GuestMemory {
     static let pageSize: UInt64 = 4096
     let size: UInt64
-    private let native: OpaquePointer
-    private let lock = NSLock()
+    private let native: OpaquePointer?
+    var isAvailable: Bool { native != nil }
 
     init(size: UInt64) {
         self.size = size
-        guard let handle = isteam_guest_memory_create(size) else {
-            fatalError("Unable to allocate native guest memory handle")
-        }
-        self.native = handle
+        self.native = isteam_guest_memory_create(size)
     }
 
-    deinit { isteam_guest_memory_destroy(native) }
+    deinit {
+        if let native { isteam_guest_memory_destroy(native) }
+    }
 
     func read(offset: UInt64, length: Int) -> Data? {
-        guard length >= 0, offset <= size, UInt64(length) <= size - offset else { return nil }
+        guard let native, length >= 0, offset <= size, UInt64(length) <= size - offset else { return nil }
         if length == 0 { return Data() }
         var data = Data(count: length)
         let success = data.withUnsafeMutableBytes { bytes -> Bool in
@@ -31,7 +30,7 @@ final class GuestMemory {
 
     @discardableResult
     func write(_ data: Data, offset: UInt64) -> Bool {
-        guard offset <= size, UInt64(data.count) <= size - offset else { return false }
+        guard let native, offset <= size, UInt64(data.count) <= size - offset else { return false }
         if data.isEmpty { return true }
         return data.withUnsafeBytes { bytes in
             guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
@@ -41,9 +40,10 @@ final class GuestMemory {
 
     @discardableResult
     func zero(offset: UInt64, length: UInt64) -> Bool {
-        isteam_guest_memory_zero(native, offset, length)
+        guard let native else { return false }
+        return isteam_guest_memory_zero(native, offset, length)
     }
 
-    func clear() { isteam_guest_memory_clear(native) }
-    var allocatedPageCount: Int { Int(isteam_guest_memory_allocated_pages(native)) }
+    func clear() { if let native { isteam_guest_memory_clear(native) } }
+    var allocatedPageCount: Int { native.map { Int(isteam_guest_memory_allocated_pages($0)) } ?? 0 }
 }

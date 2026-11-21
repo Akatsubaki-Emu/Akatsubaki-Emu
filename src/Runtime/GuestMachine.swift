@@ -48,8 +48,17 @@ final class GuestMachine {
 
     init(configuration: VMConfiguration, memorySize: UInt64? = nil) {
         self.configuration = configuration
-        let requestedSize = memorySize ?? UInt64(max(1, configuration.memoryMB)) * 1024 * 1024
+        // Keep malformed or imported configurations from overflowing the
+        // byte conversion or requesting unbounded host memory in this prototype.
+        let maximumGuestBytes: UInt64 = 16 * 1024 * 1024 * 1024
+        let requestedMB = min(max(configuration.memoryMB, 256), 16_384)
+        let defaultSize = UInt64(requestedMB) * 1024 * 1024
+        let requestedSize = memorySize.map { min(max($0, GuestMemory.pageSize), maximumGuestBytes) } ?? defaultSize
         self.memory = GuestMemory(size: requestedSize)
+        guard self.memory.isAvailable else {
+            self.state = .failed("Unable to create the native guest-memory store.")
+            return
+        }
         // Ship the small x86-64 interpreter as the first runnable backend.
         // Other architectures still require a compatible backend integration.
         if configuration.architecture == .x86_64 {
