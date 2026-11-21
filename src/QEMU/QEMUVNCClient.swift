@@ -186,15 +186,14 @@ final class QEMUVNCClient {
     /// packets can originate from different UI/controller threads; sending them
     /// from independent Tasks could reorder a release ahead of its press.
     private func enqueueSend(_ data: Data, to connection: NWConnection,
-                             in group: DispatchGroup? = nil) {
-        let selectedGroup = group ?? withStateLock { pendingSendGroup }
-        selectedGroup.enter()
+                             in group: DispatchGroup) {
+        group.enter()
         sendQueue.async {
             connection.send(content: data, completion: .contentProcessed { error in
                 if let error {
                     EmulationLog.shared.write("QEMU VNC send failed: \\(error.localizedDescription)")
                 }
-                selectedGroup.leave()
+                group.leave()
             })
         }
     }
@@ -369,7 +368,7 @@ final class QEMUVNCClient {
             else { buttonKeys.remove(keysym) }
             let shouldBePressed = buttonKeys.contains(keysym) || movementKeys.contains(keysym)
             if shouldBePressed != wasPressed {
-                enqueueSend(Self.keyEvent(keysym, down: shouldBePressed), to: connection)
+                enqueueSend(Self.keyEvent(keysym, down: shouldBePressed), to: connection, in: pendingSendGroup)
             }
             if shouldBePressed { pressedKeys.insert(keysym) }
             else { pressedKeys.remove(keysym) }
@@ -380,8 +379,8 @@ final class QEMUVNCClient {
         guard let keysym = Self.keysym(for: key) else { return }
         withStateLock {
             guard connected, let connection, !pressedKeys.contains(keysym) else { return }
-            enqueueSend(Self.keyEvent(keysym, down: true), to: connection)
-            enqueueSend(Self.keyEvent(keysym, down: false), to: connection)
+            enqueueSend(Self.keyEvent(keysym, down: true), to: connection, in: pendingSendGroup)
+            enqueueSend(Self.keyEvent(keysym, down: false), to: connection, in: pendingSendGroup)
         }
     }
 
@@ -397,10 +396,10 @@ final class QEMUVNCClient {
             movementKeys = desired
             let shouldBePressed = buttonKeys.union(movementKeys)
             for key in previouslyPressed.subtracting(shouldBePressed) {
-                enqueueSend(Self.keyEvent(key, down: false), to: connection)
+                enqueueSend(Self.keyEvent(key, down: false), to: connection, in: pendingSendGroup)
             }
             for key in shouldBePressed.subtracting(previouslyPressed) {
-                enqueueSend(Self.keyEvent(key, down: true), to: connection)
+                enqueueSend(Self.keyEvent(key, down: true), to: connection, in: pendingSendGroup)
             }
             pressedKeys = shouldBePressed
         }
@@ -413,7 +412,7 @@ final class QEMUVNCClient {
             pointerY = min(max(pointerY - Int(dy * 12), 0), framebufferHeight - 1)
             let message = Data([5, 0, UInt8((pointerX >> 8) & 0xff), UInt8(pointerX & 0xff),
                                 UInt8((pointerY >> 8) & 0xff), UInt8(pointerY & 0xff)])
-            enqueueSend(message, to: connection)
+            enqueueSend(message, to: connection, in: pendingSendGroup)
         }
     }
 
