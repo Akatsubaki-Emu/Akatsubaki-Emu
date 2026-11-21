@@ -20,6 +20,9 @@ required = {
         "private var buttonKeys = Set<UInt32>()",
         "private var movementKeys = Set<UInt32>()",
         "private func enqueueSend(_ data: Data, to connection: NWConnection,",
+        "guard dx.isFinite, dy.isFinite",
+        "let boundedX = max(-Float(framebufferWidth)",
+        "let boundedY = max(-Float(framebufferHeight)",
     ],
     "src/Runtime/WindowsPELoader.swift": [
         "fileSize <= 512 * 1024 * 1024",
@@ -321,6 +324,8 @@ required = {
     ],
     "src/Display/ControllerInputManager.swift": [
         "GCController.stopWirelessControllerDiscovery()",
+        "private func detachHandlers(from pad: GCExtendedGamepad)",
+        "detachHandlers(from: pad)",
         "pad.leftTrigger",
         "pad.dpad.up",
         "if let leftThumbstickButton = pad.leftThumbstickButton",

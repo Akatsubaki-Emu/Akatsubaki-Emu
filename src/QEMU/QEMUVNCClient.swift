@@ -430,10 +430,13 @@ final class QEMUVNCClient {
     }
 
     func movePointer(dx: Float, dy: Float) {
+        guard dx.isFinite, dy.isFinite else { return }
         withStateLock {
             guard connected, let connection, framebufferWidth > 0, framebufferHeight > 0 else { return }
-            pointerX = min(max(pointerX + Int(dx * 12), 0), framebufferWidth - 1)
-            pointerY = min(max(pointerY - Int(dy * 12), 0), framebufferHeight - 1)
+            let boundedX = max(-Float(framebufferWidth), min(Float(framebufferWidth), dx * 12))
+            let boundedY = max(-Float(framebufferHeight), min(Float(framebufferHeight), dy * 12))
+            pointerX = min(max(pointerX + Int(boundedX), 0), framebufferWidth - 1)
+            pointerY = min(max(pointerY - Int(boundedY), 0), framebufferHeight - 1)
             let message = Data([5, 0, UInt8((pointerX >> 8) & 0xff), UInt8(pointerX & 0xff),
                                 UInt8((pointerY >> 8) & 0xff), UInt8(pointerY & 0xff)])
             enqueueSend(message, to: connection, in: pendingSendGroup)

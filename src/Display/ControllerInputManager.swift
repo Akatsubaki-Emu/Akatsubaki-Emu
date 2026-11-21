@@ -32,6 +32,7 @@ final class ControllerInputManager {
             for (_, name) in buttons {
                 onButton?(ControllerMappingStore.shared.profile.action(for: name), false)
             }
+            detachHandlers(from: pad)
         }
     }
 
@@ -51,9 +52,15 @@ final class ControllerInputManager {
             for (_, name) in buttons {
                 onButton?(ControllerMappingStore.shared.profile.action(for: name), false)
             }
-            pad.leftThumbstick.valueChangedHandler = nil
-            pad.rightThumbstick.valueChangedHandler = nil
-            for (button, _) in buttons { button.valueChangedHandler = nil }
+            detachHandlers(from: pad)
+        }
+    }
+
+    private func detachHandlers(from pad: GCExtendedGamepad) {
+        pad.leftThumbstick.valueChangedHandler = nil
+        pad.rightThumbstick.valueChangedHandler = nil
+        for (button, _) in buttonInputs(for: pad) {
+            button.valueChangedHandler = nil
         }
     }
 
