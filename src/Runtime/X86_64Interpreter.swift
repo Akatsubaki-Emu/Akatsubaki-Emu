@@ -133,17 +133,51 @@ final class X86_64Interpreter: GuestCPUBackend {
                     registers[index] = value
                     registers[4] &+= 8
                 }
-            case 0x01, 0x03, 0x29, 0x2B, 0x31, 0x33, 0x39, 0x3B, 0x85:
-                guard let modrm = fetchByte(), modrm >> 6 == 3 else {
+            case 0x89, 0x8B:
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
+                }
+                let sourceRegister = decoded.reg
+                let width64 = rex & 0x08 != 0
+                if opcode == 0x89 {
+                    guard writeOperand(registers[sourceRegister], to: decoded.operand, width64: width64) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                } else {
+                    guard let value = readOperand(decoded.operand, width64: width64) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                    registers[sourceRegister] = width64 ? value : UInt64(UInt32(truncatingIfNeeded: value))
+                }
+            case 0x8D:
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex),
+                      case .memory(let address) = decoded.operand else {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)
                 }
-                let reg = Int((modrm >> 3) & 7) | (rex & 0x04 != 0 ? 8 : 0)
-                let rm = Int(modrm & 7) | (rex & 0x01 != 0 ? 8 : 0)
+                registers[decoded.reg] = address
+            case 0x01, 0x03, 0x29, 0x2B, 0x31, 0x33, 0x39, 0x3B, 0x85:
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
+                }
+                let reg = decoded.reg
                 let width64 = rex & 0x08 != 0
-                let destination = (opcode == 0x03 || opcode == 0x2B || opcode == 0x33 || opcode == 0x3B) ? reg : rm
-                let lhs = registers[destination]
-                let rhs = registers[destination == reg ? rm : reg]
+                let registerIsDestination = opcode == 0x03 || opcode == 0x2B || opcode == 0x33 || opcode == 0x3B
+                let lhs: UInt64
+                let rhs: UInt64
+                if registerIsDestination {
+                    lhs = registers[reg]
+                    guard let value = readOperand(decoded.operand, width64: width64) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                    rhs = value
+                } else {
+                    guard let value = readOperand(decoded.operand, width64: width64) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                    lhs = value
+                    rhs = registers[reg]
+                }
                 let result: X86_64ALU.Result
                 switch opcode {
                 case 0x01, 0x03:
@@ -157,15 +191,17 @@ final class X86_64Interpreter: GuestCPUBackend {
                 }
                 flags = result.flags
                 if opcode != 0x39 && opcode != 0x3B && opcode != 0x85 {
-                    registers[destination] = result.value
+                    if registerIsDestination {
+                        registers[reg] = result.value
+                    } else if !writeOperand(result.value, to: decoded.operand, width64: width64) {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
                 }
             case 0x81, 0x83:
-                guard let modrm = fetchByte(), modrm >> 6 == 3 else {
-                    rip = instructionAddress
-                    return .unsupportedInstruction(address: instructionAddress)
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
                 }
                 let group = (modrm >> 3) & 7
-                let destination = Int(modrm & 7) | (rex & 0x01 != 0 ? 8 : 0)
                 let width64 = rex & 0x08 != 0
                 let rawImmediate: UInt64
                 if opcode == 0x83 {
@@ -179,7 +215,9 @@ final class X86_64Interpreter: GuestCPUBackend {
                         ? UInt64(bitPattern: Int64(Int32(bitPattern: immediate)))
                         : UInt64(immediate)
                 }
-                let lhs = registers[destination]
+                guard let lhs = readOperand(decoded.operand, width64: width64) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
                 let result: X86_64ALU.Result
                 switch group {
                 case 0: result = X86_64ALU.add(lhs, rawImmediate, width64: width64, flags: flags)
@@ -191,7 +229,9 @@ final class X86_64Interpreter: GuestCPUBackend {
                     return .unsupportedInstruction(address: instructionAddress)
                 }
                 flags = result.flags
-                if group != 7 { registers[destination] = result.value }
+                if group != 7 && !writeOperand(result.value, to: decoded.operand, width64: width64) {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
             case 0x72, 0x73, 0x74, 0x75, 0x78, 0x79, 0x7C, 0x7D, 0x7E, 0x7F:
                 guard let raw = fetchByte(),
                       let takeBranch = X86_64ALU.condition(opcode & 0x0F, flags: flags) else {
@@ -255,6 +295,94 @@ final class X86_64Interpreter: GuestCPUBackend {
             instructionCount &+= 1
         }
         return .instructionLimit
+    }
+
+    private enum Operand {
+        case register(Int)
+        case memory(UInt64)
+    }
+
+    private func decodeRM(_ modrm: UInt8, rex: UInt8) -> (reg: Int, operand: Operand)? {
+        let mode = modrm >> 6
+        let reg = Int((modrm >> 3) & 7) | (rex & 0x04 != 0 ? 8 : 0)
+        let rmField = modrm & 7
+        if mode == 3 {
+            return (reg, .register(Int(rmField) | (rex & 0x01 != 0 ? 8 : 0)))
+        }
+
+        var base: UInt64 = 0
+        var index: UInt64 = 0
+        var usesRIPRelative = false
+        var displacementRequired = mode == 1 || mode == 2
+        if rmField == 4 {
+            guard let sib = fetchByte() else { return nil }
+            let scale = UInt64(1) << ((sib >> 6) & 3)
+            let indexField = (sib >> 3) & 7
+            let baseField = sib & 7
+            if indexField != 4 || rex & 0x02 != 0 {
+                let indexRegister = Int(indexField) | (rex & 0x02 != 0 ? 8 : 0)
+                index = registers[indexRegister] &* scale
+            }
+            if mode == 0 && baseField == 5 {
+                displacementRequired = true
+            } else {
+                let baseRegister = Int(baseField) | (rex & 0x01 != 0 ? 8 : 0)
+                base = registers[baseRegister]
+            }
+        } else if mode == 0 && rmField == 5 {
+            usesRIPRelative = true
+            displacementRequired = true
+        } else {
+            let baseRegister = Int(rmField) | (rex & 0x01 != 0 ? 8 : 0)
+            base = registers[baseRegister]
+        }
+
+        var displacement: Int64 = 0
+        if displacementRequired {
+            if mode == 1 {
+                guard let raw = fetchByte() else { return nil }
+                displacement = Int64(Int8(bitPattern: raw))
+            } else {
+                guard let raw = fetchUInt32() else { return nil }
+                displacement = Int64(Int32(bitPattern: raw))
+            }
+        }
+        let addressBase = usesRIPRelative ? rip : base
+        let address = addressBase &+ index &+ UInt64(bitPattern: displacement)
+        return (reg, .memory(address))
+    }
+
+    private func readOperand(_ operand: Operand, width64: Bool) -> UInt64? {
+        switch operand {
+        case .register(let index):
+            return width64 ? registers[index] : UInt64(UInt32(truncatingIfNeeded: registers[index]))
+        case .memory(let address):
+            if width64 { return memory.readUInt64(offset: address) }
+            return memory.readUInt32(offset: address).map(UInt64.init)
+        }
+    }
+
+    private func writeOperand(_ value: UInt64, to operand: Operand, width64: Bool) -> Bool {
+        switch operand {
+        case .register(let index):
+            registers[index] = width64 ? value : UInt64(UInt32(truncatingIfNeeded: value))
+            return true
+        case .memory(let address):
+            if width64 { return memory.writeUInt64(value, offset: address) }
+            let word = UInt32(truncatingIfNeeded: value)
+            let bytes = Data([
+                UInt8(truncatingIfNeeded: word),
+                UInt8(truncatingIfNeeded: word >> 8),
+                UInt8(truncatingIfNeeded: word >> 16),
+                UInt8(truncatingIfNeeded: word >> 24)
+            ])
+            return memory.write(bytes, offset: address)
+        }
+    }
+
+    private func operandAddress(_ operand: Operand) -> UInt64 {
+        if case .memory(let address) = operand { return address }
+        return rip
     }
 
     private func fetchByte() -> UInt8? {

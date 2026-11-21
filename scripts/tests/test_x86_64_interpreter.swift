@@ -176,12 +176,43 @@ struct InterpreterTests {
         precondition(xor.conditionFlags & X86_64ALU.zero != 0)
         precondition(xor.conditionFlags & X86_64ALU.carry == 0)
 
+        let ripRelativeMemory = GuestMemory(size: 256)
+        let ripRelativeProgram: [UInt8] = [
+            0xB8, 0x78, 0x56, 0x34, 0x12,
+            0x89, 0x05, 0x75, 0x00, 0x00, 0x00,
+            0x8B, 0x1D, 0x6F, 0x00, 0x00, 0x00,
+            0x0F, 0x0B
+        ]
+        precondition(ripRelativeMemory.write(Data(ripRelativeProgram), offset: 0))
+        let ripRelative = X86_64Interpreter(memory: ripRelativeMemory)
+        try ripRelative.reset(entryPoint: 0)
+        let ripRelativeExit = try ripRelative.run(maxInstructions: 8)
+        precondition(ripRelativeExit == .unsupportedInstruction(address: 17))
+        precondition(ripRelative.registerValue(3) == 0x12345678)
+        precondition(ripRelativeMemory.readUInt32(offset: 0x80) == 0x12345678)
+
+        let sibMemory = GuestMemory(size: 4096)
+        let sibProgram: [UInt8] = [
+            0x48, 0xBC, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+            0x48, 0x89, 0x44, 0x24, 0x08,
+            0x48, 0x8B, 0x5C, 0x24, 0x08,
+            0x0F, 0x0B
+        ]
+        precondition(sibMemory.write(Data(sibProgram), offset: 0))
+        let sib = X86_64Interpreter(memory: sibMemory)
+        try sib.reset(entryPoint: 0)
+        let sibExit = try sib.run(maxInstructions: 8)
+        precondition(sibExit == .unsupportedInstruction(address: 30))
+        precondition(sib.registerValue(3) == 0x1122334455667788)
+        precondition(sibMemory.readUInt64(offset: 0x108) == 0x1122334455667788)
+
         let unsupportedMemory = GuestMemory(size: 4)
         precondition(unsupportedMemory.write(Data([0x0F, 0x0B]), offset: 0))
         let unsupported = X86_64Interpreter(memory: unsupportedMemory)
         try unsupported.reset(entryPoint: 0)
         let unsupportedExit = try unsupported.run(maxInstructions: 1)
         precondition(unsupportedExit == .unsupportedInstruction(address: 0))
-        print("x86-64 interpreter register, ALU flags, conditional branch, syscall, budget and fault tests passed")
+        print("x86-64 interpreter register, memory addressing, ALU flags, conditional branch, syscall, budget and fault tests passed")
     }
 }
