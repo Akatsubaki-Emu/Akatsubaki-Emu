@@ -21,7 +21,10 @@ struct GameLibraryQuery {
         var result = source.filter { game in
             if favoritesOnly && !game.isFavorite { return false }
             if let tag, !tag.isEmpty,
-               !game.tags.contains(where: { $0.localizedCaseInsensitiveCompare(tag) == .orderedSame }) {
+               !game.tags.contains(where: {
+                   $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                       .localizedCaseInsensitiveCompare(tag) == .orderedSame
+               }) {
                 return false
             }
             guard !query.isEmpty else { return true }
