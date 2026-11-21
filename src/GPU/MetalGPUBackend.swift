@@ -23,6 +23,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     private let device: MTLDevice?
     private let queue: MTLCommandQueue?
     private let textureLock = NSLock()
+    private var displayUpdateScheduled = false
     private var framebufferSlots: [FramebufferSlot] = []
     private var framebuffer: FramebufferSlot?
     private var drawableWidth: Int
@@ -62,7 +63,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     }
 
     func start() {
-        DispatchQueue.main.async { [weak self] in self?.view.setNeedsDisplay() }
+        scheduleDisplayUpdate()
     }
 
     func stop() {
@@ -71,7 +72,28 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         framebuffer = nil
         framebufferSlots.removeAll(keepingCapacity: false)
         textureLock.unlock()
-        DispatchQueue.main.async { [weak self] in self?.view.setNeedsDisplay() }
+        scheduleDisplayUpdate()
+    }
+
+    private func scheduleDisplayUpdate() {
+        textureLock.lock()
+        let shouldSchedule = !displayUpdateScheduled
+        if shouldSchedule { displayUpdateScheduled = true }
+        textureLock.unlock()
+        guard shouldSchedule else { return }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.textureLock.lock()
+            let width = self.drawableWidth
+            let height = self.drawableHeight
+            self.displayUpdateScheduled = false
+            self.textureLock.unlock()
+
+            let drawableSize = CGSize(width: width, height: height)
+            if self.view.drawableSize != drawableSize { self.view.drawableSize = drawableSize }
+            self.view.setNeedsDisplay()
+        }
     }
 
     func submit(frame: Data, width frameWidth: Int, height frameHeight: Int) {
@@ -125,7 +147,6 @@ final class MetalGPUBackend: NSObject, GPUBackend {
 
         textureLock.lock()
         slot.isUploading = false
-        let needsDrawableResize = drawableWidth != frameWidth || drawableHeight != frameHeight
         let publish = generation == framebufferGeneration
             && sequence >= publishedFrameSequence
             && framebufferSlots.contains(where: { $0 === slot })
@@ -138,11 +159,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         textureLock.unlock()
 
         guard publish else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            if needsDrawableResize { self.view.drawableSize = CGSize(width: frameWidth, height: frameHeight) }
-            self.view.setNeedsDisplay()
-        }
+        scheduleDisplayUpdate()
     }
 
     private func release(_ slot: FramebufferSlot) {

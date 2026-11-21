@@ -646,7 +646,10 @@ required = {
     "src/GPU/MetalGPUBackend.swift": [
         "view.framebufferOnly = false",
         "view.autoResizeDrawable = false",
-        "view.drawableSize = CGSize(width: frameWidth, height: frameHeight)",
+        "let drawableSize = CGSize(width: width, height: height)",
+        "if self.view.drawableSize != drawableSize { self.view.drawableSize = drawableSize }",
+        "displayUpdateScheduled = false",
+        "guard shouldSchedule else { return }",
         "source.texture.width == drawable.texture.width",
         "source.texture.height == drawable.texture.height",
         "framebufferSlots.removeAll(keepingCapacity: false)",
