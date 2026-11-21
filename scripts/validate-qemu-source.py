@@ -414,6 +414,9 @@ if "--extra-ldflags=-Wl,-force_load" in qemu_workflow:
 
 # A release IPA must never be published without its native QEMU runtime.
 release_workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+if "- scripts/validate-qemu-source.py" not in release_workflow:
+    print("release workflow: source-contract validator changes should not trigger full release builds", file=sys.stderr)
+    failed = True
 release_concurrency_start = release_workflow.find("\nconcurrency:\n")
 release_concurrency_end = release_workflow.find("\njobs:", release_concurrency_start)
 if release_concurrency_start < 0 or release_concurrency_end < 0:

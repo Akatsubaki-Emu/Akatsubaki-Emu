@@ -11,6 +11,7 @@ on:
       - INSTALL.md
       - LICENSE
       - docs/**
+      - scripts/validate-qemu-source.py
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
