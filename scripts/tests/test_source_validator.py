@@ -145,5 +145,23 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn('let buttonSource = source + ":button:" + name', source)
 
 
+    def test_required_source_contracts_match_the_current_repository_files(self):
+        root = Path(__file__).resolve().parents[2]
+        validator = root / "scripts" / "validate-qemu-source.py"
+        tree = ast.parse(validator.read_text(encoding="utf-8"), filename=str(validator))
+        assignment = next(
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "required"
+                    for target in node.targets)
+        )
+        contracts = ast.literal_eval(assignment.value)
+        for relative_path, tokens in contracts.items():
+            source = (root / relative_path).read_text(encoding="utf-8")
+            for token in tokens:
+                with self.subTest(path=relative_path, token=token):
+                    self.assertIn(token, source)
+
+
 if __name__ == "__main__":
     unittest.main()

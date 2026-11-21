@@ -273,8 +273,11 @@ required = {
         "GameRuntimeProfileStore.shared.removeProfile(for: id)",
     ],
     "src/Steam/GameLibraryQuery.swift": [
-        "seen.insert($0.folding(options: .caseInsensitive, locale: .current)).inserted",
-        "games.flatMap(\\.tags)",
+        "for game in games",
+        "for rawTag in game.tags",
+        "let key = tag.folding(options: .caseInsensitive, locale: .current)",
+        "if seen.insert(key).inserted",
+        "tags.append(tag)",
     ],
     "src/Steam/GameRuntimeProfile.swift": [
         "var hasUnreadableProfiles: Bool",
