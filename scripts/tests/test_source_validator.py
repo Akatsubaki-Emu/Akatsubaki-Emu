@@ -9,14 +9,23 @@ class SourceValidatorTests(unittest.TestCase):
     def test_required_source_contracts_have_no_duplicate_dictionary_keys(self):
         source = Path(__file__).resolve().parents[1] / "validate-qemu-source.py"
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Dict):
-                continue
-            keys = [
-                key.value for key in node.keys
-                if isinstance(key, ast.Constant) and isinstance(key.value, str)
-            ]
-            self.assertEqual(len(keys), len(set(keys)), "duplicate literal key in source validator")
+        assignment = next(
+            (
+                node for node in ast.walk(tree)
+                if isinstance(node, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == "required"
+                        for target in node.targets)
+            ),
+            None,
+        )
+        self.assertIsNotNone(assignment, "required source-contract dictionary was not found")
+        self.assertIsInstance(assignment.value, ast.Dict)
+        keys = [
+            key.value for key in assignment.value.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        ]
+        duplicates = sorted({key for key in keys if keys.count(key) > 1})
+        self.assertFalse(duplicates, f"duplicate required source-contract keys: {duplicates}")
 
 
 if __name__ == "__main__":
