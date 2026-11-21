@@ -251,5 +251,13 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("python -m unittest discover -s scripts/tests -p 'test_*.py'", workflow)
 
 
+    def test_guest_backend_replacement_resets_previous_syscall_state(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        install = source.split("func installCPUBackend", 1)[1].split("func hostDeviceInfo", 1)[0]
+        self.assertIn("try currentCPU.reset(entryPoint: loadedEntryPoint)", install)
+        self.assertLess(install.index("try currentCPU.reset"), install.index("try backend.reset"))
+
+
 if __name__ == "__main__":
     unittest.main()

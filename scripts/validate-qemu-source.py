@@ -373,6 +373,7 @@ required = {
         "initialStackPointer",
         "loadedEntryPoint",
         "backend.reset(entryPoint: loadedEntryPoint)",
+        "try currentCPU.reset(entryPoint: loadedEntryPoint)",
         "backend.setInitialStackPointer(initialStackPointer)",
         "maximumGuestBytes: UInt64 = 16 * 1024 * 1024 * 1024",
         "guard self.memory.isAvailable",

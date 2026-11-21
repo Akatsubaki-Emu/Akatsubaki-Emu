@@ -138,9 +138,11 @@ final class GuestMachine {
         }
         try withExecutionLock {
             if hasLoadedImage {
-                guard let loadedEntryPoint else {
-                    throw GuestEngineError.invalidState("The loaded guest image has no saved entry point.")
+                guard let loadedEntryPoint, let currentCPU = cpu else {
+                    throw GuestEngineError.invalidState("The loaded guest image has no saved entry point or active CPU.")
                 }
+                try currentCPU.reset(entryPoint: loadedEntryPoint)
+                if let initialStackPointer { try currentCPU.setInitialStackPointer(initialStackPointer) }
                 try backend.reset(entryPoint: loadedEntryPoint)
                 if let initialStackPointer { try backend.setInitialStackPointer(initialStackPointer) }
                 if let initialProgramBreak, let initialStackBase {
