@@ -31,6 +31,7 @@ final class QEMUVNCClient {
     }
 
     private let queue = DispatchQueue(label: "com.xthrx.isteam.qemu-vnc")
+    private let sendQueue = DispatchQueue(label: "com.xthrx.isteam.qemu-vnc.send")
     private let lock = NSLock()
     private var connection: NWConnection?
 
@@ -155,15 +156,30 @@ final class QEMUVNCClient {
         return result
     }
 
-    private func send(_ data: Data, to connection: NWConnection) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+    /// All client writes enter one serial queue. Key-down/key-up and pointer
+    /// packets can originate from different UI/controller threads; sending them
+    /// from independent Tasks could reorder a release ahead of its press.
+    private func enqueueSend(_ data: Data, to connection: NWConnection) {
+        sendQueue.async {
             connection.send(content: data, completion: .contentProcessed { error in
                 if let error {
-                    continuation.resume(throwing: ClientError.connection(error.localizedDescription))
-                } else {
-                    continuation.resume(returning: ())
+                    EmulationLog.shared.write("QEMU VNC send failed: \(error.localizedDescription)")
                 }
             })
+        }
+    }
+
+    private func send(_ data: Data, to connection: NWConnection) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            sendQueue.async {
+                connection.send(content: data, completion: .contentProcessed { error in
+                    if let error {
+                        continuation.resume(throwing: ClientError.connection(error.localizedDescription))
+                    } else {
+                        continuation.resume(returning: ())
+                    }
+                })
+            }
         }
     }
 
@@ -305,7 +321,7 @@ final class QEMUVNCClient {
         let message = Data([4, down ? 1 : 0, 0, 0,
                             UInt8((value >> 24) & 0xff), UInt8((value >> 16) & 0xff),
                             UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
-        Task { try? await self.send(message, to: connection) }
+        enqueueSend(message, to: connection)
     }
 
     func tapKey(_ key: String) {
@@ -316,10 +332,8 @@ final class QEMUVNCClient {
                           UInt8((value >> 16) & 0xff), UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
         let release = Data([4, 0, 0, 0, UInt8((value >> 24) & 0xff),
                             UInt8((value >> 16) & 0xff), UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
-        Task {
-            try? await self.send(press, to: connection)
-            try? await self.send(release, to: connection)
-        }
+        enqueueSend(press, to: connection)
+        enqueueSend(release, to: connection)
     }
 
     func setMovement(x: Float, y: Float) {
