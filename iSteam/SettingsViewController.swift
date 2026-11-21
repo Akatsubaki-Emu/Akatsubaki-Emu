@@ -24,7 +24,7 @@ final class SettingsViewController: UITableViewController {
         case 2: return resolutions.count
         case 3: return frameRates.count
         case 4: return vrModes.count + 2
-        case 5: return jitMethods.count
+        case 5: return jitMethods.count + 1
         case 6, 7, 8, 9, 10: return 1
         default: return 0
         }
@@ -83,9 +83,18 @@ final class SettingsViewController: UITableViewController {
                 cell.accessoryView = makeSwitch(isOn: VRSettings.shared.touchGamepadEnabled, action: #selector(toggleTouchGamepad(_:)))
             }
         case 5:
-            let method = jitMethods[indexPath.row]
-            c.text = method.rawValue
-            cell.accessoryType = JITCoordinator.shared.selectedMethod == method ? .checkmark : .none
+            if indexPath.row < jitMethods.count {
+                let method = jitMethods[indexPath.row]
+                c.text = method.rawValue
+                c.secondaryText = method == .stikDebug
+                    ? "Use the installed StikDebug app to request JIT for this process."
+                    : "Wait for a compatible debugger to attach."
+                cell.accessoryType = JITCoordinator.shared.selectedMethod == method ? .checkmark : .none
+            } else {
+                c.text = "Request JIT"
+                c.secondaryText = "Open the selected JIT helper for this app."
+                cell.accessoryType = .disclosureIndicator
+            }
         case 6:
             c.text = "Crash Log"; c.secondaryText = "View saved crash information"
             cell.accessoryType = .disclosureIndicator
@@ -158,8 +167,12 @@ final class SettingsViewController: UITableViewController {
             VRSettings.shared.mode = vrModes[indexPath.row]
             tableView.reloadSections(IndexSet(integer: 4), with: .automatic)
         case 5:
-            JITCoordinator.shared.selectedMethod = jitMethods[indexPath.row]
-            tableView.reloadSections(IndexSet(integer: 5), with: .automatic)
+            if indexPath.row < jitMethods.count {
+                JITCoordinator.shared.selectedMethod = jitMethods[indexPath.row]
+                tableView.reloadSections(IndexSet(integer: 5), with: .automatic)
+            } else {
+                JITCoordinator.shared.requestJIT(from: self)
+            }
         case 6:
             navigationController?.pushViewController(CrashLogViewController(), animated: true)
         case 7:
