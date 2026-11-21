@@ -552,6 +552,7 @@ required = {
         "values.isRegularFile == true",
         "CocoaError(.fileReadTooLarge)",
         "replaceItemAt(destination, withItemAt: temporary)",
+        "guard values.isRegularFile == true",
     ],
     "src/Windows/GameCompatibilityDatabase.swift": [
         "private func loadRecords() throws",

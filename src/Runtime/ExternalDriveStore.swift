@@ -98,6 +98,10 @@ final class ExternalDriveStore {
             error: &coordinationError
         ) { coordinatedURL in
             do {
+                let values = try coordinatedURL.resourceValues(forKeys: [.isRegularFileKey])
+                guard values.isRegularFile == true else {
+                    throw CocoaError(.fileReadUnknown)
+                }
                 let fm = FileManager.default
                 try fm.createDirectory(
                     at: destination.deletingLastPathComponent(),

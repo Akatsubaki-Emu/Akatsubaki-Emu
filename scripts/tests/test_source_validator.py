@@ -96,6 +96,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("handle.read(upToCount:", read)
         self.assertIn("data.count == size", read)
 
+    def test_external_drive_copy_rejects_directories_before_copying(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "ExternalDriveStore.swift").read_text(encoding="utf-8")
+        copy = source.split("func copyDocument", 1)[1]
+        self.assertIn("resourceValues(forKeys: [.isRegularFileKey])", copy)
+        self.assertIn("guard values.isRegularFile == true", copy)
+        self.assertLess(copy.index("guard values.isRegularFile == true"), copy.index("copyItem(at:"))
+
     def test_translation_cache_pruning_keeps_newest_entry_last_on_timestamp_ties(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Performance" / "TranslationCache.swift").read_text(encoding="utf-8")
