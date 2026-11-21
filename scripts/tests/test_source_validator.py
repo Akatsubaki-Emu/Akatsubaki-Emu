@@ -263,5 +263,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertLess(install.index("try currentCPU.reset"), install.index("try backend.reset"))
 
 
+    def test_linux_getrandom_fills_a_single_bounded_buffer(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
+        random = source.split("private func getRandom", 1)[1].split("private func writeTimespec", 1)[0]
+        self.assertIn("var data = Data(count: count)", random)
+        self.assertIn("data.withUnsafeMutableBytes", random)
+        self.assertNotIn("(0..<Int(length)).map", random)
+
+
 if __name__ == "__main__":
     unittest.main()

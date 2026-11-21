@@ -429,7 +429,7 @@ struct InterpreterTests {
         let byteExtendMemory = GuestMemory(size: 128)
         let byteExtendProgram: [UInt8] = [
             0x0F, 0xB6, 0x05, 0x19, 0x00, 0x00, 0x00,
-            0x0F, 0xBE, 0x0D, 0x12, 0x00, 0x00, 0x00,
+            0x0F, 0xBE, 0x0D, 0x0C, 0x00, 0x00, 0x00,
             0x0F, 0x0B
         ]
         precondition(byteExtendMemory.write(Data(byteExtendProgram), offset: 0))
@@ -582,6 +582,23 @@ struct InterpreterTests {
         let ripAddExit = try ripAdd.run(maxInstructions: 3)
         precondition(ripAddExit == .unsupportedInstruction(address: 7))
         precondition(ripAddMemory.readUInt32(offset: 0x20) == 7)
+
+        let test64Memory = GuestMemory(size: 64)
+        precondition(test64Memory.write(Data([0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
+                                              0x48, 0xF7, 0xC0, 0xFF, 0xFF, 0xFF, 0xFF,
+                                              0x0F, 0x0B]), offset: 0))
+        let test64 = X86_64Interpreter(memory: test64Memory)
+        try test64.reset(entryPoint: 0)
+        let test64Exit = try test64.run(maxInstructions: 3)
+        precondition(test64Exit == .unsupportedInstruction(address: 17))
+        precondition(test64.conditionFlags & X86_64ALU.zero == 0)
+
+        let unsupportedF7Memory = GuestMemory(size: 16)
+        precondition(unsupportedF7Memory.write(Data([0xF7, 0x25, 0x00, 0x10, 0x00, 0x00]), offset: 0))
+        let unsupportedF7 = X86_64Interpreter(memory: unsupportedF7Memory)
+        try unsupportedF7.reset(entryPoint: 0)
+        let unsupportedF7Exit = try unsupportedF7.run(maxInstructions: 1)
+        precondition(unsupportedF7Exit == .unsupportedInstruction(address: 0))
 
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [
