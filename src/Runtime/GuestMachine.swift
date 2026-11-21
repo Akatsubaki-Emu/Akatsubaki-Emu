@@ -142,8 +142,9 @@ final class GuestMachine {
                     throw GuestEngineError.invalidState("The loaded guest image has no saved entry point.")
                 }
                 try backend.reset(entryPoint: loadedEntryPoint)
-                if let initialStackPointer {
-                    try backend.setInitialStackPointer(initialStackPointer)
+                if let initialStackPointer { try backend.setInitialStackPointer(initialStackPointer) }
+                if let initialProgramBreak, let initialStackBase {
+                    try backend.configureLinuxProcess(programBreak: initialProgramBreak, stackBase: initialStackBase)
                 }
             }
             cpu?.requestStop()
@@ -174,6 +175,7 @@ final class GuestMachine {
                 guard configuration.architecture == .x86_64 else {
                     throw GuestEngineError.backendNotInstalled(configuration.architecture)
                 }
+                try cpu.reset(entryPoint: 0)
                 let image = try ELF64Loader().load(url, into: memory,
                                                    expectedArchitecture: configuration.architecture)
                 let stack = try LinuxProcessStackBuilder().build(
@@ -221,6 +223,9 @@ final class GuestMachine {
             do {
                 try cpu.reset(entryPoint: entryPoint)
                 if let initialStackPointer { try cpu.setInitialStackPointer(initialStackPointer) }
+                if let initialProgramBreak, let initialStackBase {
+                    try cpu.configureLinuxProcess(programBreak: initialProgramBreak, stackBase: initialStackBase)
+                }
                 loadedEntryPoint = entryPoint
                 lastExit = nil
                 state = .configured

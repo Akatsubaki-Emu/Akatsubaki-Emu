@@ -324,7 +324,7 @@ struct InterpreterTests {
         try syscallInterpreter.reset(entryPoint: 0)
         try syscallInterpreter.configureLinuxProcess(programBreak: 0x1000, stackBase: 0x3F0000)
         let syscallExit = try syscallInterpreter.run(maxInstructions: 12)
-        precondition(syscallExit == .unsupportedInstruction(address: 22))
+        precondition(syscallExit == .unsupportedInstruction(address: 21))
         precondition(syscallInterpreter.registerValue(0) == 0x2000)
 
         let unsupportedMemory = GuestMemory(size: 4)

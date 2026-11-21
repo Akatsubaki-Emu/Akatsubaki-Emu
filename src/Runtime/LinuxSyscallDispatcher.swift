@@ -28,9 +28,10 @@ final class LinuxSyscallDispatcher {
         initialProgramBreak = initial
         self.programBreak = initial
         self.stackBase = stackBase
-        let (minimumCursor, overflow) = initial.addingReportingOverflow(0x10000)
-        let preferred = max(overflow ? initial : minimumCursor, 0x10000000)
-        mmapCursor = preferred < stackBase ? preferred : Self.alignUp(minimumCursor)
+        let (rawCursor, overflow) = initial.addingReportingOverflow(0x10000)
+        let minimumCursor = overflow ? UInt64.max : Self.alignUp(rawCursor)
+        let preferred = max(minimumCursor, 0x10000000)
+        mmapCursor = preferred < stackBase ? preferred : minimumCursor
         mappedRanges.removeAll(keepingCapacity: true)
     }
 
@@ -43,9 +44,10 @@ final class LinuxSyscallDispatcher {
         }
         programBreak = initialProgramBreak
         mappedRanges.removeAll(keepingCapacity: true)
-        let (minimumCursor, overflow) = initialProgramBreak.addingReportingOverflow(0x10000)
-        let preferred = max(overflow ? initialProgramBreak : minimumCursor, 0x10000000)
-        mmapCursor = preferred < stackBase ? preferred : Self.alignUp(minimumCursor)
+        let (rawCursor, overflow) = initialProgramBreak.addingReportingOverflow(0x10000)
+        let minimumCursor = overflow ? UInt64.max : Self.alignUp(rawCursor)
+        let preferred = max(minimumCursor, 0x10000000)
+        mmapCursor = preferred < stackBase ? preferred : minimumCursor
     }
 
     func dispatch(number: UInt64, arguments: [UInt64]) -> Outcome? {
@@ -224,7 +226,7 @@ final class LinuxSyscallDispatcher {
         let (microsecondsAddress, overflow) = address.addingReportingOverflow(8)
         guard !overflow, memory.writeUInt64(seconds, offset: address),
               memory.writeUInt64(microseconds, offset: microsecondsAddress) else { return errno(14) }
-        if timezone != 0 { _ = memory.zero(offset: timezone, length: 8) }
+        if timezone != 0 && !memory.zero(offset: timezone, length: 8) { return errno(14) }
         return 0
     }
 
