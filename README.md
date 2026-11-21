@@ -135,7 +135,7 @@ Bug reports, documentation improvements, and focused pull requests are welcome. 
 - [Build and release workflow](docs/RELEASES.md)
 - [tvOS status and roadmap](docs/TVOS.md)
 - [Host-device bridge](docs/HOST_DEVICE_BRIDGE.md)
-- [Runtime architecture and roadmap](docs/SHARPEMU_REUSE_NOTES.md)
+- [Hybrid runtime architecture and roadmap](docs/HYBRID_RUNTIME_ARCHITECTURE.md)
 - [Hybrid runtime routing architecture](docs/HYBRID_RUNTIME_ARCHITECTURE.md)
 - [QEMU runtime build and failure diagnostics](docs/QEMU_BUILD_WORKFLOW.md)
 - [DroidDeck feature-port plan](docs/DROIDDECK_PORT_PLAN.md)
