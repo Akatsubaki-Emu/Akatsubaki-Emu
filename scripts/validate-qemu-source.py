@@ -165,7 +165,7 @@ required = {
     "src/Core/VMConfigurationValidation.swift": [
         "guard architecture == .x86_64",
         "case .unsupportedArchitecture(let architecture)",
-        "if !bootWindows, gpu != .virtioGPU",
+        "if gpu != .virtioGPU",
         "case .unsupportedGPU(let gpu)",
         "framebufferBytes <= 64 * 1024 * 1024",
         "fit the 64 MiB framebuffer limit",
