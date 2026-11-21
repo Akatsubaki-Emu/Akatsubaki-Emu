@@ -82,7 +82,16 @@ final class VMSaveSlotStore {
             options: [],
             relativeTo: nil,
             bookmarkDataIsStale: &stale
-        ), !stale else { return nil }
+        ) else { return nil }
+        if stale {
+            // A resolvable stale bookmark is still useful. Refresh it now so
+            // the next launch does not lose Continue Last Session.
+            try? saveSessionMetadata(
+                configuration: session.configuration,
+                diskImageURL: diskURL,
+                gameID: session.gameID
+            )
+        }
         return (session.configuration, diskURL)
     }
 

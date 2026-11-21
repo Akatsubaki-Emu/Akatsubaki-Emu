@@ -10,6 +10,20 @@ required = {
         "func tapKey(_ key: String)",
         "numberOfColours = Int(Self.u16(header, 3))",
         "private static let maxFramebufferBytes = 64 * 1024 * 1024",
+        "RFB FramebufferUpdateRequest is exactly 10 bytes:",
+        "0, 0, 0, 0,",
+    ],
+    "src/Runtime/RuntimeComponentManifest.swift": [
+        "resolvingSymlinksInPath()",
+        "rootPrefix",
+    ],
+    "src/Runtime/ELF64Loader.swift": [
+        "($0.flags & 0x1) != 0",
+        "loadable executable segment",
+    ],
+    "src/Runtime/X86_64Interpreter.swift": [
+        "let is64Bit = rex & 0x08 != 0",
+        "32-bit GPR writes zero-extend",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         '"-vnc", "127.0.0.1:0"',

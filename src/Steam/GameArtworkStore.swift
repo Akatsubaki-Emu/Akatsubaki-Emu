@@ -48,6 +48,14 @@ final class GameArtworkStore {
         }
         let destination = directory.appendingPathComponent(gameID.uuidString).appendingPathExtension(ext)
         try data.write(to: destination, options: .atomic)
+        // Keep one canonical artwork file per game. Otherwise changing format
+        // (for example PNG to JPEG) leaves an older file that may be selected
+        // unpredictably by artworkURL(for:).
+        let existing = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        for file in existing where file.deletingPathExtension().lastPathComponent == gameID.uuidString
+            && file != destination {
+            try? fm.removeItem(at: file)
+        }
         EmulationLog.shared.write("Cached cover artwork for game \(gameID.uuidString)")
         return destination
     }
