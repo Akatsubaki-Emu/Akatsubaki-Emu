@@ -92,7 +92,6 @@ jobs:
           release = Path(".github/workflows/release.yml").read_text()
           qemu = Path(".github/workflows/build-qemu-runtime.yml").read_text()
           # Keep Actions expressions literal while this run block is expanded.
-          pages_token_expression = "$" + "{{ secrets.PAGES_TOKEN }}"
           required_release = [
               "platform: [iOS, tvOS, visionOS]",
               "uses: ./.github/workflows/build-qemu-runtime.yml",
@@ -100,11 +99,13 @@ jobs:
               "actions/download-artifact@v4",
               "name: iSteam-qemu-runtime-ios-arm64",
               "if-no-files-found: error",
-              "PAGES_TOKEN: " + pages_token_expression,
           ]
           missing = [item for item in required_release if item not in release]
           if missing:
               raise SystemExit("Missing release requirements: " + ", ".join(missing))
+          for obsolete in ("PAGES_TOKEN", "I-Steam/I-steam.github.io", "i-steam.github.io"):
+              if obsolete in release:
+                  raise SystemExit("Legacy website publishing must be handled by the website repository updater: " + obsolete)
           if "if-no-files-found: ignore" in release:
               raise SystemExit("Release artifacts must not silently ignore missing files.")
           if "workflow_call:" not in qemu or "workflow_dispatch:" not in qemu:

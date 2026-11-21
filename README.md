@@ -117,10 +117,10 @@ For hosted builds, use the [Build & Release workflow](https://github.com/Akatsub
 - **Push to `main`:** starts the Nightly channel.
 - **Scheduled workflow:** runs daily at 02:00 UTC.
 - **Manual GitHub Actions run:** choose **Nightly** or **Main**.
-- **Release assets:** iOS IPA, tvOS IPA, and SHA-256 checksum files.
+- **Release assets:** iOS, tvOS, and visionOS IPAs, each with a SHA-256 checksum.
 - **Older releases:** the workflow is configured not to automatically delete old releases.
 
-Website/AltStore-source publishing requires the `PAGES_TOKEN` secret to have suitable write access to [the website repository](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu.github.io). Builds are unsigned prototypes. ZIP and checksum validation verify packaging integrity only, not installability, runtime behavior, or guest OS compatibility.
+Official AltStore/PAL manifests are refreshed from published app releases by the [website repository's GitHub Actions updater](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu.github.io/blob/main/.github/workflows/update-xthrx-alt-source.yml). Builds are unsigned prototypes. ZIP and checksum validation verify packaging integrity only, not installability, runtime behavior, or guest OS compatibility.
 
 More details: [Installation](INSTALL.md) · [Release workflow](docs/RELEASES.md) · [tvOS roadmap](docs/TVOS.md).
 

@@ -48,8 +48,6 @@ jobs:
         channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
     env:
       RELEASE_CHANNEL: ${{ matrix.channel }}
-      VERSION: 0.1.${{ format('{0}', github.run_number) }}
-      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -182,8 +180,6 @@ jobs:
         channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
     env:
       RELEASE_CHANNEL: ${{ matrix.channel }}
-      VERSION: 0.1.${{ format('{0}', github.run_number) }}
-      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -226,9 +222,9 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"
           if [ "$RELEASE_CHANNEL" = "main" ]; then
-            echo "title=$VERSION Main (iOS + tvOS)" >> "$GITHUB_OUTPUT"
+            echo "title=$VERSION Main (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
           else
-            echo "title=$VERSION Nightly (iOS + tvOS)" >> "$GITHUB_OUTPUT"
+            echo "title=$VERSION Nightly (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Publish combined release
@@ -256,107 +252,5 @@ jobs:
 
             These are unsigned prototype builds. Sign them with a compatible signer before installing.
 
-      - name: Checkout AltStore website
-        if: (matrix.channel == 'nightly' || github.event_name == 'workflow_dispatch') && env.PAGES_TOKEN != ''
-        uses: actions/checkout@v4
-        with:
-          repository: I-Steam/I-steam.github.io
-          ref: main
-          token: ${{ secrets.PAGES_TOKEN }}
-          path: website
-
-      - name: Update legacy AltStore source and publish iOS IPA
-        if: (matrix.channel == 'nightly' || github.event_name == 'workflow_dispatch') && env.PAGES_TOKEN != ''
-        env:
-          PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
-          BUILD_NUMBER: ${{ github.run_number }}
-          CHANNEL: ${{ matrix.channel }}
-          VERSION: ${{ steps.meta.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$PAGES_TOKEN" || { echo "PAGES_TOKEN must have Contents write access to I-Steam/I-steam.github.io"; exit 1; }
-          python3 - <<'PY'
-          import datetime, hashlib, json, os, shutil
-          from pathlib import Path
-
-          website = Path("website")
-          downloads = website / "downloads"
-          downloads.mkdir(parents=True, exist_ok=True)
-          channel = os.environ["CHANNEL"]
-          build_number = os.environ["BUILD_NUMBER"]
-          current_version = os.environ["VERSION"]
-          channels = [
-              (channel, "ios", Path("build/iSteam-ios.ipa"), current_version),
-              (channel, "tvos", Path("build/iSteam-tvOS.ipa"), current_version),
-          ]
-
-          manifest_path = website / "AltSource.json"
-          manifest = json.loads(manifest_path.read_text())
-          for item_channel, platform, ipa_path, version in channels:
-              if not ipa_path.is_file():
-                  raise SystemExit(f"Missing {platform} IPA for {item_channel}: {ipa_path}")
-              data = ipa_path.read_bytes()
-              digest = hashlib.sha256(data).hexdigest()
-              now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-              nightly = item_channel == "nightly"
-              tvos = platform == "tvos"
-              if tvos:
-                  bundle_id = "com.xthrx.isteam.tvos.nightly" if nightly else "com.xthrx.isteam.tvos"
-                  app_name = "i-Steam tvOS Nightly" if nightly else "i-Steam tvOS Main"
-                  stable_name = "iSteam-tvOS-nightly.ipa" if nightly else "iSteam-tvOS-main.ipa"
-              else:
-                  bundle_id = "com.xthrx.isteam.nightly" if nightly else "com.xthrx.isteam"
-                  app_name = "i-Steam Nightly" if nightly else "i-Steam Release"
-                  stable_name = "iSteam-nightly.ipa" if nightly else "iSteam-release.ipa"
-              versioned_name = f"iSteam-{platform}-{item_channel}-{version}.ipa"
-              shutil.copy2(ipa_path, downloads / versioned_name)
-              shutil.copy2(ipa_path, downloads / stable_name)
-              (downloads / (stable_name + ".sha256")).write_text(f"{digest}  {stable_name}\\n")
-              platform_label = "tvOS / Apple TV" if tvos else "iOS"
-              entry = {
-                  "version": version,
-                  "buildVersion": str(build_number),
-                  "date": now,
-                  "size": len(data),
-                  "sha256": digest,
-                  "downloadURL": f"https://i-steam.github.io/downloads/{versioned_name}",
-                  "localizedDescription": f"{item_channel.upper()} {platform_label} build {version}. SHA-256: {digest}. Unsigned prototype; use a compatible signing method before installing.",
-                  "minOSVersion": "16.0"
-              }
-              found = False
-              for app in manifest.get("apps", []):
-                  if app.get("name") == app_name:
-                      app["bundleIdentifier"] = bundle_id
-                      versions = app.setdefault("versions", [])
-                      versions = [v for v in versions if not (v.get("version") == version and str(v.get("buildVersion", "")) == str(build_number))]
-                      app["versions"] = ([entry] + versions)[:10]
-                      found = True
-              if not found:
-                  raise SystemExit(f"Could not find AltStore app entry: {app_name}")
-
-          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-          alt_path = website / "alt" / "source.json"
-          if alt_path.exists():
-              alt = json.loads(alt_path.read_text())
-              stable_apps = {
-                  "i-steam release": ("com.xthrx.isteam", "https://i-steam.github.io/downloads/iSteam-release.ipa"),
-                  "i-steam nightly": ("com.xthrx.isteam.nightly", "https://i-steam.github.io/downloads/iSteam-nightly.ipa"),
-                  "i-steam tvos main": ("com.xthrx.isteam.tvos", "https://i-steam.github.io/downloads/iSteam-tvOS-main.ipa"),
-                  "i-steam tvos nightly": ("com.xthrx.isteam.tvos.nightly", "https://i-steam.github.io/downloads/iSteam-tvOS-nightly.ipa"),
-              }
-              for app in alt.get("apps", []):
-                  config = stable_apps.get(app.get("name", "").lower())
-                  if config:
-                      app["bundleIdentifier"], app["downloadURL"] = config
-              alt_path.write_text(json.dumps(alt, indent=2) + "\n")
-          PY
-          git -C website config user.name "i-Steam Release Bot"
-          git -C website config user.email "release-bot@users.noreply.github.com"
-          git -C website add AltSource.json alt/source.json downloads
-          if git -C website diff --cached --quiet; then
-            echo "AltStore source already up to date."
-          else
-            git -C website commit -m "Publish iOS ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}"
-            git -C website push origin HEAD:main
-          fi
+      # Official AltStore/PAL feeds are refreshed from published GitHub releases
+      # by the website repository's update-xthrx-alt-source.yml workflow.

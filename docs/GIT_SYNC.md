@@ -24,10 +24,10 @@ All CI/CD definitions live in `.github/workflows/` and execute on GitHub:
 - `validate-repository.yml` — YAML/configuration validation, duplicate-key detection, QEMU source validation, and shell syntax checks.
 - `validate-ios-build.yml` — iOS, tvOS, and visionOS simulator compile checks.
 - `build-qemu-runtime.yml` — builds and packages the iOS arm64 QEMU/UTM runtime; supports manual and reusable-workflow calls.
-- `release.yml` — builds the runtime first, then platform packages, publishes combined GitHub releases, and optionally updates the AltStore website using `PAGES_TOKEN`.
+- `release.yml` — builds the runtime first, then platform packages and combined GitHub releases. The separate website repository's `update-xthrx-alt-source.yml` workflow refreshes official AltStore/PAL feeds from published releases.
 - `blank.yml` — synchronization only; not a build or validation job. Keep unchanged.
 
-Required GitHub secrets are those used by workflows, including `GITLAB_TOKEN` for the retained GitHub → GitLab sync and `PAGES_TOKEN` for website publishing. The GitLab push-mirror credentials remain configured in GitLab settings and must not be committed to source.
+Required app-repository GitHub secrets include `GITLAB_TOKEN` for the retained GitHub → GitLab sync. The app release workflow no longer needs a website write token; the website repository owns its feed updater and `contents: write` permission. The GitLab push-mirror credentials remain configured in GitLab settings and must not be committed to source.
 
 ## Mirror verification
 

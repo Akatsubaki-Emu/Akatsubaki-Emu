@@ -13,7 +13,7 @@ Do not treat a GitLab mirror commit as proof that GitHub Actions has tested the 
 - `.github/workflows/validate-repository.yml`: workflow/YAML contracts, QEMU source contracts, Python regression tests, native guest-memory tests, native QEMU bridge lifecycle tests, and shell syntax.
 - `.github/workflows/validate-ios-build.yml`: simulator compile validation for supported Apple platform targets.
 - `.github/workflows/build-qemu-runtime.yml`: reusable/manual UTM/QEMU iOS arm64 runtime build.
-- `.github/workflows/release.yml`: builds the QEMU runtime first, then app platform packages, checksums, and optional website/AltStore updates.
+- `.github/workflows/release.yml`: builds the QEMU runtime first, then app platform packages, checksums, and combined GitHub releases.
 - `.github/workflows/blank.yml`: GitHub-to-GitLab synchronization. Preserve it unless the owner explicitly approves a change.
 
 ## Release channels
@@ -22,10 +22,13 @@ The release workflow supports Main and Nightly channels. Pushes to `main` are co
 
 The iOS app package must consume the QEMU runtime artifact produced in the same workflow run. Missing runtime artifacts, required lifecycle exports, or package contents must fail the release rather than silently producing an incomplete IPA.
 
+## AltStore/PAL feed refresh
+
+The official website repository owns the AltStore and PAL manifests. Its [`update-xthrx-alt-source.yml`](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu.github.io/blob/main/.github/workflows/update-xthrx-alt-source.yml) workflow reads published app releases and refreshes the official manifests and Xthrx catalogue on its schedule. The app release workflow deliberately does not write to the website repository, avoiding duplicate manifest writers and a separate cross-repository token. Feed refresh may therefore lag a newly published release until the website workflow runs.
+
 ## Required configuration
 
 - `GITLAB_TOKEN`: used by the retained GitHub-to-GitLab sync workflow.
-- `PAGES_TOKEN`: used only when publishing the website/AltStore source.
 - GitLab-to-GitHub mirror credentials are configured in GitLab project settings and must never be committed.
 
 ## What a successful build proves
