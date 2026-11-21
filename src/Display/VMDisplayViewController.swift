@@ -163,7 +163,7 @@ final class VMDisplayViewController: UIViewController {
         functionKeyBar.isHidden = true
 
         let panel = KeyboardOverlayView { [weak self] key in self?.emitKeyboardKey(key) }
-        panel.onKeyEvent = { [weak self] key, down in self?.vncClient.sendButton(key, down: down) }
+        panel.onKeyEvent = { [weak self] key, down in self?.vncClient.sendButton(key, down: down, source: "keyboard") }
         panel.translatesAutoresizingMaskIntoConstraints = false
         panel.isHidden = true
         view.addSubview(panel)
@@ -226,12 +226,12 @@ final class VMDisplayViewController: UIViewController {
     private func addTouchGamepad() {
         let pad = TouchGamepadView()
         pad.translatesAutoresizingMaskIntoConstraints = false
-        pad.onMove = { [weak self] point in self?.vncClient.setMovement(x: Float(point.x), y: Float(point.y)) }
+        pad.onMove = { [weak self] point in self?.vncClient.setMovement(x: Float(point.x), y: Float(point.y), source: "touchgamepad") }
         pad.onLook = { [weak self] delta in
             guard VRSettings.shared.pointerLockEnabled else { return }
             self?.vncClient.movePointer(dx: Float(delta.x), dy: -Float(delta.y))
         }
-        pad.onButton = { [weak self] key, down in self?.vncClient.sendButton(key, down: down) }
+        pad.onButton = { [weak self] key, down in self?.vncClient.sendButton(key, down: down, source: "touchgamepad") }
         view.addSubview(pad)
         NSLayoutConstraint.activate([
             pad.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -244,12 +244,12 @@ final class VMDisplayViewController: UIViewController {
 
     private func configureControllerInput() {
         let input = ControllerInputManager.shared
-        input.onMove = { [weak self] x, y in self?.vncClient.setMovement(x: x, y: -y) }
+        input.onMove = { [weak self] x, y, source in self?.vncClient.setMovement(x: x, y: -y, source: source) }
         input.onLook = { [weak self] x, y in
             guard VRSettings.shared.pointerLockEnabled else { return }
             self?.vncClient.movePointer(dx: x, dy: y)
         }
-        input.onButton = { [weak self] key, down in self?.vncClient.sendButton(key, down: down) }
+        input.onButton = { [weak self] key, down, source in self?.vncClient.sendButton(key, down: down, source: source) }
         input.start()
     }
 

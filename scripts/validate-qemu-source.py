@@ -4,6 +4,19 @@ from pathlib import Path
 import sys
 
 required = {
+    "src/QEMU/VNCKeyState.swift": [
+        "private var keySources: [UInt32: Set<String>] = [:]",
+        "private var movementSources: [String: UInt8] = [:]",
+        "static func movementMask(for x: Float, y: Float) -> UInt8",
+        "mutating func setKey(",
+        "mutating func setMovement(",
+        "mutating func releaseAll()",
+    ],
+    "scripts/tests/test_vnc_key_state.swift": [
+        "keyboard source release preserves a controller-held key",
+        "movement source release preserves another source",
+        "releaseAll clears every source",
+    ],
     "src/QEMU/QEMUVNCClient.swift": [
         "pendingSendGroup = DispatchGroup()",
         "group.enter()",
@@ -276,6 +289,9 @@ required = {
         "private func readProfile(at file: URL)",
     ],
     "src/Display/VMDisplayViewController.swift": [
+        "source: \"keyboard\"",
+        "source: \"touchgamepad\"",
+        "x, y, source in self?.vncClient.setMovement",
         "private let configuration: VMConfiguration",
         "self.configuration = configuration",
         "gamepad?.releaseAllButtons()",
@@ -334,6 +350,9 @@ required = {
     ],
     "src/Display/ControllerInputManager.swift": [
         "GCController.stopWirelessControllerDiscovery()",
+        "var onMove: ((Float, Float, String) -> Void)?",
+        "var onButton: ((String, Bool, String) -> Void)?",
+        "private func sourceID(for controller: GCController) -> String",
         "private func detachHandlers(from pad: GCExtendedGamepad)",
         "detachHandlers(from: pad)",
         "pad.leftTrigger",
@@ -360,6 +379,10 @@ required = {
         "saveLayout()",
         "releaseButtons()",
         "func releaseAllButtons()",
+    ],
+    ".github/workflows/validate-ios-build.yml": [
+        "Test VNC key-state source arbitration",
+        "scripts/tests/test_vnc_key_state.swift",
     ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",

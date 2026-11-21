@@ -50,9 +50,7 @@ final class QEMUVNCClient {
     private var framebufferHeight = 0
     private var pointerX: Int = 0
     private var pointerY: Int = 0
-    private var pressedKeys = Set<UInt32>()
-    private var buttonKeys = Set<UInt32>()
-    private var movementMask: UInt8 = 0
+    private var keyState = VNCKeyState()
     private var connected = false
     var isConnected: Bool { withStateLock { connected } }
     var onFrame: ((Data, Int, Int) -> Void)?
@@ -115,14 +113,12 @@ final class QEMUVNCClient {
             // No later input can enter the old group after connection becomes nil.
             // Queue releases after all earlier key-down packets, then cancel only
             // after Network.framework confirms the final release was processed.
+            let releaseEvents = keyState.releaseAll()
             if let previous {
-                for key in pressedKeys {
-                    enqueueSend(Self.keyEvent(key, down: false), to: previous, in: group)
+                for event in releaseEvents {
+                    enqueueSend(Self.keyEvent(event.keysym, down: false), to: previous, in: group)
                 }
             }
-            pressedKeys.removeAll()
-            buttonKeys.removeAll()
-            movementMask = 0
             pendingSendGroup = DispatchGroup()
             return (previous, group)
         }
@@ -383,71 +379,32 @@ final class QEMUVNCClient {
                        to: connection)
     }
 
-    func sendKey(_ key: String, down: Bool) {
+    func sendKey(_ key: String, down: Bool, source: String) {
         guard let keysym = Self.keysym(for: key) else { return }
         withStateLock {
             guard connected, let connection else { return }
-            let wasPressed = pressedKeys.contains(keysym)
-            if down { buttonKeys.insert(keysym) }
-            else { buttonKeys.remove(keysym) }
-            let shouldBePressed = buttonKeys.contains(keysym) || movementKeyIsActive(keysym)
-            if shouldBePressed != wasPressed {
-                enqueueSend(Self.keyEvent(keysym, down: shouldBePressed), to: connection, in: pendingSendGroup)
+            if let event = keyState.setKey(keysym, source: source, isDown: down) {
+                enqueueSend(Self.keyEvent(event.keysym, down: event.isDown), to: connection, in: pendingSendGroup)
             }
-            if shouldBePressed { pressedKeys.insert(keysym) }
-            else { pressedKeys.remove(keysym) }
         }
     }
 
     func tapKey(_ key: String) {
         guard let keysym = Self.keysym(for: key) else { return }
         withStateLock {
-            guard connected, let connection, !pressedKeys.contains(keysym) else { return }
+            guard connected, let connection, !keyState.isPressed(keysym) else { return }
             enqueueSend(Self.keyEvent(keysym, down: true), to: connection, in: pendingSendGroup)
             enqueueSend(Self.keyEvent(keysym, down: false), to: connection, in: pendingSendGroup)
         }
     }
 
-    func setMovement(x: Float, y: Float) {
-        var desiredMask: UInt8 = 0
-        if abs(x) > 0.25 { desiredMask |= x < 0 ? 0x01 : 0x02 }
-        if abs(y) > 0.25 { desiredMask |= y < 0 ? 0x04 : 0x08 }
-
+    func setMovement(x: Float, y: Float, source: String) {
+        let desiredMask = VNCKeyState.movementMask(for: x, y: y)
         withStateLock {
             guard connected, let connection else { return }
-            let changed = movementMask ^ desiredMask
-            if (changed & 0x01) != 0 {
-                updateMovementKey(0x41, active: (desiredMask & 0x01) != 0, connection: connection)
+            for event in keyState.setMovement(desiredMask, source: source) {
+                enqueueSend(Self.keyEvent(event.keysym, down: event.isDown), to: connection, in: pendingSendGroup)
             }
-            if (changed & 0x02) != 0 {
-                updateMovementKey(0x44, active: (desiredMask & 0x02) != 0, connection: connection)
-            }
-            if (changed & 0x04) != 0 {
-                updateMovementKey(0x57, active: (desiredMask & 0x04) != 0, connection: connection)
-            }
-            if (changed & 0x08) != 0 {
-                updateMovementKey(0x53, active: (desiredMask & 0x08) != 0, connection: connection)
-            }
-            movementMask = desiredMask
-        }
-    }
-
-    private func updateMovementKey(_ keysym: UInt32, active: Bool, connection: NWConnection) {
-        let wasPressed = pressedKeys.contains(keysym)
-        let shouldBePressed = active || buttonKeys.contains(keysym)
-        guard shouldBePressed != wasPressed else { return }
-        enqueueSend(Self.keyEvent(keysym, down: shouldBePressed), to: connection, in: pendingSendGroup)
-        if shouldBePressed { pressedKeys.insert(keysym) }
-        else { pressedKeys.remove(keysym) }
-    }
-
-    private func movementKeyIsActive(_ keysym: UInt32) -> Bool {
-        switch keysym {
-        case 0x41: return (movementMask & 0x01) != 0
-        case 0x44: return (movementMask & 0x02) != 0
-        case 0x57: return (movementMask & 0x04) != 0
-        case 0x53: return (movementMask & 0x08) != 0
-        default: return false
         }
     }
 
@@ -465,7 +422,7 @@ final class QEMUVNCClient {
         }
     }
 
-    func sendButton(_ name: String, down: Bool) {
+    func sendButton(_ name: String, down: Bool, source: String) {
         let key: String
         switch name {
         case "A": key = "SPACE"
@@ -489,7 +446,7 @@ final class QEMUVNCClient {
         case "DPadRight", "dpadright": key = "RIGHT"
         default: return
         }
-        sendKey(key, down: down)
+        sendKey(key, down: down, source: "(source):(name)")
     }
 
 

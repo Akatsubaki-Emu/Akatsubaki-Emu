@@ -5,9 +5,9 @@ final class ControllerInputManager {
     static let shared = ControllerInputManager()
     private init() {}
 
-    var onMove: ((Float, Float) -> Void)?
+    var onMove: ((Float, Float, String) -> Void)?
     var onLook: ((Float, Float) -> Void)?
-    var onButton: ((String, Bool) -> Void)?
+    var onButton: ((String, Bool, String) -> Void)?
     private var isStarted = false
 
     func start() {
@@ -24,13 +24,15 @@ final class ControllerInputManager {
         isStarted = false
         NotificationCenter.default.removeObserver(self)
         GCController.stopWirelessControllerDiscovery()
-        onMove?(0, 0)
         onLook?(0, 0)
         for controller in GCController.controllers() {
+            let source = sourceID(for: controller)
+            onMove?(0, 0, "(source):left")
+            onMove?(0, 0, "(source):right")
             guard let pad = controller.extendedGamepad else { continue }
             let buttons = buttonInputs(for: pad)
             for (_, name) in buttons {
-                onButton?(ControllerMappingStore.shared.profile.action(for: name), false)
+                onButton?(ControllerMappingStore.shared.profile.action(for: name), false, "(source):button:(name)")
             }
             detachHandlers(from: pad)
         }
@@ -45,15 +47,21 @@ final class ControllerInputManager {
         guard let controller = note.object as? GCController else { return }
         // A controller can disappear while a stick or button is held. Release
         // every guest input so the guest cannot remain stuck in movement/fire.
-        onMove?(0, 0)
+        let source = sourceID(for: controller)
+        onMove?(0, 0, "(source):left")
+        onMove?(0, 0, "(source):right")
         onLook?(0, 0)
         if let pad = controller.extendedGamepad {
             let buttons = buttonInputs(for: pad)
             for (_, name) in buttons {
-                onButton?(ControllerMappingStore.shared.profile.action(for: name), false)
+                onButton?(ControllerMappingStore.shared.profile.action(for: name), false, "(source):button:(name)")
             }
             detachHandlers(from: pad)
         }
+    }
+
+    private func sourceID(for controller: GCController) -> String {
+        "controller:(ObjectIdentifier(controller))"
     }
 
     private func detachHandlers(from pad: GCExtendedGamepad) {
@@ -66,24 +74,28 @@ final class ControllerInputManager {
 
     private func configure(_ controller: GCController) {
         guard let pad = controller.extendedGamepad else { return }
+        let source = sourceID(for: controller)
+        let leftSource = "(source):left"
+        let rightSource = "(source):right"
         pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
             guard let self else { return }
             let profile = ControllerMappingStore.shared.profile
             let point = Self.applyDeadzone(x: x, y: y, deadzone: profile.leftDeadzone)
             if profile.swapSticks { self.onLook?(point.0, point.1) }
-            else { self.onMove?(point.0, point.1) }
+            else { self.onMove?(point.0, point.1, leftSource) }
         }
         pad.rightThumbstick.valueChangedHandler = { [weak self] _, x, y in
             guard let self else { return }
             let profile = ControllerMappingStore.shared.profile
             var point = Self.applyDeadzone(x: x, y: y, deadzone: profile.rightDeadzone)
             if profile.invertLookY { point.1 = -point.1 }
-            if profile.swapSticks { self.onMove?(point.0, point.1) }
+            if profile.swapSticks { self.onMove?(point.0, point.1, rightSource) }
             else { self.onLook?(point.0, point.1) }
         }
         let buttons = buttonInputs(for: pad)
         for (button, name) in buttons {
-            button.valueChangedHandler = { [weak self] _, _, pressed in self?.onButton?(ControllerMappingStore.shared.profile.action(for: name), pressed) }
+            let buttonSource = "(source):button:(name)"
+            button.valueChangedHandler = { [weak self] _, _, pressed in self?.onButton?(ControllerMappingStore.shared.profile.action(for: name), pressed, buttonSource) }
         }
     }
 

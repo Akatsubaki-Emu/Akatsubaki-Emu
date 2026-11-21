@@ -49,6 +49,14 @@ jobs:
             scripts/tests/test_x86_64_interpreter.swift \
             -o "$RUNNER_TEMP/test-x86-64-interpreter"
           "$RUNNER_TEMP/test-x86-64-interpreter"
+      - name: Test VNC key-state source arbitration
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/QEMU/VNCKeyState.swift \
+            scripts/tests/test_vnc_key_state.swift \
+            -o "$RUNNER_TEMP/test-vnc-key-state"
+          "$RUNNER_TEMP/test-vnc-key-state"
       - name: Validate runtime bridge and packaging contracts
         run: python3 scripts/validate-qemu-source.py
       - name: Install XcodeGen
