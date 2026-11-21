@@ -43,23 +43,40 @@ struct ControllerMappingProfile: Codable, Equatable {
 final class ControllerMappingStore {
     static let shared = ControllerMappingStore()
     private let defaultsKey = "iSteam.controllerMapping.v1"
+    private let lock = NSLock()
+    private var cachedProfile: ControllerMappingProfile?
     private init() {}
 
     var profile: ControllerMappingProfile {
         get {
-            guard let data = UserDefaults.standard.data(forKey: defaultsKey), data.count <= 64 * 1024,
-                  let value = try? JSONDecoder().decode(ControllerMappingProfile.self, from: data),
-                  (try? value.validate()) != nil else { return .standard }
+            lock.lock()
+            defer { lock.unlock() }
+            if let cachedProfile { return cachedProfile }
+            let value = loadProfile()
+            cachedProfile = value
             return value
         }
         set {
             guard (try? newValue.validate()) != nil,
                   let data = try? JSONEncoder().encode(newValue) else { return }
+            lock.lock()
+            defer { lock.unlock() }
             UserDefaults.standard.set(data, forKey: defaultsKey)
+            cachedProfile = newValue
         }
     }
 
     func reset() {
+        lock.lock()
+        defer { lock.unlock() }
         UserDefaults.standard.removeObject(forKey: defaultsKey)
+        cachedProfile = .standard
+    }
+
+    private func loadProfile() -> ControllerMappingProfile {
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey), data.count <= 64 * 1024,
+              let value = try? JSONDecoder().decode(ControllerMappingProfile.self, from: data),
+              (try? value.validate()) != nil else { return .standard }
+        return value
     }
 }

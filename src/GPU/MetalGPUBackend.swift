@@ -69,6 +69,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         textureLock.lock()
         framebufferGeneration &+= 1
         framebuffer = nil
+        framebufferSlots.removeAll(keepingCapacity: false)
         textureLock.unlock()
         DispatchQueue.main.async { [weak self] in self?.view.setNeedsDisplay() }
     }

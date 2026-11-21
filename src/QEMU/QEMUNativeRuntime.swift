@@ -27,7 +27,7 @@ final class QEMUNativeRuntime {
 
         let libraryURL: URL
         let dataDirectory: URL
-        switch QEMURuntimeStatus.inspect() {
+        switch QEMURuntimeStatus.locate() {
         case .unavailable(let reason):
             throw RuntimeError.runtimeUnavailable(reason)
         case .ready(let library, let data):

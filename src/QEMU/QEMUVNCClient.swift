@@ -52,7 +52,7 @@ final class QEMUVNCClient {
     private var pointerY: Int = 0
     private var pressedKeys = Set<UInt32>()
     private var buttonKeys = Set<UInt32>()
-    private var movementKeys = Set<UInt32>()
+    private var movementMask: UInt8 = 0
     private var connected = false
     var isConnected: Bool { withStateLock { connected } }
     var onFrame: ((Data, Int, Int) -> Void)?
@@ -122,7 +122,7 @@ final class QEMUVNCClient {
             }
             pressedKeys.removeAll()
             buttonKeys.removeAll()
-            movementKeys.removeAll()
+            movementMask = 0
             pendingSendGroup = DispatchGroup()
             return (previous, group)
         }
@@ -390,7 +390,7 @@ final class QEMUVNCClient {
             let wasPressed = pressedKeys.contains(keysym)
             if down { buttonKeys.insert(keysym) }
             else { buttonKeys.remove(keysym) }
-            let shouldBePressed = buttonKeys.contains(keysym) || movementKeys.contains(keysym)
+            let shouldBePressed = buttonKeys.contains(keysym) || movementKeyIsActive(keysym)
             if shouldBePressed != wasPressed {
                 enqueueSend(Self.keyEvent(keysym, down: shouldBePressed), to: connection, in: pendingSendGroup)
             }
@@ -409,23 +409,45 @@ final class QEMUVNCClient {
     }
 
     func setMovement(x: Float, y: Float) {
-        let desired = Set([
-            abs(x) > 0.25 ? (x < 0 ? "A" : "D") : "",
-            abs(y) > 0.25 ? (y < 0 ? "W" : "S") : ""
-        ].filter { !$0.isEmpty }.compactMap { Self.keysym(for: $0) })
+        var desiredMask: UInt8 = 0
+        if abs(x) > 0.25 { desiredMask |= x < 0 ? 0x01 : 0x02 }
+        if abs(y) > 0.25 { desiredMask |= y < 0 ? 0x04 : 0x08 }
 
         withStateLock {
             guard connected, let connection else { return }
-            let previouslyPressed = pressedKeys
-            movementKeys = desired
-            let shouldBePressed = buttonKeys.union(movementKeys)
-            for key in previouslyPressed.subtracting(shouldBePressed) {
-                enqueueSend(Self.keyEvent(key, down: false), to: connection, in: pendingSendGroup)
+            let changed = movementMask ^ desiredMask
+            if (changed & 0x01) != 0 {
+                updateMovementKey(0x41, active: (desiredMask & 0x01) != 0, connection: connection)
             }
-            for key in shouldBePressed.subtracting(previouslyPressed) {
-                enqueueSend(Self.keyEvent(key, down: true), to: connection, in: pendingSendGroup)
+            if (changed & 0x02) != 0 {
+                updateMovementKey(0x44, active: (desiredMask & 0x02) != 0, connection: connection)
             }
-            pressedKeys = shouldBePressed
+            if (changed & 0x04) != 0 {
+                updateMovementKey(0x57, active: (desiredMask & 0x04) != 0, connection: connection)
+            }
+            if (changed & 0x08) != 0 {
+                updateMovementKey(0x53, active: (desiredMask & 0x08) != 0, connection: connection)
+            }
+            movementMask = desiredMask
+        }
+    }
+
+    private func updateMovementKey(_ keysym: UInt32, active: Bool, connection: NWConnection) {
+        let wasPressed = pressedKeys.contains(keysym)
+        let shouldBePressed = active || buttonKeys.contains(keysym)
+        guard shouldBePressed != wasPressed else { return }
+        enqueueSend(Self.keyEvent(keysym, down: shouldBePressed), to: connection, in: pendingSendGroup)
+        if shouldBePressed { pressedKeys.insert(keysym) }
+        else { pressedKeys.remove(keysym) }
+    }
+
+    private func movementKeyIsActive(_ keysym: UInt32) -> Bool {
+        switch keysym {
+        case 0x41: return (movementMask & 0x01) != 0
+        case 0x44: return (movementMask & 0x02) != 0
+        case 0x57: return (movementMask & 0x04) != 0
+        case 0x53: return (movementMask & 0x08) != 0
+        default: return false
         }
     }
 
