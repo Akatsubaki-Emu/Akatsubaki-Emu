@@ -29,8 +29,8 @@ permissions:
   actions: write
 
 concurrency:
-  group: isteam-release
-  cancel-in-progress: false
+  group: isteam-release${{ inputs.channel == 'Main' && '-main' || '' }}
+  cancel-in-progress: true
 
 jobs:
   # This reusable workflow runs inside this run and uploads the artifact here.

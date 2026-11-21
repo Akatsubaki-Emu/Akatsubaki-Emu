@@ -414,6 +414,20 @@ if "--extra-ldflags=-Wl,-force_load" in qemu_workflow:
 
 # A release IPA must never be published without its native QEMU runtime.
 release_workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+release_concurrency_start = release_workflow.find("\\nconcurrency:\\n")
+release_concurrency_end = release_workflow.find("\\njobs:", release_concurrency_start)
+if release_concurrency_start < 0 or release_concurrency_end < 0:
+    print("release workflow: concurrency policy is missing", file=sys.stderr)
+    failed = True
+else:
+    release_concurrency = release_workflow[release_concurrency_start:release_concurrency_end]
+    for token in [
+        "group: isteam-release${{ inputs.channel == 'Main' && '-main' || '' }}",
+        "cancel-in-progress: true",
+    ]:
+        if token not in release_concurrency:
+            print(f"release workflow: concurrency policy missing {token!r}", file=sys.stderr)
+            failed = True
 runtime_download_start = release_workflow.find("- name: Download required iOS QEMU runtime artifact")
 runtime_download_end = release_workflow.find("\n      - uses: actions/cache@v4", runtime_download_start)
 if runtime_download_start < 0 or runtime_download_end < 0:
