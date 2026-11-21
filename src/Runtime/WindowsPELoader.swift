@@ -43,69 +43,25 @@ final class WindowsPELoader {
             throw InspectionError.unreadableFile
         }
 
-        guard data.count >= 0x40 else { throw InspectionError.tooSmall }
-        guard data[0] == 0x4D, data[1] == 0x5A else {
-            throw InspectionError.invalidDOSHeader
-        }
-
-        guard let peOffset32 = readUInt32LE(data, at: 0x3C) else {
-            throw InspectionError.invalidDOSHeader
-        }
-        let peOffset = UInt64(peOffset32)
-        let fileSize = UInt64(data.count)
-        guard peOffset >= 0x40, peOffset <= fileSize,
-              fileSize - peOffset >= 24 else {
-            throw InspectionError.invalidPEOffset
-        }
-
-        let signatureOffset = Int(peOffset)
-        guard data[signatureOffset] == 0x50,
-              data[signatureOffset + 1] == 0x45,
-              data[signatureOffset + 2] == 0,
-              data[signatureOffset + 3] == 0 else {
-            throw InspectionError.invalidSignature
-        }
-
-        let coffOffset = signatureOffset + 4
-        guard let machine = readUInt16LE(data, at: coffOffset),
-              let sectionCount = readUInt16LE(data, at: coffOffset + 2),
-              let optionalHeaderSize = readUInt16LE(data, at: coffOffset + 16) else {
-            throw InspectionError.truncatedCOFFHeader
-        }
-
+        // Reuse the bounded PE32+ parser used by the translation layer. The
+        // previous header-only check accepted x86/ARM PE32 files and malformed
+        // section/import tables even though this runtime only targets AMD64.
+        let parsed = try WindowsPEImage.parse(data)
+        let peOffset = Int(readUInt32LE(data, at: 0x3C) ?? 0)
+        let coffOffset = peOffset + 4
+        let optionalSize = readUInt16LE(data, at: coffOffset + 16) ?? 0
         let optionalOffset = coffOffset + 20
-        let optionalSize = Int(optionalHeaderSize)
-        guard optionalOffset <= data.count,
-              optionalSize <= data.count - optionalOffset else {
-            throw InspectionError.invalidOptionalHeader
-        }
-
-        var subsystem: UInt16?
-        var is64Bit = false
-        if optionalSize > 0 {
-            guard optionalSize >= 2,
-                  let magic = readUInt16LE(data, at: optionalOffset) else {
-                throw InspectionError.invalidOptionalHeader
-            }
-            switch magic {
-            case 0x10B: is64Bit = false
-            case 0x20B: is64Bit = true
-            default: throw InspectionError.unsupportedOptionalHeader
-            }
-            if optionalSize >= 70 {
-                subsystem = readUInt16LE(data, at: optionalOffset + 68)
-            }
-        }
+        let subsystem = readUInt16LE(data, at: optionalOffset + 68)
 
         return Image(
             url: url,
             isPE: true,
-            machine: machine,
+            machine: parsed.machine,
             subsystem: subsystem,
-            is64Bit: is64Bit,
-            sectionCount: sectionCount,
-            optionalHeaderSize: optionalHeaderSize,
-            fileSize: fileSize
+            is64Bit: true,
+            sectionCount: UInt16(parsed.sections.count),
+            optionalHeaderSize: optionalSize,
+            fileSize: UInt64(data.count)
         )
     }
 
