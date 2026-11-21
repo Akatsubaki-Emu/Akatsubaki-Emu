@@ -60,14 +60,9 @@ required = {
     "iSteam/LaunchSetupViewController.swift": [
         "guestControl.selectedSegmentIndex = 2",
         "executable-library route currently accepts Windows PE metadata only",
-        "\"SteamOS Gaming Mode\"",
+        "\\\"SteamOS Gaming Mode\\\"",
         "VMConfiguration.defaultSteamOS",
-        "guestControl.selectedSegmentIndex = 2",
-        "executable-library route currently accepts Windows PE metadata only",
-        "\"SteamOS Gaming Mode\"",
-        "VMConfiguration.defaultSteamOS",
-    ],
-    "src/Performance/TranslationCache.swift": [
+    ],    "src/Performance/TranslationCache.swift": [
         "SHA256.hash(data: Data(key.utf8))",
     ],
     "src/Runtime/RuntimeComponentManifest.swift": [
