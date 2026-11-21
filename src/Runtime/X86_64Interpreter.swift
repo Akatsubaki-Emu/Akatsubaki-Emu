@@ -380,6 +380,42 @@ final class X86_64Interpreter: GuestCPUBackend {
                     }
                     writeByteRegister(value, encodedIndex: decoded.reg, rex: rex)
                 }
+            case 0x00, 0x02, 0x08, 0x0A, 0x20, 0x22, 0x28, 0x2A, 0x30, 0x32, 0x38, 0x3A, 0x84:
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
+                }
+                guard let rmValue = readByteOperand(decoded.operand, modrm: modrm, rex: rex) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
+                let regValue = readByteRegister(decoded.reg, rex: rex)
+                if opcode == 0x84 {
+                    flags = X86_64ALU.and8(rmValue, regValue, flags: flags).flags
+                } else {
+                    let reverseDirection = opcode & 0x02 != 0
+                    let lhs = reverseDirection ? regValue : rmValue
+                    let rhs = reverseDirection ? rmValue : regValue
+                    let operation = opcode & 0xF8
+                    let result: X86_64ALU.Result
+                    switch operation {
+                    case 0x00: result = X86_64ALU.add8(lhs, rhs, flags: flags)
+                    case 0x08: result = X86_64ALU.or8(lhs, rhs, flags: flags)
+                    case 0x20: result = X86_64ALU.and8(lhs, rhs, flags: flags)
+                    case 0x28, 0x38: result = X86_64ALU.subtract8(lhs, rhs, flags: flags)
+                    case 0x30: result = X86_64ALU.xor8(lhs, rhs, flags: flags)
+                    default:
+                        rip = instructionAddress
+                        return .unsupportedInstruction(address: instructionAddress)
+                    }
+                    flags = result.flags
+                    if operation != 0x38 {
+                        let value = UInt8(truncatingIfNeeded: result.value)
+                        if reverseDirection {
+                            writeByteRegister(value, encodedIndex: decoded.reg, rex: rex)
+                        } else if !writeByteOperand(value, to: decoded.operand, modrm: modrm, rex: rex) {
+                            return .memoryFault(address: operandAddress(decoded.operand))
+                        }
+                    }
+                }
             case 0x89, 0x8B:
                 guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
                     return .memoryFault(address: rip)

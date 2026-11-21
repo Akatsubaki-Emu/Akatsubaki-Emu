@@ -61,6 +61,43 @@ enum X86_64ALU {
             auxiliary: false, overflow: false, previous: flags))
     }
 
+    static func add8(_ lhs: UInt8, _ rhs: UInt8, flags: UInt64) -> Result {
+        let wide = UInt16(lhs) + UInt16(rhs)
+        let value = UInt8(truncatingIfNeeded: wide)
+        let carryOut = wide > 0xFF
+        let overflowOut = ((~(lhs ^ rhs) & (lhs ^ value)) & 0x80) != 0
+        let auxiliary = ((lhs ^ rhs ^ value) & 0x10) != 0
+        return Result(value: UInt64(value), flags: makeFlags8(value, carry: carryOut,
+            auxiliary: auxiliary, overflow: overflowOut, previous: flags))
+    }
+
+    static func subtract8(_ lhs: UInt8, _ rhs: UInt8, flags: UInt64) -> Result {
+        let value = lhs &- rhs
+        let borrow = lhs < rhs
+        let overflowOut = (((lhs ^ rhs) & (lhs ^ value)) & 0x80) != 0
+        let auxiliary = ((lhs ^ rhs ^ value) & 0x10) != 0
+        return Result(value: UInt64(value), flags: makeFlags8(value, carry: borrow,
+            auxiliary: auxiliary, overflow: overflowOut, previous: flags))
+    }
+
+    static func and8(_ lhs: UInt8, _ rhs: UInt8, flags: UInt64) -> Result {
+        let value = lhs & rhs
+        return Result(value: UInt64(value), flags: makeFlags8(value, carry: false,
+            auxiliary: false, overflow: false, previous: flags))
+    }
+
+    static func or8(_ lhs: UInt8, _ rhs: UInt8, flags: UInt64) -> Result {
+        let value = lhs | rhs
+        return Result(value: UInt64(value), flags: makeFlags8(value, carry: false,
+            auxiliary: false, overflow: false, previous: flags))
+    }
+
+    static func xor8(_ lhs: UInt8, _ rhs: UInt8, flags: UInt64) -> Result {
+        let value = lhs ^ rhs
+        return Result(value: UInt64(value), flags: makeFlags8(value, carry: false,
+            auxiliary: false, overflow: false, previous: flags))
+    }
+
     static func multiply(_ lhs: UInt64, _ rhs: UInt64, width64: Bool, flags: UInt64) -> Result {
         let value: UInt64
         let overflowOut: Bool
@@ -156,6 +193,18 @@ enum X86_64ALU {
         case 0xF: return !zf && (sf == of)
         default: return false
         }
+    }
+
+    private static func makeFlags8(_ value: UInt8, carry: Bool,
+                                    auxiliary: Bool, overflow: Bool, previous: UInt64) -> UInt64 {
+        var result = (previous & ~arithmeticMask) | 0x2
+        if carry { result |= self.carry }
+        if value.nonzeroBitCount.isMultiple(of: 2) { result |= parity }
+        if auxiliary { result |= auxiliaryCarry }
+        if value == 0 { result |= zero }
+        if value & 0x80 != 0 { result |= sign }
+        if overflow { result |= self.overflow }
+        return result
     }
 
     private static func makeFlags(_ value: UInt64, width64: Bool, carry: Bool,
