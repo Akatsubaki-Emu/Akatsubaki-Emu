@@ -201,11 +201,13 @@ final class QEMUVNCClient {
             throw ClientError.protocolError("QEMU announced an unsupported guest display size.")
         }
         _ = try await receiveExactly(nameLength, from: connection)
-        framebufferWidth = width
-        framebufferHeight = height
-        framebuffer = Data(repeating: 0, count: width * height * 4)
-        pointerX = width / 2
-        pointerY = height / 2
+        withStateLock {
+            framebufferWidth = width
+            framebufferHeight = height
+            framebuffer = Data(repeating: 0, count: width * height * 4)
+            pointerX = width / 2
+            pointerY = height / 2
+        }
 
         // 32bpp, 24-bit depth, little endian, true colour; memory order B,G,R,X.
         try await send(Data([0, 0, 0, 0, 32, 24, 0, 1,
@@ -236,29 +238,37 @@ final class QEMUVNCClient {
                               width <= Self.maxFramebufferBytes / height / 4 else {
                             throw ClientError.protocolError("QEMU requested an invalid guest display size.")
                         }
-                        framebufferWidth = width
-                        framebufferHeight = height
-                        framebuffer = Data(repeating: 0, count: width * height * 4)
-                        pointerX = min(pointerX, width - 1)
-                        pointerY = min(pointerY, height - 1)
+                        withStateLock {
+                            framebufferWidth = width
+                            framebufferHeight = height
+                            framebuffer = Data(repeating: 0, count: width * height * 4)
+                            pointerX = min(pointerX, width - 1)
+                            pointerY = min(pointerY, height - 1)
+                        }
                         continue
                     }
                     guard encoding == 0 else {
                         throw ClientError.protocolError("Unsupported QEMU VNC rectangle encoding \(encoding).")
                     }
-                    guard width > 0, height > 0, x + width <= framebufferWidth,
-                          y + height <= framebufferHeight, width <= Int.max / height / 4 else {
+                    let currentSize = withStateLock { (framebufferWidth, framebufferHeight) }
+                    guard width > 0, height > 0, x + width <= currentSize.0,
+                          y + height <= currentSize.1, width <= Int.max / height / 4 else {
                         throw ClientError.protocolError("QEMU sent a framebuffer rectangle outside the guest display.")
                     }
                     let pixels = try await receiveExactly(width * height * 4, from: connection)
-                    for row in 0..<height {
-                        let sourceStart = row * width * 4
-                        let destinationStart = ((y + row) * framebufferWidth + x) * 4
-                        framebuffer.replaceSubrange(destinationStart..<(destinationStart + width * 4),
-                                                    with: pixels[sourceStart..<(sourceStart + width * 4)])
+                    withStateLock {
+                        // The reader task owns framebuffer updates; the lock also
+                        // protects snapshots consumed by the UI/render thread.
+                        for row in 0..<height {
+                            let sourceStart = row * width * 4
+                            let destinationStart = ((y + row) * framebufferWidth + x) * 4
+                            framebuffer.replaceSubrange(destinationStart..<(destinationStart + width * 4),
+                                                        with: pixels[sourceStart..<(sourceStart + width * 4)])
+                        }
                     }
                 }
-                onFrame?(framebuffer, framebufferWidth, framebufferHeight)
+                let frame = withStateLock { (framebuffer, framebufferWidth, framebufferHeight) }
+                onFrame?(frame.0, frame.1, frame.2)
                 try await requestFramebufferUpdate(incremental: true, connection: connection)
             case 1: // SetColourMapEntries: padding + first-colour + colour-count.
                 let header = try await receiveExactly(5, from: connection)
@@ -280,15 +290,16 @@ final class QEMUVNCClient {
     private func requestFramebufferUpdate(incremental: Bool, connection: NWConnection) async throws {
         // RFB FramebufferUpdateRequest is exactly 10 bytes:
         // type, incremental, x(2), y(2), width(2), height(2).
+        let size = withStateLock { (framebufferWidth, framebufferHeight) }
         try await send(Data([3, incremental ? 1 : 0,
                              0, 0, 0, 0,
-                             UInt8((framebufferWidth >> 8) & 0xff), UInt8(framebufferWidth & 0xff),
-                             UInt8((framebufferHeight >> 8) & 0xff), UInt8(framebufferHeight & 0xff)]),
+                             UInt8((size.0 >> 8) & 0xff), UInt8(size.0 & 0xff),
+                             UInt8((size.1 >> 8) & 0xff), UInt8(size.1 & 0xff)]),
                        to: connection)
     }
 
     func sendKey(_ key: String, down: Bool) {
-        guard let connection else { return }
+        guard let connection = withStateLock({ connection }) else { return }
         guard let keysym = Self.keysym(for: key) else { return }
         let value = UInt32(keysym)
         let message = Data([4, down ? 1 : 0, 0, 0,
@@ -298,7 +309,8 @@ final class QEMUVNCClient {
     }
 
     func tapKey(_ key: String) {
-        guard let connection, let keysym = Self.keysym(for: key) else { return }
+        guard let connection = withStateLock({ connection }),
+              let keysym = Self.keysym(for: key) else { return }
         let value = UInt32(keysym)
         let press = Data([4, 1, 0, 0, UInt8((value >> 24) & 0xff),
                           UInt8((value >> 16) & 0xff), UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
@@ -326,10 +338,13 @@ final class QEMUVNCClient {
     }
 
     func movePointer(dx: Float, dy: Float) {
-        guard let connection, framebufferWidth > 0, framebufferHeight > 0 else { return }
-        pointerX = min(max(pointerX + Int(dx * 12), 0), framebufferWidth - 1)
-        pointerY = min(max(pointerY - Int(dy * 12), 0), framebufferHeight - 1)
-        let x = pointerX, y = pointerY
+        let pointer = withStateLock { () -> (NWConnection, Int, Int)? in
+            guard let connection, framebufferWidth > 0, framebufferHeight > 0 else { return nil }
+            pointerX = min(max(pointerX + Int(dx * 12), 0), framebufferWidth - 1)
+            pointerY = min(max(pointerY - Int(dy * 12), 0), framebufferHeight - 1)
+            return (connection, pointerX, pointerY)
+        }
+        guard let (connection, x, y) = pointer else { return }
         let message = Data([5, 0, UInt8((x >> 8) & 0xff), UInt8(x & 0xff),
                             UInt8((y >> 8) & 0xff), UInt8(y & 0xff)])
         Task { try? await self.send(message, to: connection) }
@@ -367,7 +382,7 @@ final class QEMUVNCClient {
         let message = Data([4, down ? 1 : 0, 0, 0,
                             UInt8((value >> 24) & 0xff), UInt8((value >> 16) & 0xff),
                             UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
-        guard let connection else { return }
+        guard let connection = withStateLock({ connection }) else { return }
         Task { try? await self.send(message, to: connection) }
     }
 
