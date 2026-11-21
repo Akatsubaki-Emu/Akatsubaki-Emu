@@ -216,6 +216,8 @@ required = {
         "static func subtract(",
         "static func condition(",
         "static func makeFlags(",
+        "static func condition(_ code: UInt8, flags: UInt64) -> Bool",
+        "default: return false",
     ],
     "src/Runtime/X86_64Interpreter.swift": [
         "func setInitialStackPointer(_ pointer: UInt64) throws",
@@ -258,6 +260,8 @@ required = {
         "guard let adjustment = fetchUInt16() else",
         "return .memoryFault(address: operandAddress(decoded.operand))",
         "case 0xC3:",
+        "let takeBranch = X86_64ALU.condition(opcode & 0x0F, flags: flags)",
+        "let takeBranch = X86_64ALU.condition(second & 0x0F, flags: flags)",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
@@ -667,6 +671,10 @@ required = {
         "LINK_ARGS",
         "emulator-specific link arguments",
         "-Wl,-force_load,",
+    ],
+    "scripts/tests/test_x86_condition_dispatch.py": [
+        "self.assertIn(\"static func condition(_ code: UInt8, flags: UInt64) -> Bool\", alu)",
+        "self.assertNotIn(\"guard let takeBranch = X86_64ALU.condition\", interpreter)",
     ],
 }
 failed = False
