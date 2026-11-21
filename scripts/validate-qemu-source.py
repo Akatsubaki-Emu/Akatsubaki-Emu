@@ -144,7 +144,7 @@ required = {
         "X86_64ALU.subtract(lhs, rawImmediate",
                 "X86_64ALU.condition(opcode & 0x0F",
         "case 0x89, 0x8B:",
-        "case 0x8D:",
+        "case 0x8D:",\n        "case 0xC7:",\n        "case 0xFF:",\n        "case 0xC9:",\n        "case 0xC2:",\n        "private func fetchUInt16() -> UInt16?",
         "private func decodeRM(_ modrm: UInt8, rex: UInt8)",
         "usesRIPRelative",
         "let scale = UInt64(1) << ((sib >> 6) & 3)",
@@ -164,7 +164,7 @@ required = {
                 "precondition(signed.conditionFlags & X86_64ALU.sign != 0)",
         "precondition(ripRelativeMemory.readUInt32(offset: 0x80) == 0x12345678)",
         "precondition(sibMemory.readUInt64(offset: 0x108) == 0x1122334455667788)",
-        "precondition(lea.registerValue(3) == 128)",
+        "precondition(lea.registerValue(3) == 128)",\n        "precondition(leave.registerValue(4) == 0x200)",\n        "precondition(indirect.registerValue(3) == 0x42)",\n        "precondition(retImmediate.registerValue(4) == 0x110)",
     ],
     "scripts/tests/test_x86_64_interpreter.swift": [
         "precondition(truncatedShortExit == .memoryFault(address: 1))",

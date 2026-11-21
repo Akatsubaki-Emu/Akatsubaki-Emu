@@ -47,6 +47,13 @@ enum X86_64ALU {
             auxiliary: false, overflow: false, previous: flags))
     }
 
+    static func or(_ lhs: UInt64, _ rhs: UInt64, width64: Bool, flags: UInt64) -> Result {
+        let mask = width64 ? UInt64.max : UInt64(UInt32.max)
+        let value = (lhs | rhs) & mask
+        return Result(value: value, flags: makeFlags(value, width64: width64, carry: false,
+            auxiliary: false, overflow: false, previous: flags))
+    }
+
     static func xor(_ lhs: UInt64, _ rhs: UInt64, width64: Bool, flags: UInt64) -> Result {
         let mask = width64 ? UInt64.max : UInt64(UInt32.max)
         let value = (lhs ^ rhs) & mask

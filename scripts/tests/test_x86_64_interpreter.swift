@@ -236,12 +236,68 @@ struct InterpreterTests {
         let truncatedNearExit = try truncatedNear.run(maxInstructions: 1)
         precondition(truncatedNearExit == .memoryFault(address: 2))
 
+        let orMemory = GuestMemory(size: 32)
+        precondition(orMemory.write(Data([0xB8, 0x01, 0x00, 0x00, 0x00, 0x83, 0xC8, 0x02, 0x0F, 0x0B]), offset: 0))
+        let orInterpreter = X86_64Interpreter(memory: orMemory)
+        try orInterpreter.reset(entryPoint: 0)
+        let orExit = try orInterpreter.run(maxInstructions: 8)
+        precondition(orExit == .unsupportedInstruction(address: 8))
+        precondition(orInterpreter.registerValue(0) == 3)
+        precondition(orInterpreter.conditionFlags & X86_64ALU.carry == 0)
+        precondition(orInterpreter.conditionFlags & X86_64ALU.overflow == 0)
+
+        let c7Memory = GuestMemory(size: 32)
+        precondition(c7Memory.write(Data([0x48, 0xC7, 0xC0, 0x78, 0x56, 0x34, 0x12, 0x0F, 0x0B]), offset: 0))
+        let c7 = X86_64Interpreter(memory: c7Memory)
+        try c7.reset(entryPoint: 0)
+        let c7Exit = try c7.run(maxInstructions: 4)
+        precondition(c7Exit == .unsupportedInstruction(address: 7))
+        precondition(c7.registerValue(0) == 0x12345678)
+
+        let leaveMemory = GuestMemory(size: 512)
+        let leaveProgram: [UInt8] = [
+            0x48, 0xBC, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x55, 0x48, 0x89, 0xE5, 0x48, 0x83, 0xEC, 0x08, 0xC9, 0x0F, 0x0B
+        ]
+        precondition(leaveMemory.write(Data(leaveProgram), offset: 0))
+        let leave = X86_64Interpreter(memory: leaveMemory)
+        try leave.reset(entryPoint: 0)
+        let leaveExit = try leave.run(maxInstructions: 8)
+        precondition(leaveExit == .unsupportedInstruction(address: 19))
+        precondition(leave.registerValue(4) == 0x200)
+        precondition(leave.registerValue(5) == 0)
+
+        let indirectMemory = GuestMemory(size: 128)
+        var indirectProgram: [UInt8] = [
+            0x48, 0xB8, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFF, 0xD0, 0x0F, 0x0B
+        ]
+        indirectProgram += [UInt8](repeating: 0x90, count: 0x20 - indirectProgram.count)
+        indirectProgram += [0xBB, 0x42, 0x00, 0x00, 0x00, 0xC3]
+        precondition(indirectMemory.write(Data(indirectProgram), offset: 0))
+        let indirect = X86_64Interpreter(memory: indirectMemory)
+        try indirect.reset(entryPoint: 0)
+        let indirectExit = try indirect.run(maxInstructions: 16)
+        precondition(indirectExit == .unsupportedInstruction(address: 12))
+        precondition(indirect.registerValue(3) == 0x42)
+        precondition(indirect.registerValue(4) == 4088)
+
+        let retImmediateMemory = GuestMemory(size: 512)
+        precondition(retImmediateMemory.write(Data([0xC2, 0x08, 0x00, 0x0F, 0x0B]), offset: 0))
+        precondition(retImmediateMemory.writeUInt64(3, offset: 0x100))
+        let retImmediate = X86_64Interpreter(memory: retImmediateMemory)
+        try retImmediate.reset(entryPoint: 0)
+        try retImmediate.setInitialStackPointer(0x100)
+        let retImmediateExit = try retImmediate.run(maxInstructions: 4)
+        precondition(retImmediateExit == .unsupportedInstruction(address: 3))
+        precondition(retImmediate.registerValue(4) == 0x110)
+
         let unsupportedMemory = GuestMemory(size: 4)
         precondition(unsupportedMemory.write(Data([0x0F, 0x0B]), offset: 0))
         let unsupported = X86_64Interpreter(memory: unsupportedMemory)
         try unsupported.reset(entryPoint: 0)
         let unsupportedExit = try unsupported.run(maxInstructions: 1)
         precondition(unsupportedExit == .unsupportedInstruction(address: 0))
-        print("x86-64 interpreter register, memory addressing, ALU flags, conditional branch, syscall, budget and fault tests passed")
+        print("x86-64 interpreter register, memory addressing, ALU flags, stack frames, indirect control flow, syscall, budget and fault tests passed")
     }
 }
