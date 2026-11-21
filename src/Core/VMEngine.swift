@@ -44,7 +44,7 @@ final class VMEngine {
             let candidate = QEMUBackend(configuration: configuration)
             try candidate.start(diskImage: diskImage, firmware: firmware)
             backend = candidate
-            startupDeadline = .now() + 15
+            startupDeadline = .now() + 60
             EmulationLog.shared.write("QEMU launch accepted; waiting for native initialization.")
             let timer = DispatchSource.makeTimerSource(queue: .main)
             timer.schedule(deadline: .now() + .milliseconds(100), repeating: .milliseconds(100))
@@ -95,7 +95,7 @@ final class VMEngine {
             return
         }
         if let deadline = startupDeadline, DispatchTime.now() >= deadline {
-            fail("QEMU did not enter its active main loop within 15 seconds. Verify the bundled runtime and its startup logs.")
+            fail("QEMU did not enter its active main loop within 60 seconds. Verify the bundled runtime and its startup logs.")
         }
     }
 

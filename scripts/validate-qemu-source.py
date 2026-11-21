@@ -62,6 +62,10 @@ required = {
         "escapeDriveValue(_ path: String)",
         'replacingOccurrences(of: ",", with: ",,")',
     ],
+    "src/Core/VMEngine.swift": [
+        "startupDeadline = .now() + 60",
+        "within 60 seconds",
+    ],
     "src/Display/VMDisplayViewController.swift": [
         "vncClient.onFrame", "vncClient.start()", "vncClient.tapKey(key)"
     ],
@@ -124,6 +128,7 @@ required = {
     "src/Runtime/GuestMachine.swift": [
         "maximumGuestBytes: UInt64 = 16 * 1024 * 1024 * 1024",
         "guard self.memory.isAvailable",
+        "case memoryUnavailable",
     ],
     "src/Steam/GameRuntimeProfile.swift": [
         "launchArguments.count <= 256",

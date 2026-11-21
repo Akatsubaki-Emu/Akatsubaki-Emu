@@ -22,6 +22,7 @@ enum GuestCPUExit: Equatable {
 enum GuestEngineError: LocalizedError {
     case invalidInstructionBudget
     case backendNotInstalled(VMConfiguration.Architecture)
+    case memoryUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -29,6 +30,8 @@ enum GuestEngineError: LocalizedError {
             return "The guest CPU instruction budget must be greater than zero."
         case .backendNotInstalled(let architecture):
             return "No guest CPU backend is installed for \(architecture.rawValue)."
+        case .memoryUnavailable:
+            return "Native guest memory could not be allocated on this device."
         }
     }
 }
@@ -82,6 +85,7 @@ final class GuestMachine {
     }
 
     func installCPUBackend(_ backend: GuestCPUBackend) throws {
+        guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
         guard backend.architecture == configuration.architecture else {
             throw GuestEngineError.backendNotInstalled(configuration.architecture)
         }
@@ -95,6 +99,7 @@ final class GuestMachine {
     /// entry point. Loading requires a compatible, real CPU backend to be installed.
     @discardableResult
     func loadELFImage(at url: URL) throws -> ELF64Loader.Image {
+        guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
         guard let cpu else {
             let error = GuestEngineError.backendNotInstalled(configuration.architecture)
             state = .failed(error.localizedDescription)
@@ -116,6 +121,7 @@ final class GuestMachine {
 
     /// Resets CPU registers only. Loaded guest memory is deliberately preserved.
     func reset(entryPoint: UInt64) throws {
+        guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
         guard let cpu else {
             let error = GuestEngineError.backendNotInstalled(configuration.architecture)
             state = .failed(error.localizedDescription)
@@ -134,6 +140,7 @@ final class GuestMachine {
     @discardableResult
     func runBatch(maxInstructions: UInt64) throws -> GuestCPUExit {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
+        guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
         guard let cpu else {
             let error = GuestEngineError.backendNotInstalled(configuration.architecture)
             state = .failed(error.localizedDescription)
