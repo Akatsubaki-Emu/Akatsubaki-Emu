@@ -409,6 +409,32 @@ struct InterpreterTests {
         precondition(movExtend.registerValue(0) == 0xF234)
         precondition(movExtend.registerValue(1) == 0xFFFF_F234)
 
+        let byteExtendMemory = GuestMemory(size: 128)
+        let byteExtendProgram: [UInt8] = [
+            0x0F, 0xB6, 0x05, 0x19, 0x00, 0x00, 0x00,
+            0x0F, 0xBE, 0x0D, 0x12, 0x00, 0x00, 0x00,
+            0x0F, 0x0B
+        ]
+        precondition(byteExtendMemory.write(Data(byteExtendProgram), offset: 0))
+        precondition(byteExtendMemory.write(Data([0xF2]), offset: 0x20))
+        let byteExtend = X86_64Interpreter(memory: byteExtendMemory)
+        try byteExtend.reset(entryPoint: 0)
+        let byteExtendExit = try byteExtend.run(maxInstructions: 4)
+        precondition(byteExtendExit == .unsupportedInstruction(address: 14))
+        precondition(byteExtend.registerValue(0) == 0xF2)
+        precondition(byteExtend.registerValue(1) == 0xFFFF_FFF2)
+
+        let highByteMemory = GuestMemory(size: 32)
+        precondition(highByteMemory.write(Data([0xB8, 0x78, 0x56, 0x34, 0x12,
+                                                0x0F, 0xB6, 0xC4,
+                                                0x40, 0x0F, 0xB6, 0xC4,
+                                                0x0F, 0x0B]), offset: 0))
+        let highByte = X86_64Interpreter(memory: highByteMemory)
+        try highByte.reset(entryPoint: 0)
+        let highByteExit = try highByte.run(maxInstructions: 5)
+        precondition(highByteExit == .unsupportedInstruction(address: 12))
+        precondition(highByte.registerValue(0) == 24)
+
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [
             0xB8, 0x0C, 0x00, 0x00, 0x00,

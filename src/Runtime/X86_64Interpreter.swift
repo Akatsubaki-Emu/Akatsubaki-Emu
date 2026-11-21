@@ -386,6 +386,20 @@ final class X86_64Interpreter: GuestCPUBackend {
                         instructionCount &+= 1
                         return .halted
                     }
+                } else if second == 0xB6 || second == 0xBE {
+                    guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                        return .memoryFault(address: rip)
+                    }
+                    guard let byte = readByteOperand(decoded.operand, modrm: modrm, rex: rex) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                    let width64 = rex & 0x08 != 0
+                    let extended = second == 0xB6
+                        ? UInt64(byte)
+                        : UInt64(bitPattern: Int64(Int8(bitPattern: byte)))
+                    registers[decoded.reg] = width64
+                        ? extended
+                        : UInt64(UInt32(truncatingIfNeeded: extended))
                 } else if second == 0xB7 || second == 0xBF {
                     guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
                         return .memoryFault(address: rip)
@@ -498,6 +512,20 @@ final class X86_64Interpreter: GuestCPUBackend {
         case .memory(let address):
             if width64 { return memory.readUInt64(offset: address) }
             return memory.readUInt32(offset: address).map { UInt64($0) }
+        }
+    }
+
+    private func readByteOperand(_ operand: Operand, modrm: UInt8, rex: UInt8) -> UInt8? {
+        switch operand {
+        case .memory(let address):
+            return memory.readByte(offset: address)
+        case .register:
+            let encoded = Int(modrm & 7)
+            if rex == 0 && (4...7).contains(encoded) {
+                return UInt8(truncatingIfNeeded: registers[encoded - 4] >> 8)
+            }
+            let index = encoded | (rex & 0x01 != 0 ? 8 : 0)
+            return UInt8(truncatingIfNeeded: registers[index])
         }
     }
 

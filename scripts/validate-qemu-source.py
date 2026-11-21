@@ -186,6 +186,8 @@ required = {
         "case 0x69, 0x6B:",
         "second == 0xAF",
         "second == 0xB7 || second == 0xBF",
+        "second == 0xB6 || second == 0xBE",
+        "private func readByteOperand(_ operand: Operand, modrm: UInt8, rex: UInt8) -> UInt8?",
         "private func readWordOperand(_ operand: Operand) -> UInt16?",
         "case 0xFF:",
         "case 0xC9:",
@@ -232,6 +234,8 @@ required = {
         "precondition(imul.registerValue(0) == UInt64.max - 5)",
         "precondition(imulOverflow.conditionFlags & X86_64ALU.overflow != 0)",
         "precondition(movExtend.registerValue(1) == 0xFFFF_F234)",
+        "precondition(byteExtend.registerValue(1) == 0xFFFF_FFF2)",
+        "precondition(highByte.registerValue(0) == 24)",
         "precondition(truncatedShortExit == .memoryFault(address: 1))",
         "precondition(truncatedNearExit == .memoryFault(address: 2))",
 
