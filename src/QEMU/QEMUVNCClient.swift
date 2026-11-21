@@ -50,7 +50,8 @@ final class QEMUVNCClient {
     private var pointerX: Int = 0
     private var pointerY: Int = 0
     private var pressedKeys = Set<UInt32>()
-    private(set) var isConnected = false
+    private var connected = false
+    var isConnected: Bool { withStateLock { connected } }
     var onFrame: ((Data, Int, Int) -> Void)?
     var onStatus: ((String) -> Void)?
 
@@ -63,7 +64,7 @@ final class QEMUVNCClient {
         readerTask = Task { [weak self] in
             guard let self else { return }
             var lastError: Error = ClientError.connection("QEMU VNC server did not start.")
-            for attempt in 0..<120 {
+            for attempt in 0..<140 {
                 if Task.isCancelled { return }
                 let candidate = NWConnection(host: "127.0.0.1", port: endpointPort, using: .tcp)
                 self.withStateLock {
@@ -73,7 +74,7 @@ final class QEMUVNCClient {
                     try await self.waitUntilReady(candidate)
                     try await self.performHandshake(candidate)
                     self.withStateLock {
-                        self.isConnected = true
+                        self.connected = true
                     }
                     self.onStatus?("Guest display connected • local VNC")
                     try await self.readServerMessages(candidate)
@@ -82,13 +83,13 @@ final class QEMUVNCClient {
                     lastError = error
                     candidate.cancel()
                     if Task.isCancelled { return }
-                    if attempt < 119 {
+                    if attempt < 139 {
                         try? await Task.sleep(nanoseconds: 500_000_000)
                     }
                 }
             }
             self.withStateLock {
-                self.isConnected = false
+                self.connected = false
             }
             self.onStatus?("Guest display unavailable: \(lastError.localizedDescription)")
         }

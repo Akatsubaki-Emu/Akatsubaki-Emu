@@ -10,7 +10,7 @@ required = {
         "func tapKey(_ key: String)",
         "numberOfColours = Int(Self.u16(header, 3))",
         "private static let maxFramebufferBytes = 64 * 1024 * 1024",
-        "for attempt in 0..<120",
+        "for attempt in 0..<140",
         "private let sendQueue = DispatchQueue(label: \"com.xthrx.isteam.qemu-vnc.send\")",
         "private final class QEMUOneShotCompletion: @unchecked Sendable",
         "private func withStateLock<T>",
