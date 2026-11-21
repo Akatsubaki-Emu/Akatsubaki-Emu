@@ -11,8 +11,8 @@ final class X86_64Interpreter: GuestCPUBackend {
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
     private var instructionWindow = [UInt8](repeating: 0, count: 15)
-    private var instructionWindowStart: UInt64 = 0
     private var instructionWindowLength = 0
+    private var instructionWindowCursor = 0
     private var flags: UInt64 = 0x2
     private var halted = false
     private let stopLock = NSLock()
@@ -659,21 +659,14 @@ final class X86_64Interpreter: GuestCPUBackend {
     }
 
     private func prepareInstructionWindow(at address: UInt64) {
-        instructionWindowStart = address
         instructionWindowLength = memory.readPrefix(offset: address, into: &instructionWindow) ?? 0
-    }
-
-    private func instructionWindowOffset(for address: UInt64, length: Int) -> Int? {
-        guard address >= instructionWindowStart else { return nil }
-        let offset = address - instructionWindowStart
-        guard offset <= UInt64(instructionWindowLength),
-              UInt64(length) <= UInt64(instructionWindowLength) - offset else { return nil }
-        return Int(offset)
+        instructionWindowCursor = 0
     }
 
     private func fetchByte() -> UInt8? {
-        if let offset = instructionWindowOffset(for: rip, length: 1) {
-            let value = instructionWindow[offset]
+        if instructionWindowCursor < instructionWindowLength {
+            let value = instructionWindow[instructionWindowCursor]
+            instructionWindowCursor += 1
             rip &+= 1
             return value
         }
@@ -688,27 +681,35 @@ final class X86_64Interpreter: GuestCPUBackend {
     }
 
     private func fetchUInt32() -> UInt32? {
-        if let offset = instructionWindowOffset(for: rip, length: 4) {
+        if instructionWindowCursor <= instructionWindowLength,
+           instructionWindowLength - instructionWindowCursor >= 4 {
+            let offset = instructionWindowCursor
             let value = UInt32(instructionWindow[offset])
                 | UInt32(instructionWindow[offset + 1]) << 8
                 | UInt32(instructionWindow[offset + 2]) << 16
                 | UInt32(instructionWindow[offset + 3]) << 24
+            instructionWindowCursor += 4
             rip &+= 4
             return value
         }
         guard let value = memory.readUInt32(offset: rip) else { return nil }
+        instructionWindowCursor = instructionWindowLength
         rip &+= 4
         return value
     }
 
     private func fetchUInt64() -> UInt64? {
-        if let offset = instructionWindowOffset(for: rip, length: 8) {
+        if instructionWindowCursor <= instructionWindowLength,
+           instructionWindowLength - instructionWindowCursor >= 8 {
+            let offset = instructionWindowCursor
             var value: UInt64 = 0
             for shift in 0..<8 { value |= UInt64(instructionWindow[offset + shift]) << (shift * 8) }
+            instructionWindowCursor += 8
             rip &+= 8
             return value
         }
         guard let value = memory.readUInt64(offset: rip) else { return nil }
+        instructionWindowCursor = instructionWindowLength
         rip &+= 8
         return value
     }

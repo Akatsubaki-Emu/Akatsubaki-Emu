@@ -662,7 +662,8 @@ struct InterpreterTests {
         precondition(windowMemory.write(Data([0x90, 0x90, 0xF4]), offset: 0x20))
         let windowInterpreter = X86_64Interpreter(memory: windowMemory)
         try windowInterpreter.reset(entryPoint: 0x20)
-        precondition(try windowInterpreter.run(maxInstructions: 8) == .halted)
+        let windowExit = try windowInterpreter.run(maxInstructions: 8)
+        precondition(windowExit == .halted)
         precondition(windowMemory.readPrefixCalls == 3)
         precondition(windowMemory.readByteCalls == 0)
 
@@ -670,14 +671,16 @@ struct InterpreterTests {
         precondition(boundaryMemory.write(Data([0xB8, 0x78, 0x56, 0x34, 0x12, 0xF4]), offset: 4094))
         let boundaryInterpreter = X86_64Interpreter(memory: boundaryMemory)
         try boundaryInterpreter.reset(entryPoint: 4094)
-        precondition(try boundaryInterpreter.run(maxInstructions: 4) == .halted)
+        let boundaryExit = try boundaryInterpreter.run(maxInstructions: 4)
+        precondition(boundaryExit == .halted)
         precondition(boundaryInterpreter.registerValue(0) == 0x12345678)
 
         let edgeMemory = GuestMemory(size: 4096)
         precondition(edgeMemory.write(Data([0x90]), offset: 4095))
         let edgeInterpreter = X86_64Interpreter(memory: edgeMemory)
         try edgeInterpreter.reset(entryPoint: 4095)
-        precondition(try edgeInterpreter.run(maxInstructions: 2) == .memoryFault(address: 4096))
+        let edgeExit = try edgeInterpreter.run(maxInstructions: 2)
+        precondition(edgeExit == .memoryFault(address: 4096))
 
         let selfModifyingMemory = GuestMemory(size: 64)
         precondition(selfModifyingMemory.write(Data([
@@ -687,7 +690,8 @@ struct InterpreterTests {
         ]), offset: 0))
         let selfModifyingInterpreter = X86_64Interpreter(memory: selfModifyingMemory)
         try selfModifyingInterpreter.reset(entryPoint: 0)
-        precondition(try selfModifyingInterpreter.run(maxInstructions: 8) == .halted)
+        let selfModifyingExit = try selfModifyingInterpreter.run(maxInstructions: 8)
+        precondition(selfModifyingExit == .halted)
         precondition(selfModifyingMemory.readByte(offset: 11) == 0xF4)
         precondition(selfModifyingMemory.readPrefixCalls == 3)
 
