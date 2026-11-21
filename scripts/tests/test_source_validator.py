@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prevent silent duplicate keys in the repository's source-contract validator."""
+"""Prevent silent duplicate keys and lifecycle/source-contract regressions."""
 import ast
 import unittest
 from pathlib import Path
@@ -61,6 +61,34 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("runtime-library-path.txt", package)
         self.assertIn("qemu_system_shutdown_request", runtime_validator)
         self.assertNotIn("duplicate_string", bridge)
+
+    def test_native_bridge_enables_strict_c11_strnlen_and_covers_cleanup_race(self):
+        root = Path(__file__).resolve().parents[2]
+        bridge = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
+        test = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
+        self.assertIn("#define _POSIX_C_SOURCE 200809L", bridge)
+        self.assertIn("g_running = false;", bridge)
+        self.assertLess(
+            bridge.index("g_qemu_main_loop();"),
+            bridge.index("g_running = false;", bridge.index("g_qemu_main_loop();")),
+        )
+        self.assertLess(
+            bridge.index("g_running = false;", bridge.index("g_qemu_main_loop();")),
+            bridge.index("if (g_qemu_cleanup) g_qemu_cleanup();"),
+        )
+        self.assertIn("#include <stdlib.h>", test)
+        self.assertIn("fake_qemu_cleanup_started_count", test)
+        self.assertIn("fake_qemu_shutdown_count", test)
+
+    def test_host_shared_file_import_and_read_enforce_the_transfer_limit(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "HostDeviceBridge.swift").read_text(encoding="utf-8")
+        receive = source.split("func receiveFile", 1)[1].split("func readSharedFile", 1)[0]
+        read = source.split("func readSharedFile", 1)[1].split("func writeSharedFile", 1)[0]
+        self.assertIn("sourceSize <= maximumInMemoryTransferBytes", receive)
+        self.assertIn("copiedSize <= maximumInMemoryTransferBytes", receive)
+        self.assertIn("maximumInMemoryTransferBytes + 1", read)
+        self.assertIn("handle.read(upToCount:", read)
 
 
 if __name__ == "__main__":

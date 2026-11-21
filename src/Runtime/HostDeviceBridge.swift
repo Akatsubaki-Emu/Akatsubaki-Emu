@@ -73,11 +73,38 @@ final class HostDeviceBridge {
             withIntermediateDirectories: true
         )
         try ExternalDriveStore.shared.withAccess(to: source) { coordinatedSource in
+            let sourceValues = try coordinatedSource.resourceValues(
+                forKeys: [.isRegularFileKey, .fileSizeKey]
+            )
+            guard sourceValues.isRegularFile == true,
+                  let sourceSize = sourceValues.fileSize,
+                  sourceSize >= 0 else {
+                throw BridgeError.invalidPath
+            }
+            guard sourceSize <= maximumInMemoryTransferBytes else {
+                throw BridgeError.fileTooLarge
+            }
+
             let fm = FileManager.default
             let temporary = destination.deletingLastPathComponent()
                 .appendingPathComponent(".\(UUID().uuidString).receive")
             defer { try? fm.removeItem(at: temporary) }
             try fm.copyItem(at: coordinatedSource, to: temporary)
+
+            // Recheck the copied file before replacing an existing destination:
+            // the provider may have changed the source between metadata and copy.
+            let copiedValues = try temporary.resourceValues(
+                forKeys: [.isRegularFileKey, .fileSizeKey]
+            )
+            guard copiedValues.isRegularFile == true,
+                  let copiedSize = copiedValues.fileSize,
+                  copiedSize >= 0 else {
+                throw BridgeError.invalidPath
+            }
+            guard copiedSize <= maximumInMemoryTransferBytes else {
+                throw BridgeError.fileTooLarge
+            }
+
             if fm.fileExists(atPath: destination.path) {
                 _ = try fm.replaceItemAt(destination, withItemAt: temporary)
             } else {
@@ -90,11 +117,25 @@ final class HostDeviceBridge {
     func readSharedFile(relativePath: String) throws -> Data {
         let url = try sharedFileURL(relativePath: relativePath)
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-        guard values.isRegularFile == true, let size = values.fileSize else {
+        guard values.isRegularFile == true, let size = values.fileSize, size >= 0 else {
             throw BridgeError.invalidPath
         }
         guard size <= maximumInMemoryTransferBytes else { throw BridgeError.fileTooLarge }
-        return try Data(contentsOf: url)
+
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var data = Data()
+        let maximumReadBytes = maximumInMemoryTransferBytes + 1
+        while data.count < maximumReadBytes {
+            let remaining = maximumReadBytes - data.count
+            let chunk = try handle.read(upToCount: min(64 * 1024, remaining)) ?? Data()
+            if chunk.isEmpty { break }
+            data.append(chunk)
+        }
+        guard data.count <= maximumInMemoryTransferBytes else {
+            throw BridgeError.fileTooLarge
+        }
+        return data
     }
 
     func writeSharedFile(_ data: Data, relativePath: String) throws {

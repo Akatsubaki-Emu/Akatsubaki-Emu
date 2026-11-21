@@ -6,6 +6,7 @@
  * UTM reference implementation is licensed under Apache-2.0.
  * See THIRD_PARTY_NOTICES.md for attribution and license information.
  */
+#define _POSIX_C_SOURCE 200809L
 #include "QEMUNativeBridge.h"
 #include <dlfcn.h>
 #include <pthread.h>
@@ -77,6 +78,12 @@ static void *qemu_thread_main(void *unused) {
         pthread_mutex_unlock(&g_lock);
         if (stop_after_init && shutdown_fn) shutdown_fn(ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI);
         g_qemu_main_loop();
+
+        // Do not call into QEMU's shutdown API after its main loop has exited.
+        // The worker remains active until cleanup and dlclose have completed.
+        pthread_mutex_lock(&g_lock);
+        g_running = false;
+        pthread_mutex_unlock(&g_lock);
         if (g_qemu_cleanup) g_qemu_cleanup();
     }
 

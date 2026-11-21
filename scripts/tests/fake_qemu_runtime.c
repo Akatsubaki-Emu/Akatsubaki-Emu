@@ -6,6 +6,8 @@
 static atomic_int init_count = 0;
 static atomic_int loop_count = 0;
 static atomic_int cleanup_count = 0;
+static atomic_int cleanup_started_count = 0;
+static atomic_int shutdown_count = 0;
 static atomic_int stop_requested = 0;
 
 static void pause_briefly(void) {
@@ -30,13 +32,19 @@ void qemu_main_loop(void) {
 
 void qemu_cleanup(void) {
     atomic_fetch_add(&cleanup_count, 1);
+    atomic_fetch_add(&cleanup_started_count, 1);
+    // Hold the library in cleanup long enough to exercise a concurrent stop.
+    for (int i = 0; i < 100; ++i) pause_briefly();
 }
 
 void qemu_system_shutdown_request(int cause) {
     (void)cause;
+    atomic_fetch_add(&shutdown_count, 1);
     atomic_store(&stop_requested, 1);
 }
 
 int fake_qemu_init_count(void) { return atomic_load(&init_count); }
 int fake_qemu_loop_count(void) { return atomic_load(&loop_count); }
 int fake_qemu_cleanup_count(void) { return atomic_load(&cleanup_count); }
+int fake_qemu_cleanup_started_count(void) { return atomic_load(&cleanup_started_count); }
+int fake_qemu_shutdown_count(void) { return atomic_load(&shutdown_count); }

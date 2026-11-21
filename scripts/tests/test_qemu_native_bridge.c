@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -41,6 +42,15 @@ static int read_counter(void *handle, const char *symbol) {
     int (*read_value)(void) = (int (*)(void))dlsym(handle, symbol);
     assert(read_value != NULL);
     return read_value();
+}
+
+static void wait_for_counter(void *handle, const char *symbol, int expected) {
+    const struct timespec delay = {.tv_sec = 0, .tv_nsec = 5 * 1000 * 1000};
+    for (int attempt = 0; attempt < 400; ++attempt) {
+        if (read_counter(handle, symbol) >= expected) return;
+        nanosleep(&delay, NULL);
+    }
+    assert(0 && "QEMU fake runtime did not reach the expected cleanup state");
 }
 
 int main(int argc, char **argv) {
@@ -91,11 +101,15 @@ int main(int argc, char **argv) {
     assert(isteam_qemu_is_running());
 
     isteam_qemu_request_stop();
+    wait_for_counter(probe, "fake_qemu_cleanup_started_count", 1);
+    isteam_qemu_request_stop();
+    assert(read_counter(probe, "fake_qemu_shutdown_count") == 1);
     wait_for_state(false);
     assert(!isteam_qemu_is_running());
     assert(read_counter(probe, "fake_qemu_init_count") == 1);
     assert(read_counter(probe, "fake_qemu_loop_count") == 1);
     assert(read_counter(probe, "fake_qemu_cleanup_count") == 1);
+    assert(read_counter(probe, "fake_qemu_shutdown_count") == 1);
 
     char error[512] = {0};
     const char *arguments[] = {"qemu-system-x86_64"};
@@ -103,6 +117,6 @@ int main(int argc, char **argv) {
     assert(strstr(error, "cannot safely restart") != NULL);
 
     dlclose(probe);
-    puts("QEMU native bridge concurrency, stop, cleanup and one-shot lifecycle tests passed.");
+    puts("QEMU native bridge concurrency, argument bounds, cleanup race and one-shot lifecycle tests passed.");
     return 0;
 }
