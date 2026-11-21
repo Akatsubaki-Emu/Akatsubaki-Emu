@@ -188,7 +188,9 @@ bool isteam_qemu_start(int argc, const char * const *argv,
         return false;
     }
     for (int i = 0; i < argc; ++i) {
-        copied_argv[i] = strdup(argv[i] ? argv[i] : "");
+        const char *argument = argv[i] ? argv[i] : "";
+        size_t argument_length = strlen(argument);
+        copied_argv[i] = malloc(argument_length + 1);
         if (!copied_argv[i]) {
             for (int j = 0; j < i; ++j) free(copied_argv[j]);
             free(copied_argv);
@@ -197,6 +199,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
             clear_starting();
             return false;
         }
+        memcpy(copied_argv[i], argument, argument_length + 1);
     }
 
     pthread_mutex_lock(&g_lock);
