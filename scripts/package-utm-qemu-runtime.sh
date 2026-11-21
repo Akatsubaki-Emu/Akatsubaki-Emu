@@ -2,34 +2,33 @@
 set -euo pipefail
 
 ARCHIVE="${1:?usage: package-utm-qemu-runtime.sh /path/to/UTM.xcarchive /path/to/output}"
-OUT_REQUEST="${2:?usage: package-utm-qemu-runtime.sh /path/to/UTM.xcarchive /path/to/output}"
+OUT_REQUEST="${2:?usage: package-utm-qemu-runtime.sh /path/to/UTM.xcarchive build/output-name}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 
-# Packaging output is destructive: only permit a real child of repository build/.
+# The next step removes OUT recursively, so accept only a single named child of
+# the real repository build/ directory. No absolute paths, traversal or symlinks.
 case "$OUT_REQUEST" in
-    /*) OUT_CANDIDATE="$OUT_REQUEST" ;;
-    *) OUT_CANDIDATE="$REPO_ROOT/$OUT_REQUEST" ;;
+    build/*) OUT_NAME="${OUT_REQUEST#build/}" ;;
+    *) echo "Refusing unsafe output path (must be build/<name>): $OUT_REQUEST" >&2; exit 2 ;;
 esac
-case "$OUT_CANDIDATE" in
-    "$REPO_ROOT"/build/*) ;;
-    *) echo "Refusing unsafe output path (must be inside build/): $OUT_REQUEST" >&2; exit 2 ;;
-esac
-OUT_PARENT_REQUEST="$(dirname "$OUT_CANDIDATE")"
-OUT_NAME="$(basename "$OUT_CANDIDATE")"
-case "$OUT_NAME" in ""|"."|"..") echo "Refusing invalid output directory name." >&2; exit 2 ;; esac
-mkdir -p "$OUT_PARENT_REQUEST"
-OUT_PARENT="$(cd "$OUT_PARENT_REQUEST" && pwd -P)"
-OUT="$OUT_PARENT/$OUT_NAME"
-case "$OUT" in
-    "$REPO_ROOT"/build/*) ;;
-    *) echo "Refusing output path that resolves outside build/: $OUT_REQUEST" >&2; exit 2 ;;
-esac
+case "$OUT_NAME" in ""|"."|".."|*/*|*\\*) echo "Refusing invalid output directory name." >&2; exit 2 ;; esac
+BUILD_DIR="$REPO_ROOT/build"
+if [ -L "$BUILD_DIR" ]; then
+    echo "Refusing a symlink build directory: $BUILD_DIR" >&2
+    exit 2
+fi
+mkdir -p "$BUILD_DIR"
+BUILD_ROOT="$(cd "$BUILD_DIR" && pwd -P)"
+if [ "$BUILD_ROOT" != "$BUILD_DIR" ]; then
+    echo "Refusing a build directory that resolves outside the repository." >&2
+    exit 2
+fi
+OUT="$BUILD_ROOT/$OUT_NAME"
 if [ -L "$OUT" ]; then
     echo "Refusing to replace a symlink output directory: $OUT" >&2
     exit 2
 fi
-
 APP="$ARCHIVE/Products/Applications/UTM.app"
 test -d "$APP" || { echo "UTM.app missing from archive: $APP" >&2; exit 1; }
 
