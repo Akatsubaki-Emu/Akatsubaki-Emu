@@ -79,15 +79,40 @@ final class TranslationCache {
     static let shared = TranslationCache()
 
     private static let schemaVersion = 1
-    private static let maximumCodeBytes = 8 * 1024 * 1024
-    private static let maximumEntryBytes = 12 * 1024 * 1024
-    private static let maximumCacheBytes: UInt64 = 256 * 1024 * 1024
-    private static let maximumEntries = 512
+    private static let defaultMaximumCodeBytes = 8 * 1024 * 1024
+    private static let defaultMaximumEntryBytes = 12 * 1024 * 1024
+    private static let defaultMaximumCacheBytes: UInt64 = 256 * 1024 * 1024
+    private static let defaultMaximumEntries = 512
 
-    private let fm = FileManager.default
+    private let fm: FileManager
     private let lock = NSLock()
+    private let rootDirectoryOverride: URL?
+    private let maximumCodeBytes: Int
+    private let maximumEntryBytes: Int
+    private let maximumCacheBytes: UInt64
+    private let maximumEntries: Int
 
-    private init() {}
+    private init() {
+        fm = .default
+        rootDirectoryOverride = nil
+        maximumCodeBytes = Self.defaultMaximumCodeBytes
+        maximumEntryBytes = Self.defaultMaximumEntryBytes
+        maximumCacheBytes = Self.defaultMaximumCacheBytes
+        maximumEntries = Self.defaultMaximumEntries
+    }
+
+    init(directory: URL, maximumCodeBytes: Int = TranslationCache.defaultMaximumCodeBytes,
+         maximumEntryBytes: Int = TranslationCache.defaultMaximumEntryBytes,
+         maximumCacheBytes: UInt64 = TranslationCache.defaultMaximumCacheBytes,
+         maximumEntries: Int = TranslationCache.defaultMaximumEntries,
+         fileManager: FileManager = .default) {
+        fm = fileManager
+        rootDirectoryOverride = directory.standardizedFileURL
+        self.maximumCodeBytes = min(max(1, maximumCodeBytes), 64 * 1024 * 1024)
+        self.maximumEntryBytes = min(max(self.maximumCodeBytes, maximumEntryBytes), 80 * 1024 * 1024)
+        self.maximumCacheBytes = max(1, maximumCacheBytes)
+        self.maximumEntries = max(1, maximumEntries)
+    }
 
     var directory: URL {
         (try? cacheDirectory()) ?? fm.temporaryDirectory
@@ -131,7 +156,7 @@ final class TranslationCache {
               values.isRegularFile == true,
               let fileSize = values.fileSize,
               fileSize > 0,
-              fileSize <= Self.maximumEntryBytes else {
+              fileSize <= maximumEntryBytes else {
             try? fm.removeItem(at: file)
             return nil
         }
@@ -150,7 +175,7 @@ final class TranslationCache {
             guard entry.schemaVersion == Self.schemaVersion,
                   entry.identity == identity,
                   !entry.code.isEmpty,
-                  entry.code.count <= Self.maximumCodeBytes,
+                  entry.code.count <= maximumCodeBytes,
                   Self.digest(entry.code) == entry.codeSHA256 else {
                 try? fm.removeItem(at: file)
                 return nil
@@ -166,7 +191,7 @@ final class TranslationCache {
     func store(_ translatedCode: Data, for identity: TranslationCacheIdentity) throws {
         guard identity.isValid else { throw CacheError.invalidIdentity }
         guard !translatedCode.isEmpty else { throw CacheError.emptyTranslation }
-        guard translatedCode.count <= Self.maximumCodeBytes else {
+        guard translatedCode.count <= maximumCodeBytes else {
             throw CacheError.translationTooLarge
         }
 
@@ -184,11 +209,19 @@ final class TranslationCache {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let encoded = try encoder.encode(entry)
-        guard encoded.count <= Self.maximumEntryBytes else {
+        guard encoded.count <= maximumEntryBytes else {
+            throw CacheError.translationTooLarge
+        }
+        guard UInt64(encoded.count) <= maximumCacheBytes else {
             throw CacheError.translationTooLarge
         }
         try encoded.write(to: file, options: .atomic)
-        try pruneCache(keeping: file)
+        do {
+            try pruneCache(keeping: file)
+        } catch {
+            try? fm.removeItem(at: file)
+            throw error
+        }
     }
 
     func invalidate(_ identity: TranslationCacheIdentity) throws {
@@ -208,7 +241,7 @@ final class TranslationCache {
             at: root,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
-        ) else { return }
+        ) else { throw CacheError.unavailableDirectory }
         for case let file as URL in files where file.pathExtension == "translation" {
             try? fm.removeItem(at: file)
         }
@@ -222,7 +255,7 @@ final class TranslationCache {
             at: root,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
             options: [.skipsHiddenFiles]
-        ) else { return Statistics(entryCount: 0, totalBytes: 0) }
+        ) else { throw CacheError.unavailableDirectory }
 
         var count = 0
         var total: UInt64 = 0
@@ -239,10 +272,15 @@ final class TranslationCache {
     }
 
     private func cacheDirectory() throws -> URL {
-        guard let base = fm.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            throw CacheError.unavailableDirectory
+        let root: URL
+        if let rootDirectoryOverride {
+            root = rootDirectoryOverride
+        } else {
+            guard let base = fm.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+                throw CacheError.unavailableDirectory
+            }
+            root = base.appendingPathComponent("iSteam/TranslationCache", isDirectory: true)
         }
-        let root = base.appendingPathComponent("iSteam/TranslationCache", isDirectory: true)
         do {
             try fm.createDirectory(at: root, withIntermediateDirectories: true)
             let values = try root.resourceValues(forKeys: [.isDirectoryKey])
@@ -259,7 +297,7 @@ final class TranslationCache {
             at: root,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
-        ) else { return }
+        ) else { throw CacheError.unavailableDirectory }
 
         var entries: [(url: URL, size: UInt64, modified: Date)] = []
         var total: UInt64 = 0
@@ -281,10 +319,10 @@ final class TranslationCache {
             if $0.modified != $1.modified { return $0.modified < $1.modified }
             return $0.url.lastPathComponent < $1.url.lastPathComponent
         }
-        while entries.count > Self.maximumEntries || total > Self.maximumCacheBytes {
+        while entries.count > maximumEntries || total > maximumCacheBytes {
             guard let oldest = entries.first, oldest.url != newestFile else { break }
             entries.removeFirst()
-            try? fm.removeItem(at: oldest.url)
+            try fm.removeItem(at: oldest.url)
             total = total >= oldest.size ? total - oldest.size : 0
         }
     }
