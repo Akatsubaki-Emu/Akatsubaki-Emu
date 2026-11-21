@@ -28,15 +28,7 @@ final class ControllerInputManager {
         onLook?(0, 0)
         for controller in GCController.controllers() {
             guard let pad = controller.extendedGamepad else { continue }
-            let buttons: [(GCControllerButtonInput, String)] = [
-                (pad.buttonA, "A"), (pad.buttonB, "B"), (pad.buttonX, "X"),
-                (pad.buttonY, "Y"), (pad.buttonMenu, "Start"),
-                (pad.leftShoulder, "LB"), (pad.rightShoulder, "RB"),
-                (pad.leftTrigger, "LT"), (pad.rightTrigger, "RT"),
-                (pad.leftThumbstickButton, "L3"), (pad.rightThumbstickButton, "R3"),
-                (pad.dpad.up, "DPadUp"), (pad.dpad.down, "DPadDown"),
-                (pad.dpad.left, "DPadLeft"), (pad.dpad.right, "DPadRight")
-            ]
+            let buttons = buttonInputs(for: pad)
             for (_, name) in buttons {
                 onButton?(ControllerMappingStore.shared.profile.action(for: name), false)
             }
@@ -55,15 +47,7 @@ final class ControllerInputManager {
         onMove?(0, 0)
         onLook?(0, 0)
         if let pad = controller.extendedGamepad {
-            let buttons: [(GCControllerButtonInput, String)] = [
-                (pad.buttonA, "A"), (pad.buttonB, "B"), (pad.buttonX, "X"),
-                (pad.buttonY, "Y"), (pad.buttonMenu, "Start"),
-                (pad.leftShoulder, "LB"), (pad.rightShoulder, "RB"),
-                (pad.leftTrigger, "LT"), (pad.rightTrigger, "RT"),
-                (pad.leftThumbstickButton, "L3"), (pad.rightThumbstickButton, "R3"),
-                (pad.dpad.up, "DPadUp"), (pad.dpad.down, "DPadDown"),
-                (pad.dpad.left, "DPadLeft"), (pad.dpad.right, "DPadRight")
-            ]
+            let buttons = buttonInputs(for: pad)
             for (_, name) in buttons {
                 onButton?(ControllerMappingStore.shared.profile.action(for: name), false)
             }
@@ -90,18 +74,28 @@ final class ControllerInputManager {
             if profile.swapSticks { self.onMove?(point.0, point.1) }
             else { self.onLook?(point.0, point.1) }
         }
-        let buttons: [(GCControllerButtonInput, String)] = [
+        let buttons = buttonInputs(for: pad)
+        for (button, name) in buttons {
+            button.valueChangedHandler = { [weak self] _, _, pressed in self?.onButton?(ControllerMappingStore.shared.profile.action(for: name), pressed) }
+        }
+    }
+
+    private func buttonInputs(for pad: GCExtendedGamepad) -> [(GCControllerButtonInput, String)] {
+        var buttons: [(GCControllerButtonInput, String)] = [
             (pad.buttonA, "A"), (pad.buttonB, "B"), (pad.buttonX, "X"),
             (pad.buttonY, "Y"), (pad.buttonMenu, "Start"),
             (pad.leftShoulder, "LB"), (pad.rightShoulder, "RB"),
             (pad.leftTrigger, "LT"), (pad.rightTrigger, "RT"),
-            (pad.leftThumbstickButton, "L3"), (pad.rightThumbstickButton, "R3"),
             (pad.dpad.up, "DPadUp"), (pad.dpad.down, "DPadDown"),
             (pad.dpad.left, "DPadLeft"), (pad.dpad.right, "DPadRight")
         ]
-        for (button, name) in buttons {
-            button.valueChangedHandler = { [weak self] _, _, pressed in self?.onButton?(ControllerMappingStore.shared.profile.action(for: name), pressed) }
+        if let leftThumbstickButton = pad.leftThumbstickButton {
+            buttons.append((leftThumbstickButton, "L3"))
         }
+        if let rightThumbstickButton = pad.rightThumbstickButton {
+            buttons.append((rightThumbstickButton, "R3"))
+        }
+        return buttons
     }
 
     private static func applyDeadzone(x: Float, y: Float, deadzone: Float) -> (Float, Float) {
