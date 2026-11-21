@@ -10,7 +10,7 @@ required = {
         "func tapKey(_ key: String)",
         "numberOfColours = Int(Self.u16(header, 3))",
         "private static let maxFramebufferBytes = 64 * 1024 * 1024",
-        "for attempt in 0..<140",
+        "for attempt in 0..<120",
         "private let sendQueue = DispatchQueue(label: \"com.xthrx.isteam.qemu-vnc.send\")",
         "private final class QEMUOneShotCompletion: @unchecked Sendable",
         "private func withStateLock<T>",
@@ -89,7 +89,7 @@ required = {
         "isteam_qemu_request_stop",
         "findUEFIFirmware(in directory: URL)",
         "findUEFIVariables(in directory: URL)",
-        "makeWritableUEFIVariables(from template: URL)",
+        "makeWritableUEFIVariables(from template: URL, for configurationID: UUID)",
         "firmwareVariables: selectedFirmwareVariables",
     ],
     "iSteam/QEMUNativeBridge.c": [
