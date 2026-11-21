@@ -27,11 +27,18 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
     var displayFPS: Int
     var bootWindows: Bool
 
+    static var defaultAccelerator: Accelerator {
+        switch RuntimeSettings.shared.acceleration {
+        case .automatic, .qemuJIT: return .jit
+        case .qemuInterpreter, .hypervisor: return .tcg
+        }
+    }
+
     static var defaultWindows: VMConfiguration {
         let resolution = RuntimeSettings.shared.renderResolution
         return VMConfiguration(
             id: UUID(), name: "Windows Steam", architecture: .x86_64,
-            memoryMB: 4096, cpuCount: 4, accelerator: .jit,
+            memoryMB: 4096, cpuCount: 4, accelerator: defaultAccelerator,
             gpu: .virtioGPU,
             displayWidth: resolution.width,
             displayHeight: resolution.height,
@@ -58,7 +65,7 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
     static var defaultSteamOS: VMConfiguration {
         VMConfiguration(
             id: UUID(), name: "SteamOS Gaming Mode", architecture: .x86_64,
-            memoryMB: 4096, cpuCount: 4, accelerator: .jit, gpu: .virtioGPU,
+            memoryMB: 4096, cpuCount: 4, accelerator: defaultAccelerator, gpu: .virtioGPU,
             displayWidth: 1280, displayHeight: 800, displayFPS: 60,
             bootWindows: false
         )

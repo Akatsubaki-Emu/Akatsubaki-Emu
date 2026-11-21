@@ -21,8 +21,17 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Save Slot", style: .done, target: self, action: #selector(saveSlot))
         buildForm()
         let lastGuest = UserDefaults.standard.string(forKey: "iSteam.lastGuest") ?? "Ubuntu"
-        guestControl.selectedSegmentIndex = lastGuest == "Windows 10" ? 2 : (lastGuest == "SteamOS" ? 1 : 0)
-        runtimeControl.selectedSegmentIndex = 0
+        switch RuntimeSettings.shared.vmMode {
+        case .windowsRuntime:
+            guestControl.selectedSegmentIndex = lastGuest == "Windows 10" ? 2 : 0
+            runtimeControl.selectedSegmentIndex = 1
+        case .windowsVM:
+            guestControl.selectedSegmentIndex = 2
+            runtimeControl.selectedSegmentIndex = 0
+        case .linuxVM:
+            guestControl.selectedSegmentIndex = lastGuest == "SteamOS" ? 1 : 0
+            runtimeControl.selectedSegmentIndex = 0
+        }
         vrSwitch.isOn = VRSettings.shared.mode == .cardboard
         persistSwitch.isOn = UserDefaults.standard.bool(forKey: "iSteam.persistSessionData")
         slotField.text = "My VM"
@@ -154,10 +163,10 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         config.displayWidth = isSteamOS ? 1280 : RuntimeSettings.shared.renderResolution.width
         config.displayHeight = isSteamOS ? 800 : RuntimeSettings.shared.renderResolution.height
         config.displayFPS = isSteamOS ? 60 : RuntimeSettings.shared.frameRate.value
+        config.accelerator = VMConfiguration.defaultAccelerator
         if isSteamOS {
             config.memoryMB = 4096
             config.cpuCount = max(config.cpuCount, 4)
-            config.accelerator = .jit
             config.gpu = .virtioGPU
         }
         return config
@@ -206,6 +215,8 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         VRSettings.shared.mode = vrSwitch.isOn ? .cardboard : .flat
         UserDefaults.standard.set(persistSwitch.isOn, forKey: "iSteam.persistSessionData")
         UserDefaults.standard.set(config.bootWindows ? "Windows 10" : (config.name == "SteamOS Gaming Mode" ? "SteamOS" : "Ubuntu"), forKey: "iSteam.lastGuest")
+        let selectedMode: VMExecutionMode = runtimeControl.selectedSegmentIndex == 1 ? .windowsRuntime : (config.bootWindows ? .windowsVM : .linuxVM)
+        RuntimeSettings.shared.vmMode = selectedMode
         UserDefaults.standard.set(config.bootWindows ? "Windows VM" : (config.name == "SteamOS Gaming Mode" ? "SteamOS Gaming Mode" : "Linux VM"), forKey: "iSteam.lastVMMode")
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "iSteam.lastLaunchDate")
 
