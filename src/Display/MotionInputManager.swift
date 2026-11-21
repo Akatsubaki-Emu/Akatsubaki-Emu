@@ -60,6 +60,7 @@ final class MotionInputManager {
             let pitch = data.attitude.pitch
             let roll = data.attitude.roll
             let callbacks = self.withStateLock { () -> (((Double, Double, Double) -> Void)?, ((Double, Double) -> Void)?, (Double, Double)?) in
+                guard self.motion.isDeviceMotionActive else { return (nil, nil, nil) }
                 var delta: (Double, Double)?
                 if let oldYaw = self.previousYaw, let oldPitch = self.previousPitch {
                     var deltaYaw = yaw - oldYaw
