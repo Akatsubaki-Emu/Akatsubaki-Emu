@@ -8,6 +8,14 @@ enum QEMURuntimeStatus {
     case ready(libraryURL: URL, dataDirectory: URL)
 
     static func inspect(bundle: Bundle = .main) -> QEMURuntimeStatus {
+        switch locate(bundle: bundle) {
+        case .unavailable(let reason): return .unavailable(reason)
+        case .ready(let libraryURL, let dataDirectory):
+            return validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory)
+        }
+    }
+
+    static func locate(bundle: Bundle = .main) -> QEMURuntimeStatus {
         let fm = FileManager.default
         let bundleRoot = bundle.bundleURL.resolvingSymlinksInPath().standardizedFileURL
         let bundlePrefix = bundleRoot.path.hasSuffix("/") ? bundleRoot.path : bundleRoot.path + "/"
@@ -42,7 +50,7 @@ enum QEMURuntimeStatus {
                 if library.path.hasPrefix(bundlePrefix),
                    fm.fileExists(atPath: library.path, isDirectory: &isDirectory),
                    !isDirectory.boolValue {
-                    return validateLoadableLibrary(library, dataDirectory: dataDirectory)
+                    return .ready(libraryURL: library, dataDirectory: dataDirectory)
                 }
             }
         }
@@ -82,7 +90,7 @@ enum QEMURuntimeStatus {
         })?.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL else {
             return .unavailable("No embedded x86_64 QEMU device library was found. Run the UTM runtime packaging workflow, embed its Frameworks and QEMU directories, and code-sign nested code.")
         }
-        return validateLoadableLibrary(library, dataDirectory: dataDirectory)
+        return .ready(libraryURL: library, dataDirectory: dataDirectory)
     }
 
     /// A file's existence is not proof that it is a usable runtime. dlopen with
