@@ -17,8 +17,7 @@ final class VMDisplayViewController: UIViewController {
 
     init(configuration: VMConfiguration, diskImage: URL) {
         self.diskImage = diskImage
-        let size = RuntimeSettings.shared.renderResolution
-        let backend = MetalGPUBackend(width: size.width, height: size.height, frameRate: RuntimeSettings.shared.frameRate.value)
+        let backend = MetalGPUBackend(width: configuration.displayWidth, height: configuration.displayHeight, frameRate: configuration.displayFPS)
         self.gpu = backend
         self.virtioGPU = VirtIOGPU(backend: backend)
         self.engine = VMEngine(configuration: configuration)
@@ -39,7 +38,7 @@ final class VMDisplayViewController: UIViewController {
         status.textColor = .white
         status.backgroundColor = UIColor.black.withAlphaComponent(0.7)
         status.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
-        status.text = "\(RuntimeSettings.shared.renderResolution.title) • \(RuntimeSettings.shared.frameRate.value) FPS target • Metal"
+        status.text = "\(configuration.displayWidth) × \(configuration.displayHeight) • \(configuration.displayFPS) FPS target • Metal"
         status.textAlignment = .center
         status.layer.cornerRadius = 8
         status.clipsToBounds = true
