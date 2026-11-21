@@ -2,6 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "QEMUNativeBridge.h"
+#include "JIT26Protocol.h"
 
 #include <assert.h>
 #include <dlfcn.h>
@@ -11,6 +12,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+bool iSteamJITIsReady(void) { return false; }
+void *iSteamJITPrepareRegion(void *address, size_t size) { (void)address; (void)size; return NULL; }
+void iSteamJITDetach(void) {}
 
 typedef struct {
     pthread_barrier_t *barrier;
@@ -57,6 +62,8 @@ int main(int argc, char **argv) {
     assert(argc == 2);
     void *probe = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
     assert(probe != NULL);
+    char validation_error[512] = {0};
+    assert(isteam_qemu_validate_library(argv[1], validation_error, (int)sizeof(validation_error)));
 
     char argumentError[512] = {0};
     const char *tooManyArguments[4097];
@@ -99,6 +106,7 @@ int main(int argc, char **argv) {
         nanosleep(&running_delay, NULL);
     }
     assert(isteam_qemu_is_running());
+    assert(read_counter(probe, "fake_qemu_jit_callbacks_installed") == 1);
 
     isteam_qemu_request_stop();
     wait_for_counter(probe, "fake_qemu_cleanup_started_count", 1);

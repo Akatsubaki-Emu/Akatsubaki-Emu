@@ -1,6 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdatomic.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <time.h>
 
 static atomic_int init_count = 0;
@@ -9,6 +11,12 @@ static atomic_int cleanup_count = 0;
 static atomic_int cleanup_started_count = 0;
 static atomic_int shutdown_count = 0;
 static atomic_int stop_requested = 0;
+static atomic_int jit_callbacks_installed = 0;
+
+void isteam_qemu_set_jit_callbacks(bool (*ready)(void), void *(*prepare)(void *, size_t), void (*detach)(void)) {
+    if (ready && prepare && detach) atomic_fetch_add(&jit_callbacks_installed, 1);
+}
+int fake_qemu_jit_callbacks_installed(void) { return atomic_load(&jit_callbacks_installed); }
 
 static void pause_briefly(void) {
     const struct timespec delay = {.tv_sec = 0, .tv_nsec = 1 * 1000 * 1000};
