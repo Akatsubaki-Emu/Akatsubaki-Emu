@@ -602,7 +602,8 @@ struct InterpreterTests {
 
         let retMemory = GuestMemory(size: 64)
         precondition(retMemory.writeUInt64(8, offset: 56))
-        precondition(retMemory.write(Data([0xC3, 0x0F, 0x0B]), offset: 0))
+        precondition(retMemory.write(Data([0xC3]), offset: 0))
+        precondition(retMemory.write(Data([0x0F, 0x0B]), offset: 8))
         let ret = X86_64Interpreter(memory: retMemory)
         try ret.reset(entryPoint: 0)
         let retExit = try ret.run(maxInstructions: 3)
