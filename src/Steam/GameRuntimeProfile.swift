@@ -73,7 +73,7 @@ struct GameRuntimeProfile: Codable, Equatable, Identifiable {
     }
 
     enum ProfileError: LocalizedError {
-        case invalidName, invalidResolution, invalidFrameRate, invalidMemory, invalidCPUCount, invalidEnvironment
+        case invalidName, invalidResolution, invalidFrameRate, invalidMemory, invalidCPUCount, invalidEnvironment, corruptStoredProfile
         var errorDescription: String? {
             switch self {
             case .invalidName: return "A game profile needs a name."
@@ -82,6 +82,7 @@ struct GameRuntimeProfile: Codable, Equatable, Identifiable {
             case .invalidMemory: return "Profile memory must be between 256 MB and 16384 MB."
             case .invalidCPUCount: return "Profile CPU count must be between 1 and 16."
             case .invalidEnvironment: return "Environment variable names or values contain invalid characters."
+            case .corruptStoredProfile: return "The existing per-game profile is unreadable; it was preserved rather than overwritten."
             }
         }
     }
@@ -114,12 +115,26 @@ final class GameRuntimeProfileStore {
         try profile.validate()
         var value = profile
         value.updatedAt = Date()
-        try encoder.encode(value).write(to: url(for: value.gameID), options: .atomic)
+        let destination = url(for: value.gameID)
+        if fm.fileExists(atPath: destination.path) {
+            let existingData = try Data(contentsOf: destination)
+            guard existingData.count <= 1024 * 1024,
+                  let existing = try? decoder.decode(GameRuntimeProfile.self, from: existingData),
+                  existing.gameID == value.gameID else {
+                throw GameRuntimeProfile.ProfileError.corruptStoredProfile
+            }
+        }
+        let encoded = try encoder.encode(value)
+        guard encoded.count <= 1024 * 1024 else {
+            throw GameRuntimeProfile.ProfileError.invalidEnvironment
+        }
+        try encoded.write(to: destination, options: .atomic)
         EmulationLog.shared.write("Saved runtime profile for \(value.displayName)")
     }
 
     func profile(for gameID: UUID) -> GameRuntimeProfile? {
         guard let data = try? Data(contentsOf: url(for: gameID)),
+              data.count <= 1024 * 1024,
               let value = try? decoder.decode(GameRuntimeProfile.self, from: data) else { return nil }
         return value
     }
@@ -132,7 +147,7 @@ final class GameRuntimeProfileStore {
     var allProfiles: [GameRuntimeProfile] {
         let files = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         return files.filter { $0.pathExtension == "json" }.compactMap { file in
-            guard let data = try? Data(contentsOf: file) else { return nil }
+            guard let data = try? Data(contentsOf: file), data.count <= 1024 * 1024 else { return nil }
             return try? decoder.decode(GameRuntimeProfile.self, from: data)
         }.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
