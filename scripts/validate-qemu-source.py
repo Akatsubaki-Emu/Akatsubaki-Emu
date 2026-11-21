@@ -335,6 +335,7 @@ required = {
     "src/Steam/DroidDeckFeatureServices.swift": [
         "NSFileCoordinator()",
         "writingItemAt: destination",
+        "guard game.validate(), seen.insert(game.id).inserted",
     ],
     "src/GPU/MetalGPUBackend.swift": [
         "view.framebufferOnly = false",
