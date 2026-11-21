@@ -40,7 +40,7 @@ extension VMConfiguration {
         guard architecture == .x86_64 else {
             throw ValidationError.unsupportedArchitecture(architecture)
         }
-        if !bootWindows, gpu != .virtioGPU {
+        if gpu != .virtioGPU {
             throw ValidationError.unsupportedGPU(gpu)
         }
         guard (256...16384).contains(memoryMB) else {

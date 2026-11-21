@@ -49,8 +49,8 @@ final class VMEngine {
                 throw GuestEngineError.backendNotInstalled(configuration.architecture)
             }
             let candidate = QEMUBackend(configuration: configuration)
-            try candidate.start(diskImage: diskImage, firmware: firmware)
             backend = candidate
+            try candidate.start(diskImage: diskImage, firmware: firmware)
             startupDeadline = .now() + 60
             EmulationLog.shared.write("QEMU launch accepted; waiting for native initialization.")
             let timer = DispatchSource.makeTimerSource(queue: .main)
