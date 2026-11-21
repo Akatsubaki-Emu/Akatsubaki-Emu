@@ -34,7 +34,7 @@ static void wait_for_state(bool active) {
         if (isteam_qemu_is_active() == active) return;
         nanosleep(&delay, NULL);
     }
-    assert(!"QEMU bridge did not reach the expected lifecycle state");
+    assert(0 && "QEMU bridge did not reach the expected lifecycle state");
 }
 
 static int read_counter(void *handle, const char *symbol) {
@@ -64,7 +64,10 @@ int main(int argc, char **argv) {
     // Exactly one simultaneous caller may reserve the process-global QEMU session.
     assert(first.started != second.started);
     assert(isteam_qemu_is_active());
-    wait_for_state(true);
+    const struct timespec running_delay = {.tv_sec = 0, .tv_nsec = 5 * 1000 * 1000};
+    for (int attempt = 0; attempt < 400 && !isteam_qemu_is_running(); ++attempt) {
+        nanosleep(&running_delay, NULL);
+    }
     assert(isteam_qemu_is_running());
 
     isteam_qemu_request_stop();
