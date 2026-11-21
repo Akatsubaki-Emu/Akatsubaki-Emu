@@ -73,7 +73,7 @@ final class VMDisplayViewController: UIViewController {
                 self.releaseGuestInputs()
                 self.vncClient.stop()
             case .stopped:
-                self.status.text = "Virtual machine stopped"
+                self.status.text = "Guest stopped. Relaunch Akatsubaki Emu before starting another QEMU session."
                 self.releaseGuestInputs()
                 self.vncClient.stop()
             case .failed(let message):

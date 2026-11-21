@@ -34,7 +34,7 @@ The in-app QEMU command builder uses an explicit q35 device graph rather than re
 - SteamOS UEFI profiles require both a code image and a writable variable-store template. The app copies the template into per-configuration Application Support storage and passes it as the second pflash device; it never writes variables into the signed app bundle.
 - Runtime preflight requires `qemu_init`, `qemu_main_loop`, `qemu_cleanup`, and `qemu_system_shutdown_request`. A library without graceful shutdown is rejected rather than starting a VM that the app cannot safely stop.
 
-The launch picker currently accepts one bootable disk image or one ISO. An ISO can be used as live media, but a Windows installer cannot be completed until the UI exposes a separate writable destination disk. Do not describe ISO-based Windows installation as supported yet. No physical-device guest boot has been verified.
+The launch picker currently accepts one bootable disk image or one ISO. An ISO can be used as live media, but a Windows installer cannot be completed until the UI exposes a separate writable destination disk. Do not describe ISO-based Windows installation as supported yet. The native QEMU bridge is intentionally one-shot per app process because the embedded QEMU global state is not proven safe to reinitialize. After stopping a QEMU guest, relaunch Akatsubaki Emu before starting another one. No physical-device guest boot has been verified.
 
 ## Run locally on macOS
 
