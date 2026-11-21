@@ -137,5 +137,34 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("refusing to export an incomplete library backup", source)
 
 
+
+    def test_validator_tracks_optimized_input_runtime_and_gpu_contracts(self):
+        root = Path(__file__).resolve().parents[2]
+        validator = (root / "scripts" / "validate-qemu-source.py").read_text(encoding="utf-8")
+        vnc = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
+        native_runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        runtime_status = (root / "src" / "QEMU" / "QEMURuntimeStatus.swift").read_text(encoding="utf-8")
+        controller = (root / "src" / "Display" / "ControllerMappingStore.swift").read_text(encoding="utf-8")
+        metal = (root / "src" / "GPU" / "MetalGPUBackend.swift").read_text(encoding="utf-8")
+
+        vnc_contract = validator.split('"src/QEMU/QEMUVNCClient.swift": [', 1)[1].split("],", 1)[0]
+        native_contract = validator.split('"src/QEMU/QEMUNativeRuntime.swift": [', 1)[1].split("],", 1)[0]
+        runtime_contract = validator.split('"src/QEMU/QEMURuntimeStatus.swift": [', 1)[1].split("],", 1)[0]
+        controller_contract = validator.split('"src/Display/ControllerMappingStore.swift": [', 1)[1].split("],", 1)[0]
+        metal_contract = validator.split('"src/GPU/MetalGPUBackend.swift": [', 1)[1].split("],", 1)[0]
+
+        self.assertIn('"private var movementMask: UInt8 = 0"', vnc_contract)
+        self.assertNotIn('"private var movementKeys = Set<UInt32>()"', vnc_contract)
+        self.assertIn("movementMask: UInt8 = 0", vnc)
+        self.assertIn('"QEMURuntimeStatus.locate()"', native_contract)
+        self.assertIn("QEMURuntimeStatus.locate()", native_runtime)
+        self.assertIn('"validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory)"', runtime_contract)
+        self.assertIn("static func locate(bundle: Bundle = .main)", runtime_status)
+        self.assertIn('"private var cachedProfile: ControllerMappingProfile?"', controller_contract)
+        self.assertIn("private var cachedProfile: ControllerMappingProfile?", controller)
+        self.assertIn('"framebufferSlots.removeAll(keepingCapacity: false)"', metal_contract)
+        self.assertIn("framebufferSlots.removeAll(keepingCapacity: false)", metal)
+
+
 if __name__ == "__main__":
     unittest.main()

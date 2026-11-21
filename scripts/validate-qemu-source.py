@@ -18,7 +18,11 @@ required = {
         "guard count <= 4096",
         "rectangleBytes <= Self.maxFramebufferBytes - updateBytes",
         "private var buttonKeys = Set<UInt32>()",
-        "private var movementKeys = Set<UInt32>()",
+        "private var movementMask: UInt8 = 0",
+        "movementMask = desiredMask",
+        "movementMask = 0",
+        "movementKeyIsActive(keysym)",
+        "private func updateMovementKey",
         "private func enqueueSend(_ data: Data, to connection: NWConnection,",
         "guard dx.isFinite, dy.isFinite",
         "let boundedX = max(-Float(framebufferWidth)",
@@ -116,7 +120,7 @@ required = {
         "backend = candidate",
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
-        "QEMURuntimeStatus.inspect()",
+        "QEMURuntimeStatus.locate()",
         "isteam_qemu_start",
         "isteam_qemu_request_stop",
         "findUEFIFirmware(in directory: URL)",
@@ -148,7 +152,9 @@ required = {
         "bundlePrefix",
         "resolvingSymlinksInPath()",
         "isteam_qemu_validate_library(",
-        "validateLoadableLibrary(library, dataDirectory: dataDirectory)",
+        "static func locate(bundle: Bundle = .main)",
+        "validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory)",
+        "return .ready(libraryURL: library, dataDirectory: dataDirectory)",
         "The bundled QEMU library failed its load/export validation.",
     ],
     "src/Runtime/RuntimeCapabilityRegistry.swift": [
@@ -311,6 +317,7 @@ required = {
         "view.drawableSize = CGSize(width: frameWidth, height: frameHeight)",
         "source.texture.width == drawable.texture.width",
         "source.texture.height == drawable.texture.height",
+        "framebufferSlots.removeAll(keepingCapacity: false)",
     ],
     "iSteam/QEMUNativeBridge.h": [
         "#define ISTEAM_NONNULL _Nonnull",
@@ -353,6 +360,11 @@ required = {
     ],
     "src/Display/ControllerMappingStore.swift": [
         "!$0.value.isEmpty",
+        "private var cachedProfile: ControllerMappingProfile?",
+        "if let cachedProfile { return cachedProfile }",
+        "private func loadProfile()",
+        "cachedProfile = newValue",
+        "cachedProfile = .standard",
     ],
     "src/Display/TouchGamepadView.swift": [
         "iSteam.touchGamepad.layout.v3",
