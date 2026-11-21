@@ -16,6 +16,7 @@ final class GuestBlockDevice {
     }
 
     static let defaultSectorSize: UInt64 = 512
+    static let maximumTransferBytes = 16 * 1024 * 1024
     let url: URL
     let sectorSize: UInt64
     let sectorCount: UInt64
@@ -54,7 +55,7 @@ final class GuestBlockDevice {
     func read(lba: UInt64, count: UInt32 = 1) throws -> Data {
         guard lba <= sectorCount, UInt64(count) <= sectorCount - lba else { throw DeviceError.outOfBounds }
         let byteCount = UInt64(count) * sectorSize
-        guard byteCount <= UInt64(Int.max) else { throw DeviceError.invalidGeometry }
+        guard byteCount <= UInt64(Self.maximumTransferBytes) else { throw DeviceError.invalidGeometry }
         lock.lock()
         defer { lock.unlock() }
         try handle.seek(toOffset: lba * sectorSize)
@@ -65,7 +66,8 @@ final class GuestBlockDevice {
 
     func write(_ data: Data, lba: UInt64) throws {
         guard !readOnly else { throw DeviceError.readOnly }
-        guard data.count % Int(sectorSize) == 0 else { throw DeviceError.invalidGeometry }
+        guard data.count <= Self.maximumTransferBytes,
+              data.count % Int(sectorSize) == 0 else { throw DeviceError.invalidGeometry }
         let count = UInt64(data.count) / sectorSize
         guard lba <= sectorCount, count <= sectorCount - lba else { throw DeviceError.outOfBounds }
         lock.lock()
