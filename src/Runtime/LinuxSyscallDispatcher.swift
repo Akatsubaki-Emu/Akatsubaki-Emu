@@ -67,12 +67,19 @@ final class LinuxSyscallDispatcher {
                 return .returned(errno(14))
             }
             if let text = String(data: bytes, encoding: .utf8), !text.isEmpty {
-                var start = text.startIndex
-                while start < text.endIndex {
-                    let end = text.index(start, offsetBy: 4096, limitedBy: text.endIndex) ?? text.endIndex
-                    log.write("[guest stdout] " + text[start..<end])
-                    start = end
+                var chunk = ""
+                var chunkBytes = 0
+                for scalar in text.unicodeScalars {
+                    let scalarByteCount = scalar.utf8.count
+                    if chunkBytes + scalarByteCount > 4096 {
+                        log.write("[guest stdout] " + chunk)
+                        chunk.removeAll(keepingCapacity: true)
+                        chunkBytes = 0
+                    }
+                    chunk.unicodeScalars.append(scalar)
+                    chunkBytes += scalarByteCount
                 }
+                if !chunk.isEmpty { log.write("[guest stdout] " + chunk) }
             } else if !bytes.isEmpty {
                 log.write("[guest stdout] <\(bytes.count) non-UTF8 bytes>")
             }

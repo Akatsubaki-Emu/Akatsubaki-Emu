@@ -42,7 +42,9 @@ final class GuestMemory {
 final class EmulationLog {
     static let shared = EmulationLog()
     private(set) var messages: [String] = []
-    func write(_ message: String) { messages.append(message) }
+    func write(_ message: String) {
+        messages.append(String(decoding: message.utf8.prefix(8192), as: UTF8.self))
+    }
 }
 
 enum GuestEngineError: Error {
@@ -124,6 +126,13 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let written) = write else { preconditionFailure() }
         precondition(written == 12_000)
         precondition(outputLog.messages.map { $0.replacingOccurrences(of: "[guest stdout] ", with: "") }.joined() == output)
+
+        let unicodeOutput = String(repeating: "🙂", count: 3_000)
+        precondition(memory.write(Data(unicodeOutput.utf8), offset: 0x3F2000))
+        let unicodeWrite = outputDispatcher.dispatch(number: 1, arguments: [1, 0x3F2000, UInt64(unicodeOutput.utf8.count), 0, 0, 0])!
+        guard case .returned(let unicodeWritten) = unicodeWrite else { preconditionFailure() }
+        precondition(unicodeWritten == UInt64(unicodeOutput.utf8.count))
+        precondition(outputLog.messages.suffix(3).map { $0.replacingOccurrences(of: "[guest stdout] ", with: "") }.joined() == unicodeOutput)
 
         let random = dispatcher.dispatch(number: 318, arguments: [0x40800, 32, 0, 0, 0, 0])!
         guard case .returned(let randomValue) = random else { preconditionFailure() }

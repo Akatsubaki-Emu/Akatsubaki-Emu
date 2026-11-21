@@ -236,8 +236,8 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
         write_case = source.split("case 1:", 1)[1].split("case 3:", 1)[0]
-        self.assertIn("while start < text.endIndex", write_case)
-        self.assertIn("offsetBy: 4096", write_case)
+        self.assertIn("for scalar in text.unicodeScalars", write_case)
+        self.assertIn("chunkBytes + scalarByteCount > 4096", write_case)
         self.assertIn("log.write(\"[guest stdout] \" + text[start..<end])", write_case)
 
 
