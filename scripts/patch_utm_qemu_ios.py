@@ -42,6 +42,8 @@ def patch_script(source: str) -> str:
 
     qemu_build = 'build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS'
     qemu_patch_call = (
+        ': "${ISTEAM_QEMU_JIT_PATCHER:?ISTEAM_QEMU_JIT_PATCHER is required}"\n'
+        'python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"\n'
         ': "${ISTEAM_QEMU_MESON_PATCHER:?ISTEAM_QEMU_MESON_PATCHER is required}"\n'
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"\n'
         + qemu_build
@@ -70,6 +72,7 @@ def patch_script(source: str) -> str:
         'https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}',
         cross_override,
         "--target-list=x86_64-softmmu",
+        'python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"',
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
         'python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"',
     ]
@@ -86,7 +89,7 @@ def main() -> None:
     source = path.read_text(encoding="utf-8")
     patched = patch_script(source)
     path.write_text(patched, encoding="utf-8")
-    print("Installed idempotent iOS QEMU feature, Meson-link and pre-build verification hooks.")
+    print("Installed idempotent iOS QEMU JIT, Meson-link and pre-build verification hooks.")
 
 
 if __name__ == "__main__":

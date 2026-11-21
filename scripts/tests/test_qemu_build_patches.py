@@ -8,6 +8,7 @@ SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 
 import patch_qemu_meson_ios
+import patch_qemu_stikjit_ios
 import patch_utm_qemu_ios
 import verify_qemu_meson_link
 
@@ -95,6 +96,51 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("JITCoordinator.shared.isStikDebugAvailable", source)
         self.assertIn("!JITCoordinator.shared.isJITReady", source)
         self.assertIn("Enable JIT for Akatsubaki Emu with StikDebug", source)
+
+    def test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed(self):
+        source = """#ifdef CONFIG_DARWIN
+#include <mach/mach.h>
+static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
+{
+    return 0;
+}
+#endif
+"""
+        once = patch_qemu_stikjit_ios.patch_source(source)
+        twice = patch_qemu_stikjit_ios.patch_source(once)
+        self.assertEqual(once, twice)
+        self.assertIn("iSteamJITIsReady", once)
+        self.assertIn("iSteamJITPrepareRegion", once)
+        self.assertIn("iSteamJITDetach", once)
+        self.assertIn("__builtin_available(iOS 26.0, *)", once)
+        self.assertIn("mach_vm_remap(mach_task_self(), &buf_rw", once)
+        self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
+        with self.assertRaisesRegex(SystemExit, "split-W^X Darwin allocator not found"):
+            patch_qemu_stikjit_ios.patch_source("#ifdef CONFIG_DARWIN\\n#include <mach/mach.h>\\n#endif\\n")
+
+    def test_utm_patch_installs_stikdebug_allocator_before_qemu_configure(self):
+        source = '''#!/bin/sh
+generate_meson_cross() {
+    echo "has_function_dup3 = false" >> $cross
+}
+QEMU_PLATFORM_BUILD_FLAGS="--enable-shared-lib --disable-cocoa --disable-sdl --disable-coreaudio --disable-slirp-smbd --enable-ucontext --with-coroutine=libucontext $HVF_FLAGS $TCI_BUILD_FLAGS"
+download () {
+    URL=$1
+    FILE="$(basename $URL)"
+}
+build () {
+    if [ -z "$REBUILD" ]; then
+        echo "Configuring"
+        ./configure --prefix="$PREFIX" --host="$CHOST" $@
+    fi
+    echo "Building"
+    make -j$NCPU
+}
+build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
+'''
+        patched = patch_utm_qemu_ios.patch_script(source)
+        self.assertIn('python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"', patched)
+        self.assertLess(patched.index("ISTEAM_QEMU_JIT_PATCHER"), patched.index("ISTEAM_QEMU_MESON_PATCHER"))
 
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):
         root = Path(__file__).resolve().parents[2]

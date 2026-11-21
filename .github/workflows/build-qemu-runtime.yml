@@ -87,19 +87,20 @@ jobs:
             UTM/sysroot-iOS-arm64
           # Include the workflow itself: Meson cross-file fixes change build configuration.
           # A workflow-only fix must not reuse a QEMU build tree configured without it.
-          key: utm-ios-arm64-deps-v11-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
+          key: utm-ios-arm64-deps-v11-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
 
       - name: Build UTM dependencies for physical iOS arm64
         shell: bash
         env:
           NCPU: "2"
+          ISTEAM_QEMU_JIT_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_stikjit_ios.py
           ISTEAM_QEMU_MESON_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_meson_ios.py
           ISTEAM_QEMU_LINK_VERIFIER: ${{ github.workspace }}/scripts/verify_qemu_meson_link.py
         run: |
           set -euo pipefail
           cd UTM
-          # Patch QEMU's own Meson project and verify the generated QEMU dylib link edge
-          # before any of its 2,000+ compile/link tasks can start.
+          # Patch QEMU's iOS 26+ TCG JIT allocator and Meson project, then verify the generated
+          # QEMU dylib link edge before its compile/link tasks start.
           python3 "$GITHUB_WORKSPACE/scripts/patch_utm_qemu_ios.py" scripts/build_dependencies.sh
           if [ "${{ inputs.rebuild_dependencies }}" = "true" ] || [ ! -f build-iOS-arm64/BUILD_SUCCESS ]; then
             ./scripts/build_dependencies.sh -p ios -a arm64
