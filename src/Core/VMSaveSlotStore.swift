@@ -53,6 +53,10 @@ final class VMSaveSlotStore {
     }
 
     func saveSessionMetadata(configuration: VMConfiguration, diskImageURL: URL, gameID: UUID? = nil) throws {
+        // Document-picker URLs may be security scoped. Keep the grant active
+        // while the bookmark is created so Continue Last Session can resolve it.
+        let scoped = diskImageURL.startAccessingSecurityScopedResource()
+        defer { if scoped { diskImageURL.stopAccessingSecurityScopedResource() } }
         let bookmark = try diskImageURL.bookmarkData(
             options: [],
             includingResourceValuesForKeys: nil,

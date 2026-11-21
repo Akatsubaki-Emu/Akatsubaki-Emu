@@ -64,21 +64,17 @@ final class HostDeviceBridge {
             throw BridgeError.invalidPath
         }
 
-        let destination = sharedDirectoryURL.appendingPathComponent(relativePath)
-            .standardizedFileURL
-        let root = sharedDirectoryURL.standardizedFileURL.path + "/"
-        guard destination.path.hasPrefix(root) else {
-            throw BridgeError.outsideSharedDirectory
-        }
-
+        let destination = try sharedFileURL(relativePath: relativePath)
         try FileManager.default.createDirectory(
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
+        try ExternalDriveStore.shared.withAccess(to: source) { coordinatedSource in
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: coordinatedSource, to: destination)
         }
-        try FileManager.default.copyItem(at: source, to: destination)
         return destination
     }
 
@@ -104,11 +100,17 @@ final class HostDeviceBridge {
                 .contains(where: { $0 == "." || $0 == ".." }) else {
             throw BridgeError.invalidPath
         }
-        let url = sharedDirectoryURL.appendingPathComponent(relativePath).standardizedFileURL
-        guard url.path.hasPrefix(sharedDirectoryURL.standardizedFileURL.path + "/") else {
+        let root = sharedDirectoryURL.resolvingSymlinksInPath().standardizedFileURL
+        let rootPrefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        let url = root.appendingPathComponent(relativePath).standardizedFileURL
+        // standardizedFileURL removes dot segments but does not resolve a
+        // symlinked parent. Resolve existing path components before accepting
+        // reads/writes so a shared-directory symlink cannot escape the sandbox.
+        let resolved = url.resolvingSymlinksInPath().standardizedFileURL
+        guard resolved.path.hasPrefix(rootPrefix) else {
             throw BridgeError.outsideSharedDirectory
         }
-        return url
+        return resolved
     }
 
     private static func machineIdentifier() -> String {
