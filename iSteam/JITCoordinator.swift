@@ -28,7 +28,14 @@ final class JITCoordinator {
     var hasGetTaskAllow: Bool { false }
 
     var isJITProtocolSupported: Bool {
-        iSteamJITIsSupported()
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            return iSteamJITIsSupported()
+        }
+        #endif
+        // The breakpoint protocol is specific to supported iOS releases;
+        // arm64 alone does not make it available on visionOS or older iOS.
+        return false
     }
 
     func requestJIT(from controller: UIViewController?) {
