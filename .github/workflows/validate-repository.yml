@@ -57,7 +57,7 @@ jobs:
 
           paths = sorted(Path(".github/workflows").glob("*.yml"))
           paths += sorted(Path(".github/workflows").glob("*.yaml"))
-          paths += [Path("project.yml")]
+          paths += [Path("project.yml"), Path(".gitlab-ci.yml")]
           if not paths:
               raise SystemExit("No workflow or project configuration files were found.")
           for path in paths:
@@ -70,11 +70,14 @@ jobs:
               print(f"Validated {path}")
           PY
 
-      - name: Enforce GitHub Actions CI and preserve both sync directions
+      - name: Validate GitHub Actions and GitLab CI while preserving sync directions
         shell: bash
         run: |
           set -euo pipefail
-          test ! -e .gitlab-ci.yml || { echo "GitLab CI configuration must not be present; CI/CD runs on GitHub Actions." >&2; exit 1; }
+          test -f .gitlab-ci.yml || { echo "GitLab runtime-test configuration is missing." >&2; exit 1; }
+          grep -Fq "swift-runtime-tests:" .gitlab-ci.yml
+          grep -Fq "python-source-contracts:" .gitlab-ci.yml
+          grep -Fq "test_static_elf_execution.swift" .gitlab-ci.yml
           test -f .github/workflows/blank.yml || { echo "The owner-required GitHub-to-GitLab sync workflow is missing." >&2; exit 1; }
           grep -Fq "GitHub to GitLab Push Sync" .github/workflows/blank.yml
           grep -Fq "GITLAB_TOKEN" .github/workflows/blank.yml

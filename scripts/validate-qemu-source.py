@@ -621,6 +621,15 @@ release_workflow = Path(".github/workflows/release.yml").read_text(encoding="utf
 if "- scripts/validate-qemu-source.py" not in release_workflow:
     print("release workflow: source-contract validator changes should not trigger full release builds", file=sys.stderr)
     failed = True
+for token in [
+    "- .github/workflows/validate-ios-build.yml",
+    "- .github/workflows/validate-repository.yml",
+    "- .gitlab-ci.yml",
+    "- scripts/tests/**",
+]:
+    if token not in release_workflow:
+        print(f"release workflow: validation-only path should not trigger QEMU release builds: {token}", file=sys.stderr)
+        failed = True
 release_concurrency_start = release_workflow.find("\nconcurrency:\n")
 release_concurrency_end = release_workflow.find("\njobs:", release_concurrency_start)
 if release_concurrency_start < 0 or release_concurrency_end < 0:

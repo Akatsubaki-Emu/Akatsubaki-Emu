@@ -6,6 +6,10 @@ on:
     branches: [main]
     paths-ignore:
       - .github/workflows/release.yml
+      - .github/workflows/validate-ios-build.yml
+      - .github/workflows/validate-repository.yml
+      - .gitlab-ci.yml
+      - scripts/tests/**
       - README.md
       - CONTRIBUTING.md
       - INSTALL.md
