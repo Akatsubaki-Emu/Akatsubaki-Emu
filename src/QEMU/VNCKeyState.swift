@@ -93,6 +93,12 @@ struct VNCKeyState {
 
 
     private static func movementMask(for keysym: UInt32) -> UInt8 {
-        movementKeys.first(where: { $0.keysym == keysym })?.mask ?? 0
+        switch keysym {
+        case 0x41: return 0x01
+        case 0x44: return 0x02
+        case 0x57: return 0x04
+        case 0x53: return 0x08
+        default: return 0
+        }
     }
 }

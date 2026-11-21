@@ -67,6 +67,22 @@ struct VNCKeyStateTests {
             .init(keysym: 0x41, isDown: false)
         ], "last source release must clear the cached direction")
 
+        for (mask, keysym) in [(UInt8(0x01), UInt32(0x41)),
+                               (UInt8(0x02), UInt32(0x44)),
+                               (UInt8(0x04), UInt32(0x57)),
+                               (UInt8(0x08), UInt32(0x53))] {
+            var mappedState = VNCKeyState()
+            expect(mappedState.setMovement(mask, source: "movement").count == 1,
+                   "each movement direction must create one key-down")
+            expect(mappedState.setKey(keysym, source: "keyboard", isDown: true) == nil,
+                   "keyboard and movement sources must resolve to the same direction")
+            expect(mappedState.setMovement(0, source: "movement").isEmpty,
+                   "movement release must preserve a keyboard-held direction")
+            expect(mappedState.setKey(keysym, source: "keyboard", isDown: false)
+                   == .init(keysym: keysym, isDown: false),
+                   "keyboard release must clear the final direction source")
+        }
+
         print("VNC key-state tests passed")
     }
 }
