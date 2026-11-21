@@ -7,6 +7,7 @@ extension VMConfiguration {
     enum ValidationError: LocalizedError, Equatable {
         case emptyName
         case unsupportedArchitecture(VMConfiguration.Architecture)
+        case unsupportedGPU(VMConfiguration.GPUModel)
         case memoryOutOfRange(Int)
         case cpuCountOutOfRange(Int)
         case invalidResolution(width: Int, height: Int)
@@ -18,6 +19,8 @@ extension VMConfiguration {
                 return "Give this VM a name before starting it."
             case .unsupportedArchitecture(let architecture):
                 return "The current QEMU launch profile only supports x86-64 guests; \(architecture.rawValue) is not wired to a compatible machine yet."
+            case .unsupportedGPU(let gpu):
+                return "The current iOS QEMU build only enables the non-GL VirtIO GPU path; \(gpu.rawValue) has not been verified."
             case .memoryOutOfRange(let value):
                 return "VM memory must be between 256 MB and 16384 MB (requested: \(value) MB)."
             case .cpuCountOutOfRange(let value):
@@ -36,6 +39,9 @@ extension VMConfiguration {
         }
         guard architecture == .x86_64 else {
             throw ValidationError.unsupportedArchitecture(architecture)
+        }
+        if !bootWindows, gpu != .virtioGPU {
+            throw ValidationError.unsupportedGPU(gpu)
         }
         guard (256...16384).contains(memoryMB) else {
             throw ValidationError.memoryOutOfRange(memoryMB)
