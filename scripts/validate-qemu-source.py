@@ -730,7 +730,7 @@ required = {
         "-Wl,-force_load,",
     ],
     "scripts/tests/test_x86_condition_dispatch.py": [
-        "self.assertIn(\"static func condition(_ code: UInt8, flags: UInt64) -> Bool\", alu)",
+        "self.assertIn(\"static func condition(_ code: UInt8, flags: UInt64) -> Bool {\", alu)",
         "self.assertNotIn(\"guard let takeBranch = X86_64ALU.condition\", interpreter)",
     ],
 }
