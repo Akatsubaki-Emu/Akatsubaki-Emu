@@ -3,7 +3,7 @@
 ## Repositories
 
 - **GitLab:** https://gitlab.com/chantinlongxthrx/I-steam
-- **GitHub:** https://github.com/I-Steam/I-steam
+- **GitHub:** https://github.com/Akatsubaki-Emu/Akatsubaki-Emu
 - **Branch:** `main`
 
 The project retains both configured synchronization directions:
