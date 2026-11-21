@@ -51,7 +51,9 @@ struct GameRuntimeProfile: Codable, Equatable, Identifiable {
     }
 
     func validate() throws {
-        guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              displayName.utf8.count <= 256, !displayName.contains("\0"),
+              !compatibilityNotes.contains("\0") else {
             throw ProfileError.invalidName
         }
         guard (320...8192).contains(preferredResolutionWidth),
