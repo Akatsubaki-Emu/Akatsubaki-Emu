@@ -21,11 +21,12 @@ final class ELF64Loader {
         case unreadable, invalidMagic, unsupportedClassOrEndian
         case truncatedHeader, invalidProgramHeaderTable, noLoadableSegments
         case invalidSegment, segmentOutsideGuestMemory, unsupportedMachine(UInt16)
-        case unsupportedFileType(UInt16)
+        case unsupportedFileType(UInt16), fileTooLarge
 
         var errorDescription: String? {
             switch self {
             case .unreadable: return "The ELF image could not be read."
+            case .fileTooLarge: return "The ELF image exceeds the 512 MiB inspection limit."
             case .invalidMagic: return "The file is not an ELF image."
             case .unsupportedClassOrEndian: return "Only little-endian ELF64 images are supported."
             case .truncatedHeader: return "The ELF64 header is truncated or invalid."
@@ -43,6 +44,11 @@ final class ELF64Loader {
               expectedArchitecture: VMConfiguration.Architecture) throws -> Image {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let values: URLResourceValues
+        do { values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]) }
+        catch { throw LoadError.unreadable }
+        guard values.isRegularFile == true, let fileSize = values.fileSize else { throw LoadError.unreadable }
+        guard fileSize <= 512 * 1024 * 1024 else { throw LoadError.fileTooLarge }
         let data: Data
         do { data = try Data(contentsOf: url, options: [.mappedIfSafe]) }
         catch { throw LoadError.unreadable }

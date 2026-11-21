@@ -15,7 +15,7 @@ final class WindowsPELoader {
     }
 
     enum InspectionError: LocalizedError {
-        case unreadableFile, tooSmall, invalidDOSHeader, invalidPEOffset
+        case unreadableFile, tooSmall, tooLarge, invalidDOSHeader, invalidPEOffset
         case invalidSignature, truncatedCOFFHeader, invalidOptionalHeader
         case unsupportedOptionalHeader
 
@@ -23,6 +23,7 @@ final class WindowsPELoader {
             switch self {
             case .unreadableFile: return "The executable could not be read."
             case .tooSmall: return "The file is too small to contain a Windows PE header."
+            case .tooLarge: return "The executable exceeds the 512 MiB inspection limit."
             case .invalidDOSHeader: return "The file does not have a valid MZ/DOS header."
             case .invalidPEOffset: return "The PE header offset is outside the file or overflows."
             case .invalidSignature: return "The PE signature is missing or invalid."
@@ -36,6 +37,16 @@ final class WindowsPELoader {
     func load(_ url: URL) throws -> Image {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let values: URLResourceValues
+        do {
+            values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        } catch {
+            throw InspectionError.unreadableFile
+        }
+        guard values.isRegularFile == true, let fileSize = values.fileSize else {
+            throw InspectionError.unreadableFile
+        }
+        guard fileSize <= 512 * 1024 * 1024 else { throw InspectionError.tooLarge }
         let data: Data
         do {
             data = try Data(contentsOf: url, options: [.mappedIfSafe])

@@ -22,6 +22,8 @@ required = {
         "private func enqueueSend(_ data: Data, to connection: NWConnection,",
     ],
     "src/Runtime/WindowsPELoader.swift": [
+        "fileSize <= 512 * 1024 * 1024",
+        "case tooLarge",
         "WindowsPEImage.parse(data)",
         "is64Bit: true",
     ],

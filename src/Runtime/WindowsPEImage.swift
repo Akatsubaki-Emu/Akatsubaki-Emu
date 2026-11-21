@@ -44,10 +44,20 @@ struct WindowsPEImage {
     static func parse(url: URL) throws -> WindowsPEImage {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        guard values.isRegularFile == true, let fileSize = values.fileSize else {
+            throw ParseError.malformed("PE source is not a regular file")
+        }
+        guard fileSize <= 512 * 1024 * 1024 else {
+            throw ParseError.resourceLimit("file exceeds the 512 MiB inspection limit")
+        }
         return try parse(Data(contentsOf: url, options: [.mappedIfSafe]))
     }
 
     static func parse(_ data: Data) throws -> WindowsPEImage {
+        guard data.count <= 512 * 1024 * 1024 else {
+            throw ParseError.resourceLimit("file exceeds the 512 MiB inspection limit")
+        }
         guard data.count >= 0x40 else { throw ParseError.truncated("DOS header") }
         guard data[0] == 0x4D, data[1] == 0x5A else { throw ParseError.invalidSignature }
         let pe = Int(try u32(data, 0x3C))
