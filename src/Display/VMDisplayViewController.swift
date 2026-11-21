@@ -5,6 +5,7 @@ final class VMDisplayViewController: UIViewController {
     private let gpu: MetalGPUBackend
     private let virtioGPU: VirtIOGPU
     private let engine: VMEngine
+    private let configuration: VMConfiguration
     private let vncClient = QEMUVNCClient()
     private let diskImage: URL
     private let status = UILabel()
@@ -16,6 +17,7 @@ final class VMDisplayViewController: UIViewController {
     private var keyboardObservers: [NSObjectProtocol] = []
 
     init(configuration: VMConfiguration, diskImage: URL) {
+        self.configuration = configuration
         self.diskImage = diskImage
         let backend = MetalGPUBackend(width: configuration.displayWidth, height: configuration.displayHeight, frameRate: configuration.displayFPS)
         self.gpu = backend
