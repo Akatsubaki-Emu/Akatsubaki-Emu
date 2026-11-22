@@ -20,19 +20,29 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
         self.assertIn("var isJITReady: Bool", source)
-        self.assertIn("return iSteamJITIsReady()", source)
+        self.assertIn("return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && iSteamJITIsReady()", source)
 
     def test_qemu_jit_readiness_requires_every_physical_ios_prerequisite(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
         self.assertIn("var isQEMUJITReady: Bool", source)
         self.assertIn(
-            "return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady",
+            "return isJITReady",
             source,
         )
         gate = source.split("var isQEMUJITReady: Bool", 1)[1].split("func requestJIT", 1)[0]
         self.assertIn("#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)", gate)
         self.assertIn("return false", gate)
+
+    def test_all_qemu_launch_paths_use_the_full_jit_readiness_gate(self):
+        root = Path(__file__).resolve().parents[2]
+        for relative_path in (
+            Path("src/QEMU/QEMUNativeRuntime.swift"),
+            Path("iSteam/LaunchSetupViewController.swift"),
+            Path("src/Display/VMDisplayViewController.swift"),
+        ):
+            source = (root / relative_path).read_text(encoding="utf-8")
+            self.assertIn("JITCoordinator.shared.isJITReady", source, str(relative_path))
 
     def test_stikdebug_request_targets_this_app_process(self):
         root = Path(__file__).resolve().parents[2]
