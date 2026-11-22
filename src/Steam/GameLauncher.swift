@@ -140,7 +140,7 @@ final class LinuxELFRuntime {
                 EmulationLog.shared.write(
                     "Linux static ELF loaded at 0x" + String(image.entryPoint, radix: 16)
                 )
-                self.runNextBatch(machine: machine, token: token)
+                self.executeNextBatch(machine: machine, token: token)
             } catch {
                 self.finish(token: token, machine: machine, result: .failure(error))
             }
@@ -168,13 +168,6 @@ final class LinuxELFRuntime {
         lock.lock()
         defer { lock.unlock() }
         return token == generation && activeMachine === machine
-    }
-
-    private func runNextBatch(machine: GuestMachine, token: UInt64) {
-        queue.async { [weak self] in
-            guard let self else { return }
-            self.executeNextBatch(machine: machine, token: token)
-        }
     }
 
     private func executeNextBatch(machine: GuestMachine, token: UInt64) {
