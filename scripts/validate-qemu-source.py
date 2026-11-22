@@ -1220,7 +1220,7 @@ if r"\n" in builder:
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
 repository_validation = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
-if "utm-ios-arm64-deps-v15-" not in repository_validation or "utm-ios-arm64-deps-v15-" in repository_validation:
+if "utm-ios-arm64-deps-v15-" not in repository_validation or "utm-ios-arm64-deps-v14-" in repository_validation:
     print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
     failed = True
 for step in (

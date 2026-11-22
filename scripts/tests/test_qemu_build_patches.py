@@ -157,7 +157,7 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("utm-ios-arm64-deps-v15-", repository)
         self.assertIn("utm-ios-arm64-deps-v15-", validator)
         self.assertNotIn("utm-ios-arm64-deps-v14-", repository)
-        self.assertNotIn("utm-ios-arm64-deps-v14-", validator)
+        self.assertIn('or "utm-ios-arm64-deps-v14-" in repository_validation', validator)
 
     def test_qemu_runtime_pr_workflow_calls_reusable_build(self):
         root = Path(__file__).resolve().parents[2]
