@@ -30,12 +30,12 @@ jobs:
 
       # Recheck after this job obtains an Xcode runner. A queued job can become
       # stale after the parent workflow's lightweight freshness check.
-      - name: Check push freshness before expensive QEMU build
+      - name: Check main-ref freshness before expensive QEMU build
         id: freshness
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
             latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 {print $1}')"
             if [ -z "$latest_main" ]; then
               echo "Unable to determine the current main commit." >&2
@@ -139,8 +139,7 @@ jobs:
           echo "Using iOS compiler runtime: $RUNTIME"
 
       - name: Cache UTM dependency build and sysroot
-        if: steps.freshness.outputs.build == 'true'
-        if: ${{ !inputs.rebuild_dependencies }}
+        if: ${{ steps.freshness.outputs.build == 'true' && !inputs.rebuild_dependencies }}
         uses: actions/cache@v6
         with:
           path: |
