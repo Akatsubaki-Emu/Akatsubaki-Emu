@@ -69,6 +69,15 @@ final class JITCoordinator {
         return true
     }
 
+    var isQEMUProtocolAvailable: Bool {
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        if #available(iOS 26.0, *) {
+            return isJITProtocolKnown
+        }
+        #endif
+        return false
+    }
+
     var isJITReady: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if #available(iOS 17.4, *) {
@@ -81,7 +90,7 @@ final class JITCoordinator {
     /// QEMU TCG requires the supported physical-device executable-memory handshake.
     var isQEMUJITReady: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
-        return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolSupported && isJITProtocolKnown && isJITReady
+        return isStikDebugAvailable && hasGetTaskAllow && isQEMUProtocolAvailable && isJITReady
         #else
         return false
         #endif
