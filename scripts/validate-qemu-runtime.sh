@@ -38,7 +38,7 @@ echo "== Defined external lifecycle symbols =="
 # -U excludes undefined imports. Do not fall back to plain nm -g: that can
 # mistake an undefined reference for an exported implementation.
 symbols="$(nm -gU "$library")"
-for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request; do
+for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request isteam_qemu_set_jit_callbacks; do
   if ! grep -Eq "[[:space:]][A-Za-z][[:space:]]_?${symbol}$" <<<"$symbols"; then
     echo "Missing required defined export: $symbol" >&2
     exit 3

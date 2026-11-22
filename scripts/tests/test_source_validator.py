@@ -71,8 +71,11 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertEqual(package.count('candidate=""'), 1)
         self.assertEqual(package.count('candidate="$file"'), 1)
         self.assertIn("qemu_system_shutdown_request", package)
+        self.assertIn("isteam_qemu_set_jit_callbacks", package)
         self.assertIn("runtime-library-path.txt", package)
         self.assertIn("qemu_system_shutdown_request", runtime_validator)
+        self.assertIn("isteam_qemu_set_jit_callbacks", runtime_validator)
+        self.assertIn('dlsym(library, "isteam_qemu_set_jit_callbacks")', bridge)
         self.assertNotIn("duplicate_string", bridge)
 
     def test_native_bridge_enables_strict_c11_strnlen_and_covers_cleanup_race(self):

@@ -54,7 +54,8 @@ while IFS= read -r file; do
     if printf '%s\n' "$candidate_exports" | grep -qE ' _?qemu_init$' &&
        printf '%s\n' "$candidate_exports" | grep -qE ' _?qemu_main_loop$' &&
        printf '%s\n' "$candidate_exports" | grep -qE ' _?qemu_cleanup$' &&
-       printf '%s\n' "$candidate_exports" | grep -qE ' _?qemu_system_shutdown_request$'; then
+       printf '%s\n' "$candidate_exports" | grep -qE ' _?qemu_system_shutdown_request$' &&
+       printf '%s\n' "$candidate_exports" | grep -qE ' _?isteam_qemu_set_jit_callbacks$'; then
       candidate="$file"
       exports="$candidate_exports"
       break
@@ -63,7 +64,7 @@ while IFS= read -r file; do
 done < "$OUT/runtime-file-inventory.txt"
 
 if [ -z "$candidate" ]; then
-  echo "No UTM in-process QEMU library exporting qemu_init, qemu_main_loop, qemu_cleanup, and qemu_system_shutdown_request was found." >&2
+  echo "No UTM in-process QEMU library exporting qemu_init, qemu_main_loop, qemu_cleanup, qemu_system_shutdown_request, and isteam_qemu_set_jit_callbacks was found." >&2
   echo "The artifact was rejected rather than pretending an executable is a loadable runtime." >&2
   exit 2
 fi
@@ -93,7 +94,7 @@ esac
 # The app resolves the runtime through this manifest rather than assuming
 # that every UTM revision names its loadable library the same way.
 printf '%s\n' "$runtime_relative" > "$OUT/QEMU/runtime-library-path.txt"
-printf '%s\n' "$exports" | grep -E ' _?qemu_(init|main_loop|cleanup)$| _?qemu_system_shutdown_request$' > "$OUT/exports.txt" || true
+printf '%s\n' "$exports" | grep -E ' _?qemu_(init|main_loop|cleanup)$| _?qemu_system_shutdown_request$| _?isteam_qemu_set_jit_callbacks$' > "$OUT/exports.txt" || true
 
 data_dir=""
 found="$(find "$APP" -type f \( \
@@ -125,7 +126,7 @@ Target: physical iOS arm64
 Library source: $candidate
 Packaged library path: $runtime_relative
 Architectures: $ARCHS
-Lifecycle and graceful-shutdown exports: verified by nm before packaging
+Lifecycle, graceful-shutdown and StikDebug JIT callback exports: verified by nm before packaging
 Data source: $data_dir
 Package layout: Frameworks/ (UTM dependencies), QEMU/ (QEMU data files and runtime manifest)
 Important: embed and code-sign nested code in Akatsubaki Emu and boot-test on a physical device before claiming runtime support.

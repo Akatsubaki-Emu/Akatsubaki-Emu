@@ -442,6 +442,7 @@ required = {
         'dlsym(library, "qemu_main_loop")',
         'dlsym(library, "qemu_cleanup")',
         'dlsym(library, "qemu_system_shutdown_request")',
+        'dlsym(library, "isteam_qemu_set_jit_callbacks")',
         "static bool g_starting = false;",
         "static _Thread_local char error_copy",
         "ISTEAM_QEMU_MAX_ARGUMENTS 4096",
@@ -449,6 +450,13 @@ required = {
         "ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES",
         "strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u)",
         "error_buffer && error_capacity > 0",
+    ],
+    "scripts/package-utm-qemu-runtime.sh": [
+        " _?isteam_qemu_set_jit_callbacks$",
+        "isteam_qemu_set_jit_callbacks",
+    ],
+    "scripts/validate-qemu-runtime.sh": [
+        "for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request isteam_qemu_set_jit_callbacks; do",
     ],
     "src/QEMU/QEMURuntimeStatus.swift": [
         "bundleRoot = bundle.bundleURL.resolvingSymlinksInPath()",

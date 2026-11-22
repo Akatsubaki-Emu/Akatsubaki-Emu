@@ -18,8 +18,9 @@ The native bridge in `iSteam/QEMUNativeBridge.c` requires these exported symbols
 - `qemu_main_loop`
 - `qemu_cleanup`
 - `qemu_system_shutdown_request`
+- `isteam_qemu_set_jit_callbacks`
 
-The shutdown symbol is required. The bridge rejects a runtime that cannot request graceful shutdown; actual shutdown behavior still requires physical-device validation.
+Both graceful shutdown and the StikDebug JIT callback registration export are required. The bridge rejects a runtime missing either contract; actual shutdown and JIT behavior still require physical-device validation.
 
 The Swift runtime locator is `src/QEMU/QEMURuntimeStatus.swift`; the lifecycle owner is `src/QEMU/QEMUNativeRuntime.swift`. The locator reads the generated manifest and resolves the library inside the app bundle. The native bridge then loads it with `dlopen` and resolves the lifecycle symbols with `dlsym`.
 
@@ -31,7 +32,7 @@ Run:
 bash scripts/validate-qemu-runtime.sh /path/to/the/manifest-selected-QEMU-library
 ```
 
-The validator requires Apple tooling and checks that the file is Mach-O, contains the device `arm64` architecture, exports all four required lifecycle/shutdown symbols as defined external symbols, and passes strict code-signature verification.
+The validator requires Apple tooling and checks that the file is Mach-O, contains the device `arm64` architecture, exports all five required lifecycle/shutdown/JIT symbols as defined external symbols, and passes strict code-signature verification.
 
 This is a packaging check only. It does not prove that the library's dependencies load, that QEMU initializes, or that a guest boots.
 
