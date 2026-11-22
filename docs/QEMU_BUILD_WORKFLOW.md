@@ -20,7 +20,7 @@ This note documents the iOS device-arm64 QEMU runtime build in `.github/workflow
 - `scripts/patch_qemu_meson_ios.py` — patches QEMU's Meson feature probe and adds Objective-C fast message-stub generation, `libobjc`, and the compiler-runtime force-load argument to the emulator-specific link-argument list consumed by the generated shared-library target. Its unique marker lets it replace only its own runtime entry while preserving unrelated upstream linker arguments.
 - `scripts/verify_qemu_meson_link.py` — inspects the generated Ninja link edge for `libqemu-x86_64-softmmu.dylib`; verifies the actual link configuration includes Objective-C stub generation, `libobjc`, and compiler-rt rather than checking only environment variables or source text.
 - `scripts/tests/test_qemu_build_patches.py` — regression tests idempotence, StikDebug allocator insertion, split-WX command construction, expected patch insertion and fail-closed linker verification.
-- `.github/workflows/build-qemu-runtime.yml` — reusable/manual runtime build, cache fingerprint, non-cancelling concurrency policy and same-run artifact upload.
+- `.github/workflows/build-qemu-runtime.yml` — reusable/manual runtime build, cache fingerprint, unthrottled build scheduling and same-run artifact upload. The QEMU build job has no concurrency group, so GitHub does not replace pending builds; release-tag publication remains serialized separately.
 - `.github/workflows/release.yml` — runtime dependency ordering and required artifact download before the iOS IPA is packaged.
 - `.github/workflows/validate-repository.yml` — strict YAML checks, both-direction mirror preservation, workflow contract checks and Python patcher tests.
 

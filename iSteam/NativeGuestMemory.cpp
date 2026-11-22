@@ -1,6 +1,7 @@
 #include "NativeGuestMemory.h"
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cstring>
 #include <memory>
@@ -23,6 +24,7 @@ struct ISteamGuestMemory {
     explicit ISteamGuestMemory(uint64_t byteCount) : size(byteCount) {}
 
     uint64_t size;
+    std::atomic<uint64_t> mutationGeneration{0};
     bool usesDensePages = false;
     std::vector<std::unique_ptr<Page>> densePages;
     std::vector<uint64_t> denseAllocatedPageIndices;
@@ -81,6 +83,10 @@ void isteam_guest_memory_destroy(ISteamGuestMemory *memory) {
 
 uint64_t isteam_guest_memory_size(const ISteamGuestMemory *memory) {
     return memory ? memory->size : 0;
+}
+
+uint64_t isteam_guest_memory_generation(const ISteamGuestMemory *memory) {
+    return memory ? memory->mutationGeneration.load(std::memory_order_acquire) : 0;
 }
 
 bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
@@ -159,6 +165,7 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
 
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        memory->mutationGeneration.fetch_add(1, std::memory_order_release);
         const uint64_t lastAddress = offset + length - 1;
         if (memory->usesDensePages) {
             if (offset / pageSize == lastAddress / pageSize) {
@@ -237,6 +244,7 @@ bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
 
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        memory->mutationGeneration.fetch_add(1, std::memory_order_release);
         const uint64_t end = offset + length;
         const uint64_t firstPage = offset / pageSize;
         const uint64_t lastPage = (end - 1) / pageSize;
@@ -344,6 +352,7 @@ void isteam_guest_memory_clear(ISteamGuestMemory *memory) {
     if (!memory) return;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        memory->mutationGeneration.fetch_add(1, std::memory_order_release);
         if (memory->usesDensePages) {
             for (uint64_t pageIndex : memory->denseAllocatedPageIndices) {
                 memory->densePages[static_cast<size_t>(pageIndex)].reset();

@@ -57,7 +57,7 @@ struct LinuxProcessStackTests {
         let random = Data(repeating: 0xA5, count: 16)
         let result = try LinuxProcessStackBuilder().build(
             executablePath: "/bin/hello",
-            arguments: ["--version"],
+            arguments: ["--version", "--verbose"],
             environment: ["PATH": "/bin:/usr/bin", "HOME": "/root"],
             memory: memory,
             entryPoint: 0x41000,
@@ -68,10 +68,11 @@ struct LinuxProcessStackTests {
 
         precondition(result.stackPointer & 0xF == 0)
         precondition(result.stackBase == 0x300000)
-        precondition(memory.readUInt64(offset: result.stackPointer) == 2)
+        precondition(memory.readUInt64(offset: result.stackPointer) == 3)
         precondition(memory.readString(offset: memory.readUInt64(offset: result.argumentVectorAddress)!) == "/bin/hello")
         precondition(memory.readString(offset: memory.readUInt64(offset: result.argumentVectorAddress + 8)!) == "--version")
-        precondition(memory.readUInt64(offset: result.argumentVectorAddress + 16) == 0)
+        precondition(memory.readString(offset: memory.readUInt64(offset: result.argumentVectorAddress + 16)!) == "--verbose")
+        precondition(memory.readUInt64(offset: result.argumentVectorAddress + 24) == 0)
         precondition(memory.readString(offset: result.executableNameAddress) == "/bin/hello")
         precondition((0..<16).allSatisfy {
             memory.readByte(offset: result.randomAddress + UInt64($0)) == 0xA5

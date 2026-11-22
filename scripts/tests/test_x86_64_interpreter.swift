@@ -34,6 +34,7 @@ final class GuestMemory {
     private(set) var readByteCalls = 0
     private(set) var readUInt16Calls = 0
     private(set) var readPrefixCalls = 0
+    private(set) var mutationGeneration: UInt64 = 0
 
     init(size: UInt64) {
         self.size = size
@@ -56,6 +57,7 @@ final class GuestMemory {
     func writeByte(_ value: UInt8, offset: UInt64) -> Bool {
         guard offset < size else { return false }
         bytes[Int(offset)] = value
+        mutationGeneration &+= 1
         return true
     }
 
@@ -95,12 +97,14 @@ final class GuestMemory {
         for shift in 0..<4 {
             bytes[index + shift] = UInt8(truncatingIfNeeded: value >> (shift * 8))
         }
+        mutationGeneration &+= 1
         return true
     }
 
     func zero(offset: UInt64, length: UInt64) -> Bool {
         guard offset <= size, length <= size - offset, length <= UInt64(Int.max) else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset + length), with: repeatElement(0, count: Int(length)))
+        if length > 0 { mutationGeneration &+= 1 }
         return true
     }
 
@@ -111,6 +115,7 @@ final class GuestMemory {
             bytes[start + index] = UInt8(truncatingIfNeeded: first >> (index * 8))
             bytes[start + 8 + index] = UInt8(truncatingIfNeeded: second >> (index * 8))
         }
+        mutationGeneration &+= 1
         return true
     }
 
@@ -120,6 +125,7 @@ final class GuestMemory {
         for shift in 0..<8 {
             bytes[index + shift] = UInt8(truncatingIfNeeded: value >> (shift * 8))
         }
+        mutationGeneration &+= 1
         return true
     }
 
@@ -131,6 +137,7 @@ final class GuestMemory {
     func write(_ data: Data, offset: UInt64) -> Bool {
         guard offset <= size, UInt64(data.count) <= size - offset else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset) + data.count, with: data)
+        if !data.isEmpty { mutationGeneration &+= 1 }
         return true
     }
 }
@@ -399,6 +406,8 @@ struct InterpreterTests {
         try truncatedRet.reset(entryPoint: 0)
         let truncatedRetExit = try truncatedRet.run(maxInstructions: 1)
         precondition(truncatedRetExit == .memoryFault(address: 1))
+        precondition(truncatedRetMemory.readPrefixCalls == 1)
+        precondition(truncatedRetMemory.readByteCalls == 0)
 
         let indirectFaultMemory = GuestMemory(size: 64)
         precondition(indirectFaultMemory.write(Data([0xFF, 0x25, 0x00, 0x10, 0x00, 0x00]), offset: 0))
@@ -825,14 +834,67 @@ struct InterpreterTests {
         try unsupported.reset(entryPoint: 0)
         let unsupportedExit = try unsupported.run(maxInstructions: 1)
         precondition(unsupportedExit == .unsupportedInstruction(address: 0))
-        let windowMemory = GuestMemory(size: 64)
-        precondition(windowMemory.write(Data([0x90, 0x90, 0xF4]), offset: 0x20))
+        let windowMemory = GuestMemory(size: 128)
+        let sequentialWindowProgram = [UInt8](repeating: 0x90, count: 40) + [0xF4]
+        precondition(windowMemory.write(Data(sequentialWindowProgram), offset: 0x20))
         let windowInterpreter = X86_64Interpreter(memory: windowMemory)
         try windowInterpreter.reset(entryPoint: 0x20)
-        let windowExit = try windowInterpreter.run(maxInstructions: 8)
+        let windowExit = try windowInterpreter.run(maxInstructions: 64)
         precondition(windowExit == .halted)
-        precondition(windowMemory.readPrefixCalls == 3)
+        precondition(windowMemory.readPrefixCalls == 1)
+        precondition(windowInterpreter.instructionCount == 41)
         precondition(windowMemory.readByteCalls == 0)
+
+        var crossWindowProgram = Data(repeating: 0x90, count: 63)
+        crossWindowProgram.append(contentsOf: [0xB8, 0x78, 0x56, 0x34, 0x12, 0xF4])
+        let crossWindowMemory = GuestMemory(size: 256)
+        precondition(crossWindowMemory.write(crossWindowProgram, offset: 0))
+        let crossWindowInterpreter = X86_64Interpreter(memory: crossWindowMemory)
+        try crossWindowInterpreter.reset(entryPoint: 0)
+        let crossWindowExit = try crossWindowInterpreter.run(maxInstructions: 70)
+        precondition(crossWindowExit == .halted)
+        precondition(crossWindowInterpreter.registerValue(0) == 0x12345678)
+        precondition(crossWindowMemory.readPrefixCalls == 2)
+        precondition(crossWindowMemory.readByteCalls == 0)
+
+        var crossWindowOpcodeProgram = Data(repeating: 0x90, count: 63)
+        crossWindowOpcodeProgram.append(contentsOf: [0x0F, 0x85, 0, 0, 0, 0, 0xF4])
+        var crossWindow64Program = Data(repeating: 0x90, count: 63)
+        crossWindow64Program.append(contentsOf: [0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0xF4])
+        let crossWindow64Memory = GuestMemory(size: 256)
+        precondition(crossWindow64Memory.write(crossWindow64Program, offset: 0))
+        let crossWindow64Interpreter = X86_64Interpreter(memory: crossWindow64Memory)
+        try crossWindow64Interpreter.reset(entryPoint: 0)
+        let crossWindow64Exit = try crossWindow64Interpreter.run(maxInstructions: 70)
+        precondition(crossWindow64Exit == .halted)
+        precondition(crossWindow64Interpreter.registerValue(0) == 0x1122334455667788)
+        precondition(crossWindow64Memory.readPrefixCalls == 2)
+        precondition(crossWindow64Memory.readByteCalls == 0)
+
+        var crossWindow16Program = Data(repeating: 0x90, count: 63)
+        crossWindow16Program.append(contentsOf: [0xC2, 0x00, 0x00, 0xF4])
+        let crossWindow16Memory = GuestMemory(size: 512)
+        precondition(crossWindow16Memory.write(crossWindow16Program, offset: 0))
+        precondition(crossWindow16Memory.writeUInt64(66, offset: 0x100))
+        let crossWindow16Interpreter = X86_64Interpreter(memory: crossWindow16Memory)
+        try crossWindow16Interpreter.reset(entryPoint: 0)
+        try crossWindow16Interpreter.setInitialStackPointer(0x100)
+        let crossWindow16Exit = try crossWindow16Interpreter.run(maxInstructions: 70)
+        precondition(crossWindow16Exit == .halted)
+        precondition(crossWindow16Interpreter.instructionCount == 65)
+        precondition(crossWindow16Interpreter.registerValue(4) == 0x108)
+        precondition(crossWindow16Memory.readPrefixCalls == 2)
+        precondition(crossWindow16Memory.readByteCalls == 0)
+
+        let crossWindowOpcodeMemory = GuestMemory(size: 256)
+        precondition(crossWindowOpcodeMemory.write(crossWindowOpcodeProgram, offset: 0))
+        let crossWindowOpcodeInterpreter = X86_64Interpreter(memory: crossWindowOpcodeMemory)
+        try crossWindowOpcodeInterpreter.reset(entryPoint: 0)
+        let crossWindowOpcodeExit = try crossWindowOpcodeInterpreter.run(maxInstructions: 70)
+        precondition(crossWindowOpcodeExit == .halted)
+        precondition(crossWindowOpcodeInterpreter.instructionCount == 65)
+        precondition(crossWindowOpcodeMemory.readPrefixCalls == 2)
+        precondition(crossWindowOpcodeMemory.readByteCalls == 0)
 
         let boundaryMemory = GuestMemory(size: 8192)
         precondition(boundaryMemory.write(Data([0xB8, 0x78, 0x56, 0x34, 0x12, 0xF4]), offset: 4094))
@@ -848,6 +910,8 @@ struct InterpreterTests {
         try edgeInterpreter.reset(entryPoint: 4095)
         let edgeExit = try edgeInterpreter.run(maxInstructions: 2)
         precondition(edgeExit == .memoryFault(address: 4096))
+        precondition(edgeMemory.readPrefixCalls == 1)
+        precondition(edgeMemory.readByteCalls == 0)
 
         let selfModifyingMemory = GuestMemory(size: 64)
         precondition(selfModifyingMemory.write(Data([
@@ -860,7 +924,28 @@ struct InterpreterTests {
         let selfModifyingExit = try selfModifyingInterpreter.run(maxInstructions: 8)
         precondition(selfModifyingExit == .halted)
         precondition(selfModifyingMemory.readByte(offset: 11) == 0xF4)
-        precondition(selfModifyingMemory.readPrefixCalls == 3)
+        precondition(selfModifyingMemory.readPrefixCalls == 2)
+
+        let branchWindowMemory = GuestMemory(size: 64)
+        precondition(branchWindowMemory.write(Data([0xEB, 0x02, 0xF4, 0xF4, 0x90, 0xF4]), offset: 0))
+        let branchWindowInterpreter = X86_64Interpreter(memory: branchWindowMemory)
+        try branchWindowInterpreter.reset(entryPoint: 0)
+        let branchWindowExit = try branchWindowInterpreter.run(maxInstructions: 8)
+        precondition(branchWindowExit == .halted)
+        precondition(branchWindowInterpreter.instructionCount == 3)
+        precondition(branchWindowMemory.readPrefixCalls == 1)
+        precondition(branchWindowMemory.readByteCalls == 0)
+
+        let externalCodeMutationMemory = GuestMemory(size: 64)
+        precondition(externalCodeMutationMemory.write(Data([0x90, 0x90]), offset: 0))
+        let externalCodeMutation = X86_64Interpreter(memory: externalCodeMutationMemory)
+        try externalCodeMutation.reset(entryPoint: 0)
+        let firstMutationBatch = try externalCodeMutation.run(maxInstructions: 1)
+        precondition(firstMutationBatch == .instructionLimit)
+        precondition(externalCodeMutationMemory.writeByte(0xF4, offset: 1))
+        let secondMutationBatch = try externalCodeMutation.run(maxInstructions: 1)
+        precondition(secondMutationBatch == .halted)
+        precondition(externalCodeMutationMemory.readPrefixCalls == 2)
 
         let zeroExtendMemory = GuestMemory(size: 256)
         precondition(zeroExtendMemory.write(Data([0x0F, 0xB7, 0x05, 0x79, 0x00, 0x00, 0x00, 0xF4]), offset: 0))
