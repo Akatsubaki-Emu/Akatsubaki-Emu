@@ -8,6 +8,24 @@ FUNCTION_ANCHOR = "static int alloc_code_gen_buffer_splitwx_vmremap(size_t size,
 MARKER = "alloc_code_gen_buffer_splitwx_stikdebug"
 
 HELPER = r'''#if TARGET_OS_IOS
+typedef bool (*ISTEAMJITReadyFunction)(void);
+typedef void *(*ISTEAMJITPrepareFunction)(void *, size_t);
+typedef void (*ISTEAMJITDetachFunction)(void);
+
+static ISTEAMJITReadyFunction isteam_jit_ready_callback;
+static ISTEAMJITPrepareFunction isteam_jit_prepare_callback;
+static ISTEAMJITDetachFunction isteam_jit_detach_callback;
+
+__attribute__((visibility("default")))
+void isteam_qemu_set_jit_callbacks(ISTEAMJITReadyFunction ready,
+                                   ISTEAMJITPrepareFunction prepare,
+                                   ISTEAMJITDetachFunction detach)
+{
+    isteam_jit_ready_callback = ready;
+    isteam_jit_prepare_callback = prepare;
+    isteam_jit_detach_callback = detach;
+}
+
 extern kern_return_t mach_vm_protect(vm_map_t target_task,
                                      mach_vm_address_t address,
                                      mach_vm_size_t size,
@@ -19,12 +37,9 @@ extern kern_return_t mach_vm_deallocate(vm_map_t target_task,
 
 static int alloc_code_gen_buffer_splitwx_stikdebug(size_t size, Error **errp)
 {
-    typedef bool (*JITReadyFunction)(void);
-    typedef void *(*JITPrepareFunction)(void *, size_t);
-    typedef void (*JITDetachFunction)(void);
-    JITReadyFunction jit_ready = (JITReadyFunction)dlsym(RTLD_DEFAULT, "iSteamJITIsReady");
-    JITPrepareFunction prepare_region = (JITPrepareFunction)dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion");
-    JITDetachFunction detach = (JITDetachFunction)dlsym(RTLD_DEFAULT, "iSteamJITDetach");
+    ISTEAMJITReadyFunction jit_ready = isteam_jit_ready_callback;
+    ISTEAMJITPrepareFunction prepare_region = isteam_jit_prepare_callback;
+    ISTEAMJITDetachFunction detach = isteam_jit_detach_callback;
     kern_return_t ret;
     mach_vm_address_t buf_rw = 0;
     mach_vm_address_t buf_rx;
@@ -83,6 +98,10 @@ static int alloc_code_gen_buffer_splitwx_stikdebug(size_t size, Error **errp)
 def patch_source(source: str) -> str:
     if MARKER in source:
         required = [
+            "isteam_qemu_set_jit_callbacks",
+            "isteam_jit_ready_callback",
+            "isteam_jit_prepare_callback",
+            "isteam_jit_detach_callback",
             "iSteamJITIsSupported",
             "iSteamJITIsReady",
             "iSteamJITPrepareRegion",
@@ -126,6 +145,11 @@ def patch_source(source: str) -> str:
     required = [
         "#include <TargetConditionals.h>",
         "#include <dlfcn.h>",
+        "__attribute__((visibility(\"default\")))",
+        "isteam_qemu_set_jit_callbacks",
+        "isteam_jit_ready_callback",
+        "isteam_jit_prepare_callback",
+        "isteam_jit_detach_callback",
         "iSteamJITIsSupported",
         "iSteamJITIsReady",
         "iSteamJITPrepareRegion",

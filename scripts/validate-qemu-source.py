@@ -910,6 +910,12 @@ required = {
         'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
         'if [ "$XCODE_VERSION" != "26.2" ]; then',
     ],
+    "scripts/patch_qemu_stikjit_ios.py": [
+        "isteam_qemu_set_jit_callbacks",
+        "__attribute__((visibility(\"default\")))",
+        "isteam_jit_prepare_callback",
+        "iSteamJITIsSupported",
+    ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",
