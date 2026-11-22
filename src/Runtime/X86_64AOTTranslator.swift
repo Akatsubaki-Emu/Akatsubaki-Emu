@@ -72,14 +72,32 @@ struct X86_64AOTTranslator {
         let instructionBudget = min(maximumInstructions, Self.maximumInstructionBudget)
         let outputBudget = min(maximumOutputBytes, Self.maximumOutputBudget)
         let guestByteBudget = min(maximumGuestBytes, Self.maximumGuestByteBudget)
-        let bytes = [UInt8](guestCode.prefix(guestByteBudget))
+        return guestCode.withUnsafeBytes { raw in
+            let inputCount = min(raw.count, guestByteBudget)
+            let bytes = UnsafeBufferPointer(
+                start: raw.baseAddress?.assumingMemoryBound(to: UInt8.self),
+                count: inputCount
+            )
+            return translate(bytes, guestCodeCount: raw.count,
+                             maximumInstructions: instructionBudget,
+                             maximumOutputBytes: outputBudget)
+        }
+    }
+
+    private func translate(_ bytes: UnsafeBufferPointer<UInt8>,
+                           guestCodeCount: Int,
+                           maximumInstructions: Int,
+                           maximumOutputBytes: Int) -> X86_64AOTTranslation {
         var cursor = 0
         var instructions = 0
-        var output = [UInt8]()
-        output.reserveCapacity(min(outputBudget, 4096))
+        var output = [UInt32]()
+        let inputCapacity = min(bytes.count, 4096)
+        let instructionCapacity = min(maximumInstructions, 1024) * 4
+        let reserveWords = min(maximumOutputBytes / 4, max(1, min(inputCapacity, instructionCapacity)))
+        output.reserveCapacity(reserveWords)
 
         while cursor < bytes.count {
-            if instructions >= instructionBudget {
+            if instructions >= maximumInstructions {
                 return result(output, consumed: cursor, instructions: instructions,
                               reason: .instructionLimit, fallbackOffset: cursor)
             }
@@ -96,7 +114,7 @@ struct X86_64AOTTranslator {
             }
 
             guard cursor < bytes.count else {
-                if bytes.count < guestCode.count {
+                if bytes.count < guestCodeCount {
                     return result(output, consumed: start, instructions: instructions,
                                   reason: .inputLimit, fallbackOffset: start)
                 }
@@ -106,7 +124,7 @@ struct X86_64AOTTranslator {
 
             let opcode = bytes[cursor]
             cursor += 1
-            var words: [UInt32] = []
+            var words = EncodedWords()
 
             switch opcode {
             case 0x90:
@@ -116,14 +134,14 @@ struct X86_64AOTTranslator {
                     return fallback(output, consumed: start, instructions: instructions,
                                     reason: .unsupportedInstruction, opcode: bytes[start])
                 }
-                words = [0xD503201F]
+                words.append(0xD503201F)
 
             case 0xB8...0xBF:
                 let register = Int(opcode - 0xB8) | ((rex & 0x01) != 0 ? 8 : 0)
                 let is64Bit = (rex & 0x08) != 0
                 let immediateBytes = is64Bit ? 8 : 4
                 guard bytes.count - cursor >= immediateBytes else {
-                    if bytes.count < guestCode.count {
+                    if bytes.count < guestCodeCount {
                         return result(output, consumed: start, instructions: instructions,
                                       reason: .inputLimit, fallbackOffset: start)
                     }
@@ -145,7 +163,7 @@ struct X86_64AOTTranslator {
 
             case 0x89, 0x8B:
                 guard cursor < bytes.count else {
-                    if bytes.count < guestCode.count {
+                    if bytes.count < guestCodeCount {
                         return result(output, consumed: start, instructions: instructions,
                                       reason: .inputLimit, fallbackOffset: start)
                     }
@@ -168,7 +186,7 @@ struct X86_64AOTTranslator {
                 let destination = opcode == 0x89 ? rm : reg
                 let source = opcode == 0x89 ? reg : rm
                 let is64Bit = (rex & 0x08) != 0
-                words = [Self.moveRegister(source, to: destination, is64Bit: is64Bit)]
+                words.append(Self.moveRegister(source, to: destination, is64Bit: is64Bit))
 
             case 0xF3:
                 // ENDBR64 is not assumed to be a NOP: guest CET policy is not
@@ -185,58 +203,83 @@ struct X86_64AOTTranslator {
                 return fallback(output, consumed: start, instructions: instructions,
                                 reason: .unsupportedInstruction, opcode: bytes[start])
             }
-            let emittedBytes = words.count * MemoryLayout<UInt32>.size
-            guard emittedBytes <= outputBudget - output.count else {
+            let remainingOutputWords = maximumOutputBytes / MemoryLayout<UInt32>.size - output.count
+            guard words.count <= remainingOutputWords else {
                 return result(output, consumed: start, instructions: instructions,
                               reason: .outputLimit, fallbackOffset: start)
             }
-            for word in words { append(word, to: &output) }
+            append(words.first, to: &output)
+            if words.count > 1 { append(words.second, to: &output) }
+            if words.count > 2 { append(words.third, to: &output) }
+            if words.count > 3 { append(words.fourth, to: &output) }
             instructions += 1
         }
 
-        if bytes.count < guestCode.count {
+        if bytes.count < guestCodeCount {
             return result(output, consumed: cursor, instructions: instructions,
                           reason: .inputLimit, fallbackOffset: cursor)
         }
         return result(output, consumed: cursor, instructions: instructions, reason: .endOfInput)
     }
 
-    private func append(_ word: UInt32, to output: inout [UInt8]) {
-        output.append(UInt8(truncatingIfNeeded: word))
-        output.append(UInt8(truncatingIfNeeded: word >> 8))
-        output.append(UInt8(truncatingIfNeeded: word >> 16))
-        output.append(UInt8(truncatingIfNeeded: word >> 24))
+    private struct EncodedWords {
+        var first: UInt32 = 0
+        var second: UInt32 = 0
+        var third: UInt32 = 0
+        var fourth: UInt32 = 0
+        var count = 0
+
+        mutating func append(_ word: UInt32) {
+            switch count {
+            case 0: first = word
+            case 1: second = word
+            case 2: third = word
+            case 3: fourth = word
+            default: preconditionFailure("A translated instruction emitted more than four words")
+            }
+            count += 1
+        }
     }
 
-    private func fallback(_ code: [UInt8], consumed: Int, instructions: Int,
+    private func append(_ word: UInt32, to output: inout [UInt32]) {
+        output.append(word.littleEndian)
+    }
+
+    private func fallback(_ code: [UInt32], consumed: Int, instructions: Int,
                           reason: X86_64AOTTranslation.StopReason, opcode: UInt8) -> X86_64AOTTranslation {
         result(code, consumed: consumed, instructions: instructions, reason: reason,
                fallbackOffset: consumed, fallbackOpcode: opcode)
     }
 
-    private func result(_ code: [UInt8], consumed: Int, instructions: Int,
+    private func result(_ code: [UInt32], consumed: Int, instructions: Int,
                         reason: X86_64AOTTranslation.StopReason,
                         fallbackOffset: Int? = nil,
                         fallbackOpcode: UInt8? = nil) -> X86_64AOTTranslation {
-        X86_64AOTTranslation(machineCode: Data(code), guestBytesConsumed: consumed,
+        X86_64AOTTranslation(machineCode: code.withUnsafeBytes { Data($0) }, guestBytesConsumed: consumed,
                              instructionCount: instructions, stopReason: reason,
                              fallbackOffset: fallbackOffset, fallbackOpcode: fallbackOpcode)
     }
 
-    private static func moveImmediate(_ value: UInt64, to register: Int, is64Bit: Bool) -> [UInt32] {
+    private static func moveImmediate(_ value: UInt64, to register: Int, is64Bit: Bool) -> EncodedWords {
         let highestHalf = is64Bit ? 3 : 1
-        var chunks = [UInt16](repeating: 0, count: highestHalf + 1)
+        var firstHalf = 0
         for half in 0...highestHalf {
-            chunks[half] = UInt16(truncatingIfNeeded: value >> (half * 16))
+            if UInt16(truncatingIfNeeded: value >> (half * 16)) != 0 {
+                firstHalf = half
+                break
+            }
         }
-        let first = chunks.firstIndex(where: { $0 != 0 }) ?? 0
-        var words = [UInt32]()
-        words.reserveCapacity(chunks.count)
-        words.append(moveWide(chunks[first], register: register, half: first,
+
+        var words = EncodedWords()
+        let firstImmediate = UInt16(truncatingIfNeeded: value >> (firstHalf * 16))
+        words.append(moveWide(firstImmediate, register: register, half: firstHalf,
                               is64Bit: is64Bit, keep: false))
-        for half in chunks.indices where half != first && chunks[half] != 0 {
-            words.append(moveWide(chunks[half], register: register, half: half,
-                                  is64Bit: is64Bit, keep: true))
+        for half in 0...highestHalf where half != firstHalf {
+            let chunk = UInt16(truncatingIfNeeded: value >> (half * 16))
+            if chunk != 0 {
+                words.append(moveWide(chunk, register: register, half: half,
+                                      is64Bit: is64Bit, keep: true))
+            }
         }
         return words
     }
