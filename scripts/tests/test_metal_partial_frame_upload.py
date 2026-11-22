@@ -17,6 +17,14 @@ class MetalPartialFramebufferUploadTests(unittest.TestCase):
         self.assertIn("let isUploading = framebuffer?.isUploading ?? false", draw)
         self.assertIn("if isUploading { return }", draw)
 
+    def test_uploading_frame_skips_drawable_and_command_buffer_acquisition(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "GPU" / "MetalGPUBackend.swift").read_text(encoding="utf-8")
+        draw = source.split("func draw(in view:", 1)[1].split("extension MetalGPUBackend", 1)[0]
+        self.assertLess(draw.index("if isUploading { return }"), draw.index("queue.makeCommandBuffer()"))
+        self.assertLess(draw.index("if isUploading { return }"), draw.index("view.currentDrawable"))
+        self.assertIn("if let source { release(source) }", draw)
+
     def test_spare_texture_receives_a_full_frame_to_avoid_stale_pixels(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "GPU" / "MetalGPUBackend.swift").read_text(encoding="utf-8")
