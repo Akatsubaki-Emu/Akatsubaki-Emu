@@ -10,11 +10,12 @@ class QEMUJITPolicyTests(unittest.TestCase):
             "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)",
             1,
         )[1].split("#endif", 1)[0]
-        self.assertIn("if #available(iOS 17.4, *)", gate)
-        self.assertIn("guard JITCoordinator.shared.isJITReady else", gate)
-        self.assertIn("QEMU TCG requires iOS 17.4 or later", gate)
+        self.assertIn("guard JITCoordinator.shared.isQEMUJITReady else", gate)
+        self.assertIn("QEMU TCG requires a physical iOS 17.4+ device", gate)
         self.assertNotIn("isStikDebugAvailable", gate)
-        self.assertLess(runtime.index("if #available(iOS 17.4, *)"), runtime.index("switch QEMURuntimeStatus.inspect()"))
+        self.assertLess(runtime.index("isQEMUJITReady"), runtime.index("switch QEMURuntimeStatus.inspect()"))
+        coordinator = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady", coordinator)
 
 
 if __name__ == "__main__":

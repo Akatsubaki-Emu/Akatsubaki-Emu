@@ -93,6 +93,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             guard var opcode = fetchByte() else { return .memoryFault(address: rip) }
             var rex: UInt8 = 0
             activeSegmentBase = 0
+            var endbrPrefix = false
             var prefixCount = 0
             while true {
                 if opcode == 0x64 {
@@ -100,6 +101,9 @@ final class X86_64Interpreter: GuestCPUBackend {
                     rex = 0
                 } else if opcode == 0x65 {
                     activeSegmentBase = gsBase
+                    rex = 0
+                } else if opcode == 0xF3 {
+                    endbrPrefix = true
                     rex = 0
                 } else if opcode >= 0x40 && opcode <= 0x4F {
                     rex = opcode
@@ -113,6 +117,11 @@ final class X86_64Interpreter: GuestCPUBackend {
                 }
                 guard let next = fetchByte() else { return .memoryFault(address: rip) }
                 opcode = next
+            }
+
+            if endbrPrefix && opcode != 0x0F {
+                rip = instructionAddress
+                return .unsupportedInstruction(address: instructionAddress)
             }
 
             switch opcode {
@@ -657,7 +666,17 @@ final class X86_64Interpreter: GuestCPUBackend {
                 if takeBranch { rip = addSigned(Int8(bitPattern: raw), to: rip) }
             case 0x0F: // Two-byte opcode map
                 guard let second = fetchByte() else { return .memoryFault(address: rip) }
-                if second == 0x05 {
+                if endbrPrefix {
+                    guard second == 0x1E, rex == 0, activeSegmentBase == 0 else {
+                        rip = instructionAddress
+                        return .unsupportedInstruction(address: instructionAddress)
+                    }
+                    guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
+                    guard modrm == 0xFA else {
+                        rip = instructionAddress
+                        return .unsupportedInstruction(address: instructionAddress)
+                    }
+                } else if second == 0x05 {
                     // SYSCALL saves the post-instruction RIP and guest flags in RCX/R11.
                     registers[1] = rip
                     registers[11] = flags

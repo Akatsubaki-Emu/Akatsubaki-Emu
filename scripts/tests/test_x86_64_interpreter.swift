@@ -940,6 +940,36 @@ struct InterpreterTests {
         let multiByteNopExit = try multiByteNop.run(maxInstructions: 4)
         precondition(multiByteNopExit == .halted)
 
+        // ENDBR64 is a CET landing pad and has no guest-visible side effects.
+        let endbr64Memory = GuestMemory(size: 64)
+        precondition(endbr64Memory.write(Data([
+            0x31, 0xC0,
+            0xF3, 0x0F, 0x1E, 0xFA,
+            0x74, 0x05,
+            0xBB, 0x01, 0x00, 0x00, 0x00,
+            0xBB, 0x02, 0x00, 0x00, 0x00,
+            0xF4
+        ]), offset: 0))
+        let endbr64 = X86_64Interpreter(memory: endbr64Memory)
+        try endbr64.reset(entryPoint: 0)
+        let endbr64Exit = try endbr64.run(maxInstructions: 5)
+        precondition(endbr64Exit == .halted)
+        precondition(endbr64.registerValue(3) == 2)
+
+        let malformedEndbr64Memory = GuestMemory(size: 16)
+        precondition(malformedEndbr64Memory.write(Data([0xF3, 0x0F, 0x1E, 0xFB]), offset: 0))
+        let malformedEndbr64 = X86_64Interpreter(memory: malformedEndbr64Memory)
+        try malformedEndbr64.reset(entryPoint: 0)
+        let malformedEndbr64Exit = try malformedEndbr64.run(maxInstructions: 1)
+        precondition(malformedEndbr64Exit == .unsupportedInstruction(address: 0))
+
+        let truncatedEndbr64Memory = GuestMemory(size: 3)
+        precondition(truncatedEndbr64Memory.write(Data([0xF3, 0x0F, 0x1E]), offset: 0))
+        let truncatedEndbr64 = X86_64Interpreter(memory: truncatedEndbr64Memory)
+        try truncatedEndbr64.reset(entryPoint: 0)
+        let truncatedEndbr64Exit = try truncatedEndbr64.run(maxInstructions: 1)
+        precondition(truncatedEndbr64Exit == .memoryFault(address: 3))
+
         let shortParityMemory = GuestMemory(size: 64)
         precondition(shortParityMemory.write(Data([
             0x31, 0xC0, 0x7A, 0x05,

@@ -22,6 +22,18 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("var isJITReady: Bool", source)
         self.assertIn("return iSteamJITIsReady()", source)
 
+    def test_qemu_jit_readiness_requires_every_physical_ios_prerequisite(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("var isQEMUJITReady: Bool", source)
+        self.assertIn(
+            "return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady",
+            source,
+        )
+        gate = source.split("var isQEMUJITReady: Bool", 1)[1].split("func requestJIT", 1)[0]
+        self.assertIn("#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)", gate)
+        self.assertIn("return false", gate)
+
     def test_stikdebug_request_targets_this_app_process(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")

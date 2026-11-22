@@ -157,7 +157,7 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("self.launchInProgress = false", launch_method)
         self.assertNotIn("waitForJIT", launch)
         self.assertIn("VMDisplayViewController(configuration: configuration", complete_method)
-        self.assertIn("guard JITCoordinator.shared.isJITReady else", native)
+        self.assertIn("guard JITCoordinator.shared.isQEMUJITReady else", native)
 
     def test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed(self):
         source = """#ifdef CONFIG_DARWIN
