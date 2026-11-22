@@ -915,6 +915,7 @@ required = {
         "isteam_qemu_set_jit_callbacks",
         "__attribute__((visibility(\"default\")))",
         "isteam_jit_prepare_callback",
+        "#include <mach/mach_vm.h>",
         'dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")',
         "jit_protocol_supported()",
         "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",

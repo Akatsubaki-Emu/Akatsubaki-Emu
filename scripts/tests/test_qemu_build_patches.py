@@ -27,6 +27,7 @@ class QEMUBuildPatchTests(unittest.TestCase):
         once = patch_qemu_meson_ios.patch_source(source, runtime)
         twice = patch_qemu_meson_ios.patch_source(once, runtime)
         self.assertEqual(once, twice)
+        self.assertIn("#include <mach/mach_vm.h>", once)
         self.assertIn("config_host_data.set('CONFIG_POSIX_MEMALIGN', true)", twice)
         self.assertIn("emulator_link_args += ['-Wl,-objc_stubs_fast', '-lobjc', '-Wl,-force_load," + runtime + "']", twice)
         self.assertLess(twice.index("emulator_link_args = []"), twice.index("emulator_link_args +="))

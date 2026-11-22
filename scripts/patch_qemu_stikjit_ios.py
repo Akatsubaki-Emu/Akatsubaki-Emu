@@ -107,6 +107,7 @@ def patch_source(source: str) -> str:
             "isteam_jit_ready_callback",
             "isteam_jit_prepare_callback",
             "isteam_jit_detach_callback",
+            "#include <mach/mach_vm.h>",
             "iSteamJITIsSupported",
             'dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")',
             "jit_protocol_supported()",
@@ -130,7 +131,7 @@ def patch_source(source: str) -> str:
         raise SystemExit("QEMU tcg/region.c changed: Darwin Mach include anchor not found")
     source = source.replace(
         INCLUDE_ANCHOR,
-        "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <stdbool.h>\n#include <stddef.h>\n#include <dlfcn.h>\n#include <mach/mach.h>",
+        "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <stdbool.h>\n#include <stddef.h>\n#include <dlfcn.h>\n#include <mach/mach.h>\n#include <mach/mach_vm.h>",
         1,
     )
     if FUNCTION_ANCHOR not in source:
@@ -162,6 +163,7 @@ def patch_source(source: str) -> str:
         "isteam_jit_ready_callback",
         "isteam_jit_prepare_callback",
         "isteam_jit_detach_callback",
+        "#include <mach/mach_vm.h>",
         "iSteamJITIsSupported",
         'dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")',
         "jit_protocol_supported()",
