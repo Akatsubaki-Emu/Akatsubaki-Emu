@@ -192,6 +192,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("if grep -q 'isteam_qemu_set_jit_callbacks' \"$TCI_DIR/exports.txt\"; then", merge)
         self.assertIn('mkdir -p "$OUT/Frameworks" "$OUT/QEMU/JIT" "$OUT/QEMU/TCI"', merge)
 
+    def test_guest_process_manager_validates_pe64_before_classification(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "GuestProcess.swift").read_text(encoding="utf-8")
+        validation = source.index("WindowsPEImage.validateHeader(handle: handle, fileSize: UInt64(size))")
+        classification = source.index("return .success(.windowsPE)")
+        self.assertLess(validation, classification)
+        self.assertIn("return .success(.unknown)", source)
+
     def test_qemu_ios_platform_guard_rejects_simulator_platforms(self):
         pattern = "platform[[:space:]]+IOS([[:space:]]|$)"
         device = subprocess.run(

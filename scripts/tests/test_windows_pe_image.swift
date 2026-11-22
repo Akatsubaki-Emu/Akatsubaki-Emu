@@ -229,10 +229,60 @@ struct WindowsPEImageTests {
         return Data(bytes)
     }
 
+    static func inspectFormat(_ data: Data, name: String, in directory: URL) throws -> GuestExecutableFormat {
+        let url = directory.appendingPathComponent(name)
+        try data.write(to: url, options: .atomic)
+        switch GuestProcessManager.shared.inspect(url) {
+        case .success(let format):
+            return format
+        case .failure(let message):
+            throw NSError(domain: "WindowsPEImageTests", code: 20,
+                          userInfo: [NSLocalizedDescriptionKey: message])
+        }
+    }
+
     static func main() throws {
-        let valid = try WindowsPEImage.parse(
-            makeImage(importDirectoryRVA: 0x1000, importDirectorySize: 40)
-        )
+        let validData = makeImage(importDirectoryRVA: 0x1000, importDirectorySize: 40)
+        let valid = try WindowsPEImage.parse(validData)
+        let inspectionDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("akatsubaki-pe-inspection-\\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: inspectionDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: inspectionDirectory) }
+
+        guard try inspectFormat(validData, name: "valid-amd64.exe", in: inspectionDirectory) == .windowsPE else {
+            throw NSError(domain: "WindowsPEImageTests", code: 21,
+                          userInfo: [NSLocalizedDescriptionKey: "Valid AMD64 PE32+ was not classified as Windows PE"])
+        }
+        var mzOnly = [UInt8](repeating: 0, count: 64)
+        mzOnly[0] = 0x4D
+        mzOnly[1] = 0x5A
+        put32(0x80, at: 0x3C, in: &mzOnly)
+        guard try inspectFormat(Data(mzOnly), name: "dos-only.exe", in: inspectionDirectory) == .unknown else {
+            throw NSError(domain: "WindowsPEImageTests", code: 22,
+                          userInfo: [NSLocalizedDescriptionKey: "An MZ-only file was incorrectly classified as PE"])
+        }
+        var wrongMachine = [UInt8](validData)
+        put16(0x014C, at: 0x84, in: &wrongMachine)
+        guard try inspectFormat(Data(wrongMachine), name: "x86-pe.exe", in: inspectionDirectory) == .unknown else {
+            throw NSError(domain: "WindowsPEImageTests", code: 23,
+                          userInfo: [NSLocalizedDescriptionKey: "A non-AMD64 PE was incorrectly classified as PE"])
+        }
+        var wrongOptionalMagic = [UInt8](validData)
+        put16(0x010B, at: 0x98, in: &wrongOptionalMagic)
+        guard try inspectFormat(Data(wrongOptionalMagic), name: "pe32.exe", in: inspectionDirectory) == .unknown else {
+            throw NSError(domain: "WindowsPEImageTests", code: 24,
+                          userInfo: [NSLocalizedDescriptionKey: "A PE32 optional header was incorrectly classified as PE32+"])
+        }
+        var invalidOffset = [UInt8](validData)
+        put32(0xFFFF_FFF0, at: 0x3C, in: &invalidOffset)
+        guard try inspectFormat(Data(invalidOffset), name: "bad-offset.exe", in: inspectionDirectory) == .unknown else {
+            throw NSError(domain: "WindowsPEImageTests", code: 25,
+                          userInfo: [NSLocalizedDescriptionKey: "An out-of-range e_lfanew was incorrectly classified as PE"])
+        }
+        guard try inspectFormat(Data([0x7F, 0x45, 0x4C, 0x46]), name: "hello.elf", in: inspectionDirectory) == .linuxELF else {
+            throw NSError(domain: "WindowsPEImageTests", code: 26,
+                          userInfo: [NSLocalizedDescriptionKey: "ELF classification regressed"])
+        }
         guard valid.imports.count == 1,
               valid.imports[0].library == "KERNEL32.dll",
               valid.imports[0].name == "ExitProcess" else {

@@ -32,7 +32,14 @@ final class GuestProcessManager {
         defer { try? handle.close() }
         let data = (try? handle.read(upToCount: min(4, size))) ?? Data()
         if data.count >= 2 && data[data.startIndex] == 0x4D && data[data.startIndex + 1] == 0x5A {
-            return .success(.windowsPE)
+            do {
+                try WindowsPEImage.validateHeader(handle: handle, fileSize: UInt64(size))
+                return .success(.windowsPE)
+            } catch {
+                // An MZ prefix alone is not a PE executable. Malformed, DOS-only,
+                // 32-bit, and non-AMD64 files remain unsupported/unknown.
+                return .success(.unknown)
+            }
         }
         if data.count >= 4 && data[data.startIndex] == 0x7F && data[data.startIndex + 1] == 0x45 && data[data.startIndex + 2] == 0x4C && data[data.startIndex + 3] == 0x46 {
             return .success(.linuxELF)

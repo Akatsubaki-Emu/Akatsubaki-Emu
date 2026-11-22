@@ -56,6 +56,92 @@ struct WindowsPEImage {
         return try parse(Data(contentsOf: url, options: [.mappedIfSafe]))
     }
 
+    /// Validates only the bounded DOS/PE/COFF/PE32+ headers and section table.
+    /// This avoids loading a potentially very large executable merely to classify it.
+    static func validateHeader(handle: FileHandle, fileSize: UInt64) throws {
+        let dos = try readExactly(handle, offset: 0, count: 0x40, fileSize: fileSize, field: "DOS header")
+        guard dos[0] == 0x4D, dos[1] == 0x5A else { throw ParseError.invalidSignature }
+
+        let peOffset = UInt64(try u32(dos, 0x3C))
+        guard peOffset >= 0x40 else { throw ParseError.malformed("PE header overlaps the DOS header") }
+        guard peOffset <= fileSize, fileSize - peOffset >= 24 else {
+            throw ParseError.truncated("PE/COFF header")
+        }
+
+        let peCoff = try readExactly(handle, offset: peOffset, count: 24, fileSize: fileSize, field: "PE/COFF header")
+        guard peCoff[0] == 0x50, peCoff[1] == 0x45, peCoff[2] == 0, peCoff[3] == 0 else {
+            throw ParseError.invalidSignature
+        }
+        let machine = try u16(peCoff, 4)
+        guard machine == 0x8664 else { throw ParseError.unsupportedMachine(machine) }
+
+        let sectionCount = Int(try u16(peCoff, 6))
+        guard (1...96).contains(sectionCount) else {
+            throw ParseError.resourceLimit("section count must be 1...96")
+        }
+        let optionalSize = Int(try u16(peCoff, 20))
+        guard optionalSize >= 112 else { throw ParseError.truncated("PE32+ optional header") }
+
+        let optionalOffset = peOffset + 24
+        guard optionalOffset <= fileSize, UInt64(optionalSize) <= fileSize - optionalOffset else {
+            throw ParseError.truncated("optional header")
+        }
+        let optional = try readExactly(handle, offset: optionalOffset, count: 112, fileSize: fileSize, field: "PE32+ optional header")
+        let magic = try u16(optional, 0)
+        guard magic == 0x20B else { throw ParseError.unsupportedOptionalHeader(magic) }
+
+        let sizeOfImage = try u32(optional, 56)
+        let sizeOfHeaders = try u32(optional, 60)
+        guard sizeOfImage > 0, sizeOfHeaders > 0,
+              sizeOfHeaders <= sizeOfImage, UInt64(sizeOfHeaders) <= fileSize else {
+            throw ParseError.malformed("invalid image/header size")
+        }
+
+        let sectionTableOffset = optionalOffset + UInt64(optionalSize)
+        let sectionTableSize = UInt64(sectionCount) * 40
+        guard sectionTableOffset <= fileSize,
+              sectionTableSize <= fileSize - sectionTableOffset,
+              UInt64(sizeOfHeaders) >= sectionTableOffset + sectionTableSize else {
+            throw ParseError.truncated("section table")
+        }
+        let sectionTable = try readExactly(
+            handle, offset: sectionTableOffset, count: Int(sectionTableSize),
+            fileSize: fileSize, field: "section table"
+        )
+        for index in 0..<sectionCount {
+            let offset = index * 40
+            let virtualSize = try u32(sectionTable, offset + 8)
+            let virtualAddress = try u32(sectionTable, offset + 12)
+            let rawSize = try u32(sectionTable, offset + 16)
+            let rawOffset = try u32(sectionTable, offset + 20)
+            guard UInt64(rawOffset) + UInt64(rawSize) <= fileSize else {
+                throw ParseError.malformed("section raw data extends beyond file")
+            }
+            guard UInt64(virtualAddress) + UInt64(max(virtualSize, rawSize)) <= UInt64(sizeOfImage) else {
+                throw ParseError.malformed("section extends beyond image")
+            }
+        }
+    }
+
+    private static func readExactly(
+        _ handle: FileHandle, offset: UInt64, count: Int, fileSize: UInt64, field: String
+    ) throws -> Data {
+        guard count >= 0, offset <= fileSize, UInt64(count) <= fileSize - offset else {
+            throw ParseError.truncated(field)
+        }
+        do {
+            try handle.seek(toOffset: offset)
+            guard let data = try handle.read(upToCount: count), data.count == count else {
+                throw ParseError.truncated(field)
+            }
+            return data
+        } catch let error as ParseError {
+            throw error
+        } catch {
+            throw ParseError.truncated(field)
+        }
+    }
+
     static func parse(_ data: Data) throws -> WindowsPEImage {
         guard data.count <= 512 * 1024 * 1024 else {
             throw ParseError.resourceLimit("file exceeds the 512 MiB inspection limit")
