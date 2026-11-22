@@ -199,7 +199,7 @@ struct InterpreterTests {
 
         // Unsupported starts are rejected using the existing 15-byte instruction window.
         let unsupportedStartMemory = GuestMemory(size: 64)
-        precondition(unsupportedStartMemory.write(Data([0x01, 0xD8]), offset: 0))
+        precondition(unsupportedStartMemory.write(Data([0xCC]), offset: 0))
         let readyAOT = TestAOTExecutor(isAvailable: true)
         let unsupportedStart = X86_64Interpreter(memory: unsupportedStartMemory, aotExecutor: readyAOT)
         try unsupportedStart.reset(entryPoint: 0)
