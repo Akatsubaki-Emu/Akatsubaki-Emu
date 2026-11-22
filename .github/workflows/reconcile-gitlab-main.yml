@@ -1,0 +1,43 @@
+name: Reconcile GitLab mirror history
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/reconcile-gitlab-main.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-gitlab-main
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out canonical main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch GitLab mirror
+        run: |
+          git remote add gitlab https://gitlab.com/chantinlongx/I-steam.git
+          git fetch --no-tags gitlab main
+
+      - name: Merge mirror history without rewriting
+        run: |
+          if git merge-base --is-ancestor refs/remotes/gitlab/main HEAD; then
+            echo "GitLab main is already included in canonical main."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge --no-ff --no-edit refs/remotes/gitlab/main
+          git push origin HEAD:main
