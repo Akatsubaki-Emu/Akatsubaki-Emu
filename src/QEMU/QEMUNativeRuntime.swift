@@ -26,17 +26,18 @@ final class QEMUNativeRuntime {
             )
         }
 
+        let requiresJIT = configuration.accelerator == .jit
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
-        guard JITCoordinator.shared.isQEMUJITReady else {
+        if requiresJIT && !JITCoordinator.shared.isQEMUJITReady {
             throw RuntimeError.runtimeUnavailable(
-                "QEMU TCG requires a physical iOS 26+ device, the get-task-allow entitlement, a recognised StikDebug JIT protocol (standard split-WX or TXM), and confirmed executable-memory readiness. Enable JIT for Akatsubaki Emu with StikDebug and try again."
+                "The selected QEMU JIT runtime requires physical iOS 26+, the get-task-allow entitlement, and a supported StikDebug protocol. The no-JIT TCI runtime is not packaged yet; enable JIT and try again."
             )
         }
         #endif
 
         let libraryURL: URL
         let dataDirectory: URL
-        switch QEMURuntimeStatus.inspect() {
+        switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT) {
         case .unavailable(let reason):
             throw RuntimeError.runtimeUnavailable(reason)
         case .ready(let library, let data):
@@ -120,7 +121,8 @@ final class QEMUNativeRuntime {
                 errorBuffer.withUnsafeMutableBufferPointer { errorPointer -> Bool in
                     guard let error = errorPointer.baseAddress else { return false }
                     return isteam_qemu_start(Int32(pointerBuffer.count), argv,
-                                             libraryPath, error, Int32(errorPointer.count))
+                                             libraryPath, requiresJIT, error,
+                                             Int32(errorPointer.count))
                 }
             }
         }
@@ -219,7 +221,28 @@ final class QEMUNativeRuntime {
         default:
             return nil
         }
-        return containedRegularFile(named: [variablesName], in: directory)
+
+        // A caller-supplied code image must be paired with the variable store
+        // from that exact firmware bundle. A recursive name-only lookup can
+        // silently combine unrelated OVMF/EDK2 releases.
+        let root = directory.resolvingSymlinksInPath().standardizedFileURL
+        let rootPrefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        let resolvedFirmware = firmware.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let firmwareValues = try? resolvedFirmware.resourceValues(forKeys: [.isRegularFileKey])
+        guard resolvedFirmware.path.hasPrefix(rootPrefix),
+              firmwareValues?.isRegularFile == true else { return nil }
+
+        let firmwareDirectory = resolvedFirmware.deletingLastPathComponent().standardizedFileURL
+        guard firmwareDirectory.path == root.path || firmwareDirectory.path.hasPrefix(rootPrefix) else {
+            return nil
+        }
+        let candidate = firmwareDirectory.appendingPathComponent(variablesName)
+        let resolvedVariables = candidate.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let variablesValues = try? resolvedVariables.resourceValues(forKeys: [.isRegularFileKey])
+        guard resolvedVariables.path.hasPrefix(rootPrefix),
+              resolvedVariables.deletingLastPathComponent().path == firmwareDirectory.path,
+              variablesValues?.isRegularFile == true else { return nil }
+        return resolvedVariables
     }
 
     /// UEFI variable stores are writable guest state. Keep one persistent copy
