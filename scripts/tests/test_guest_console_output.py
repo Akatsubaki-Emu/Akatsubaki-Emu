@@ -30,5 +30,23 @@ class GuestConsoleOutputTests(unittest.TestCase):
         self.assertIn("textView.scrollRangeToVisible", output)
 
 
+    def test_observer_test_is_wired_into_both_ci_pipelines(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "validate-ios-build.yml").read_text(encoding="utf-8")
+        gitlab_ci = (root / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        command = "swiftc -parse-as-library -swift-version 5 src/Core/EmulationLog.swift scripts/tests/test_emulation_log_observer.swift"
+        self.assertIn(command, workflow)
+        self.assertIn(command, gitlab_ci)
+
+    def test_gitlab_ci_uses_current_aot_translation_and_cache_tests(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("X86_64AOTTranslator.swift", source)
+        self.assertIn("test_kenran_buto_aot_translator.swift", source)
+        self.assertIn("KenranButoAOTCompiler.swift", source)
+        self.assertIn("test_kenran_buto_aot_cache.swift", source)
+        self.assertNotIn("src/Runtime/KenranButoAOT.swift", source)
+
+
 if __name__ == "__main__":
     unittest.main()
