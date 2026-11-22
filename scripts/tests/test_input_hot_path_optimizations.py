@@ -13,14 +13,21 @@ class InputHotPathOptimizationTests(unittest.TestCase):
 
     def test_touch_stick_caches_radius_and_skips_in_radius_square_root(self):
         stick = self.touch.split("private final class StickControl", 1)[1]
-        self.assertIn("private var movementRadius: CGFloat = 1", stick)
-        self.assertIn("private var movementRadiusSquared: CGFloat = 1", stick)
-        self.assertIn("movementRadius = max(1, min(bounds.width, bounds.height) * 0.36)", stick)
-        self.assertIn("movementRadiusSquared = movementRadius * movementRadius", stick)
+        self.assertIn("private var stickMath = TouchStickMath(radius: 1)", stick)
+        self.assertIn("stickMath = TouchStickMath(radius: max(1, min(bounds.width, bounds.height) * 0.36))", stick)
         update = stick.split("private func update(_ point: CGPoint)", 1)[1]
-        self.assertIn("let distanceSquared = dx * dx + dy * dy", update)
-        self.assertIn("distanceSquared <= movementRadiusSquared", update)
-        self.assertIn(": movementRadius / sqrt(distanceSquared)", update)
+        self.assertIn("stickMath.transform(dx: dx, dy: dy)", update)
+        self.assertNotIn("movementRadius", update)
+        self.assertNotIn("sqrt", update)
+
+    def test_touch_stick_math_uses_cached_inverse_radius(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Display" / "TouchStickMath.swift").read_text(encoding="utf-8")
+        transform = source.split("func transform", 1)[1]
+        self.assertIn("inverseRadius = 1 / value", source)
+        self.assertIn("offsetX * inverseRadius", transform)
+        self.assertIn("offsetY * inverseRadius", transform)
+        self.assertIn("distanceSquared <= radiusSquared", transform)
 
     def test_controller_deadzone_rejects_inside_radius_before_square_root(self):
         if "struct ControllerDeadzone" in self.controller_mapping:

@@ -683,6 +683,18 @@ required = {
         "framebufferBytes <= 64 * 1024 * 1024",
         "fit the 64 MiB framebuffer limit",
     ],
+    "src/Display/TouchStickMath.swift": [
+        "struct TouchStickMovement",
+        "private let inverseRadius: CGFloat",
+        "inverseRadius = 1 / value",
+        "func transform(dx: CGFloat, dy: CGFloat) -> TouchStickMovement",
+        "offsetX * inverseRadius",
+    ],
+    "scripts/tests/test_touch_stick_math.swift": [
+        "TouchStickMath(radius: radius)",
+        "checked += 1",
+        "Touch stick transform equivalence passed",
+    ],
     "scripts/tests/test_qemu_native_bridge_jit_validation.py": [
         "def test_qemu_arguments_use_one_contiguous_allocation(self):",
         "self.assertIn(\"malloc(total_argument_bytes)\", start)",
