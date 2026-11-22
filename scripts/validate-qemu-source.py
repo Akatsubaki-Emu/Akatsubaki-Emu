@@ -1095,6 +1095,7 @@ for step in (
     "Select Xcode",
     "Verify Objective-C class-selector stub compatibility",
     "Verify iOS vm_map compatibility",
+    "scripts/check-build-freshness.sh",
     "Install UTM build dependencies",
     "Cache UTM dependency build and sysroot",
     "Build UTM dependencies for physical iOS arm64",
@@ -1151,6 +1152,14 @@ if "--extra-ldflags=-Wl,-force_load" in qemu_workflow:
 
 # A release IPA must never be published without its native QEMU runtime.
 release_workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+for token in [
+    'bash scripts/check-build-freshness.sh "$GITHUB_SHA"',
+    "group: isteam-release-publish-${{ matrix.channel }}",
+    "if: steps.freshness.outputs.publish == 'true'",
+]:
+    if token not in release_workflow:
+        print(f"release workflow: build freshness or release serialization contract is missing: {token}", file=sys.stderr)
+        failed = True
 if "- scripts/validate-qemu-source.py" not in release_workflow:
     print("release workflow: source-contract validator changes should not trigger full release builds", file=sys.stderr)
     failed = True
