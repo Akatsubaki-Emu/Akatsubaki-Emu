@@ -7,11 +7,13 @@ class JITProtocolSourceTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
         header = (root / "iSteam" / "JIT26Protocol.h").read_text(encoding="utf-8")
-        self.assertIn('"brk #0xf00d\\n"', source)
-        self.assertIn('"mov x16, #1\\n"', source)
-        detach = source.split("void iSteamJITDetach(void) {", 1)[1].split("}", 1)[0]
-        self.assertIn("Keep the StikDebug session attached", source)
-        self.assertNotIn("brk #0xf00d", detach)
+        prepare = source.split("void *iSteamJITPrepareRegion", 1)[1].split("\\n}", 1)[0]
+        detach = source.split("void iSteamJITDetach(void) {", 1)[1].split("\\n}", 1)[0]
+        self.assertIn('"brk #0xf00d\\n"', prepare)
+        self.assertIn('"mov x16, #1\\n"', prepare)
+        self.assertNotIn('"mov x16, #0\\n"', detach)
+        self.assertNotIn('"brk #0xf00d\\n"', detach)
+        self.assertIn("Intentionally empty: keep TXM executable mappings valid.", detach)
         self.assertIn("bool iSteamJITIsReady(void)", source)
         self.assertIn("bool iSteamJITIsReady(void);", header)
 
