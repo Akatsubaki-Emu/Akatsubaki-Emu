@@ -775,6 +775,8 @@ required = {
         "private(set) var initializationError: GuestEngineError?",
         "let error = GuestEngineError.backendNotInstalled(configuration.architecture)",
         "self.initializationError = error",
+        "state = .failed(error.localizedDescription)",
+        "throw error",
         "initializationError = nil",
         "withExecutionLock",
         "hasLoadedImage",
