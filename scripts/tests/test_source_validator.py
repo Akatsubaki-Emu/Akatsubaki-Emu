@@ -198,14 +198,18 @@ class SourceValidatorTests(unittest.TestCase):
         bridge = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
         test = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
         self.assertIn("#define _POSIX_C_SOURCE 200809L", bridge)
+        self.assertIn("typedef int (*qemu_main_loop_fn)(void);", bridge)
+        self.assertIn("typedef void (*qemu_cleanup_fn)(int);", bridge)
+        self.assertIn("#define ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI 5", bridge)
         self.assertIn("g_running = false;", bridge)
+        main_loop_call = "int qemu_exit_status = g_qemu_main_loop();"
         self.assertLess(
-            bridge.index("g_qemu_main_loop();"),
-            bridge.index("g_running = false;", bridge.index("g_qemu_main_loop();")),
+            bridge.index(main_loop_call),
+            bridge.index("g_running = false;", bridge.index(main_loop_call)),
         )
         self.assertLess(
-            bridge.index("g_running = false;", bridge.index("g_qemu_main_loop();")),
-            bridge.index("if (g_qemu_cleanup) g_qemu_cleanup();"),
+            bridge.index("g_running = false;", bridge.index(main_loop_call)),
+            bridge.index("if (g_qemu_cleanup) g_qemu_cleanup(qemu_exit_status);"),
         )
         self.assertIn("#include <stdlib.h>", test)
         self.assertIn("fake_qemu_cleanup_started_count", test)
