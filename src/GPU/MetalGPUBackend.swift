@@ -14,6 +14,14 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         init(texture: MTLTexture) { self.texture = texture }
     }
 
+    private struct PendingFrame {
+        let data: Data
+        let width: Int
+        let height: Int
+        let sequence: UInt64
+        let generation: UInt64
+    }
+
     let name = "VirtIO GPU • Metal"
     let isHardwareAccelerated = MTLCreateSystemDefaultDevice() != nil
     let width: Int
@@ -33,6 +41,8 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     private var framebufferGeneration: UInt64 = 0
     private var nextFrameSequence: UInt64 = 0
     private var publishedFrameSequence: UInt64 = 0
+    private var pendingFullFrame: PendingFrame?
+    private var requiresFullFrameUpload = false
     private let targetFrameRate: Int
     private let maxFramebufferBytes = 64 * 1024 * 1024
     private let maxFramebufferPoolBytes = 128 * 1024 * 1024
@@ -71,6 +81,8 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         framebufferGeneration &+= 1
         framebuffer = nil
         framebufferSlots.removeAll(keepingCapacity: false)
+        pendingFullFrame = nil
+        requiresFullFrameUpload = false
         textureLock.unlock()
         scheduleDisplayUpdate()
     }
@@ -131,12 +143,17 @@ final class MetalGPUBackend: NSObject, GPUBackend {
             framebuffer = nil
             nextFrameSequence = 0
             publishedFrameSequence = 0
+            pendingFullFrame = nil
+            requiresFullFrameUpload = true
             framebufferWidth = frameWidth
             framebufferHeight = frameHeight
         }
 
         let frameByteCount = frameWidth * frameHeight * 4
         let slotLimit = max(2, min(maxFramebufferSlots, maxFramebufferPoolBytes / frameByteCount))
+        nextFrameSequence &+= 1
+        let sequence = nextFrameSequence
+        let generation = framebufferGeneration
         let slot: FramebufferSlot
         let updatesPublishedSlot: Bool
         if let current = framebuffer, current.readers == 0, !current.isUploading {
@@ -153,18 +170,21 @@ final class MetalGPUBackend: NSObject, GPUBackend {
             framebufferSlots.append(slot)
             updatesPublishedSlot = false
         } else {
+            // Keep only the newest complete snapshot while every texture is busy.
+            pendingFullFrame = PendingFrame(data: frame, width: frameWidth, height: frameHeight,
+                                            sequence: sequence, generation: generation)
+            requiresFullFrameUpload = true
             textureLock.unlock()
             return
         }
+        let requiresFullUpload = requiresFullFrameUpload || pendingFullFrame != nil || !updatesPublishedSlot
+        pendingFullFrame = nil
         slot.isUploading = true
-        nextFrameSequence &+= 1
-        let sequence = nextFrameSequence
-        let generation = framebufferGeneration
         textureLock.unlock()
 
-        // Spare slots can contain older frames; only the published slot may
-        // receive a partial upload. All other slots are synchronised in full.
-        let uploadRegion = updatesPublishedSlot ? requestedRegion : fullRegion
+        // Any dropped update invalidates partial-copy assumptions until a full
+        // snapshot has been published again.
+        let uploadRegion = requiresFullUpload ? fullRegion : requestedRegion
         frame.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
             let byteOffset = uploadRegion.y * frameWidth * 4 + uploadRegion.x * 4
@@ -187,19 +207,103 @@ final class MetalGPUBackend: NSObject, GPUBackend {
             publishedFrameSequence = sequence
             drawableWidth = frameWidth
             drawableHeight = frameHeight
+            if sequence == nextFrameSequence && pendingFullFrame == nil {
+                requiresFullFrameUpload = false
+            }
         }
         let shouldSchedule = publish && !displayUpdateScheduled
         if shouldSchedule { displayUpdateScheduled = true }
+        let shouldDrainPending = pendingFullFrame != nil
         textureLock.unlock()
 
-        guard publish else { return }
         if shouldSchedule { enqueueDisplayUpdate() }
+        if shouldDrainPending { schedulePendingFrameDrain() }
     }
 
     private func release(_ slot: FramebufferSlot) {
         textureLock.lock()
         slot.readers = max(0, slot.readers - 1)
+        let shouldDrainPending = pendingFullFrame != nil
         textureLock.unlock()
+        if shouldDrainPending { schedulePendingFrameDrain() }
+    }
+
+    private func schedulePendingFrameDrain() {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.drainPendingFrame()
+        }
+    }
+
+    private func drainPendingFrame() {
+        guard let device else { return }
+
+        textureLock.lock()
+        guard let pending = pendingFullFrame else {
+            textureLock.unlock()
+            return
+        }
+        guard pending.generation == framebufferGeneration,
+              pending.width == framebufferWidth,
+              pending.height == framebufferHeight else {
+            pendingFullFrame = nil
+            textureLock.unlock()
+            return
+        }
+
+        let frameByteCount = pending.width * pending.height * 4
+        let slotLimit = max(2, min(maxFramebufferSlots, maxFramebufferPoolBytes / frameByteCount))
+        let slot: FramebufferSlot
+        if let current = framebuffer, current.readers == 0, !current.isUploading {
+            slot = current
+        } else if let reusable = framebufferSlots.first(where: {
+            $0 !== framebuffer && $0.readers == 0 && !$0.isUploading
+        }) {
+            slot = reusable
+        } else if framebufferSlots.count < slotLimit,
+                  let texture = makeTexture(device: device, width: pending.width, height: pending.height) {
+            slot = FramebufferSlot(texture: texture)
+            framebufferSlots.append(slot)
+        } else {
+            textureLock.unlock()
+            return
+        }
+
+        pendingFullFrame = nil
+        slot.isUploading = true
+        textureLock.unlock()
+
+        let fullRegion = GPUFrameRegion(x: 0, y: 0, width: pending.width, height: pending.height)
+        pending.data.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            slot.texture.replace(
+                region: MTLRegionMake2D(0, 0, fullRegion.width, fullRegion.height),
+                mipmapLevel: 0,
+                withBytes: base,
+                bytesPerRow: pending.width * 4
+            )
+        }
+
+        textureLock.lock()
+        slot.isUploading = false
+        let publish = pending.generation == framebufferGeneration
+            && pending.sequence >= publishedFrameSequence
+            && framebufferSlots.contains(where: { $0 === slot })
+        if publish {
+            framebuffer = slot
+            publishedFrameSequence = pending.sequence
+            drawableWidth = pending.width
+            drawableHeight = pending.height
+            if pending.sequence == nextFrameSequence && pendingFullFrame == nil {
+                requiresFullFrameUpload = false
+            }
+        }
+        let shouldSchedule = publish && !displayUpdateScheduled
+        if shouldSchedule { displayUpdateScheduled = true }
+        let shouldDrainPending = pendingFullFrame != nil
+        textureLock.unlock()
+
+        if shouldSchedule { enqueueDisplayUpdate() }
+        if shouldDrainPending { schedulePendingFrameDrain() }
     }
 
     private func makeTexture(device: MTLDevice, width: Int, height: Int) -> MTLTexture? {
