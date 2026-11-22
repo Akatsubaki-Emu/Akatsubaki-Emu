@@ -553,8 +553,8 @@ required = {
     "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
         "dlopen(library_path, RTLD_NOW | RTLD_LOCAL)",
-        "malloc(argument_length + 1)",
-        "memcpy(copied_argv[i], argument, argument_length + 1)",
+        "malloc(total_argument_bytes)",
+        "memcpy(copied_argv[i], argv[i], argument_length + 1u)",
         'dlsym(library, "qemu_init")',
         'dlsym(library, "qemu_main_loop")',
         'dlsym(library, "qemu_cleanup")',
@@ -566,6 +566,9 @@ required = {
         "ISTEAM_QEMU_MAX_ARGUMENTS 4096",
         "ISTEAM_QEMU_MAX_ARGUMENT_BYTES",
         "ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES",
+        "copied_argv[i] = argument_storage + argument_offset",
+        "free(g_argument_storage)",
+        "g_argument_storage = argument_storage",
         "strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u)",
         "error_buffer && error_capacity > 0",
     ],
@@ -674,6 +677,12 @@ required = {
         "case .unsupportedGPU(let gpu)",
         "framebufferBytes <= 64 * 1024 * 1024",
         "fit the 64 MiB framebuffer limit",
+    ],
+    "scripts/tests/test_qemu_native_bridge_jit_validation.py": [
+        "def test_qemu_arguments_use_one_contiguous_allocation(self):",
+        "self.assertIn(\"malloc(total_argument_bytes)\", start)",
+        "self.assertNotIn(\"malloc(argument_length + 1)\", start)",
+        "self.assertIn(\"copied_argv[i] = argument_storage + argument_offset\", start)",
     ],
     "scripts/tests/test_qemu_native_bridge.c": [
         "tooManyArguments[4097]",
