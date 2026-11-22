@@ -29,8 +29,9 @@ final class EntitlementViewModel: ObservableObject {
 
     func signIn() async {
         guard !isBusy else { return }
-        guard let anisetteURL = URL(string: anisetteServerURL.trimmingCharacters(in: .whitespacesAndNewlines)),
-              anisetteURL.scheme == "https", anisetteURL.host != nil else {
+        let configuredURL = anisetteServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let anisetteURL = URL(string: configuredURL),
+              anisetteURL.scheme?.lowercased() == "https", anisetteURL.host != nil else {
             status = "Enter a valid HTTPS Anisette server URL."
             return
         }
@@ -44,7 +45,7 @@ final class EntitlementViewModel: ObservableObject {
 
         do {
             AnisetteDataHelper.shared.url = anisetteURL
-            UserDefaults.standard.set(anisetteURL.absoluteString, forKey: "iSteam.anisetteServerURL")
+            UserDefaults.standard.set(configuredURL, forKey: "iSteam.anisetteServerURL")
             let anisetteData = try await AnisetteDataHelper.shared.getAnisetteData()
             let (account, authenticatedSession) = try await AppleAPI.shared.authenticate(
                 appleID: appleID,
@@ -55,7 +56,7 @@ final class EntitlementViewModel: ObservableObject {
                     completionHandler(nil)
                     return
                 }
-                self.prepareForVerification(using: completionHandler)
+                await self.prepareForVerification(using: completionHandler)
             }
 
             session = authenticatedSession

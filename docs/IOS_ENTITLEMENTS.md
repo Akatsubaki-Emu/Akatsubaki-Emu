@@ -11,18 +11,18 @@ The iOS Settings screen includes an **Entitlements** page based on the Apple Dev
 3. Complete Apple's two-factor verification if requested.
 4. Select the team containing the exact bundle ID shown by the current build (`com.xthrx.isteam` or `com.xthrx.isteam.nightly`).
 5. Choose **Enable Increased Memory Limit for Akatsubaki Emu**.
-6. Reinstall the app through SideStore or AltStore using the same Apple account so the installer can obtain a refreshed provisioning profile.
+6. Reinstall the app through SideStore or AltStore using the same Apple account so the installer can obtain and apply a refreshed provisioning profile.
 
-The integration lists the selected team's App IDs to locate the exact bundle identifier of the running build, then requests `INCREASED_MEMORY_LIMIT` only for that matching App ID. It does not create or modify unrelated App IDs. The Anisette device identifier and provisioning data are stored in the iOS Keychain. The Apple account password is held only in memory for authentication and cleared when the sign-in operation finishes.
+The integration only updates the current build's exact bundle identifier. It does not enumerate or modify unrelated App IDs. It requests the `INCREASED_MEMORY_LIMIT` capability, matching GetMoreRam's upstream implementation. The Anisette device identifier and provisioning data are stored in the iOS Keychain; the Apple account password is held only in memory for authentication and cleared when sign-in finishes.
 
 ## Important limits
 
 - The app cannot grant itself a privileged entitlement at runtime, rewrite its own code signature, or replace its installed provisioning profile from inside its sandbox.
-- After Apple accepts the App ID capability change, reinstall/re-provision through SideStore or AltStore using the same Apple account. The installer must obtain a refreshed provisioning profile for the entitlement to become effective.
+- Apple invalidates provisioning profiles when an App ID's capabilities change. Reinstallation/re-provisioning is therefore required; see [Apple's capability guidance](https://developer.apple.com/help/account/identifiers/enable-app-capabilities).
 - The account must have permission to modify the App ID, and the App ID must already exist in the selected team. This does not bypass Apple's eligibility rules for free or paid developer accounts.
 - `get-task-allow` is a development-signing entitlement and is not granted by the Increased Memory Limit capability request.
 - Extended Virtual Addressing remains declared in the entitlements file, but this GetMoreRam-compatible flow does not request it. Do not assume it is active until the signed app's effective entitlements and provisioning profile are inspected.
-- Apple Developer Services authentication is handled by StosSign. Authentication failures (including Apple's `-80045` response) are surfaced rather than treated as a successful capability update.
+- Apple Developer Services authentication is controlled by Apple and StosSign. Authentication failures (including Apple's `-80045` response) must be surfaced rather than treated as a successful capability update.
 
 ## Validation
 
