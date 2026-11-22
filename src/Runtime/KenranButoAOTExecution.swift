@@ -87,10 +87,7 @@ struct KenranButoAOTBlock {
 /// creation; on iOS 26+ TXM devices the C provider keeps separate RW/RX aliases
 /// and leaves the StikDebug session attached.
 final class KenranButoExecutableMemory {
-    private typealias EntryPoint = @convention(c) (UnsafeMutablePointer<UInt64>) -> Void
-
     private let region: OpaquePointer
-    private let entryPoint: UnsafeMutableRawPointer
 
     static var isAvailable: Bool {
         #if os(iOS) && !targetEnvironment(simulator)
@@ -136,17 +133,14 @@ final class KenranButoExecutableMemory {
         }
 
         region = createdRegion
-        entryPoint = entry
     }
 
     func execute(registers: inout [UInt64]) -> Bool {
         guard registers.count == KenranButoAOTBlock.guestRegisterCount else { return false }
-        let entry = unsafeBitCast(entryPoint, to: EntryPoint.self)
-        registers.withUnsafeMutableBufferPointer { buffer in
-            guard let baseAddress = buffer.baseAddress else { return }
-            entry(baseAddress)
+        return registers.withUnsafeMutableBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else { return false }
+            return iSteamAOTExecutableMemoryInvoke(region, baseAddress)
         }
-        return true
     }
 
     deinit {
