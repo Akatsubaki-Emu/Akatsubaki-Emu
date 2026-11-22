@@ -229,6 +229,79 @@ struct StaticELFExecutionTests {
         return (Data(bytes), message)
     }
 
+    static func makePIE(relocationType: UInt32 = 8, includeDependency: Bool = false) -> Data {
+        var bytes = [UInt8](repeating: 0, count: 4096)
+        bytes[0...3] = [0x7F, 0x45, 0x4C, 0x46]
+        bytes[4] = 2
+        bytes[5] = 1
+        bytes[6] = 1
+        put16(3, 16, &bytes)
+        put16(62, 18, &bytes)
+        put32(1, 20, &bytes)
+        put64(0x200, 24, &bytes)
+        put64(64, 32, &bytes)
+        put16(64, 52, &bytes)
+        put16(56, 54, &bytes)
+        put16(3, 56, &bytes)
+
+        let load = 64
+        put32(1, load, &bytes)
+        put32(7, load + 4, &bytes)
+        put64(0, load + 8, &bytes)
+        put64(0, load + 16, &bytes)
+        put64(0, load + 24, &bytes)
+        put64(4096, load + 32, &bytes)
+        put64(4096, load + 40, &bytes)
+        put64(4096, load + 48, &bytes)
+
+        let phdr = load + 56
+        put32(6, phdr, &bytes)
+        put32(4, phdr + 4, &bytes)
+        put64(64, phdr + 8, &bytes)
+        put64(0x40, phdr + 16, &bytes)
+        put64(0, phdr + 24, &bytes)
+        put64(168, phdr + 32, &bytes)
+        put64(168, phdr + 40, &bytes)
+        put64(8, phdr + 48, &bytes)
+
+        let dynamic = load + 112
+        let dynamicCount = includeDependency ? 5 : 4
+        put32(2, dynamic, &bytes)
+        put32(6, dynamic + 4, &bytes)
+        put64(0x400, dynamic + 8, &bytes)
+        put64(0x400, dynamic + 16, &bytes)
+        put64(0, dynamic + 24, &bytes)
+        put64(UInt64(dynamicCount * 16), dynamic + 32, &bytes)
+        put64(UInt64(dynamicCount * 16), dynamic + 40, &bytes)
+        put64(8, dynamic + 48, &bytes)
+
+        var entries: [(UInt64, UInt64)] = []
+        if includeDependency { entries.append((1, 0)) }
+        entries += [(7, 0x500), (8, 24), (9, 24), (0, 0)]
+        for (index, entry) in entries.enumerated() {
+            put64(entry.0, 0x400 + index * 16, &bytes)
+            put64(entry.1, 0x408 + index * 16, &bytes)
+        }
+        put64(0x600, 0x500, &bytes)
+        put64(UInt64(relocationType), 0x508, &bytes)
+        put64(0x700, 0x510, &bytes)
+        return Data(bytes)
+    }
+
+    static func rejectsPIE(_ data: Data) -> Bool {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pie")
+        do {
+            try data.write(to: url)
+            defer { try? FileManager.default.removeItem(at: url) }
+            _ = try ELF64Loader().load(url, into: GuestMemory(size: 16 * 1024 * 1024),
+                                       expectedArchitecture: .x86_64)
+            return false
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            return true
+        }
+    }
+
     static func main() throws {
         let (elfData, expectedOutput) = makeELF()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".elf")
@@ -263,6 +336,16 @@ struct StaticELFExecutionTests {
         let exit = try interpreter.run(maxInstructions: 64)
         precondition(exit == .halted)
         precondition(EmulationLog.shared.messages.contains { $0.contains(expectedOutput) })
-        print("Static ELF load → initial stack → x86-64 execution → Linux write/exit passed")
+        let pieURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pie")
+        try makePIE().write(to: pieURL)
+        defer { try? FileManager.default.removeItem(at: pieURL) }
+        let pieMemory = GuestMemory(size: 16 * 1024 * 1024)
+        let pieImage = try ELF64Loader().load(pieURL, into: pieMemory, expectedArchitecture: .x86_64)
+        precondition(pieImage.entryPoint == 0x400200)
+        precondition(pieImage.programHeaderAddress == 0x400040)
+        precondition(pieMemory.readUInt64(offset: 0x400600) == 0x400700)
+        precondition(rejectsPIE(makePIE(includeDependency: true)))
+        precondition(rejectsPIE(makePIE(relocationType: 1)))
+        print("Static ET_EXEC execution and static PIE load-bias/relative-relocation checks passed")
     }
 }

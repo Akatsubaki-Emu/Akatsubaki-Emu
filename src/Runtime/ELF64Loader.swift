@@ -1,7 +1,7 @@
 import Foundation
 
-/// Loads fixed-address ELF64 little-endian PT_LOAD segments into guest memory.
-/// This does not implement Linux boot, dynamic relocation, or process startup.
+/// Loads ELF64 ET_EXEC images and self-contained ET_DYN static PIE images.
+/// PIE support is limited to R_X86_64_RELATIVE relocations; dynamic linking is not implemented.
 final class ELF64Loader {
     struct Segment {
         let guestAddress: UInt64
@@ -39,8 +39,8 @@ final class ELF64Loader {
             case .invalidSegment: return "An ELF load segment has invalid file or memory sizes."
             case .segmentOutsideGuestMemory: return "An ELF load segment does not fit in guest memory."
             case .unsupportedMachine(let machine): return "Unsupported ELF machine type: \(machine)."
-            case .unsupportedFileType(let type): return "Unsupported ELF file type: \(type). This loader currently supports fixed-address ET_EXEC images only."
-            case .unsupportedDynamicImage: return "Dynamic linking, interpreter segments and TLS are not supported by this ELF loader."
+            case .unsupportedFileType(let type): return "Unsupported ELF file type: \(type). Only ET_EXEC and self-contained static ET_DYN images are supported."
+            case .unsupportedDynamicImage: return "Dynamic interpreters, dependencies, TLS and non-relative relocations are not supported."
             case .programHeadersNotMapped: return "The ELF program-header table is not mapped inside a loadable segment."
             }
         }
@@ -71,9 +71,10 @@ final class ELF64Loader {
               let phnum = u16(data, 56), version == 1, ehsize >= 64, phentsize >= 56 else {
             throw LoadError.truncatedHeader
         }
-        // ET_DYN needs a load bias and dynamic relocations; accepting it as
-        // fixed-address code would produce a misleadingly "loaded" image.
-        guard fileType == 2 else { throw LoadError.unsupportedFileType(fileType) }
+        guard fileType == 2 || fileType == 3 else {
+            throw LoadError.unsupportedFileType(fileType)
+        }
+        let loadBias: UInt64 = fileType == 3 ? 0x400000 : 0
 
         let expectedMachine: UInt16
         switch expectedArchitecture {
@@ -96,6 +97,8 @@ final class ELF64Loader {
 
         var segments: [Segment] = []
         var pending: [(Segment, Int)] = []
+        var rawLoadSegments: [(virtualAddress: UInt64, fileOffset: UInt64, fileSize: UInt64, memorySize: UInt64)] = []
+        var dynamicSegment: (fileOffset: UInt64, fileSize: UInt64)?
         var total: UInt64 = 0
         var mappedProgramHeaderAddress: UInt64?
         var declaredProgramHeaderAddress: UInt64?
@@ -115,10 +118,23 @@ final class ELF64Loader {
                       declaredProgramHeaderAddress == nil else {
                     throw LoadError.invalidProgramHeaderTable
                 }
-                declaredProgramHeaderAddress = virtualAddress
+                let (biasedAddress, biasOverflow) = virtualAddress.addingReportingOverflow(loadBias)
+                guard !biasOverflow else { throw LoadError.invalidProgramHeaderTable }
+                declaredProgramHeaderAddress = biasedAddress
                 continue
             }
-            if type == 2 || type == 3 || type == 7 {
+            if type == 2 {
+                guard fileType == 3, dynamicSegment == nil,
+                      fileOffset <= UInt64(data.count),
+                      fileSize > 0, fileSize <= UInt64(data.count) - fileOffset,
+                      fileSize % 16 == 0, fileSize <= 16 * 1024 * 1024,
+                      memorySize >= fileSize else {
+                    throw LoadError.unsupportedDynamicImage
+                }
+                dynamicSegment = (fileOffset: fileOffset, fileSize: fileSize)
+                continue
+            }
+            if type == 3 || type == 7 {
                 throw LoadError.unsupportedDynamicImage
             }
             guard type == 1 else { continue }
@@ -128,15 +144,17 @@ final class ELF64Loader {
                 let offsetInSegment = phoff - fileOffset
                 if offsetInSegment <= fileSize && programHeaderTableSize <= fileSize - offsetInSegment {
                     guard virtualAddress <= UInt64.max - offsetInSegment else { throw LoadError.invalidSegment }
-                    let mappedAddress = virtualAddress + offsetInSegment
+                    let (virtualMapping, mappingOverflow) = virtualAddress.addingReportingOverflow(offsetInSegment)
+                    let (mappedAddress, biasOverflow) = virtualMapping.addingReportingOverflow(loadBias)
+                    guard !mappingOverflow, !biasOverflow else { throw LoadError.invalidProgramHeaderTable }
                     if let existing = mappedProgramHeaderAddress, existing != mappedAddress {
                         throw LoadError.invalidProgramHeaderTable
                     }
                     mappedProgramHeaderAddress = mappedAddress
                 }
             }
-            let loadAddress = virtualAddress
-            guard loadAddress <= memory.size, memorySize <= memory.size - loadAddress,
+            let (loadAddress, addressOverflow) = virtualAddress.addingReportingOverflow(loadBias)
+            guard !addressOverflow, loadAddress <= memory.size, memorySize <= memory.size - loadAddress,
                   fileSize <= UInt64(Int.max), loadAddress <= UInt64(Int.max),
                   total <= UInt64.max - memorySize else {
                 throw LoadError.segmentOutsideGuestMemory
@@ -146,6 +164,8 @@ final class ELF64Loader {
                     alignment & (alignment - 1) == 0
                     && virtualAddress % alignment == fileOffset % alignment
                   ) else { throw LoadError.invalidSegment }
+            rawLoadSegments.append((virtualAddress: virtualAddress, fileOffset: fileOffset,
+                                    fileSize: fileSize, memorySize: memorySize))
             let segment = Segment(guestAddress: loadAddress, fileSize: fileSize,
                                   memorySize: memorySize, flags: flags)
             segments.append(segment)
@@ -154,6 +174,16 @@ final class ELF64Loader {
         }
 
         guard !segments.isEmpty else { throw LoadError.noLoadableSegments }
+        let (loadedEntryPoint, entryOverflow) = entry.addingReportingOverflow(loadBias)
+        guard !entryOverflow else { throw LoadError.invalidSegment }
+        if let dynamicSegment {
+            let dynamicIsMapped = rawLoadSegments.contains { segment in
+                dynamicSegment.fileOffset >= segment.fileOffset
+                    && dynamicSegment.fileOffset - segment.fileOffset <= segment.fileSize
+                    && dynamicSegment.fileSize <= segment.fileSize - (dynamicSegment.fileOffset - segment.fileOffset)
+            }
+            guard dynamicIsMapped else { throw LoadError.unsupportedDynamicImage }
+        }
         let orderedSegments = segments.sorted { $0.guestAddress < $1.guestAddress }
         let phdrAddress: UInt64
         if let declaredProgramHeaderAddress {
@@ -185,8 +215,8 @@ final class ELF64Loader {
         // Merely being within a writable/data PT_LOAD region is not sufficient.
         guard segments.contains(where: {
             ($0.flags & 0x1) != 0
-                && entry >= $0.guestAddress
-                && entry - $0.guestAddress < $0.fileSize
+                && loadedEntryPoint >= $0.guestAddress
+                && loadedEntryPoint - $0.guestAddress < $0.fileSize
         }) else { throw LoadError.invalidSegment }
 
         // Start from a clean address space so bytes from a previously loaded image
@@ -201,10 +231,119 @@ final class ELF64Loader {
                 throw LoadError.segmentOutsideGuestMemory
             }
         }
+        if let dynamicSegment {
+            try applyStaticPIERelocations(
+                data: data,
+                fileOffset: dynamicSegment.fileOffset,
+                fileSize: dynamicSegment.fileSize,
+                loadBias: loadBias,
+                loadSegments: rawLoadSegments,
+                memory: memory
+            )
+        }
         let maximumGuestAddress = orderedSegments.reduce(UInt64(0)) { max($0, $1.guestAddress + $1.memorySize) }
-        return Image(entryPoint: entry, machine: machine, segments: segments, loadedByteCount: total,
+        return Image(entryPoint: loadedEntryPoint, machine: machine, segments: segments, loadedByteCount: total,
                      programHeaderAddress: phdrAddress, programHeaderEntrySize: phentsize,
                      programHeaderCount: phnum, maximumGuestAddress: maximumGuestAddress)
+    }
+
+    private func applyStaticPIERelocations(
+        data: Data,
+        fileOffset: UInt64,
+        fileSize: UInt64,
+        loadBias: UInt64,
+        loadSegments: [(virtualAddress: UInt64, fileOffset: UInt64, fileSize: UInt64, memorySize: UInt64)],
+        memory: GuestMemory
+    ) throws {
+        guard fileOffset <= UInt64(data.count),
+              fileSize <= UInt64(data.count) - fileOffset,
+              fileSize > 0, fileSize % 16 == 0,
+              fileSize <= 16 * 1024 * 1024 else {
+            throw LoadError.unsupportedDynamicImage
+        }
+
+        var relaAddress: UInt64?
+        var relaSize: UInt64?
+        var relaEntrySize: UInt64?
+        var foundTerminator = false
+        let dynamicEntryCount = Int(fileSize / 16)
+        for index in 0..<dynamicEntryCount {
+            let offset = Int(fileOffset) + index * 16
+            guard let tag = u64(data, offset), let value = u64(data, offset + 8) else {
+                throw LoadError.unsupportedDynamicImage
+            }
+            if tag == 0 {
+                foundTerminator = true
+                break
+            }
+            switch tag {
+            case 1, 2, 12, 13, 17, 18, 19, 20, 22, 23, 25, 26, 27, 32, 33, 35, 36, 37:
+                throw LoadError.unsupportedDynamicImage
+            case 7:
+                guard relaAddress == nil else { throw LoadError.unsupportedDynamicImage }
+                relaAddress = value
+            case 8:
+                guard relaSize == nil else { throw LoadError.unsupportedDynamicImage }
+                relaSize = value
+            case 9:
+                guard relaEntrySize == nil else { throw LoadError.unsupportedDynamicImage }
+                relaEntrySize = value
+            default:
+                break
+            }
+        }
+        guard foundTerminator else { throw LoadError.unsupportedDynamicImage }
+        guard let relaAddress, let relaSize else {
+            guard relaAddress == nil, relaSize == nil, relaEntrySize == nil else {
+                throw LoadError.unsupportedDynamicImage
+            }
+            return
+        }
+        guard relaEntrySize == 24, relaSize % 24 == 0,
+              relaSize <= 16 * 1024 * 1024 else {
+            throw LoadError.unsupportedDynamicImage
+        }
+        guard relaSize > 0 else { return }
+
+        let relaFileOffset = loadSegments.compactMap { segment -> UInt64? in
+            guard relaAddress >= segment.virtualAddress else { return nil }
+            let delta = relaAddress - segment.virtualAddress
+            guard delta <= segment.fileSize, relaSize <= segment.fileSize - delta else { return nil }
+            let (offset, overflow) = segment.fileOffset.addingReportingOverflow(delta)
+            return overflow ? nil : offset
+        }.first
+        guard let relaFileOffset,
+              relaFileOffset <= UInt64(data.count),
+              relaSize <= UInt64(data.count) - relaFileOffset else {
+            throw LoadError.unsupportedDynamicImage
+        }
+
+        let relocationCount = Int(relaSize / 24)
+        for index in 0..<relocationCount {
+            let offset = Int(relaFileOffset) + index * 24
+            guard let target = u64(data, offset),
+                  let information = u64(data, offset + 8),
+                  let addendBits = u64(data, offset + 16) else {
+                throw LoadError.unsupportedDynamicImage
+            }
+            let relocationType = UInt32(truncatingIfNeeded: information)
+            let symbolIndex = UInt32(information >> 32)
+            guard relocationType == 8, symbolIndex == 0,
+                  loadSegments.contains(where: { segment in
+                      guard target >= segment.virtualAddress else { return false }
+                      let delta = target - segment.virtualAddress
+                      return delta <= segment.memorySize && 8 <= segment.memorySize - delta
+                  }) else {
+                throw LoadError.unsupportedDynamicImage
+            }
+            let (targetAddress, targetOverflow) = target.addingReportingOverflow(loadBias)
+            let (relocatedValue, valueOverflow) = Int64(bitPattern: loadBias)
+                .addingReportingOverflow(Int64(bitPattern: addendBits))
+            guard !targetOverflow, !valueOverflow, relocatedValue >= 0,
+                  memory.writeUInt64(UInt64(relocatedValue), offset: targetAddress) else {
+                throw LoadError.unsupportedDynamicImage
+            }
+        }
     }
 
     private func u16(_ data: Data, _ offset: Int) -> UInt16? {

@@ -12,7 +12,7 @@ enum ELFValidator {
             case .notELF: return "The selected file is not an ELF executable."
             case .not64Bit: return "Only 64-bit ELF executables are supported."
             case .notX86_64: return "Only x86-64 ELF executables are currently supported."
-            case .unsupportedFileType: return "Only fixed-address ET_EXEC ELF images are supported; shared objects and PIE images need a dynamic loader."
+            case .unsupportedFileType: return "Only ET_EXEC and self-contained static PIE ELF images are supported; dynamic linking is not implemented."
             }
         }
     }
@@ -34,7 +34,7 @@ enum ELFValidator {
 
         guard bytes[5] == 1, bytes[6] == 1 else { throw ValidationError.notELF }
         let fileType = UInt16(bytes[16]) | (UInt16(bytes[17]) << 8)
-        guard fileType == 2 else { throw ValidationError.unsupportedFileType }
+        guard fileType == 2 || fileType == 3 else { throw ValidationError.unsupportedFileType }
         let machine = UInt16(bytes[18]) | (UInt16(bytes[19]) << 8)
         guard machine == 62 else { throw ValidationError.notX86_64 }
     }

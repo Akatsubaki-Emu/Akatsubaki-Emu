@@ -123,7 +123,7 @@ required = {
         "previous-crash.log",
     ],
     "iSteam/ELFValidator.swift": [
-        "guard fileType == 2",
+        "guard fileType == 2 || fileType == 3",
         "unsupportedFileType",
     ],
     "iSteam/LaunchSetupViewController.swift": [
@@ -287,7 +287,11 @@ required = {
         "loadable executable segment",
         "case unsupportedFileType(UInt16), unsupportedDynamicImage, programHeadersNotMapped, fileTooLarge",
         "version == 1",
-        "type == 2 || type == 3 || type == 7",
+        "if type == 2",
+        "type == 3 || type == 7",
+        "applyStaticPIERelocations",
+        "relocationType == 8",
+        "relaEntrySize == 24",
         "alignment & (alignment - 1) == 0",
         "orderedSegments",
         "entry - $0.guestAddress < $0.fileSize",
