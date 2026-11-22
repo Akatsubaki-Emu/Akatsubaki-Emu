@@ -38,11 +38,12 @@ final class LinuxSyscallDispatcher {
     }
 
     func reset() {
-        if programBreak > initialProgramBreak {
-            _ = memory.zero(offset: initialProgramBreak, length: programBreak - initialProgramBreak)
+        let mappedBreakEnd = Self.alignUp(programBreak)
+        if mappedBreakEnd > initialProgramBreak {
+            _ = memory.unmap(offset: initialProgramBreak, length: mappedBreakEnd - initialProgramBreak)
         }
         for range in mappedRanges {
-            _ = memory.zero(offset: range.lowerBound, length: range.upperBound - range.lowerBound)
+            _ = memory.unmap(offset: range.lowerBound, length: range.upperBound - range.lowerBound)
         }
         programBreak = initialProgramBreak
         mappedRanges.removeAll(keepingCapacity: true)
@@ -89,9 +90,9 @@ final class LinuxSyscallDispatcher {
             return .returned(0)
         case 9:
             guard arg4 == UInt64.max, arg5 == 0 else { return .returned(errno(22)) }
-            return .returned(mapAnonymous(address: arg0, length: arg1, flags: arg3))
+            return .returned(mapAnonymous(address: arg0, length: arg1, protection: arg2, flags: arg3))
         case 10:
-            return .returned(validateRange(address: arg0, length: arg1))
+            return .returned(protect(address: arg0, length: arg1, protection: arg2))
         case 11:
             return .returned(unmap(address: arg0, length: arg1))
         case 12:
@@ -215,18 +216,31 @@ final class LinuxSyscallDispatcher {
         let upperLimit = min(firstMapping, stackBase >= 4096 ? stackBase - 4096 : 0)
         guard requested >= initialProgramBreak, requested <= upperLimit,
               requested <= memory.size else { return programBreak }
-        if requested > programBreak {
-            guard memory.zero(offset: programBreak, length: requested - programBreak) else { return programBreak }
-        } else if requested < programBreak {
-            guard memory.zero(offset: requested, length: programBreak - requested) else { return programBreak }
+        let oldMappedEnd = Self.alignUp(programBreak)
+        let newMappedEnd = Self.alignUp(requested)
+        if newMappedEnd > oldMappedEnd {
+            let length = newMappedEnd - oldMappedEnd
+            guard memory.map(offset: oldMappedEnd, length: length,
+                             permissions: [.read, .write]) else { return programBreak }
+            guard memory.zero(offset: oldMappedEnd, length: length) else {
+                _ = memory.unmap(offset: oldMappedEnd, length: length)
+                return programBreak
+            }
+        } else if newMappedEnd < oldMappedEnd {
+            guard memory.unmap(offset: newMappedEnd, length: oldMappedEnd - newMappedEnd) else {
+                return programBreak
+            }
         }
         programBreak = requested
         return programBreak
     }
 
-    private func mapAnonymous(address requested: UInt64, length: UInt64, flags: UInt64) -> UInt64 {
+    private func mapAnonymous(address requested: UInt64, length: UInt64, protection: UInt64, flags: UInt64) -> UInt64 {
         let mapType = flags & 0x03
-        guard length > 0, length <= memory.size, flags & 0x20 != 0,
+        let supportedFlags: UInt64 = 0x03 | 0x10 | 0x20 | 0x100000
+        guard length > 0, length <= memory.size, protection & ~UInt64(0x7) == 0,
+              flags & ~supportedFlags == 0, flags & 0x20 != 0,
+              (flags & 0x10 == 0 || flags & 0x100000 == 0),
               mapType == 1 || mapType == 2 else { return errno(22) }
         let (rounded, overflow) = length.addingReportingOverflow(4095)
         guard !overflow else { return errno(12) }
@@ -264,23 +278,17 @@ final class LinuxSyscallDispatcher {
         if !overlappingRanges.isEmpty {
             if noReplace { return errno(17) }
             guard fixed, unmap(address: address, length: size) == 0 else { return errno(12) }
-
-            // unmap() clears replaced pages; clear only newly covered gaps here.
-            var zeroCursor = address
-            for overlap in overlappingRanges {
-                let overlapStart = max(address, overlap.lowerBound)
-                let overlapEnd = min(end, overlap.upperBound)
-                if zeroCursor < overlapStart,
-                   !memory.zero(offset: zeroCursor, length: overlapStart - zeroCursor) {
-                    return errno(12)
-                }
-                zeroCursor = max(zeroCursor, overlapEnd)
-            }
-            if zeroCursor < end,
-               !memory.zero(offset: zeroCursor, length: end - zeroCursor) {
-                return errno(12)
-            }
-        } else if !memory.zero(offset: address, length: size) {
+        }
+        guard memory.map(offset: address, length: size, permissions: [.read, .write]) else {
+            return noReplace ? errno(17) : errno(12)
+        }
+        guard memory.zero(offset: address, length: size) else {
+            _ = memory.unmap(offset: address, length: size)
+            return errno(12)
+        }
+        let requestedPermissions = GuestMemoryPermissions(rawValue: UInt8(protection))
+        guard memory.protect(offset: address, length: size, permissions: requestedPermissions) else {
+            _ = memory.unmap(offset: address, length: size)
             return errno(12)
         }
         insertMappedRange(address..<end)
@@ -344,9 +352,7 @@ final class LinuxSyscallDispatcher {
 
             let overlapStart = max(range.lowerBound, address)
             let overlapEnd = min(range.upperBound, end)
-            guard memory.zero(offset: overlapStart, length: overlapEnd - overlapStart) else {
-                return errno(22)
-            }
+
             if range.lowerBound < address {
                 remaining.append(range.lowerBound..<address)
             }
@@ -354,8 +360,20 @@ final class LinuxSyscallDispatcher {
                 remaining.append(end..<range.upperBound)
             }
         }
+        guard memory.unmap(offset: address, length: size) else { return errno(22) }
         mappedRanges = remaining
         return 0
+    }
+
+    private func protect(address: UInt64, length: UInt64, protection: UInt64) -> UInt64 {
+        guard address & 0xFFF == 0, length > 0,
+              protection & ~UInt64(0x7) == 0 else { return errno(22) }
+        let (rounded, overflow) = length.addingReportingOverflow(4095)
+        guard !overflow else { return errno(12) }
+        let size = rounded & ~UInt64(4095)
+        guard address <= memory.size, size <= memory.size - address else { return errno(12) }
+        let permissions = GuestMemoryPermissions(rawValue: UInt8(protection))
+        return memory.protect(offset: address, length: size, permissions: permissions) ? 0 : errno(12)
     }
 
     private func validateRange(address: UInt64, length: UInt64) -> UInt64 {
