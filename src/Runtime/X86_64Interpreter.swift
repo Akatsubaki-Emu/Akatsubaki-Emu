@@ -93,8 +93,18 @@ final class X86_64Interpreter: GuestCPUBackend {
             }
 
             switch opcode {
-            case 0x90: // NOP
-                break
+            case 0x90...0x97: // XCHG EAX/RAX, r32/r64
+                let index = Int(opcode - 0x90) | (rex & 0x01 != 0 ? 8 : 0)
+                if index != 0 {
+                    if rex & 0x08 != 0 {
+                        registers.swapAt(0, index)
+                    } else {
+                        let accumulator = UInt32(truncatingIfNeeded: registers[0])
+                        let value = UInt32(truncatingIfNeeded: registers[index])
+                        registers[0] = UInt64(value)
+                        registers[index] = UInt64(accumulator)
+                    }
+                }
             case 0xF4: // HLT
                 halted = true
                 instructionCount &+= 1

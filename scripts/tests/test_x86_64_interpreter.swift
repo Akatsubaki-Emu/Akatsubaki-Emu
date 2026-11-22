@@ -976,6 +976,36 @@ struct InterpreterTests {
             }
         }
 
+        let accumulatorExchange32Memory = GuestMemory(size: 64)
+        let accumulatorExchange32Program: [UInt8] = [
+            0xB8, 0x44, 0x33, 0x22, 0x11,
+            0x41, 0xB8, 0x88, 0x77, 0x66, 0x55,
+            0x41, 0x90,
+            0x0F, 0x0B
+        ]
+        precondition(accumulatorExchange32Memory.write(Data(accumulatorExchange32Program), offset: 0))
+        let accumulatorExchange32 = X86_64Interpreter(memory: accumulatorExchange32Memory)
+        try accumulatorExchange32.reset(entryPoint: 0)
+        let accumulatorExchange32Exit = try accumulatorExchange32.run(maxInstructions: 4)
+        precondition(accumulatorExchange32Exit == .unsupportedInstruction(address: 13))
+        precondition(accumulatorExchange32.registerValue(0) == 0x55667788)
+        precondition(accumulatorExchange32.registerValue(8) == 0x11223344)
+
+        let accumulatorExchange64Memory = GuestMemory(size: 64)
+        let accumulatorExchange64Program: [UInt8] = [
+            0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+            0x49, 0xB8, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+            0x49, 0x90,
+            0x0F, 0x0B
+        ]
+        precondition(accumulatorExchange64Memory.write(Data(accumulatorExchange64Program), offset: 0))
+        let accumulatorExchange64 = X86_64Interpreter(memory: accumulatorExchange64Memory)
+        try accumulatorExchange64.reset(entryPoint: 0)
+        let accumulatorExchange64Exit = try accumulatorExchange64.run(maxInstructions: 4)
+        precondition(accumulatorExchange64Exit == .unsupportedInstruction(address: 22))
+        precondition(accumulatorExchange64.registerValue(0) == 0x8877665544332211)
+        precondition(accumulatorExchange64.registerValue(8) == 0x1122334455667788)
+
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
