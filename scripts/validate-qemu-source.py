@@ -576,6 +576,13 @@ required = {
         "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
     ],
+    "runtime/qemu/README.md": [
+        "QEMURuntimeStatus.inspect()",
+        "qemu_system_shutdown_request",
+        "isteam_qemu_set_jit_callbacks",
+        "physical iOS 17.4",
+        "Physical-device runtime startup",
+    ],
     ".github/workflows/validate-repository.yml": [
         "bash -n scripts/validate-qemu-runtime.sh",
     ],

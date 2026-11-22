@@ -139,6 +139,21 @@ class SourceValidatorTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, f"{script}: {result.stderr}")
 
+    def test_qemu_runtime_documentation_has_one_consistent_required_export_contract(self):
+        root = Path(__file__).resolve().parents[2]
+        readme = (root / "runtime" / "qemu" / "README.md").read_text(encoding="utf-8")
+        for symbol in (
+            "qemu_init",
+            "qemu_main_loop",
+            "qemu_cleanup",
+            "qemu_system_shutdown_request",
+            "isteam_qemu_set_jit_callbacks",
+        ):
+            self.assertIn(f"`{symbol}`", readme)
+        self.assertNotIn("qemu_system_shutdown_request` is optional", readme)
+        self.assertEqual(readme.count("The runtime library must be built for **physical iOS arm64**"), 1)
+        self.assertEqual(readme.count("Physical-device runtime startup"), 1)
+
     def test_qemu_ios_platform_guard_rejects_simulator_platforms(self):
         pattern = "platform[[:space:]]+IOS([[:space:]]|$)"
         device = subprocess.run(

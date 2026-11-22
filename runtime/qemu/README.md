@@ -1,62 +1,61 @@
-# QEMU runtime artifact contract
+# Akatsubaki Emu QEMU runtime contract
 
-This directory documents the runtime packaging contract and contains a validator. It does **not** implement or bundle the QEMU engine, and it is not a completed DroidDeck backend port.
+This document describes the QEMU runtime artifact used by Akatsubaki Emu. It does not implement or bundle the QEMU engine; the runtime is built from the UTM/QEMU source by the dedicated workflow.
 
-## Runtime layout
+## Build and embedding
 
-The build script `scripts/package-utm-qemu-runtime.sh` selects a loadable UTM/QEMU Mach-O binary by its exported lifecycle symbols. It writes the selected path to:
+`scripts/package-utm-qemu-runtime.sh` selects a loadable UTM/QEMU Mach-O library by its exported lifecycle, shutdown, and JIT symbols. It writes the selected relative path to `QEMU/runtime-library-path.txt`.
 
-- `QEMU/runtime-library-path.txt`
+The iOS release workflow downloads the runtime artifact and embeds its complete `Frameworks/` and `QEMU/` directories into the app. The manifest is authoritative; do not assume a fixed QEMU library filename or internal UTM layout.
 
-The release workflow embeds the complete `Frameworks/` and `QEMU/` directories into the iOS app. Do not assume a fixed QEMU library filename: the manifest is authoritative, and UTM may change its internal library name or layout.
-
-The library is an **iOS device arm64** binary that runs an **x86_64 system guest**. It must not be replaced with a macOS or simulator build.
-The build script `scripts/package-utm-qemu-runtime.sh` selects a loadable UTM/QEMU Mach-O binary by its exported lifecycle symbols. It writes the selected path to `QEMU/runtime-library-path.txt`.
-
-The release workflow embeds the complete `Frameworks/` and `QEMU/` directories into the iOS app. Do not assume a fixed QEMU library filename: the manifest is authoritative, and UTM may change its internal library name or layout.
-
-The library is an **iOS device arm64** binary that runs an **x86_64 system guest**. Packaging and standalone validation inspect the Mach-O build-version platform and require `IOS`; an arm64 slice alone is insufficient, and macOS, Catalyst or simulator builds are rejected.
+The runtime library must be built for **physical iOS arm64** and runs an **x86_64 system guest**. An arm64 slice alone is insufficient: macOS, Mac Catalyst, and iOS Simulator builds are rejected.
 
 ## Native bridge contract
 
-The native bridge in `iSteam/QEMUNativeBridge.c` requires these exported symbols:
+`iSteam/QEMUNativeBridge.c` requires all five exports below and registers the JIT callbacks before calling `qemu_init`:
 
 - `qemu_init`
 - `qemu_main_loop`
 - `qemu_cleanup`
-
-`qemu_system_shutdown_request` is optional. If it is absent, the bridge can start QEMU but cannot request graceful guest shutdown.
 - `qemu_system_shutdown_request`
 - `isteam_qemu_set_jit_callbacks`
 
-Both graceful shutdown and the StikDebug JIT callback registration export are required. The bridge rejects a runtime missing either contract; actual shutdown and JIT behavior still require physical-device validation.
+Graceful shutdown and StikDebug JIT callback registration are mandatory. A library missing either export is rejected by the packager, preflight loader, and native bridge.
 
-The writable per-VM variable store is confined to the resolved Application Support directory. Existing symlinks and non-regular destination objects are not reused; a directory or escaped parent path is rejected.
+## Startup and validation
 
-UEFI code and variable-store templates are selected as matching pairs: `OVMF_CODE.fd` with `OVMF_VARS.fd`, `OVMF_CODE_4M.fd` with `OVMF_VARS_4M.fd`, or `edk2-x86_64-code.fd` with `edk2-x86_64-vars.fd`. Custom code images must match one of these supported names so the runtime cannot pair unrelated firmware generations.
+`src/QEMU/QEMURuntimeStatus.swift` resolves the library path from the generated manifest. `QEMURuntimeStatus.inspect()` then asks the native bridge to load the library with `RTLD_NOW` and resolve the required exports. `QEMUNativeRuntime` performs this preflight before starting QEMU, so missing dependent libraries and missing exports are reported before guest startup.
 
-The Swift runtime locator is `src/QEMU/QEMURuntimeStatus.swift`; the lifecycle owner is `src/QEMU/QEMUNativeRuntime.swift`. The locator reads the generated manifest and resolves the library inside the app bundle. The native bridge then loads it with `dlopen` and resolves the lifecycle symbols with `dlsym`.
-
-## Validation
-
-Run:
+The package script validates the artifact's Mach-O type, physical iOS platform, arm64 architecture, and required exports. For a signed library, the standalone validator can additionally verify the code signature:
 
 ```sh
 bash scripts/validate-qemu-runtime.sh /path/to/the/manifest-selected-QEMU-library
 ```
 
-The validator requires Apple tooling and checks that the file is Mach-O, contains the device `arm64` architecture, exports all three required symbols as defined external symbols, and passes strict code-signature verification. It reports the optional shutdown symbol separately.
-The validator requires Apple tooling and checks that the file is Mach-O, contains the device `arm64` architecture, exports all five required lifecycle/shutdown/JIT symbols as defined external symbols, and passes strict code-signature verification.
+The standalone validator requires Apple tooling (`file`, `lipo`, `nm`, `vtool`, and `codesign`). It is a post-signing check; unsigned build artifacts are not expected to pass its code-signature check.
 
-This is a packaging check only. It does not prove that the library's dependencies load, that QEMU initializes, or that a guest boots.
+## JIT requirements
 
-## Current status and limitations
+On physical iOS 17.4 and later, QEMU TCG startup requires an active StikDebug debugger/JIT session and the app's `get-task-allow` entitlement. On supported iOS 26+ TXM devices, the patched TCG allocator uses the StikDebug executable-region protocol. Simulator, tvOS, and visionOS builds do not use this physical-iOS JIT path.
 
-- Native bridge and Swift manifest-based runtime locator: present in source.
-- UTM/QEMU runtime binary: must be produced by the runtime workflow and embedded by the release workflow.
-- Physical-device runtime startup, guest boot, display, input, graceful shutdown, and disk persistence: not verified by this validator.
-- Physical-device runtime startup, guest boot, display, input, graceful shutdown, and disk persistence: not verified by this validator. The native bridge is one-shot per app process; relaunch Akatsubaki Emu before starting another QEMU session.
-- The current app runtime configuration is for x86_64 guests; this artifact is not an ARM64 guest runtime. The launch flow accepts a boot disk or installer/live ISO and an optional writable destination disk. ISO installation attaches the destination as a hard disk and keeps the ISO on a separate optical AHCI port. A blank sparse raw disk can be created in app storage from Launch Setup. Existing one-disk sessions remain supported.
-- tvOS and visionOS need separately built and validated platform runtimes; the iOS binary must not be reused blindly.
+## Firmware and writable disks
 
-A simulator compile, source check, or successful artifact inspection is not evidence of a working physical-device emulator.
+Windows and SteamOS UEFI profiles require matching firmware pairs:
+
+- `OVMF_CODE.fd` with `OVMF_VARS.fd`
+- `OVMF_CODE_4M.fd` with `OVMF_VARS_4M.fd`
+- `edk2-x86_64-code.fd` with `edk2-x86_64-vars.fd`
+
+The app copies the variable-store template into per-configuration Application Support storage and passes it as the second pflash device. It never writes UEFI variables into the signed app bundle. Existing symlinks and non-regular destination objects are not reused.
+
+Launch Setup accepts a boot disk or installer/live ISO and an optional writable destination disk. ISO installation attaches the destination as a hard disk and keeps the ISO on a separate optical AHCI port. A blank sparse raw disk can be created in app storage; existing one-disk sessions remain supported.
+
+## Verification status and limitations
+
+- Runtime build and IPA embedding are defined in the workflows and packaging scripts.
+- Physical-device runtime startup, guest boot, display, input, graceful shutdown, and disk persistence have **not** been verified on hardware.
+- The native bridge is one-shot per app process because QEMU global-state reinitialization is not proven safe; relaunch Akatsubaki Emu before starting another QEMU session.
+- The current runtime targets x86_64 guests. It is not an ARM64 guest runtime.
+- tvOS and visionOS require separately built and validated platform runtimes.
+
+A successful source check or artifact inspection is not evidence that a physical-device guest boots.
