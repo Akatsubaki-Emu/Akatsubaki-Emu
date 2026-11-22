@@ -27,7 +27,7 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
         self.assertIn("var isQEMUJITReady: Bool", source)
         self.assertIn(
-            "return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady",
+            "return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolSupported && isJITProtocolKnown && isJITReady",
             source,
         )
         gate = source.split("var isQEMUJITReady: Bool", 1)[1].split("func requestJIT", 1)[0]
