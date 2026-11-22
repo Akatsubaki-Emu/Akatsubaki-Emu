@@ -29,7 +29,7 @@ final class QEMUNativeRuntime {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         guard JITCoordinator.shared.isQEMUJITReady else {
             throw RuntimeError.runtimeUnavailable(
-                "QEMU TCG requires a physical iOS 26+ device, the get-task-allow entitlement, the supported StikDebug TXM protocol, and confirmed executable-memory readiness. Enable JIT for Akatsubaki Emu with StikDebug and try again."
+                "QEMU TCG requires a physical iOS 26+ device, the get-task-allow entitlement, a recognised StikDebug JIT protocol (standard split-WX or TXM), and confirmed executable-memory readiness. Enable JIT for Akatsubaki Emu with StikDebug and try again."
             )
         }
         #endif
