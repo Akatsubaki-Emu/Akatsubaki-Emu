@@ -46,8 +46,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
                 && fallbackOffset.map { $0 < guestCode.count } == true
                 && fallbackOpcode == guestCode[guestCode.index(guestCode.startIndex, offsetBy: guestBytesConsumed)]
         case .instructionLimit, .outputLimit:
-            return fallbackOffset == guestBytesConsumed
-                && fallbackOpcode == nil
+            return fallbackOffset == guestBytesConsumed && fallbackOpcode == nil
         case .invalidBudget:
             return instructionCount == 0 && guestBytesConsumed == 0
                 && fallbackOffset == nil && fallbackOpcode == nil
@@ -60,9 +59,6 @@ struct X86_64AOTTranslator {
     static let translatorVersion = "1"
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
-
-    private let defaultInstructionLimit = 4096
-    private let defaultOutputLimit = 1_048_576
 
     func translate(_ guestCode: Data,
                    maximumInstructions: Int = 4096,
@@ -202,7 +198,7 @@ struct X86_64AOTTranslator {
 
     private static func moveImmediate(_ value: UInt64, to register: Int, is64Bit: Bool) -> [UInt32] {
         let highestHalf = is64Bit ? 3 : 1
-        var chunks = (0...highestHalf).map { UInt16(truncatingIfNeeded: value >> ($0 * 16)) }
+        let chunks = (0...highestHalf).map { UInt16(truncatingIfNeeded: value >> ($0 * 16)) }
         let first = chunks.firstIndex(where: { $0 != 0 }) ?? 0
         var words = [moveWide(chunks[first], register: register, half: first,
                               is64Bit: is64Bit, keep: false)]
@@ -210,7 +206,6 @@ struct X86_64AOTTranslator {
             words.append(moveWide(chunks[half], register: register, half: half,
                                   is64Bit: is64Bit, keep: true))
         }
-        chunks.removeAll(keepingCapacity: false)
         return words
     }
 
@@ -228,54 +223,5 @@ struct X86_64AOTTranslator {
     private static func moveRegister(_ source: Int, to destination: Int, is64Bit: Bool) -> UInt32 {
         let base: UInt32 = is64Bit ? 0xAA0003E0 : 0x2A0003E0
         return base | (UInt32(source) << 16) | UInt32(destination)
-    }
-}
-
-/// Couples the AOT translator to Kenran Butō's validated artifact cache.
-/// The result is a prepared artifact only; executable-memory allocation and
-/// dispatch remain the responsibility of a platform-verified runtime adapter.
-final class KenranButoAOTCompiler {
-    struct Compilation {
-        let translation: X86_64AOTTranslation
-        let cacheHit: Bool
-    }
-
-    private let translator: X86_64AOTTranslator
-    private let cache: TranslationCache
-
-    init(cache: TranslationCache = .shared, translator: X86_64AOTTranslator = X86_64AOTTranslator()) {
-        self.cache = cache
-        self.translator = translator
-    }
-
-    func compile(_ guestCode: Data, guestABI: String) throws -> Compilation {
-        let digest = Self.sha256(guestCode)
-        let identity = TranslationCacheIdentity(
-            guestCodeSHA256: digest,
-            guestArchitecture: "x86_64",
-            translatorIdentifier: X86_64AOTTranslator.translatorIdentifier,
-            translatorVersion: X86_64AOTTranslator.translatorVersion,
-            hostArchitecture: X86_64AOTTranslator.hostArchitecture,
-            cpuFeatures: X86_64AOTTranslator.cpuFeatures,
-            guestABI: guestABI
-        )
-
-        if let cached = try cache.load(identity),
-           let translation = try? JSONDecoder().decode(X86_64AOTTranslation.self, from: cached),
-           translation.isCacheable,
-           translation.isValid(for: guestCode) {
-            return Compilation(translation: translation, cacheHit: true)
-        }
-
-        let translation = translator.translate(guestCode)
-        if translation.isCacheable {
-            let encoded = try JSONEncoder().encode(translation)
-            try cache.store(encoded, for: identity)
-        }
-        return Compilation(translation: translation, cacheHit: false)
-    }
-
-    private static func sha256(_ data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
