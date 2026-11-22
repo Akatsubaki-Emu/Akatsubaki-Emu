@@ -29,8 +29,8 @@ if [ -L "$OUT" ]; then
     echo "Refusing to replace a symlink output directory: $OUT" >&2
     exit 2
 fi
-APP="$ARCHIVE/Products/Applications/UTM.app"
-test -d "$APP" || { echo "UTM.app missing from archive: $APP" >&2; exit 1; }
+APP="$ARCHIVE/Products/Applications/UTM SE.app"
+test -d "$APP" || { echo "UTM SE.app missing from TCI archive: $APP" >&2; exit 1; }
 
 rm -rf "$OUT"
 mkdir -p "$OUT/QEMU" "$OUT/Frameworks"
@@ -126,7 +126,7 @@ case "$candidate" in
     fi
     ;;
   *)
-    echo "TCI QEMU candidate is outside UTM.app/Frameworks: $candidate" >&2
+    echo "TCI QEMU candidate is outside UTM SE.app/Frameworks: $candidate" >&2
     exit 3
     ;;
 esac
@@ -163,7 +163,7 @@ while IFS= read -r firmware_file; do
   case "$source_dir" in
     "$APP") relative_dir="root" ;;
     "$APP"/*) relative_dir="${source_dir#"$APP"/}" ;;
-    *) echo "Refusing firmware path outside UTM.app: $firmware_file" >&2; exit 5 ;;
+    *) echo "Refusing firmware path outside UTM SE.app: $firmware_file" >&2; exit 5 ;;
   esac
   case "/$relative_dir/" in
     *"/../"*|*"/./"*) echo "Refusing unsafe firmware directory: $relative_dir" >&2; exit 5 ;;
@@ -242,7 +242,7 @@ while IFS= read -r firmware_file; do
   case "$source_dir" in
     "$APP") relative_dir="root" ;;
     "$APP"/*) relative_dir="${source_dir#"$APP"/}" ;;
-    *) echo "Refusing firmware path outside UTM.app: $firmware_file" >&2; exit 5 ;;
+    *) echo "Refusing firmware path outside UTM SE.app: $firmware_file" >&2; exit 5 ;;
   esac
   case "/$relative_dir/" in
     *"/../"*|*"/./"*) echo "Refusing unsafe firmware directory: $relative_dir" >&2; exit 5 ;;
