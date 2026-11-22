@@ -327,8 +327,22 @@ jobs:
             sha256sum -c "build/$asset.ipa.sha256"
           done
 
-      - name: Set release metadata
+      # Downloads and checksum verification can take time. Recheck immediately
+      # before mutating the rolling release so a newer main commit wins.
+      - name: Re-check freshness immediately before publishing
         if: steps.freshness.outputs.publish == 'true'
+        id: final-freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Set release metadata
+        if: steps.final-freshness.outputs.publish == 'true'
         id: meta
         shell: bash
         run: |
@@ -343,7 +357,7 @@ jobs:
           fi
 
       - name: Publish combined release
-        if: steps.freshness.outputs.publish == 'true'
+        if: steps.final-freshness.outputs.publish == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
@@ -373,7 +387,7 @@ jobs:
       # when the tag is new. Move the rolling channel ref after the assets publish
       # so existing main/nightly tags always resolve to this exact build commit.
       - name: Update rolling channel tag
-        if: steps.freshness.outputs.publish == 'true'
+        if: steps.final-freshness.outputs.publish == 'true'
         shell: bash
         run: |
           set -euo pipefail
