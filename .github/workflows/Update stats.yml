@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 jobs:
-  metrics:
+  overview:
     runs-on: ubuntu-latest
     if: github.actor != 'github-actions[bot]'
     steps:
@@ -28,7 +28,6 @@ jobs:
           filename: docs/metrics-overview.svg
           config_timezone: UTC
           base: header, metadata
-          base_skip: deployments, environments
           plugin_followup: yes
           plugin_followup_sections: repository
           plugin_lines: yes
@@ -36,6 +35,10 @@ jobs:
           plugin_lines_delay: 60
           committer_message: "chore: update metrics overview [skip ci]"
 
+  team:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
       - name: Generate Right Card (Contributors & Languages)
         uses: lowlighter/metrics@master
         with:
@@ -45,7 +48,7 @@ jobs:
           template: repository
           filename: docs/metrics-team.svg
           config_timezone: UTC
-          base: ""
+          base: metadata
           plugin_contributors: yes
           plugin_contributors_base: main
           plugin_contributors_sections: contributions

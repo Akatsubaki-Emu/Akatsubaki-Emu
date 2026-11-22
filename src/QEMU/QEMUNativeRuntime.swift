@@ -26,17 +26,18 @@ final class QEMUNativeRuntime {
             )
         }
 
+        let requiresJIT = configuration.accelerator == .jit
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
-        guard JITCoordinator.shared.isQEMUJITReady else {
+        if requiresJIT && !JITCoordinator.shared.isQEMUJITReady {
             throw RuntimeError.runtimeUnavailable(
-                "QEMU TCG requires a physical iOS 26+ device, the get-task-allow entitlement, a recognised StikDebug JIT protocol (standard split-WX or TXM), and confirmed executable-memory readiness. Enable JIT for Akatsubaki Emu with StikDebug and try again."
+                "The selected QEMU JIT runtime requires physical iOS JIT readiness, get-task-allow and a supported StikDebug protocol. Select QEMU TCI (no JIT) or enable JIT and try again."
             )
         }
         #endif
 
         let libraryURL: URL
         let dataDirectory: URL
-        switch QEMURuntimeStatus.inspect() {
+        switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT) {
         case .unavailable(let reason):
             throw RuntimeError.runtimeUnavailable(reason)
         case .ready(let library, let data):
@@ -120,7 +121,8 @@ final class QEMUNativeRuntime {
                 errorBuffer.withUnsafeMutableBufferPointer { errorPointer -> Bool in
                     guard let error = errorPointer.baseAddress else { return false }
                     return isteam_qemu_start(Int32(pointerBuffer.count), argv,
-                                             libraryPath, error, Int32(errorPointer.count))
+                                             libraryPath, requiresJIT, error,
+                                             Int32(errorPointer.count))
                 }
             }
         }

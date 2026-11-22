@@ -72,6 +72,40 @@ struct KenranButoAOTTranslatorTests {
         precondition(inputLimited.guestBytesConsumed == 1)
         precondition(inputLimited.isValid(for: Data([0x90, 0x90])))
 
+        precondition(X86_64AOTTranslator.translatorVersion == "3")
+
+        // Input-budget exhaustion in the middle of an immediate must side-exit
+        // at the instruction start, preserving the already translated prefix.
+        let inputLimitedImmediate = Data([0x90, 0x48, 0xB8, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08])
+        let inputLimitedMove = translator.translate(inputLimitedImmediate, maximumGuestBytes: 5)
+        precondition(inputLimitedMove.stopReason == .inputLimit)
+        precondition(inputLimitedMove.guestBytesConsumed == 1)
+        precondition(inputLimitedMove.instructionCount == 1)
+        precondition(inputLimitedMove.fallbackOffset == 1)
+        precondition(inputLimitedMove.fallbackOpcode == nil)
+        precondition(inputLimitedMove.machineCode.count == 4)
+        precondition(inputLimitedMove.isValid(for: inputLimitedImmediate))
+
+        // A budget ending before ModRM is input-limited, not a corrupt guest binary.
+        let inputLimitedModRM = Data([0x89, 0xD8])
+        let inputLimitedRegisterMove = translator.translate(inputLimitedModRM, maximumGuestBytes: 1)
+        precondition(inputLimitedRegisterMove.stopReason == .inputLimit)
+        precondition(inputLimitedRegisterMove.guestBytesConsumed == 0)
+        precondition(inputLimitedRegisterMove.isValid(for: inputLimitedModRM))
+
+        let actuallyTruncatedMove = translator.translate(Data([0x48, 0xB8, 0x01, 0x02]))
+        precondition(actuallyTruncatedMove.stopReason == .truncatedInstruction)
+        precondition(actuallyTruncatedMove.guestBytesConsumed == 0)
+
+        // Callers cannot raise the hard instruction budget with Int.max.
+        let oversizedInstructionRequest = translator.translate(
+            Data(repeating: 0x90, count: X86_64AOTTranslator.maximumInstructionBudget + 1),
+            maximumInstructions: Int.max
+        )
+        precondition(oversizedInstructionRequest.stopReason == .instructionLimit)
+        precondition(oversizedInstructionRequest.instructionCount == X86_64AOTTranslator.maximumInstructionBudget)
+        precondition(oversizedInstructionRequest.guestBytesConsumed == X86_64AOTTranslator.maximumInstructionBudget)
+
         // ENDBR64 must fall back until guest CET policy is explicit.
         let endbr = translator.translate(Data([0xF3, 0x0F, 0x1E, 0xFA]))
         precondition(endbr.stopReason == .unsupportedInstruction)
@@ -108,6 +142,6 @@ struct KenranButoAOTTranslatorTests {
         precondition(outputLimited.stopReason == .outputLimit)
         precondition(outputLimited.guestBytesConsumed == 0)
 
-        print("Kenran Butō AOT decoder, AArch64 emission, 15-byte bounds and interpreter fallback passed")
+        print("Kenran Butō AOT decoder, bounded input, 15-byte bounds and interpreter fallback passed")
     }
 }

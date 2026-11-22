@@ -77,10 +77,10 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
         inspect = status.split("static func inspect", 1)[1].split("static func locate", 1)[0]
         locate = status.split("static func locate", 1)[1].split("func validateLoadableLibrary", 1)[0]
-        self.assertIn("validateLoadableLibrary(libraryURL", inspect)
+        self.assertIn("validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory,", inspect)
         self.assertNotIn("validateLoadableLibrary", locate)
         self.assertIn("return .ready(libraryURL: library, dataDirectory: dataDirectory)", locate)
-        self.assertIn("switch QEMURuntimeStatus.inspect()", runtime)
+        self.assertIn("switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", runtime)
         self.assertNotIn("switch QEMURuntimeStatus.locate()", runtime)
 
 

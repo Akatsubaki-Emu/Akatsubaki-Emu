@@ -970,6 +970,49 @@ struct InterpreterTests {
         let truncatedEndbr64Exit = try truncatedEndbr64.run(maxInstructions: 1)
         precondition(truncatedEndbr64Exit == .memoryFault(address: 3))
 
+        // Exactly 15 bytes (14 redundant REX prefixes plus NOP) remain legal.
+        let legal15ByteMemory = GuestMemory(size: 32)
+        let legal15ByteProgram = [UInt8](repeating: 0x48, count: 14) + [0x90, 0xF4]
+        precondition(legal15ByteMemory.write(Data(legal15ByteProgram), offset: 0))
+        let legal15Byte = X86_64Interpreter(memory: legal15ByteMemory)
+        try legal15Byte.reset(entryPoint: 0)
+        let legal15ByteExit = try legal15Byte.run(maxInstructions: 2)
+        precondition(legal15ByteExit == .halted)
+        precondition(legal15Byte.instructionCount == 2)
+
+        // The architectural 15-byte limit includes immediate bytes, not only prefixes.
+        let overlongImmediateMemory = GuestMemory(size: 64)
+        let overlongImmediateProgram = [UInt8](repeating: 0x48, count: 14)
+            + [0xB8] + [UInt8](repeating: 0, count: 8)
+        precondition(overlongImmediateMemory.write(Data(overlongImmediateProgram), offset: 0))
+        let overlongImmediate = X86_64Interpreter(memory: overlongImmediateMemory)
+        try overlongImmediate.reset(entryPoint: 0)
+        let overlongImmediateExit = try overlongImmediate.run(maxInstructions: 1)
+        precondition(overlongImmediateExit == .unsupportedInstruction(address: 0))
+        precondition(overlongImmediate.instructionPointer == 0)
+
+        // A ModRM/SIB displacement that crosses byte 15 must side-exit, not fault.
+        let overlongSIBMemory = GuestMemory(size: 64)
+        let overlongSIBProgram = [UInt8](repeating: 0x48, count: 11)
+            + [0x8B, 0x04, 0x25, 0, 0, 0, 0]
+        precondition(overlongSIBMemory.write(Data(overlongSIBProgram), offset: 0))
+        let overlongSIB = X86_64Interpreter(memory: overlongSIBMemory)
+        try overlongSIB.reset(entryPoint: 0)
+        let overlongSIBExit = try overlongSIB.run(maxInstructions: 1)
+        precondition(overlongSIBExit == .unsupportedInstruction(address: 0))
+        precondition(overlongSIB.instructionPointer == 0)
+
+        // Trailing immediate fetches are subject to the same whole-instruction bound.
+        let overlongTrailingImmediateMemory = GuestMemory(size: 64)
+        let overlongTrailingImmediateProgram = [UInt8](repeating: 0x48, count: 11)
+            + [0xC7, 0xC0, 1, 0, 0, 0]
+        precondition(overlongTrailingImmediateMemory.write(Data(overlongTrailingImmediateProgram), offset: 0))
+        let overlongTrailingImmediate = X86_64Interpreter(memory: overlongTrailingImmediateMemory)
+        try overlongTrailingImmediate.reset(entryPoint: 0)
+        let overlongTrailingImmediateExit = try overlongTrailingImmediate.run(maxInstructions: 1)
+        precondition(overlongTrailingImmediateExit == .unsupportedInstruction(address: 0))
+        precondition(overlongTrailingImmediate.instructionPointer == 0)
+
         // ENDBR64 without its mandatory F3 prefix is not the landing-pad opcode.
         let unprefixedEndbr64Memory = GuestMemory(size: 16)
         precondition(unprefixedEndbr64Memory.write(Data([0x0F, 0x1E, 0xFA]), offset: 0))

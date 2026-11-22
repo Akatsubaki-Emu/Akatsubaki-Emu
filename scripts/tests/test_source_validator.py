@@ -497,6 +497,31 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("sha256sum -c", release_publish)
 
 
+    def test_static_pie_relocation_uses_loader_method_not_shadowed_parameter(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "ELF64Loader.swift").read_text(encoding="utf-8")
+        relocation = source.split("private func applyStaticPIERelocations", 1)[1].split(
+            "private func loadSegment", 1
+        )[0]
+        self.assertIn("let relaFileOffset = self.fileOffset(", relocation)
+        self.assertIn("forVirtualAddress: relaAddress", relocation)
+        self.assertNotIn("let relaFileOffset = fileOffset(", relocation)
+
+
+    def test_platform_validation_compiles_physical_ios_arm64(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "validate-ios-build.yml").read_text(encoding="utf-8")
+        push = workflow.split("  push:", 1)[1].split("  pull_request:", 1)[0]
+        for path in ("- src/**", "- iSteam/**", "- project.yml", "- scripts/tests/**"):
+            with self.subTest(path=path):
+                self.assertIn(path, push)
+        device = workflow.split("\n  build-ios-device:\n", 1)[1]
+        self.assertIn("-sdk iphoneos", device)
+        self.assertIn("-destination 'generic/platform=iOS'", device)
+        self.assertIn("CODE_SIGNING_ALLOWED=NO", device)
+        self.assertIn("build", device)
+
+
     def test_qemu_acceleration_profiles_describe_actual_tcg_behavior(self):
         root = Path(__file__).resolve().parents[2]
         settings = (root / "src" / "Core" / "RuntimeSettings.swift").read_text(encoding="utf-8")

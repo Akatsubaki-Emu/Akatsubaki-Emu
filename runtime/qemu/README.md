@@ -20,7 +20,7 @@ The runtime library must be built for **physical iOS arm64** and runs an **x86_6
 - `qemu_system_shutdown_request`
 - `isteam_qemu_set_jit_callbacks`
 
-Graceful shutdown and StikDebug JIT callback registration are mandatory. A library missing either export is rejected by the packager, preflight loader, and native bridge.
+Graceful shutdown is mandatory for both modes. The StikDebug JIT callback is required only for the JIT runtime; the TCI runtime must be usable without it. A JIT library missing the callback or either mode missing a lifecycle export is rejected by the packager, preflight loader, and native bridge.
 
 The bridge matches the pinned UTM QEMU 10.0.12 lifecycle ABI exactly:
 
@@ -33,7 +33,7 @@ Do not declare the main loop or cleanup as `void(void)`: doing so discards the r
 
 ## Startup and validation
 
-`src/QEMU/QEMURuntimeStatus.swift` resolves the library path from the generated manifest. `QEMURuntimeStatus.inspect()` then asks the native bridge to load the library with `RTLD_NOW` and resolve the required exports. `QEMUNativeRuntime` performs this preflight before starting QEMU, so missing dependent libraries and missing exports are reported before guest startup.
+`src/QEMU/QEMURuntimeStatus.swift` resolves the library path from the generated manifest. `QEMURuntimeStatus.inspect(requiresJIT:)` selects the JIT or TCI framework and then asks the native bridge to load the library with `RTLD_NOW` and resolve the required exports. `QEMUNativeRuntime` performs this preflight before starting QEMU, so missing dependent libraries and missing exports are reported before guest startup.
 
 The package script validates the artifact's Mach-O type, physical iOS platform, arm64 architecture, and required exports. For a signed library, the standalone validator can additionally verify the code signature:
 
