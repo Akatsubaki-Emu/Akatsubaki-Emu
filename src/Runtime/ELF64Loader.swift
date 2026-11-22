@@ -318,7 +318,8 @@ final class ELF64Loader {
         // Sort once, then use binary search for each relocation instead of
         // scanning every segment in the hot relocation loop.
         let orderedLoadSegments = loadSegments.sorted { $0.virtualAddress < $1.virtualAddress }
-        guard let relaFileOffset = fileOffset(
+        // Explicit self disambiguates the helper from the local fileOffset parameter.
+        guard let relaFileOffset = self.fileOffset(
             forVirtualAddress: relaAddress,
             byteCount: relaSize,
             in: orderedLoadSegments
