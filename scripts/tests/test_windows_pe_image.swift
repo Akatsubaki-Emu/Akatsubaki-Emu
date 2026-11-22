@@ -77,6 +77,80 @@ struct WindowsPEImageTests {
         return Data(bytes)
     }
 
+    static func makeMultiSectionImage() -> Data {
+        var bytes = [UInt8](repeating: 0, count: 0x700)
+        bytes[0] = 0x4d
+        bytes[1] = 0x5a
+        put32(0x80, at: 0x3c, in: &bytes)
+        bytes[0x80] = 0x50
+        bytes[0x81] = 0x45
+        put16(0x8664, at: 0x84, in: &bytes)
+        put16(3, at: 0x86, in: &bytes)
+        put16(0xF0, at: 0x94, in: &bytes)
+        let optional = 0x98
+        put16(0x20B, at: optional, in: &bytes)
+        put32(0x1000, at: optional + 16, in: &bytes)
+        put64(0x140000000, at: optional + 24, in: &bytes)
+        put32(0x4000, at: optional + 56, in: &bytes)
+        put32(0x200, at: optional + 60, in: &bytes)
+        put32(16, at: optional + 108, in: &bytes)
+        let table = optional + 0xF0
+        // Deliberately store sections in a different order from their RVAs.
+        let definitions: [(String, UInt32, UInt32, UInt32)] = [
+            (".data", 0x3000, 0x600, 0xC0000040),
+            (".text", 0x1000, 0x200, 0x60000020),
+            (".rdata", 0x2000, 0x400, 0x40000040)
+        ]
+        for (index, item) in definitions.enumerated() {
+            let offset = table + index * 40
+            for (nameIndex, byte) in Array(item.0.utf8).enumerated() { bytes[offset + nameIndex] = byte }
+            put32(0x1000, at: offset + 8, in: &bytes)
+            put32(item.1, at: offset + 12, in: &bytes)
+            put32(0x100, at: offset + 16, in: &bytes)
+            put32(item.2, at: offset + 20, in: &bytes)
+            put32(item.3, at: offset + 36, in: &bytes)
+        }
+        return Data(bytes)
+    }
+
+    static func makeManySectionImage() -> Data {
+        var bytes = [UInt8](repeating: 0, count: 0x4700)
+        bytes[0] = 0x4d
+        bytes[1] = 0x5a
+        put32(0x80, at: 0x3c, in: &bytes)
+        bytes[0x80] = 0x50
+        bytes[0x81] = 0x45
+        put16(0x8664, at: 0x84, in: &bytes)
+        put16(32, at: 0x86, in: &bytes)
+        put16(0xF0, at: 0x94, in: &bytes)
+        let optional = 0x98
+        put16(0x20B, at: optional, in: &bytes)
+        put32(0x1000, at: optional + 16, in: &bytes)
+        put64(0x140000000, at: optional + 24, in: &bytes)
+        put32(0x21000, at: optional + 56, in: &bytes)
+        put32(0x800, at: optional + 60, in: &bytes)
+        put32(16, at: optional + 108, in: &bytes)
+        let table = optional + 0xF0
+        // Reverse-RVA file order; 32 sections exercise the binary-search path.
+        let definitions: [(String, UInt32, UInt32, UInt32)] = (0..<32).reversed().map { index in
+            let name = index == 0 ? ".text" : String(format: ".s%02d", index)
+            let virtualAddress = UInt32(0x1000 + index * 0x1000)
+            let rawOffset = UInt32(0x800 + index * 0x200)
+            let characteristics: UInt32 = index == 0 ? 0x60000020 : 0xC0000040
+            return (name, virtualAddress, rawOffset, characteristics)
+        }
+        for (index, item) in definitions.enumerated() {
+            let offset = table + index * 40
+            for (nameIndex, byte) in Array(item.0.utf8).enumerated() { bytes[offset + nameIndex] = byte }
+            put32(0x1000, at: offset + 8, in: &bytes)
+            put32(item.1, at: offset + 12, in: &bytes)
+            put32(0x100, at: offset + 16, in: &bytes)
+            put32(item.2, at: offset + 20, in: &bytes)
+            put32(item.3, at: offset + 36, in: &bytes)
+        }
+        return Data(bytes)
+    }
+
     static func main() throws {
         let valid = try WindowsPEImage.parse(
             makeImage(importDirectoryRVA: 0x1000, importDirectorySize: 40)
@@ -86,6 +160,44 @@ struct WindowsPEImageTests {
               valid.imports[0].name == "ExitProcess" else {
             throw NSError(domain: "WindowsPEImageTests", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "Valid import descriptor was not parsed"])
+        }
+
+        let multiSection = try WindowsPEImage.parse(makeMultiSectionImage())
+        let expectedSmallMappings: [(UInt32, Int)] = [
+            (0x1000, 0x200), (0x2000, 0x400), (0x3000, 0x600), (0x30FC, 0x6FC)
+        ]
+        for (rva, expectedOffset) in expectedSmallMappings {
+            guard try multiSection.fileOffset(forRVA: rva, length: 4) == expectedOffset else {
+                throw NSError(domain: "WindowsPEImageTests", code: 7,
+                              userInfo: [NSLocalizedDescriptionKey: "Out-of-order PE sections were not indexed correctly"])
+            }
+        }
+        guard try multiSection.fileOffset(forRVA: 0x2000, length: 0) == 0x300 else {
+            throw NSError(domain: "WindowsPEImageTests", code: 8,
+                          userInfo: [NSLocalizedDescriptionKey: "Zero-length PE boundary mapping changed"])
+        }
+        do {
+            _ = try multiSection.fileOffset(forRVA: 0x3100, length: 1)
+            throw NSError(domain: "WindowsPEImageTests", code: 9,
+                          userInfo: [NSLocalizedDescriptionKey: "Raw zero-fill tail was incorrectly treated as file-backed"])
+        } catch WindowsPEImage.ParseError.unmappedRVA(_) {
+        }
+
+        let manySections = try WindowsPEImage.parse(makeManySectionImage())
+        let manyMappings: [(UInt32, Int)] = [
+            (0x1000, 0x800), (0x5000, 0x1000), (0x20000, 0x4600), (0x200FC, 0x46FC)
+        ]
+        for (rva, expectedOffset) in manyMappings {
+            guard try manySections.fileOffset(forRVA: rva, length: 4) == expectedOffset else {
+                throw NSError(domain: "WindowsPEImageTests", code: 10,
+                              userInfo: [NSLocalizedDescriptionKey: "32-section PE binary lookup returned an incorrect file offset"])
+            }
+        }
+        do {
+            _ = try manySections.fileOffset(forRVA: 0x20100, length: 1)
+            throw NSError(domain: "WindowsPEImageTests", code: 11,
+                          userInfo: [NSLocalizedDescriptionKey: "32-section PE zero-fill tail was incorrectly mapped"])
+        } catch WindowsPEImage.ParseError.unmappedRVA(_) {
         }
 
         do {

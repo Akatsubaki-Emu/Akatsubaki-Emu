@@ -36,6 +36,8 @@ struct WindowsPEImage {
     let sizeOfImage: UInt32
     let sizeOfHeaders: UInt32
     let sections: [Section]
+    private let virtualSections: [Section]
+    private let sectionsAreSortedByRVA: Bool
     let directories: [DataDirectory]
     let imports: [Import]
     let relocations: [Relocation]
@@ -89,6 +91,7 @@ struct WindowsPEImage {
         let directoryCount = min(Int(try u32(data, optional + 108)), 16)
         guard directoryCount <= (optionalSize - 112) / 8 else { throw ParseError.truncated("data directory array") }
         var directories: [DataDirectory] = []
+        directories.reserveCapacity(directoryCount)
         for index in 0..<directoryCount {
             let offset = optional + 112 + index * 8
             directories.append(DataDirectory(rva: try u32(data, offset), size: try u32(data, offset + 4)))
@@ -102,10 +105,10 @@ struct WindowsPEImage {
             throw ParseError.malformed("SizeOfHeaders does not cover the section table")
         }
         var sections: [Section] = []
+        sections.reserveCapacity(sectionCount)
         for index in 0..<sectionCount {
             let offset = table + index * 40
-            let nameData = data.subdata(in: offset..<(offset + 8))
-            let name = String(bytes: nameData.prefix { $0 != 0 }, encoding: .ascii) ?? "section\(index)"
+            let name = String(bytes: data[offset..<(offset + 8)].prefix { $0 != 0 }, encoding: .ascii) ?? "section\(index)"
             let section = Section(name: name,
                 virtualAddress: try u32(data, offset + 12),
                 virtualSize: try u32(data, offset + 8),
@@ -122,6 +125,7 @@ struct WindowsPEImage {
         }
 
         let virtualSections = sections.sorted { $0.virtualAddress < $1.virtualAddress }
+        let sectionsAreSortedByRVA = zip(sections, sections.dropFirst()).allSatisfy { $0.virtualAddress <= $1.virtualAddress }
         for pair in zip(virtualSections, virtualSections.dropFirst()) {
             let previousEnd = UInt64(pair.0.virtualAddress)
                 + UInt64(max(pair.0.virtualSize, pair.0.rawSize))
@@ -149,9 +153,13 @@ struct WindowsPEImage {
 
         let shell = WindowsPEImage(machine: machine, entryPointRVA: entryPoint, imageBase: imageBase,
             sizeOfImage: sizeOfImage, sizeOfHeaders: sizeOfHeaders, sections: sections,
+            virtualSections: virtualSections,
+            sectionsAreSortedByRVA: sectionsAreSortedByRVA,
             directories: directories, imports: [], relocations: [], file: data)
         return WindowsPEImage(machine: machine, entryPointRVA: entryPoint, imageBase: imageBase,
             sizeOfImage: sizeOfImage, sizeOfHeaders: sizeOfHeaders, sections: sections,
+            virtualSections: virtualSections,
+            sectionsAreSortedByRVA: sectionsAreSortedByRVA,
             directories: directories, imports: try shell.readImports(),
             relocations: try shell.readRelocations(), file: data)
     }
@@ -168,19 +176,70 @@ struct WindowsPEImage {
             }
             return Int(rva)
         }
-        for section in sections {
-            let start = UInt64(section.virtualAddress)
-            let span = UInt64(max(section.virtualSize, section.rawSize))
-            if UInt64(rva) >= start && end <= start + span {
-                let delta = UInt64(rva) - start
-                guard delta + UInt64(length) <= UInt64(section.rawSize) else { throw ParseError.unmappedRVA(rva) }
-                let offset = UInt64(section.rawOffset) + delta
-                guard offset + UInt64(length) <= UInt64(file.count) else { throw ParseError.unmappedRVA(rva) }
-                return Int(offset)
+        guard let section = section(forRVA: rva, allowEnd: length == 0) else {
+            throw ParseError.unmappedRVA(rva)
+        }
+        let start = UInt64(section.virtualAddress)
+        let span = UInt64(max(section.virtualSize, section.rawSize))
+        guard end <= start + span else { throw ParseError.unmappedRVA(rva) }
+        let delta = UInt64(rva) - start
+        guard delta + UInt64(length) <= UInt64(section.rawSize) else {
+            throw ParseError.unmappedRVA(rva)
+        }
+        let offset = UInt64(section.rawOffset) + delta
+        guard offset + UInt64(length) <= UInt64(file.count) else {
+            throw ParseError.unmappedRVA(rva)
+        }
+        return Int(offset)
+    }
+
+    private func section(forRVA rva: UInt32, allowEnd: Bool = false) -> Section? {
+        if allowEnd {
+            for section in sections {
+                let start = UInt64(section.virtualAddress)
+                let end = start + UInt64(max(section.virtualSize, section.rawSize))
+                if UInt64(rva) >= start && UInt64(rva) <= end { return section }
+            }
+            return nil
+        }
+
+        if sections.count <= Self.linearSectionLookupThreshold {
+            if sectionsAreSortedByRVA {
+                for section in sections {
+                    let start = UInt64(section.virtualAddress)
+                    if UInt64(rva) < start { return nil }
+                    let end = start + UInt64(max(section.virtualSize, section.rawSize))
+                    if UInt64(rva) < end { return section }
+                }
+            } else {
+                for section in sections {
+                    let start = UInt64(section.virtualAddress)
+                    let end = start + UInt64(max(section.virtualSize, section.rawSize))
+                    if UInt64(rva) >= start && UInt64(rva) < end { return section }
+                }
+            }
+            return nil
+        }
+
+        var lower = 0
+        var upper = virtualSections.count
+        while lower < upper {
+            let middle = lower + (upper - lower) / 2
+            if virtualSections[middle].virtualAddress <= rva {
+                lower = middle + 1
+            } else {
+                upper = middle
             }
         }
-        throw ParseError.unmappedRVA(rva)
+        guard lower > 0 else { return nil }
+        let candidate = virtualSections[lower - 1]
+        let start = UInt64(candidate.virtualAddress)
+        let span = UInt64(max(candidate.virtualSize, candidate.rawSize))
+        guard UInt64(rva) < start + span else { return nil }
+        return candidate
     }
+
+    private static let linearSectionLookupThreshold = 16
 
     private func readImports() throws -> [Import] {
         guard directories.count > 1 else { return [] }
@@ -273,15 +332,10 @@ struct WindowsPEImage {
 
     private func contiguousFileLength(forRVA rva: UInt32) throws -> Int {
         if rva < sizeOfHeaders { return Int(sizeOfHeaders - rva) }
-        for section in sections {
-            let start = UInt64(section.virtualAddress)
-            guard UInt64(rva) >= start else { continue }
-            let delta = UInt64(rva) - start
-            if delta < UInt64(section.rawSize) {
-                return Int(UInt64(section.rawSize) - delta)
-            }
-        }
-        throw ParseError.unmappedRVA(rva)
+        guard let section = section(forRVA: rva) else { throw ParseError.unmappedRVA(rva) }
+        let delta = UInt64(rva) - UInt64(section.virtualAddress)
+        guard delta < UInt64(section.rawSize) else { throw ParseError.unmappedRVA(rva) }
+        return Int(UInt64(section.rawSize) - delta)
     }
 
     private func readCString(atRVA rva: UInt32, limit: Int) throws -> String {
