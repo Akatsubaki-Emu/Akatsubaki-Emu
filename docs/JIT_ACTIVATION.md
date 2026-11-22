@@ -69,3 +69,10 @@ The helper's persistent DDI cache lives under its own Library container. The tem
 - **Not verified:** XcodeGen project generation, Xcode 27.1 compilation of the StikJIT 2.0.1 module, IPA packaging/signing, extension installation, LocalDevVPN tunnel activation, RSD pairing/DDI mount, TXM breakpoint handshake, QEMU guest boot or persistence.
 
 Do not describe this integration as device-working until the iOS 26 extension is built, installed with a valid signing profile, and a physical QEMU guest completes the JIT breakpoint handshake.
+
+
+## On-device pairing
+
+iOS/iPadOS 27+ physical devices can generate their own Remote Pairing file from Settings → JIT. Allow Local Network access, select Pair with Akatsubaki Emu in Developer Mode settings and enter the PIN displayed in the continued-processing Live Activity. The pairing file is protected at `Documents/StikJIT/pairingFile.plist`; the host `altIRK` is retained separately. iOS 26 keeps manual import.
+
+The standalone StikPair app is MIT, Non-Commercial, so its app and FFI wrapper source are not redistributed. Akatsubaki uses an original FFI over the pinned MIT `idevice` Remote Pairing library instead.

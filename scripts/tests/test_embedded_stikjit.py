@@ -86,5 +86,31 @@ class EmbeddedStikJITIntegrationTests(unittest.TestCase):
             settings,
         )
 
+class StikPairIntegrationTests(unittest.TestCase):
+    root=Path(__file__).resolve().parents[2]
+    def read(self,p): return (self.root/p).read_text(encoding="utf-8")
+    def test_pairing_engine_is_pinned_and_advertises_apple_service(self):
+        c=self.read("pairing-ffi/Cargo.toml");r=self.read("pairing-ffi/src/lib.rs")
+        self.assertIn("7bd551c16c6dd2e058740d85a2d9399a51a776e9",c)
+        self.assertIn("PairableHost::new",r);self.assertIn("mdns_txt_records",r)
+    def test_pairing_file_is_protected_and_host_identity_persists(self):
+        s=self.read("iSteam/StikJITPairingFileStore.swift")
+        self.assertIn(".documentDirectory",s);self.assertIn("FileProtectionType.complete",s);self.assertIn("host-identity.plist",s)
+    def test_pairing_requires_physical_ios27_and_wildcard_background_registration(self):
+        s=self.read("iSteam/StikPairingCoordinator.swift")
+        self.assertIn("if #available(iOS 27.0,*)",s);self.assertIn("targetEnvironment(simulator)",s)
+        self.assertIn('prefix+".*"',s);self.assertIn('prefix+"."+UUID().uuidString',s)
+    def test_pairing_info_plist_declares_services_and_task_wildcard(self):
+        import plistlib
+        with (self.root/"iSteam/Info.plist").open("rb") as f: p=plistlib.load(f)
+        self.assertIn("_remotepairing-pairable-host._tcp",p["NSBonjourServices"])
+        self.assertIn("$(PRODUCT_BUNDLE_IDENTIFIER).pairing.*",p["BGTaskSchedulerPermittedIdentifiers"])
+    def test_workflows_build_pairing_before_xcodegen(self):
+        for p in (".github/workflows/release.yml",".github/workflows/validate-ios-build.yml"):
+            s=self.read(p);self.assertLess(s.index("bash scripts/build_stikpair_ffi.sh"),s.index("xcodegen generate --spec project.yml"))
+    def test_jit_uses_shared_pairing_file_store(self):
+        s=self.read("iSteam/JITCoordinator.swift")
+        self.assertIn("StikJITPairingFileStore.hasPairingFile",s);self.assertIn("StikJITPairingFileStore.load()",s)
+
 if __name__ == "__main__":
     unittest.main()

@@ -30,3 +30,12 @@ The framework is downloaded at build time and verified against the pinned digest
 ## LocalDevVPN and StikDebug
 
 LocalDevVPN and StikDebug are integration dependencies only; their app binaries, packet-tunnel extension and app source are not bundled. LocalDevVPN must be installed separately and its VPN profile approved by the user. Its packet-tunnel extension requires Apple's Network Extension entitlement and a matching provisioning profile, which the current Akatsubaki signing configuration does not declare.
+
+
+## idevice Remote Pairing library
+
+Project: https://github.com/jkcoxson/idevice  
+Revision: `7bd551c16c6dd2e058740d85a2d9399a51a776e9`  
+License: MIT; Copyright Jackson Coxson. See `THIRD_PARTY_LICENSES/MIT-idevice.txt`.
+
+The pairing FFI is original Akatsubaki code. StikPair's MIT Non-Commercial app and wrapper source are not bundled.

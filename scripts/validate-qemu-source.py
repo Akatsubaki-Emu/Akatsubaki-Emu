@@ -977,6 +977,21 @@ required = {
     ],
 }
 failed = False
+pairing_required = {
+    "pairing-ffi/src/lib.rs": ["PairableHost::new", "mdns_txt_records", "PAIRABLE_HOST_SERVICE_TYPE"],
+    "iSteam/StikPairingCoordinator.swift": ["BGContinuedProcessingTaskRequest", "NWBrowser", "akatsubaki_pairing_run"],
+    "iSteam/StikJITPairingFileStore.swift": [".documentDirectory", "FileProtectionType.complete", "host-identity.plist"],
+    "scripts/build_stikpair_ffi.sh": ["aarch64-apple-ios", "aarch64-apple-ios-sim", "xcodebuild -create-xcframework"],
+    "project.yml": ["AkatsubakiPairingFFI.xcframework"],
+    ".github/workflows/release.yml": ["bash scripts/build_stikpair_ffi.sh"],
+    ".github/workflows/validate-ios-build.yml": ["bash scripts/build_stikpair_ffi.sh"],
+}
+for name, tokens in pairing_required.items():
+    source=Path(name).read_text(encoding="utf-8")
+    for token in tokens:
+        if token not in source:
+            print(f"{name}: missing pairing integration {token!r}",file=sys.stderr)
+            failed=True
 for name, tokens in required.items():
     source = Path(name).read_text(encoding="utf-8")
     for token in tokens:

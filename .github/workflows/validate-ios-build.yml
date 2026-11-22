@@ -5,6 +5,15 @@ on:
     branches: [main]
     paths:
       - .github/workflows/validate-ios-build.yml
+      - pairing-ffi/**
+      - scripts/build_stikpair_ffi.sh
+      - iSteam/StikPairingCoordinator.swift
+      - iSteam/StikJITPairingFileStore.swift
+      - iSteam/JITCoordinator.swift
+      - iSteam/SettingsViewController.swift
+      - iSteam/AppDelegate.swift
+      - iSteam/Info.plist
+      - project.yml
   pull_request:
   workflow_dispatch:
 
@@ -150,6 +159,8 @@ jobs:
         run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Download and verify pinned StikJIT XCFramework
         run: bash scripts/fetch_stikjit.sh
+      - name: Build on-device StikPair pairing FFI
+        run: bash scripts/build_stikpair_ffi.sh
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
       - name: Compile ${{ matrix.scheme }} for ${{ matrix.destination }}

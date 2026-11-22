@@ -6,6 +6,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         CrashLogger.shared.install()
+        StikPairingCoordinator.shared.registerBackgroundTask()
         // Keep every UIKit toggle visually consistent with the app's native iOS controls.
         UISwitch.appearance().onTintColor = .systemGreen
         UISwitch.appearance().tintColor = .systemGray4
@@ -29,5 +30,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         JITCoordinator.shared.applicationDidBecomeActive()
+        StikPairingCoordinator.shared.applicationDidBecomeActive()
     }
 }

@@ -25,7 +25,7 @@ final class SettingsViewController: UITableViewController {
         case 2: return resolutions.count
         case 3: return frameRates.count
         case 4: return vrModes.count + 2
-        case 5: return jitMethods.count + 2
+        case 5: return jitMethods.count + (StikPairingCoordinator.shared.canGeneratePairingFile ? 3 : 2)
         case 6, 7, 8, 9, 10, 11: return 1
         default: return 0
         }
@@ -98,7 +98,7 @@ final class SettingsViewController: UITableViewController {
                         cell.isUserInteractionEnabled = false
                         c.textProperties.color = .secondaryLabel
                     } else if !JITCoordinator.shared.hasPairingFile {
-                        c.secondaryText = "Import a StikJIT pairing file before selecting this method."
+                        c.secondaryText = "Generate a pairing file on iOS 27+ or import an existing one."
                         cell.isUserInteractionEnabled = false
                         c.textProperties.color = .secondaryLabel
                     } else {
@@ -106,11 +106,13 @@ final class SettingsViewController: UITableViewController {
                     }
                 }
                 cell.accessoryType = JITCoordinator.shared.selectedMethod == method ? .checkmark : .none
-            } else if indexPath.row == jitMethods.count {
-                c.text = "Import StikJIT pairing file"
-                c.secondaryText = JITCoordinator.shared.hasPairingFile
-                    ? "Pairing file imported · Application Support/StikJIT/pairingFile.plist"
-                    : "Required for Built-in StikJIT · choose a .plist file"
+            } else if StikPairingCoordinator.shared.canGeneratePairingFile && indexPath.row == jitMethods.count {
+                c.text = JITCoordinator.shared.hasPairingFile ? "Regenerate device pairing file" : "Generate device pairing file"
+                c.secondaryText = "Pair this iPad directly in Developer Mode."
+                cell.accessoryType = .disclosureIndicator
+            } else if indexPath.row == jitMethods.count + (StikPairingCoordinator.shared.canGeneratePairingFile ? 1 : 0) {
+                c.text = "Import existing pairing file"
+                c.secondaryText = JITCoordinator.shared.hasPairingFile ? "Pairing file ready · Documents/StikJIT/pairingFile.plist" : "Use an existing Remote Pairing .plist file"
                 cell.accessoryType = .disclosureIndicator
             } else {
                 c.text = "Request JIT"
@@ -198,10 +200,10 @@ final class SettingsViewController: UITableViewController {
                 guard method != .builtInStikJIT || (JITCoordinator.shared.isBuiltInStikJITAvailable && JITCoordinator.shared.hasPairingFile) else { return }
                 JITCoordinator.shared.selectedMethod = method
                 tableView.reloadSections(IndexSet(integer: 5), with: .automatic)
-            } else if indexPath.row == jitMethods.count {
-                JITCoordinator.shared.importPairingFile(from: self) { [weak self] in
-                    self?.tableView.reloadSections(IndexSet(integer: 5), with: .automatic)
-                }
+            } else if StikPairingCoordinator.shared.canGeneratePairingFile && indexPath.row == jitMethods.count {
+                StikPairingCoordinator.shared.startPairing(from: self) { [weak self] in self?.tableView.reloadSections(IndexSet(integer: 5), with: .automatic) }
+            } else if indexPath.row == jitMethods.count + (StikPairingCoordinator.shared.canGeneratePairingFile ? 1 : 0) {
+                JITCoordinator.shared.importPairingFile(from: self) { [weak self] in self?.tableView.reloadSections(IndexSet(integer: 5), with: .automatic) }
             } else {
                 JITCoordinator.shared.requestJIT(from: self)
             }

@@ -94,6 +94,8 @@ jobs:
       - name: Download and verify pinned StikJIT XCFramework
         run: bash scripts/fetch_stikjit.sh
 
+      - name: Build on-device StikPair pairing FFI
+        run: bash scripts/build_stikpair_ffi.sh
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
 

@@ -95,19 +95,9 @@ final class JITCoordinator: NSObject, UIDocumentPickerDelegate {
         return false
     }
 
-    var hasPairingFile: Bool {
-        guard let url = pairingFileURL, let data = try? Data(contentsOf: url),
-              let value = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) else {
-            return false
-        }
-        return value is [String: Any]
-    }
-
-    private var pairingFileURL: URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("StikJIT", isDirectory: true)
-            .appendingPathComponent("pairingFile.plist")
-    }
+    var hasPairingFile: Bool { StikJITPairingFileStore.hasPairingFile }
+    var canGeneratePairingFile: Bool { StikPairingCoordinator.shared.canGeneratePairingFile }
+    private var pairingFileURL: URL? { StikJITPairingFileStore.pairingFileURL }
 
     func importPairingFile(from controller: UIViewController, completion: (() -> Void)? = nil) {
         guard isBuiltInStikJITAvailable else {
@@ -130,16 +120,7 @@ final class JITCoordinator: NSObject, UIDocumentPickerDelegate {
         }
         do {
             let data = try Data(contentsOf: source)
-            let propertyList = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
-            guard propertyList is [String: Any] else {
-                throw NSError(domain: "AkatsubakiStikJIT", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "The pairing file must contain a property-list dictionary."])
-            }
-            try FileManager.default.createDirectory(
-                at: destination.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try data.write(to: destination, options: [.atomic, .completeFileProtection])
+            try StikJITPairingFileStore.storeImported(data)
             let completion = pairingImportCompletion
             pairingImportCompletion = nil
             completion?()
@@ -187,8 +168,8 @@ final class JITCoordinator: NSObject, UIDocumentPickerDelegate {
                 failRequest("Built-in StikJIT requires iOS 26 or later on a physical device and cannot run inside LiveContainer. Choose StikDebug or Wait for Debugger instead.", title: "Built-in JIT unavailable")
                 return
             }
-            guard hasPairingFile, let pairingURL = pairingFileURL,
-                  let data = try? Data(contentsOf: pairingURL) else {
+            guard hasPairingFile,
+                  let data = try? StikJITPairingFileStore.load() else {
                 failRequest("Import a valid device pairing file in Settings → JIT before using Built-in StikJIT.", title: "Pairing file required")
                 return
             }

@@ -32,6 +32,7 @@ targets:
         excludes:
           - Display/VMDisplayViewController-tvOS.swift
     dependencies:
+      - framework: build/dependencies/AkatsubakiPairingFFI.xcframework
       - package: StosSign
         product: StosSign_API
       - package: StosSign
@@ -66,6 +67,7 @@ targets:
         excludes:
           - Display/VMDisplayViewController-tvOS.swift
     dependencies:
+      - framework: build/dependencies/AkatsubakiPairingFFI.xcframework
       - package: StosSign
         product: StosSign_API
       - package: StosSign
