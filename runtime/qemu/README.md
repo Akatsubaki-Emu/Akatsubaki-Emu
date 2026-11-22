@@ -72,3 +72,6 @@ A successful source check or artifact inspection is not evidence that a physical
 ## JIT protocol detection
 
 Physical iOS 26+ devices are classified through the same IOKit memory-map TXM query used by StikJIT. The host exposes UNKNOWN, STANDARD, and STIKDEBUG modes. UNKNOWN fails closed in the launch coordinator and QEMU patcher. STANDARD uses QEMU's normal split-WX allocator; STIKDEBUG uses the exported callback setter and the StikDebug executable-region protocol.
+
+
+CI packaging uses `allow-unsigned` only while validating the upstream TCI build artifact produced with code signing disabled. The validator defaults to strict signature verification; the final app/sideload signing stage must sign the embedded nested runtime before installation.

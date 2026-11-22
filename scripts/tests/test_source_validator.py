@@ -82,21 +82,21 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("clearPendingStopRequest()", pause)
         self.assertIn("clearPendingStopRequest()", stop)
 
-    def test_release_ipa_requires_all_five_qemu_exports(self):
+    def test_release_ipa_requires_both_qemu_modes_and_mode_specific_exports(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         ios_package = workflow.split("- name: Build and package iOS IPA", 1)[1].split(
             "- name: Build and package tvOS IPA", 1
         )[0]
-        for symbol in (
-            "qemu_init",
-            "qemu_main_loop",
-            "qemu_cleanup",
-            "qemu_system_shutdown_request",
-            "isteam_qemu_set_jit_callbacks",
-        ):
-            with self.subTest(symbol=symbol):
-                self.assertIn(f"grep -Eq ' _?{symbol}$'", ios_package)
+        for mode in ("JIT", "TCI"):
+            with self.subTest(mode=mode):
+                self.assertIn(f'QEMU/{mode}', ios_package)
+                self.assertIn(f'"$RUNTIME_DIR/QEMU/{mode}/exports.txt"', ios_package)
+                self.assertIn(f'"$APP/QEMU/{mode}/exports.txt"', ios_package)
+        for symbol in ("qemu_init", "qemu_main_loop", "qemu_cleanup", "qemu_system_shutdown_request"):
+            self.assertIn(f" _?{symbol}", ios_package)
+        self.assertIn('test -s "$APP/$EMBEDDED_TCI_REL"', ios_package)
+        self.assertIn('test -s "$APP/QEMU/runtime-mode-manifest.txt"', ios_package)
 
     def test_qemu_packager_has_one_complete_candidate_scan(self):
         root = Path(__file__).resolve().parents[2]
@@ -129,7 +129,10 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertEqual(source.count('if [[ "$mode" == "jit" ]]; then'), 1)
         self.assertEqual(source.count("required_symbols+=(isteam_qemu_set_jit_callbacks)"), 1)
         self.assertEqual(source.count('for symbol in "${required_symbols[@]}"; do'), 1)
-        self.assertEqual(source.count("codesign --verify --strict"), 1)
+        self.assertEqual(source.count("if codesign --verify --strict"), 1)
+        self.assertIn('signature_policy="${3:-signed}"', source)
+        self.assertIn("code object is not signed at all", source)
+        self.assertEqual(source.count('echo "== Code signature =="'), 1)
         self.assertNotIn("optional graceful-shutdown export", source)
         self.assertNotIn("for tool in file lipo nm codesign; do", source)
 
@@ -175,6 +178,8 @@ class SourceValidatorTests(unittest.TestCase):
             self.assertIn(f"`{symbol}`", readme)
         self.assertIn("Only JIT mode additionally requires", readme)
         self.assertIn("TCI validation checks lifecycle/shutdown exports", readme)
+        self.assertIn("CI packaging uses allow-unsigned only", readme)
+        self.assertIn("validator defaults to strict signature verification", readme)
         self.assertIn("Build verification: a successful hosted JIT+TCI UTM build and combined artifact have not yet been recorded", readme)
         self.assertNotIn("qemu_system_shutdown_request` is optional", readme)
         self.assertEqual(readme.count("The runtime library must be built for **physical iOS arm64**"), 1)
@@ -186,7 +191,7 @@ class SourceValidatorTests(unittest.TestCase):
         merge = (root / "scripts" / "merge-qemu-runtime-variants.sh").read_text(encoding="utf-8")
         self.assertIn("has_jit_callbacks=false", tci)
         self.assertIn("QEMU-TCI.framework", tci)
-        self.assertIn('bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci)
+        self.assertIn('bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" tci allow-unsigned', tci)
         self.assertIn("StikJIT callback export: absent by design", tci)
         self.assertIn("grep -q 'isteam_qemu_set_jit_callbacks' \"$JIT_DIR/exports.txt\"", merge)
         self.assertIn("if grep -q 'isteam_qemu_set_jit_callbacks' \"$TCI_DIR/exports.txt\"; then", merge)

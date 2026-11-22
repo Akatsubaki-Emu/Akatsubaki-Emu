@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import subprocess
 import sys
 import unittest
@@ -155,6 +156,9 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         source = (root / "scripts" / "validate-qemu-runtime.sh").read_text(encoding="utf-8")
         self.assertIn('if [[ "$mode" == "tci" ]] && grep -Eq', source)
         self.assertIn("TCI runtime must not export the StikDebug JIT callback.", source)
+        self.assertIn('signature_policy="${3:-signed}"', source)
+        self.assertIn("code object is not signed at all", source)
+        self.assertEqual(source.count('echo "== Code signature =="'), 1)
 
     def test_release_validates_mode_specific_jit_and_tci_manifests(self):
         root = Path(__file__).resolve().parents[2]
@@ -164,6 +168,8 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn('"$APP/QEMU/JIT/runtime-library-path.txt"', source)
         self.assertIn('"$APP/QEMU/TCI/runtime-library-path.txt"', source)
         self.assertIn("TCI runtime unexpectedly exports the StikDebug JIT callback.", source)
+        self.assertIn('test -s "$APP/$EMBEDDED_TCI_REL"', source)
+
     def test_tci_packager_shell_syntax_and_export_manifest(self):
         root = Path(__file__).resolve().parents[2]
         script = root / "scripts" / "package-utm-qemu-tci-runtime.sh"
@@ -174,26 +180,19 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn('> "$OUT/exports.txt"', source)
         self.assertIn("StikJIT callback export: absent by design", source)
         self.assertEqual(source.count('data_dir=""'), 1)
+        self.assertIn('bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" tci allow-unsigned', source)
 
     def test_generic_tci_packager_requires_no_jit_callback(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "scripts" / "package-utm-qemu-runtime.sh").read_text(encoding="utf-8")
         self.assertIn('{ [ "$MODE" = "tci" ] && [ "$has_jit_callbacks" = false ]; }', source)
 
-    def test_tci_runtime_validator_rejects_jit_callback(self):
-        root = Path(__file__).resolve().parents[2]
-        source = (root / "scripts" / "validate-qemu-runtime.sh").read_text(encoding="utf-8")
-        self.assertIn('if [[ "$mode" == "tci" ]] && grep -Eq', source)
-        self.assertIn("TCI runtime must not export the StikDebug JIT callback.", source)
+    def test_python_test_method_names_are_unique(self):
+        source = Path(__file__).read_text(encoding="utf-8")
+        names = re.findall(r"^\s+def (test_[A-Za-z0-9_]+)\(", source, re.MULTILINE)
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        self.assertEqual(duplicates, [])
 
-    def test_release_validates_mode_specific_jit_and_tci_manifests(self):
-        root = Path(__file__).resolve().parents[2]
-        source = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-        self.assertIn('"$RUNTIME_DIR/QEMU/JIT/runtime-library-path.txt"', source)
-        self.assertIn('TCI_RUNTIME_DIR="$RUNTIME_DIR/QEMU/TCI"', source)
-        self.assertIn('"$APP/QEMU/JIT/runtime-library-path.txt"', source)
-        self.assertIn('"$APP/QEMU/TCI/runtime-library-path.txt"', source)
-        self.assertIn("TCI runtime unexpectedly exports the StikDebug JIT callback.", source)
     def test_fresh_launch_defaults_to_ubuntu(self):
         root = Path(__file__).resolve().parents[2]
         settings = (root / "src/Core/RuntimeSettings.swift").read_text(encoding="utf-8")

@@ -203,6 +203,6 @@ test -s "$OUT/exports.txt"
 test -s "$OUT/$runtime_relative"
 find "$OUT/Frameworks" -type f -size +0c -print -quit | grep -q .
 find "$OUT/QEMU" -type f -size +0c -print -quit | grep -q .
-bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" tci
+bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" tci allow-unsigned
 
 echo "Packaged and inspected the no-JIT TCI runtime from $(basename "$APP")."

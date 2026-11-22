@@ -204,6 +204,7 @@ required = {
         "test_generic_tci_packager_requires_no_jit_callback",
         "test_tci_runtime_validator_rejects_jit_callback",
         "test_release_validates_mode_specific_jit_and_tci_manifests",
+        "test_python_test_method_names_are_unique",
         "test_build_freshness_script_ignores_only_non_build_paths",
         "#include <mach/vm_map.h>",
         "#define mach_vm_remap vm_remap",
@@ -639,7 +640,7 @@ required = {
     "scripts/package-utm-qemu-tci-runtime.sh": [
         "has_jit_callbacks=false",
         "QEMU-TCI.framework",
-        'bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci',
+        'bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci allow-unsigned',
         "StikJIT callback export: absent by design",
         "runtime-library-path.txt",
         'printf \'%s\\n\' "$exports" | grep -E',
@@ -657,6 +658,7 @@ required = {
         'cp -a "$TCI_DIR/QEMU/." "$TEMP_OUT/QEMU/TCI/"',
     ],
     "scripts/validate-qemu-runtime.sh": [
+        'signature_policy="${3:-signed}"',
         "for tool in file lipo nm codesign vtool; do",
         "required_symbols=(qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request)",
         'if [[ "$mode" == "jit" ]]; then',
@@ -665,6 +667,7 @@ required = {
         "required_symbols+=(isteam_qemu_set_jit_callbacks)",
         'for symbol in "${required_symbols[@]}"; do',
         "codesign --verify --strict",
+        "code object is not signed at all",
         "vtool -show-build",
         "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
