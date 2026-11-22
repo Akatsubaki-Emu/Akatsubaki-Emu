@@ -255,7 +255,6 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     g_starting = true;
     g_error[0] = '\0';
     g_stop_requested = false;
-    pthread_mutex_unlock(&g_lock);
 
     void *library = NULL;
     void *stale_preflight_library = NULL;

@@ -34,5 +34,23 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
 
 
 
+    def test_preflight_handle_transfer_keeps_lifecycle_lock_until_handle_is_consumed(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
+        start = source.split("bool isteam_qemu_start", 1)[1].split(
+            "void isteam_qemu_request_stop", 1
+        )[0]
+        reservation = start.split("g_stop_requested = false;", 1)[1].split(
+            "if (!library)", 1
+        )[0]
+        self.assertIn("g_preflight_library", reservation)
+        self.assertEqual(reservation.count("pthread_mutex_unlock(&g_lock);"), 1)
+        self.assertLess(
+            reservation.index("g_preflight_library"),
+            reservation.index("pthread_mutex_unlock(&g_lock);"),
+        )
+
+
+
 if __name__ == "__main__":
     unittest.main()
