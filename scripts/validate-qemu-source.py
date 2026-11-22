@@ -987,7 +987,6 @@ required = {
         "def test_meson_patcher_changes_only_the_objc_compiler_block",
         "def test_meson_patcher_fails_closed_if_objc_block_changes",
         "def test_meson_patcher_handles_qemu_common_flags_variant",
-        "def test_meson_patcher_handles_qemu_common_flags_variant",
         "def test_ninja_verifier_requires_flag_on_actual_metal_compile_edge",
         "def test_ninja_verifier_rejects_missing_compile_flag_even_when_link_flags_exist",
         "def test_ninja_verifier_rejects_missing_metal_compile_edge",
