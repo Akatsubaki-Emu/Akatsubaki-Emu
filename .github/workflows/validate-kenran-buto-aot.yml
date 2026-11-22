@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - "src/Runtime/X86_64AOTTranslator.swift"
+      - "src/Core/EmulationLog.swift"
+      - "src/Runtime/GuestMemory.swift"
+      - "src/Runtime/LinuxSyscallDispatcher.swift"
+      - "src/Runtime/X86_64ALU.swift"
+      - "iSteam/JIT26Protocol.c"
+      - "iSteam/KenranButoAOTExecutableMemory.h"
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
       - "src/Runtime/X86_64Interpreter.swift"
@@ -22,10 +28,15 @@ on:
       - "docs/KENRAN_BUTO_AOT_ABI.md"
       - "src/Performance/TranslationCache.swift"
       - "scripts/tests/test_kenran_buto_aot_*.swift"
-      - ".github/workflows/validate-kenran-buto-aot.yml"
   pull_request:
     paths:
       - "src/Runtime/X86_64AOTTranslator.swift"
+      - "src/Core/EmulationLog.swift"
+      - "src/Runtime/GuestMemory.swift"
+      - "src/Runtime/LinuxSyscallDispatcher.swift"
+      - "src/Runtime/X86_64ALU.swift"
+      - "iSteam/JIT26Protocol.c"
+      - "iSteam/KenranButoAOTExecutableMemory.h"
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
       - "src/Runtime/X86_64Interpreter.swift"
@@ -45,6 +56,10 @@ on:
       - "scripts/tests/test_kenran_buto_aot_*.swift"
       - ".github/workflows/validate-kenran-buto-aot.yml"
   workflow_dispatch:
+
+concurrency:
+  group: kenran-buto-aot-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -110,6 +125,7 @@ jobs:
           set -euo pipefail
           swiftc -parse-as-library -swift-version 5 \
             -import-objc-header iSteam/JIT26Protocol.h \
+            src/Core/EmulationLog.swift \
             src/Performance/TranslationCache.swift \
             src/Runtime/X86_64AOTTranslator.swift \
             src/Runtime/KenranButoAOTCompiler.swift \
