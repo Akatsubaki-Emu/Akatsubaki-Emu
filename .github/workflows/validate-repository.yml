@@ -203,7 +203,7 @@ jobs:
           if "runs-on: macos-15" in release or "runs-on: macos-15" in platform_validation:
               raise SystemExit("Apple builds must not use an unpinned macOS 15 runner.")
           if "runs-on: xcode-27" not in release or "runs-on: xcode-27" not in platform_validation:
-              raise SystemExit("Apple builds must use the macOS 26 runner image.")
+              raise SystemExit("Apple builds must use the xcode-27 runner image.")
           xcode_contract = [
               'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
               'case "$XCODE_VERSION" in',
