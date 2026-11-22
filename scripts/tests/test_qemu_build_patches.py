@@ -201,6 +201,28 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
                 source.index('rm -rf "$OUT"'),
             )
 
+    def test_qemu_packagers_preserve_archive_when_output_is_same_path(self):
+        root = Path(__file__).resolve().parents[2]
+        build_root = root / "build"
+        build_root.mkdir(exist_ok=True)
+        for relative in (
+            "scripts/package-utm-qemu-runtime.sh",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+        ):
+            with tempfile.TemporaryDirectory(prefix="qemu-output-overlap-", dir=build_root) as temporary:
+                archive = Path(temporary)
+                marker = archive / "keep.txt"
+                marker.write_text("keep", encoding="utf-8")
+                result = subprocess.run(
+                    ["bash", str(root / relative), str(archive), f"build/{archive.name}"],
+                    cwd=root,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertNotEqual(result.returncode, 0, relative)
+                self.assertIn("overlaps the input UTM archive", result.stderr, relative)
+                self.assertEqual(marker.read_text(encoding="utf-8"), "keep", relative)
+
     def test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed(self):
         source = """#ifdef CONFIG_DARWIN
 #include <mach/mach.h>
