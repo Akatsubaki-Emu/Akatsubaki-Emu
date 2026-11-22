@@ -253,6 +253,9 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
                 guard let self else { return }
                 self.launchInProgress = false
                 self.statusLabel.text = "JIT failed • \(message)"
+                if self.navigationController?.topViewController is VMDisplayViewController {
+                    self.navigationController?.popViewController(animated: true)
+                }
             }) { [weak self] in
                 self?.completeLaunch(configuration: config, diskURL: diskURL)
             }

@@ -14,7 +14,7 @@ The iOS app embeds an ExtensionKit helper, not a second runnable app. The helper
 4. The helper writes a temporary extension-local pairing file, then synchronously calls `StikJIT.enableJIT` on one serial queue. StikJIT checks RSD reachability, downloads/mounts/verifies the appropriate Developer Disk Image, and starts the selected universal script.
 5. The host keeps the XPC session alive and polls its own debugger state while StikJIT's script waits. QEMU starts only after the host reports `CS_DEBUGGED`; TXM/SPTM devices additionally require `P_TRACED`.
 6. QEMU invokes the existing universal breakpoint callbacks to prepare executable regions and then calls `iSteamJITDetach`. That breakpoint ends the script, allowing the helper's synchronous call to return. The helper reports the final result over XPC.
-7. If the helper fails before readiness, QEMU remains stopped. If the helper fails during the breakpoint handshake, the failure is surfaced to the launch flow; the guest must not be treated as successfully started.
+7. If the helper fails before readiness, QEMU remains stopped. If the helper fails during the breakpoint handshake, the failure is surfaced to the launch flow. A VM display already pushed by Launch Setup is popped, and a directly launched VM display stops VNC, QEMU and the GPU backend.
 
 The helper's persistent DDI cache lives under its own Library container. The temporary pairing file is removed when the request completes. The host retains the imported pairing file so future requests do not require re-importing it.
 

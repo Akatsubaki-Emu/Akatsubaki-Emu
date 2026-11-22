@@ -126,7 +126,7 @@ final class VMDisplayViewController: UIViewController {
            !JITCoordinator.shared.isJITReady {
             status.text = "Waiting for JIT • preparing LocalDevVPN and StikDebug"
             JITCoordinator.shared.requestJIT(from: self, onFailure: { [weak self] message in
-                self?.status.text = "JIT failed • \(message)"
+                self?.handleJITFailure(message)
             }) { [weak self] in
                 self?.startEngine()
             }
@@ -136,6 +136,17 @@ final class VMDisplayViewController: UIViewController {
         #else
         startEngine()
         #endif
+    }
+
+    func handleJITFailure(_ message: String) {
+        status.text = "JIT failed • \(message)"
+        EmulationLog.shared.write("JIT helper failed: \(message)")
+        guard engineStartRequested else { return }
+        releaseGuestInputs()
+        vncClient.stop()
+        engine.stop()
+        virtioGPU.stop()
+        engineStartRequested = false
     }
 
     private func startEngine() {

@@ -49,5 +49,16 @@ class EmbeddedStikJITIntegrationTests(unittest.TestCase):
         self.assertIn('host: "com.xthrx.isteam.nightly"', helper)
 
 
+
+    def test_late_helper_failure_stops_or_pops_the_guest_display(self):
+        launch = self.read("iSteam/LaunchSetupViewController.swift")
+        display = self.read("src/Display/VMDisplayViewController.swift")
+        self.assertIn("topViewController is VMDisplayViewController", launch)
+        self.assertIn("popViewController(animated: true)", launch)
+        self.assertIn("func handleJITFailure(_ message: String)", display)
+        self.assertIn("vncClient.stop()", display)
+        self.assertIn("engine.stop()", display)
+        self.assertIn("virtioGPU.stop()", display)
+
 if __name__ == "__main__":
     unittest.main()
