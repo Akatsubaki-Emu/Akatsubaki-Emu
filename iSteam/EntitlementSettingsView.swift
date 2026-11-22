@@ -108,7 +108,7 @@ final class EntitlementViewModel: ObservableObject {
 
             let existingCapabilities = try await fetchExistingCapabilities(for: appID, session: session)
             if existingCapabilities.contains(where: { $0.type == "INCREASED_MEMORY_LIMIT" }) {
-                status = "Apple already reports Increased Memory Limit enabled for \(bundleIdentifier). Reinstall through SideStore or AltStore if this installation has not yet received a refreshed provisioning profile."
+                status = "Apple already reports Increased Memory Limit enabled for \(bundleIdentifier). Reinstall this app through SideStore or AltStore if this installation has not yet received a refreshed provisioning profile."
                 return
             }
 
@@ -167,7 +167,7 @@ final class EntitlementViewModel: ObservableObject {
                     userInfo: [NSLocalizedDescriptionKey: message]
                 )
             }
-            status = "Apple accepted the Increased Memory Limit capability update for \(bundleIdentifier). Existing App ID capabilities and their settings were preserved. Reinstall through SideStore or AltStore using the same account so the provisioning profile is regenerated. The running installation cannot update its own code signature."
+            status = "Apple accepted the Increased Memory Limit capability update for \(bundleIdentifier). Existing App ID capabilities and their settings were preserved. Reinstall this app through SideStore or AltStore using the same account so the provisioning profile is regenerated. The running installation cannot update its own code signature."
         } catch {
             status = error.localizedDescription
         }
