@@ -126,11 +126,9 @@ merge_framework_tree() {
 }
 
 merge_framework_tree "$JIT_DIR/Frameworks" "$TEMP_OUT/Frameworks"
-[[ ! -e "$TEMP_OUT/Frameworks/TCI" && ! -L "$TEMP_OUT/Frameworks/TCI" ]] || fail "JIT frameworks already use the reserved Frameworks/TCI path"
 merge_framework_tree "$TCI_DIR/Frameworks" "$TEMP_OUT/Frameworks" "$tci_framework_component"
-mkdir -p "$TEMP_OUT/Frameworks/TCI"
 tci_component_source="$TCI_DIR/Frameworks/$tci_framework_component"
-tci_component_destination="$TEMP_OUT/Frameworks/TCI/$tci_framework_component"
+tci_component_destination="$TEMP_OUT/Frameworks/$tci_framework_component"
 [[ ! -L "$tci_component_source" ]] || fail "TCI runtime library component must not be a symlink"
 if [[ -d "$tci_component_source" ]]; then
   mkdir -p "$tci_component_destination"
@@ -141,7 +139,7 @@ else
   fail "TCI runtime library component is missing: $tci_framework_component"
 fi
 
-tci_library_merged="Frameworks/TCI/$tci_framework_relative"
+tci_library_merged="Frameworks/$tci_framework_relative"
 JIT_QEMU_SOURCE="$JIT_DIR/QEMU"
 if [[ -d "$JIT_DIR/QEMU/JIT" ]]; then
   JIT_QEMU_SOURCE="$JIT_DIR/QEMU/JIT"
