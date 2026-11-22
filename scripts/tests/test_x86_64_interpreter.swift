@@ -1102,6 +1102,18 @@ struct InterpreterTests {
         precondition(stackUnderflowExit == .memoryFault(address: 0))
         precondition(stackUnderflow.registerValue(4) == 0)
 
+        let callStackFaultMemory = GuestMemory(size: 64)
+        let callStackFaultProgram: [UInt8] = [
+            0x48, 0xBC, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            0xE8, 0x00, 0x00, 0x00, 0x00
+        ]
+        precondition(callStackFaultMemory.write(Data(callStackFaultProgram), offset: 0))
+        let callStackFault = X86_64Interpreter(memory: callStackFaultMemory)
+        try callStackFault.reset(entryPoint: 0)
+        let callStackFaultExit = try callStackFault.run(maxInstructions: 2)
+        precondition(callStackFaultExit == .memoryFault(address: UInt64.max - 8))
+        precondition(callStackFault.registerValue(4) == UInt64.max)
+
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
