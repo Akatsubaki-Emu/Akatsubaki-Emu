@@ -59,7 +59,7 @@ jobs:
     env:
       RELEASE_CHANNEL: ${{ matrix.channel }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -78,12 +78,12 @@ jobs:
 
       - name: Download required iOS QEMU runtime artifact from this run
         if: matrix.platform == 'iOS'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: iSteam-qemu-runtime-ios-arm64
           path: build/qemu-runtime
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/Library/Caches/Homebrew
           key: brew-xcodegen-${{ runner.os }}-v1
@@ -185,7 +185,7 @@ jobs:
           shasum -a 256 build/iSteam-visionOS.ipa > build/iSteam-visionOS.ipa.sha256
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: iSteam-${{ matrix.platform }}-${{ matrix.channel }}
           path: |
@@ -206,24 +206,24 @@ jobs:
     env:
       RELEASE_CHANNEL: ${{ matrix.channel }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download iOS build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: iSteam-iOS-${{ matrix.channel }}
           path: build
 
       - name: Download tvOS build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: iSteam-tvOS-${{ matrix.channel }}
           path: build
 
       - name: Download visionOS build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: iSteam-visionOS-${{ matrix.channel }}
           path: build
@@ -253,7 +253,7 @@ jobs:
           fi
 
       - name: Publish combined release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.title }}

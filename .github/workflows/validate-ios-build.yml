@@ -33,7 +33,7 @@ jobs:
             sdk: xrsimulator
             destination: generic/platform=visionOS Simulator
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Select and verify Xcode 26.2
         shell: bash
         run: |

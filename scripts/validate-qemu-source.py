@@ -1052,13 +1052,13 @@ else:
             print(f"release workflow: concurrency policy missing {token!r}", file=sys.stderr)
             failed = True
 runtime_download_start = release_workflow.find("- name: Download required iOS QEMU runtime artifact")
-runtime_download_end = release_workflow.find("\n      - uses: actions/cache@v4", runtime_download_start)
+runtime_download_end = release_workflow.find("\n      - uses: actions/cache@", runtime_download_start)
 if runtime_download_start < 0 or runtime_download_end < 0:
     print("release workflow: required QEMU runtime download step is missing", file=sys.stderr)
     failed = True
 else:
     runtime_download = release_workflow[runtime_download_start:runtime_download_end]
-    for token in ["uses: actions/download-artifact@v4", "name: iSteam-qemu-runtime-ios-arm64", "path: build/qemu-runtime"]:
+    for token in ["uses: actions/download-artifact@", "name: iSteam-qemu-runtime-ios-arm64", "path: build/qemu-runtime"]:
         if token not in runtime_download:
             print(f"release workflow: required same-run runtime download setting missing: {token}", file=sys.stderr)
             failed = True
