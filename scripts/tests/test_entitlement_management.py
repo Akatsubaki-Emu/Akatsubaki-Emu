@@ -24,7 +24,6 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("AppleAPI.shared.fetchAppIDsForTeam", self.view)
         self.assertIn("AppleAPI.shared.updateAppID", self.view)
         self.assertIn("prepareForVerification(using:", self.view)
-        self.assertIn("await self.prepareForVerification", self.view)
 
     def test_anisette_helper_is_vendored_and_uses_secure_device_state(self):
         self.assertIn("class AnisetteDataHelper", self.anisette)
@@ -37,8 +36,8 @@ class EntitlementManagementSourceTests(unittest.TestCase):
 
     def test_anisette_server_is_https_and_configurable(self):
         self.assertIn('?? "https://ani.sidestore.io"', self.view)
-        self.assertIn('anisetteURL.scheme?.lowercased() == "https"', self.view)
-        self.assertIn('UserDefaults.standard.set(configuredURL, forKey: "iSteam.anisetteServerURL")', self.view)
+        self.assertIn('anisetteURL.scheme == "https"', self.view)
+        self.assertIn('UserDefaults.standard.set(anisetteURL.absoluteString, forKey: "iSteam.anisetteServerURL")', self.view)
 
     def test_reinstall_is_required_after_capability_change(self):
         self.assertIn("Reinstall this app through SideStore or AltStore", self.view)

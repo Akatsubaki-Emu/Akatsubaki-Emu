@@ -11,6 +11,7 @@ The iOS Settings screen includes an **Entitlements** page based on the Apple Dev
 3. Complete Apple's two-factor verification if requested.
 4. Select the team containing the exact bundle ID shown by the current build (`com.xthrx.isteam` or `com.xthrx.isteam.nightly`).
 5. Choose **Enable Increased Memory Limit for Akatsubaki Emu**.
+6. Reinstall the app through SideStore or AltStore using the same Apple account so the installer can obtain a refreshed provisioning profile.
 
 The integration lists the selected team's App IDs to locate the exact bundle identifier of the running build, then requests `INCREASED_MEMORY_LIMIT` only for that matching App ID. It does not create or modify unrelated App IDs. The Anisette device identifier and provisioning data are stored in the iOS Keychain. The Apple account password is held only in memory for authentication and cleared when the sign-in operation finishes.
 
