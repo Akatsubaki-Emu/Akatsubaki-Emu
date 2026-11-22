@@ -7,6 +7,7 @@ final class GameArtworkStore {
     static let shared = GameArtworkStore()
     private let fm = FileManager.default
     private let maxBytes = 12 * 1024 * 1024
+    private static let supportedExtensions = ["jpg", "png", "heic", "webp", "gif"]
     private init() {}
 
     private var directory: URL {
@@ -14,6 +15,13 @@ final class GameArtworkStore {
         let folder = base.appendingPathComponent("GameArtwork", isDirectory: true)
         try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder
+    }
+
+    private func artworkFiles(for gameID: UUID) -> [URL] {
+        let base = directory.appendingPathComponent(gameID.uuidString)
+        return Self.supportedExtensions
+            .map { base.appendingPathExtension($0) }
+            .filter { fm.fileExists(atPath: $0.path) }
     }
 
     @discardableResult
@@ -58,9 +66,7 @@ final class GameArtworkStore {
         // Keep one canonical artwork file per game. Otherwise changing format
         // (for example PNG to JPEG) leaves an older file that may be selected
         // unpredictably by artworkURL(for:).
-        let existing = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        for file in existing where file.deletingPathExtension().lastPathComponent == gameID.uuidString
-            && file != destination {
+        for file in artworkFiles(for: gameID) where file != destination {
             try? fm.removeItem(at: file)
         }
         EmulationLog.shared.write("Cached cover artwork for game \(gameID.uuidString)")
@@ -68,20 +74,19 @@ final class GameArtworkStore {
     }
 
     func artworkURL(for gameID: UUID) -> URL? {
-        guard let files = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
-        return files.filter { $0.deletingPathExtension().lastPathComponent == gameID.uuidString }
-            .sorted {
-                let left = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                let right = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                return left > right
-            }.first
+        let files = artworkFiles(for: gameID)
+        guard files.count > 1 else { return files.first }
+        return files.max {
+            let left = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let right = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return left < right
+        }
     }
 
     func removeArtwork(for gameID: UUID) throws {
-        guard fm.fileExists(atPath: directory.path) else { return }
-        let files = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-            .filter { $0.deletingPathExtension().lastPathComponent == gameID.uuidString }
-        for file in files { try fm.removeItem(at: file) }
+        for file in artworkFiles(for: gameID) {
+            try fm.removeItem(at: file)
+        }
     }
 
     enum ArtworkError: LocalizedError {
