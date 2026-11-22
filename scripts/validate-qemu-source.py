@@ -100,6 +100,12 @@ required = {
     ],
     "scripts/patch_qemu_stikjit_ios.py": [
         "iSteamJITGetProtocolMode",
+        'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
+        "isteam_qemu_set_jit_callbacks",
+        "g_jit_ready = ready;",
+        "g_jit_prepare_region = prepare;",
+        "g_jit_detach = detach;",
+        "__attribute__((used, visibility(\\"default\\")))",
         "jit_protocol_mode < 0",
         "jit_protocol_mode > 0",
         "alloc_code_gen_buffer_splitwx_stikdebug",

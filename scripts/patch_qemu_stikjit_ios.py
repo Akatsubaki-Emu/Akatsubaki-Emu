@@ -8,6 +8,24 @@ FUNCTION_ANCHOR = "static int alloc_code_gen_buffer_splitwx_vmremap(size_t size,
 MARKER = "alloc_code_gen_buffer_splitwx_stikdebug"
 
 HELPER = r'''#if TARGET_OS_IOS
+typedef bool (*JITReadyFunction)(void);
+typedef void *(*JITPrepareFunction)(void *, size_t);
+typedef void (*JITDetachFunction)(void);
+
+static JITReadyFunction g_jit_ready;
+static JITPrepareFunction g_jit_prepare_region;
+static JITDetachFunction g_jit_detach;
+
+__attribute__((used, visibility("default")))
+void isteam_qemu_set_jit_callbacks(JITReadyFunction ready,
+                                   JITPrepareFunction prepare,
+                                   JITDetachFunction detach)
+{
+    g_jit_ready = ready;
+    g_jit_prepare_region = prepare;
+    g_jit_detach = detach;
+}
+
 extern kern_return_t mach_vm_protect(vm_map_t target_task,
                                      mach_vm_address_t address,
                                      mach_vm_size_t size,
@@ -19,26 +37,20 @@ extern kern_return_t mach_vm_deallocate(vm_map_t target_task,
 
 static int alloc_code_gen_buffer_splitwx_stikdebug(size_t size, Error **errp)
 {
-    typedef bool (*JITReadyFunction)(void);
-    typedef void *(*JITPrepareFunction)(void *, size_t);
-    typedef void (*JITDetachFunction)(void);
-    JITReadyFunction jit_ready = (JITReadyFunction)dlsym(RTLD_DEFAULT, "iSteamJITIsReady");
-    JITPrepareFunction prepare_region = (JITPrepareFunction)dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion");
-    JITDetachFunction detach = (JITDetachFunction)dlsym(RTLD_DEFAULT, "iSteamJITDetach");
     kern_return_t ret;
     mach_vm_address_t buf_rw = 0;
     mach_vm_address_t buf_rx;
     vm_prot_t cur_prot, max_prot;
 
-    if (!jit_ready || !prepare_region || !detach || !jit_ready()) {
+    if (!g_jit_ready || !g_jit_prepare_region || !g_jit_detach || !g_jit_ready()) {
         error_setg(errp, "iOS 26+ QEMU TCG requires an attached StikDebug JIT session.");
         return -1;
     }
 
-    buf_rx = (mach_vm_address_t)prepare_region(NULL, size);
+    buf_rx = (mach_vm_address_t)g_jit_prepare_region(NULL, size);
     if (buf_rx == 0) {
         error_setg(errp, "StikDebug did not provide an executable QEMU translation region.");
-        detach();
+        g_jit_detach();
         return -1;
     }
 
@@ -48,14 +60,14 @@ static int alloc_code_gen_buffer_splitwx_stikdebug(size_t size, Error **errp)
     if (ret != KERN_SUCCESS) {
         error_setg(errp, "vm_remap for the StikDebug JIT writable alias failed: %d", ret);
         mach_vm_deallocate(mach_task_self(), buf_rx, size);
-        detach();
+        g_jit_detach();
         return -1;
     }
     if ((max_prot & VM_PROT_WRITE) == 0) {
         error_setg(errp, "StikDebug JIT region does not permit a writable alias.");
         mach_vm_deallocate(mach_task_self(), buf_rw, size);
         mach_vm_deallocate(mach_task_self(), buf_rx, size);
-        detach();
+        g_jit_detach();
         return -1;
     }
 
@@ -65,14 +77,14 @@ static int alloc_code_gen_buffer_splitwx_stikdebug(size_t size, Error **errp)
         error_setg(errp, "vm_protect for the StikDebug JIT writable alias failed: %d", ret);
         mach_vm_deallocate(mach_task_self(), buf_rw, size);
         mach_vm_deallocate(mach_task_self(), buf_rx, size);
-        detach();
+        g_jit_detach();
         return -1;
     }
 
     region.start_aligned = (void *)buf_rw;
     region.total_size = size;
     tcg_splitwx_diff = buf_rx - buf_rw;
-    detach();
+    g_jit_detach();
     return PROT_READ | PROT_WRITE;
 }
 #endif
@@ -84,9 +96,11 @@ def patch_source(source: str) -> str:
     if MARKER in source:
         required = [
             "iSteamJITGetProtocolMode",
-            "iSteamJITIsReady",
-            "iSteamJITPrepareRegion",
-            "iSteamJITDetach",
+            "isteam_qemu_set_jit_callbacks",
+            "g_jit_ready",
+            "g_jit_prepare_region",
+            "g_jit_detach",
+            'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
             "jit_protocol_mode < 0",
             "jit_protocol_mode > 0",
             "__builtin_available(iOS 26.0, *)",
@@ -94,8 +108,15 @@ def patch_source(source: str) -> str:
             "tcg_splitwx_diff = buf_rx - buf_rw",
         ]
         missing = [item for item in required if item not in source]
-        if missing:
-            raise SystemExit("Existing StikDebug QEMU patch is incomplete: " + ", ".join(missing))
+        forbidden = [
+            'dlsym(RTLD_DEFAULT, "iSteamJITIsReady")',
+            'dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")',
+            'dlsym(RTLD_DEFAULT, "iSteamJITDetach")',
+        ]
+        unexpected = [item for item in forbidden if item in source]
+        if missing or unexpected:
+            details = missing + ["unexpected host-symbol lookup: " + item for item in unexpected]
+            raise SystemExit("Existing StikDebug QEMU patch is incomplete: " + ", ".join(details))
         return source
 
     if INCLUDE_ANCHOR not in source:
@@ -129,9 +150,12 @@ def patch_source(source: str) -> str:
         "#include <TargetConditionals.h>",
         "#include <dlfcn.h>",
         "iSteamJITGetProtocolMode",
-        "iSteamJITIsReady",
-        "iSteamJITPrepareRegion",
-        "iSteamJITDetach",
+        "isteam_qemu_set_jit_callbacks",
+        "g_jit_ready = ready;",
+        "g_jit_prepare_region = prepare;",
+        "g_jit_detach = detach;",
+        "__attribute__((used, visibility(\\"default\\")))",
+        'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
         "jit_protocol_mode < 0",
         "jit_protocol_mode > 0",
         "__builtin_available(iOS 26.0, *)",

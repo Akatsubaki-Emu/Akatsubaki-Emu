@@ -11,6 +11,12 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
             source,
         )
         self.assertIn("isteam_qemu_set_jit_callbacks", source)
+        patcher = (root / "scripts" / "patch_qemu_stikjit_ios.py").read_text(encoding="utf-8")
+        self.assertIn("void isteam_qemu_set_jit_callbacks(", patcher)
+        self.assertIn("g_jit_ready = ready;", patcher)
+        self.assertIn("g_jit_prepare_region = prepare;", patcher)
+        self.assertIn("g_jit_detach = detach;", patcher)
+        self.assertIn('__attribute__((used, visibility("default")))', patcher)
         self.assertIn("required lifecycle/JIT exports", source)
 
 
