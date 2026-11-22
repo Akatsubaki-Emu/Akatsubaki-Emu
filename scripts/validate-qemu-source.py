@@ -1088,8 +1088,18 @@ required = {
         "- sdk: IOKit.framework",
         "-Wl,-exported_symbol,_iSteamJITGetProtocolMode",
     ],
+    "scripts/patch_qemu_tci_exports.py": [
+        "REQUIRED_EXPORTS",
+        "SHUTDOWN_EXPORT",
+        "JIT_CALLBACK_EXPORT",
+        "def patch_exported_symbols(source: str) -> str",
+        "QEMU TCI shutdown export verification failed",
+        "QEMU TCI export list still contains the StikJIT callback",
+    ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
+        "ISTEAM_QEMU_TCI_EXPORT_PATCHER is required for TCI mode",
+        'python3 "$ISTEAM_QEMU_TCI_EXPORT_PATCHER" "$QEMU_DIR/system/qemu.symbols"',
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
         'python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"',
@@ -1129,6 +1139,19 @@ required = {
         "def test_sync_job_rechecks_gitlab_ancestry_before_retry",
         "def test_sync_job_never_force_pushes",
         "def test_sync_jobs_are_serialized_without_cancellation",
+    ],
+    "scripts/tests/test_qemu_build_patches.py": [
+        "import patch_qemu_tci_exports",
+        "test_tci_build_uses_upstream_ios_se_scheme_and_product",
+        "ISTEAM_QEMU_TCI_EXPORT_PATCHER",
+    ],
+    "scripts/tests/test_qemu_tci_exports.py": [
+        "def test_tci_exports_add_shutdown_and_remove_jit_callback",
+        "def test_patch_is_idempotent",
+        "def test_missing_lifecycle_export_is_rejected",
+        "def test_duplicate_shutdown_export_is_rejected",
+        "def test_duplicate_jit_callback_is_rejected",
+        "def test_export_file_is_updated_idempotently",
     ],
     "scripts/tests/test_qemu_objc_compile_flags.py": [
         "def test_meson_patcher_adds_required_objc_flag_and_is_idempotent",
