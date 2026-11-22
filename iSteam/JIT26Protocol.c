@@ -117,6 +117,7 @@ bool iSteamJITIsReady(void) {
 }
 #else
 bool iSteamJITHasGetTaskAllow(void) { return false; }
+int iSteamJITGetProtocolMode(void) { return ISTEAM_JIT_PROTOCOL_UNKNOWN; }
 void iSteamJITDetach(void) {}
 void *iSteamJITPrepareRegion(void *address, size_t length) {
     (void)address;
