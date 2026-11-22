@@ -672,6 +672,13 @@ required = {
         "framebufferBytes <= 64 * 1024 * 1024",
         "fit the 64 MiB framebuffer limit",
     ],
+    "scripts/tests/test_qemu_native_bridge_jit_validation.py": [
+        "def test_qemu_arguments_use_one_contiguous_allocation(self):",
+        "self.assertIn(\"malloc(total_argument_bytes)\", start)",
+        "def test_jit_callback_export_is_required_during_validation_and_start(self):",
+        "typedef void (*qemu_set_jit_callbacks_fn)",
+        "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
+    ],
     "scripts/tests/test_qemu_native_bridge.c": [
         "tooManyArguments[4097]",
         "oversizedArgument",
