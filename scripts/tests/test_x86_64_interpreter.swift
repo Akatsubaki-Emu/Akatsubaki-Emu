@@ -141,6 +141,22 @@ final class EmulationLog {
     func write(_ message: String) { messages.append(message) }
 }
 
+private final class CorruptingAOTExecutor: KenranButoAOTExecuting {
+    private(set) var calls = 0
+    private(set) var invalidations = 0
+    func invalidateAll() { invalidations += 1 }
+    func execute(guestCode: Data, registers: inout [UInt64], rip: UInt64,
+                 rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
+                 memory: GuestMemory, maximumInstructions: Int) -> KenranButoAOTExecutionResult? {
+        calls += 1
+        registers[0] = 0xDEAD_BEEF
+        return KenranButoAOTExecutionResult(
+            guestBytesConsumed: 5, instructionCount: 1,
+            exitReason: .unsupportedInstruction, exitRip: rip &+ 99, exitAddress: 0
+        )
+    }
+}
+
 @main
 struct InterpreterTests {
     static func main() throws {
@@ -1273,12 +1289,26 @@ struct InterpreterTests {
         }
         precondition(!faultOK && callbackState.exit_reason == 7)
         precondition(callbackState.exit_address == 4096 && callbackState.exit_rip == 0x1000)
+        var invalidEmptyState = KenranButoAOTGuestState()
+        var zeroByte: UInt8 = 0
+        let invalidEmptyRead = withUnsafeMutablePointer(to: &zeroByte) { p in
+            iSteamAOTGuestMemoryRead(&invalidEmptyState, 0, UnsafeMutableRawPointer(p), 0)
+        }
+        precondition(!invalidEmptyRead && invalidEmptyState.exit_reason == 9)
+        let invalidEmptyWrite = withUnsafePointer(to: &zeroByte) { p in
+            iSteamAOTGuestMemoryWrite(&invalidEmptyState, 0, UnsafeRawPointer(p), 0)
+        }
+        precondition(!invalidEmptyWrite && invalidEmptyState.exit_reason == 9)
 
-        if iSteamAOTExecutableMemoryIsAvailable() {
+        precondition(iSteamAOTExecutableMemoryIsAvailable(), "ARM64 CI must execute native AOT blocks; skipping is not a pass.")
             let program=Data([0xB8,0x01,0,0,0,0xBB,0x02,0,0,0,0x01,0xD8,0xF4])
             let hybridMemory=GuestMemory(size:8192)
             precondition(hybridMemory.write(program,offset:0x1000))
-            let executor=KenranButoAOTExecutor()
+            let aotCacheDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("KenranButoAOT-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: aotCacheDirectory) }
+            let aotCompiler = KenranButoAOTCompiler(cache: TranslationCache(directory: aotCacheDirectory))
+            let executor = KenranButoAOTExecutor(compiler: aotCompiler)
             var regs=[UInt64](repeating:0,count:16)
             let sideExit=executor.execute(guestCode:program,registers:&regs,rip:0x1000,rflags:0x202,
                 fsBase:0,gsBase:0,memory:hybridMemory,maximumInstructions:8)
@@ -1299,9 +1329,24 @@ struct InterpreterTests {
             for r in 0..<16 { precondition(hybrid.registerValue(r) == baseline.registerValue(r)) }
             precondition(executor.blocksExecuted >= 2)
             print("Kenran Butō AOT native block execution, exact-RIP side exit and differential passed")
-        } else {
-            print("Kenran Butō AOT native execution skipped: host lacks ARM64 executable-memory support")
-        }
+        let fallbackProgram = Data([0xB8, 0x2A, 0, 0, 0, 0xF4])
+        let fallbackBaselineMemory = GuestMemory(size: 8192)
+        precondition(fallbackBaselineMemory.write(fallbackProgram, offset: 0x1000))
+        let fallbackBaseline = X86_64Interpreter(memory: fallbackBaselineMemory)
+        try fallbackBaseline.reset(entryPoint: 0x1000)
+        let fallbackBaselineExit = try fallbackBaseline.run(maxInstructions: 4)
+
+        let fallbackMemory = GuestMemory(size: 8192)
+        precondition(fallbackMemory.write(fallbackProgram, offset: 0x1000))
+        let corruptingExecutor = CorruptingAOTExecutor()
+        let protectedInterpreter = X86_64Interpreter(memory: fallbackMemory, aotExecutor: corruptingExecutor)
+        try protectedInterpreter.reset(entryPoint: 0x1000)
+        let protectedExit = try protectedInterpreter.run(maxInstructions: 4)
+        precondition(protectedExit == fallbackBaselineExit && protectedExit == .halted)
+        precondition(protectedInterpreter.registerValue(0) == 42)
+        precondition(protectedInterpreter.instructionCount == fallbackBaseline.instructionCount)
+        precondition(corruptingExecutor.calls == 1 && corruptingExecutor.invalidations == 1)
+        print("Kenran Butō AOT invalid side-exit rejection preserved interpreter state")
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }

@@ -64,6 +64,13 @@ class GitHubActionsOwnershipTests(unittest.TestCase):
         self.assertIn("  pull_request:", workflow)
         self.assertIn("  workflow_dispatch:", workflow)
 
+    def test_metrics_bot_dispatches_mirror_sync_after_both_jobs(self):
+        workflow = (self.ROOT / ".github" / "workflows" / "Update stats.yml").read_text(encoding="utf-8")
+        self.assertIn("needs: [overview, team]", workflow)
+        self.assertIn("actions: write", workflow)
+        self.assertIn("GH_TOKEN: ${{ github.token }}", workflow)
+        self.assertIn("gh workflow run blank.yml --ref main", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

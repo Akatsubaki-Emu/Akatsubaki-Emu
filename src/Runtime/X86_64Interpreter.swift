@@ -84,6 +84,7 @@ final class X86_64Interpreter: GuestCPUBackend {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         if halted { return .halted }
         var executed: UInt64 = 0
+        var aotDisabledForRun = false
         while executed < maxInstructions {
             if executed & 0xff == 0 {
                 stopLock.lock()
@@ -95,37 +96,49 @@ final class X86_64Interpreter: GuestCPUBackend {
             let instructionAddress = rip
             instructionLengthExceeded = false
             prepareInstructionWindow(at: instructionAddress)
-            if let aotExecutor, instructionWindowLength > 0 {
+            if !aotDisabledForRun, let aotExecutor, instructionWindowLength > 0 {
                 let remaining = maxInstructions - executed
                 let budget = Int(min(remaining, UInt64(X86_64AOTTranslator.maximumInstructionBudget)))
+                var candidateRegisters = registers
                 if let result = aotExecutor.execute(
                     guestCode: Data(instructionWindow.prefix(instructionWindowLength)),
-                    registers: &registers, rip: instructionAddress, rflags: flags,
+                    registers: &candidateRegisters, rip: instructionAddress, rflags: flags,
                     fsBase: fsBase, gsBase: gsBase, memory: memory, maximumInstructions: budget
                 ) {
-                    guard result.instructionCount >= 0 && result.instructionCount <= budget,
-                          result.guestBytesConsumed >= 0 &&
-                          result.guestBytesConsumed <= instructionWindowLength else {
-                        return .backendUnavailable("Kenran Butō AOT returned an invalid block result.")
+                    let countsAreValid = result.instructionCount >= 0 &&
+                        result.instructionCount <= budget &&
+                        result.guestBytesConsumed >= 0 &&
+                        result.guestBytesConsumed <= instructionWindowLength
+                    let isMemoryFault = result.exitReason == .memoryReadFault ||
+                        result.exitReason == .memoryWriteFault
+                    let isKnownExit = result.exitReason != .none && result.exitReason != .invalidState
+                    var sideExitIsValid = false
+                    if countsAreValid && isKnownExit {
+                        let (expectedRip, overflow) = instructionAddress.addingReportingOverflow(
+                            UInt64(result.guestBytesConsumed)
+                        )
+                        sideExitIsValid = !overflow && result.exitRip == expectedRip
+                        if !isMemoryFault {
+                            sideExitIsValid = sideExitIsValid &&
+                                result.guestBytesConsumed > 0 &&
+                                result.instructionCount > 0 &&
+                                result.exitAddress == 0
+                        }
                     }
-                    if result.instructionCount > 0 {
-                        let count = UInt64(result.instructionCount)
-                        executed += count
-                        instructionCount &+= count
+                    if sideExitIsValid {
+                        registers = candidateRegisters
+                        if result.instructionCount > 0 {
+                            let count = UInt64(result.instructionCount)
+                            executed += count
+                            instructionCount &+= count
+                        }
+                        rip = result.exitRip
+                        if isMemoryFault {
+                            return .memoryFault(address: result.exitAddress)
+                        }
+                        continue
                     }
-                    rip = result.exitRip
-                    if result.exitReason == .memoryReadFault || result.exitReason == .memoryWriteFault {
-                        return .memoryFault(address: result.exitAddress)
-                    }
-                    if result.exitReason == .invalidState {
-                        return .backendUnavailable("Kenran Butō AOT guest-state ABI validation failed.")
-                    }
-                    let (expectedRip, overflow) = instructionAddress.addingReportingOverflow(UInt64(result.guestBytesConsumed))
-                    guard !overflow, result.exitRip == expectedRip,
-                          result.guestBytesConsumed > 0, result.instructionCount > 0 else {
-                        return .backendUnavailable("Kenran Butō AOT side exit did not preserve exact guest RIP.")
-                    }
-                    continue
+                    aotDisabledForRun = true
                 }
             }
             guard var opcode = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }

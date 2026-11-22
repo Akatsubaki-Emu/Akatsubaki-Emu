@@ -58,3 +58,18 @@ jobs:
           plugin_languages_sections: most-used
           plugin_languages_limit: 6
           committer_message: "chore: update metrics team [skip ci]"
+
+  sync-mirror:
+    name: Sync metrics commits to GitLab
+    runs-on: ubuntu-latest
+    needs: [overview, team]
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      # Commits made with GITHUB_TOKEN do not trigger push workflows.
+      # Dispatch the retained sync workflow after both metrics commits finish.
+      - name: Dispatch GitHub-to-GitLab synchronization
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run blank.yml --ref main

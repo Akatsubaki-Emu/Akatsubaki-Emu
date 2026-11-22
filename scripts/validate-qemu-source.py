@@ -1406,7 +1406,6 @@ for token in ("endbr64Memory", "malformedEndbr64Memory", "truncatedEndbr64Memory
         print(f"x86-64 interpreter tests: missing ENDBR64 prefix regression {token!r}", file=sys.stderr)
         failed = True
 
-
 # Kenran Butō AOT ABI v1 and interpreter-cooperative execution contracts.
 aot_header = Path("iSteam/JIT26Protocol.h").read_text(encoding="utf-8")
 aot_memory = Path("iSteam/KenranButoAOTExecutableMemory.c").read_text(encoding="utf-8")
@@ -1437,7 +1436,8 @@ for token in ("KenranButoAOTGuestState", "makeMemoryCallbacks(for:memory)",
         print(f"AOT executor missing {token!r}", file=sys.stderr)
         failed = True
 for token in ("aotExecutor.execute(", "rip = result.exitRip", "aotExecutor?.invalidateAll()",
-              "instructionWindow = [UInt8](repeating: 0, count: 64)"):
+              "instructionWindow = [UInt8](repeating: 0, count: 64)",
+              "var candidateRegisters = registers", "aotDisabledForRun = true"):
     if token not in aot_interpreter:
         print(f"AOT interpreter integration missing {token!r}", file=sys.stderr)
         failed = True
@@ -1450,7 +1450,9 @@ for token in ("maximumInstructions", "maximumOutputBytes", "maximumGuestBytes", 
         failed = True
 aot_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
 for token in ("iSteamAOTGuestMemoryRead", "iSteamAOTGuestMemoryWrite",
-              "sideExit!.exitRip == 0x100A", "Kenran Butō AOT native block execution"):
+              "sideExit!.exitRip == 0x100A", "Kenran Butō AOT native block execution",
+              "CorruptingAOTExecutor", "Kenran Butō AOT invalid side-exit rejection preserved interpreter state",
+              "ARM64 CI must execute native AOT blocks", "invalidEmptyRead", "invalidEmptyWrite"):
     if token not in aot_tests:
         print(f"AOT runtime regression missing {token!r}", file=sys.stderr)
         failed = True

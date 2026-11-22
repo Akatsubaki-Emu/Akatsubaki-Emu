@@ -44,12 +44,18 @@ bool iSteamAOTGuestStateInitialize(KenranButoAOTGuestState *s,uint64_t *g,uint64
  if(!s||!g||!m||!budget)return false;memset(s,0,sizeof(*s));s->abi_version=KENRAN_BUTO_AOT_ABI_VERSION;s->struct_size=(uint32_t)sizeof(*s);s->gpr=g;s->rip=rip;s->rflags=flags;s->fs_base=fs;s->gs_base=gs;s->memory=m;s->instruction_budget=budget;s->exit_rip=rip;return iSteamAOTGuestStateIsValid(s);
 }
 bool iSteamAOTGuestMemoryRead(KenranButoAOTGuestState *s,uint64_t a,void *d,size_t n){
- if(!n)return true;if(!iSteamAOTGuestStateIsValid(s)||!d||n>UINT64_MAX-a){if(s)s->exit_reason=KENRAN_BUTO_AOT_EXIT_INVALID_STATE;return false;}
- if(!s->memory->read_memory(s->memory->context,a,d,n)){s->exit_reason=KENRAN_BUTO_AOT_EXIT_MEMORY_READ_FAULT;s->exit_address=a;s->exit_rip=s->rip;return false;}return true;
+ if(!iSteamAOTGuestStateIsValid(s)){if(s)s->exit_reason=KENRAN_BUTO_AOT_EXIT_INVALID_STATE;return false;}
+ if(!n)return true;
+ if(!d||n>UINT64_MAX-a){s->exit_reason=KENRAN_BUTO_AOT_EXIT_INVALID_STATE;return false;}
+ if(!s->memory->read_memory(s->memory->context,a,d,n)){s->exit_reason=KENRAN_BUTO_AOT_EXIT_MEMORY_READ_FAULT;s->exit_address=a;s->exit_rip=s->rip;return false;}
+ return true;
 }
 bool iSteamAOTGuestMemoryWrite(KenranButoAOTGuestState *s,uint64_t a,const void *p,size_t n){
- if(!n)return true;if(!iSteamAOTGuestStateIsValid(s)||!p||n>UINT64_MAX-a){if(s)s->exit_reason=KENRAN_BUTO_AOT_EXIT_INVALID_STATE;return false;}
- if(!s->memory->write_memory(s->memory->context,a,p,n)){s->exit_reason=KENRAN_BUTO_AOT_EXIT_MEMORY_WRITE_FAULT;s->exit_address=a;s->exit_rip=s->rip;return false;}return true;
+ if(!iSteamAOTGuestStateIsValid(s)){if(s)s->exit_reason=KENRAN_BUTO_AOT_EXIT_INVALID_STATE;return false;}
+ if(!n)return true;
+ if(!p||n>UINT64_MAX-a){s->exit_reason=KENRAN_BUTO_AOT_EXIT_INVALID_STATE;return false;}
+ if(!s->memory->write_memory(s->memory->context,a,p,n)){s->exit_reason=KENRAN_BUTO_AOT_EXIT_MEMORY_WRITE_FAULT;s->exit_address=a;s->exit_rip=s->rip;return false;}
+ return true;
 }
 iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate(const void *code,size_t length,char *error,size_t capacity){
  if(!iSteamAOTExecutableMemoryIsAvailable()){set_error(error,capacity,"AOT executable memory unavailable; enable supported JIT.");return NULL;}

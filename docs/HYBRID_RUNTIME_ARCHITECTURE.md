@@ -81,7 +81,7 @@ The current conservative translator is a bounded bring-up subset, not an executa
 
 The focused regression harness is `scripts/tests/test_kenran_buto_aot_translator.swift`. It checks AArch64 MOVZ/MOVK encodings, register moves, both REX.B exchange forms, legal 15-byte and rejected 16-byte instructions, input limits, ENDBR64 fallback, unsupported/truncated boundaries, and output/instruction budgets. `.github/workflows/validate-kenran-buto-aot.yml` compiles and runs both the decoder harness and translation-cache integration harness on macOS.
 
-These changes improve decoder safety and regression coverage only. The emitter still produces standalone instruction words rather than a versioned guest-state block ABI; it does not yet save/restore guest registers and flags, allocate executable memory, dispatch translated blocks, or resume the interpreter after side exits. Do not mark `.staticAOT` operational or route real guest processes through it until those execution and differential-correctness layers are implemented and tested on device.
+This paragraph describes the translator-only stage before ABI v1 integration. The runtime now has a bounded register-only AOT fast path, executable-memory management and interpreter side exits. It is not a general-purpose backend, and real guest workloads must remain on validated interpreter/QEMU routes until differential and physical-device tests pass.
 
 
 ## Kenran Butō executable AOT integration — ABI v1
