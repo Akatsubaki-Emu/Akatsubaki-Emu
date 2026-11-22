@@ -18,7 +18,7 @@ jobs:
   sync:
     name: Push GitHub main to GitLab main
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - name: Check out GitHub main with full history
         uses: actions/checkout@v4
@@ -54,8 +54,45 @@ jobs:
 
           if git merge-base --is-ancestor "${GITLAB_SHA}" "${GITHUB_SHA}"; then
             echo "GitHub is ahead; pushing the fast-forward update."
-            git push gitlab HEAD:refs/heads/main
-            exit 0
+            push_log="$(mktemp)"
+            trap 'rm -f "$push_log"' EXIT
+            for attempt in 1 2 3 4 5; do
+              : > "$push_log"
+              if git push gitlab HEAD:refs/heads/main 2>&1 | tee "$push_log"; then
+                echo "GitLab main is now synchronized."
+                exit 0
+              fi
+
+              if ! grep -Eiq '429|rate limit exceeded|too many requests' "$push_log"; then
+                echo "::error::GitLab push failed for a reason other than a rate limit."
+                exit 1
+              fi
+
+              if [ "$attempt" -eq 5 ]; then
+                echo "::error::GitLab remained rate-limited after five attempts."
+                exit 1
+              fi
+
+              delay=$((60 * (2 ** (attempt - 1)))
+              if [ "$delay" -gt 300 ]; then delay=300; fi
+              echo "::warning::GitLab rate limit encountered; retrying in ${delay}s (attempt $((attempt + 1))/5)."
+              sleep "$delay"
+
+              if ! git fetch --no-tags gitlab main; then
+                echo "::error::Could not refresh GitLab main before retry; refusing to push without checking ancestry."
+                exit 1
+              fi
+              GITLAB_SHA="$(git rev-parse gitlab/main)"
+              if [ "${GITHUB_SHA}" = "${GITLAB_SHA}" ]; then
+                echo "GitLab already contains this exact commit."
+                exit 0
+              fi
+              if ! git merge-base --is-ancestor "${GITLAB_SHA}" "${GITHUB_SHA}"; then
+                echo "::error::GitLab main moved or diverged during retry; refusing to overwrite newer history."
+                exit 1
+              fi
+            done
+            exit 1
           fi
 
           if git merge-base --is-ancestor "${GITHUB_SHA}" "${GITLAB_SHA}"; then
