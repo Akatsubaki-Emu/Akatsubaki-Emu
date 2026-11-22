@@ -13,6 +13,15 @@ final class KenranButoAOTCompiler {
     private let translator: X86_64AOTTranslator
     private let cache: TranslationCache
 
+    static let executionABIVersion: UInt32 = 1
+
+    static func cacheGuestABI(_ guestABI: String, abiVersion: UInt32 = executionABIVersion,
+                              maximumInstructions: Int = X86_64AOTTranslator.maximumInstructionBudget,
+                              maximumGuestBytes: Int = X86_64AOTTranslator.maximumGuestByteBudget,
+                              maximumOutputBytes: Int = X86_64AOTTranslator.maximumOutputBudget) -> String {
+        "\(guestABI)-abi\(abiVersion)-i\(maximumInstructions)-g\(maximumGuestBytes)-o\(maximumOutputBytes)"
+    }
+
     init(cache: TranslationCache = .shared, translator: X86_64AOTTranslator = X86_64AOTTranslator()) {
         self.cache = cache
         self.translator = translator
@@ -39,13 +48,15 @@ final class KenranButoAOTCompiler {
             translatorVersion: X86_64AOTTranslator.translatorVersion,
             hostArchitecture: X86_64AOTTranslator.hostArchitecture,
             cpuFeatures: X86_64AOTTranslator.cpuFeatures,
-            guestABI: guestABI,
+            guestABI: Self.cacheGuestABI(guestABI, maximumInstructions: instructionBudget,
+                                         maximumGuestBytes: guestByteBudget,
+                                         maximumOutputBytes: outputBudget),
             translationInstructionBudget: instructionBudget,
             translationInputByteBudget: guestByteBudget,
             translationOutputByteBudget: outputBudget
         )
 
-        if let cached = try cache.load(identity) {
+        if let cached = try? cache.load(identity) {
             if let translation = try? JSONDecoder().decode(X86_64AOTTranslation.self, from: cached),
                translation.isCacheable,
                translation.guestBytesConsumed <= guestByteBudget,
@@ -56,14 +67,14 @@ final class KenranButoAOTCompiler {
                     maximumGuestBytes: guestByteBudget)
                 if translation == canonical { return Compilation(translation: translation, cacheHit: true) }
             }
-            try cache.invalidate(identity)
+            try? cache.invalidate(identity)
         }
 
         let translation = translator.translate(guestCode,
             maximumInstructions: instructionBudget, maximumOutputBytes: outputBudget,
             maximumGuestBytes: guestByteBudget)
         if translation.isCacheable {
-            try cache.store(try JSONEncoder().encode(translation), for: identity)
+            try? cache.store(try JSONEncoder().encode(translation), for: identity)
         }
         return Compilation(translation: translation, cacheHit: false)
     }
