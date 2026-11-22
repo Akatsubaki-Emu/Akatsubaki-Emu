@@ -681,6 +681,11 @@ required = {
     ],
     ".github/workflows/validate-repository.yml": [
         "bash -n scripts/validate-qemu-runtime.sh",
+        "Compile and run native guest-memory regression tests",,
+        "clang++ -std=c++17 -Wall -Wextra -Werror -pthread -D ISTEAM_GUEST_MEMORY_TESTING -I iSteam",,
+        "iSteam/NativeGuestMemory.cpp scripts/tests/test_native_guest_memory.cpp",,
+        "Compile and run Swift runtime tests",,
+        "scripts/tests/test_static_elf_execution.swift",
     ],
     "src/QEMU/QEMURuntimeStatus.swift": [
         "bundleRoot = bundle.bundleURL.resolvingSymlinksInPath()",
@@ -1031,17 +1036,14 @@ required = {
     "iSteam/NativeGuestMemory.cpp": [
         "const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);",
         "static_cast<uint64_t>(amount) == pageLength",
+        'extern "C" {',
+        "isteam_guest_memory_create(uint64_t size)",
+        "isteam_guest_memory_destroy(ISteamGuestMemory *memory)",
+        "isteam_guest_memory_size(const ISteamGuestMemory *memory)",
+        "readExecuteTestHook{nullptr}",
+        "setReadExecuteTestHook(",
     ],
-    ".gitlab-ci.yml": [
-        "apt-get install -y --no-install-recommends bash build-essential",
-        "test_execution_backend_router.swift",
-        "test_static_elf_execution.swift",
-        "test_native_guest_memory.cpp",
-        "g++ -std=c++17 -Wall -Wextra -Werror",
-        "test_vnc_key_state.swift",
-        "test_windows_pe_image.swift",
-        "python -m unittest discover -s scripts/tests -p 'test_*.py'",
-    ],
+
     ".github/workflows/validate-ios-build.yml": [
         "src/Runtime/LinuxSyscallDispatcher.swift",
         "      - src/**",

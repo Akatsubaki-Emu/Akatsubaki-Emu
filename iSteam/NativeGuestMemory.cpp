@@ -36,6 +36,11 @@ struct ISteamGuestMemory {
 };
 
 namespace {
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+std::atomic<ISteamGuestMemoryReadExecuteTestHook> readExecuteTestHook{nullptr};
+std::atomic<void *> readExecuteTestContext{nullptr};
+#endif
+
 Page *allocateDensePage(ISteamGuestMemory *memory, uint64_t pageIndex) {
     auto page = std::unique_ptr<Page>(new (std::nothrow) Page{});
     if (!page) return nullptr;
@@ -135,7 +140,7 @@ bool copyReadLocked(ISteamGuestMemory *memory, uint64_t offset,
     return true;
 }
 
-bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
+bool readMemory(ISteamGuestMemory *memory, uint64_t offset,
                               uint8_t *destination, size_t length) {
     if (!memory || (length && !destination)
         || offset > memory->size || length > memory->size - offset) {
@@ -152,7 +157,7 @@ bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
     }
 }
 
-bool isteam_guest_memory_read_execute(ISteamGuestMemory *memory, uint64_t offset,
+bool readExecuteMemory(ISteamGuestMemory *memory, uint64_t offset,
                                       uint8_t *destination, size_t length) {
     if (!memory || (length && !destination)
         || offset > memory->size || length > memory->size - offset) {
@@ -176,7 +181,7 @@ bool isteam_guest_memory_read_execute(ISteamGuestMemory *memory, uint64_t offset
     }
 }
 
-size_t isteam_guest_memory_read_execute_prefix(ISteamGuestMemory *memory,
+size_t readExecutePrefix(ISteamGuestMemory *memory,
                                            uint64_t offset, uint8_t *destination,
                                            size_t maximumLength) {
     if (!memory || (maximumLength && !destination) || offset > memory->size || !maximumLength) {
@@ -207,7 +212,7 @@ size_t isteam_guest_memory_read_execute_prefix(ISteamGuestMemory *memory,
     }
 }
 
-bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
+bool writeMemory(ISteamGuestMemory *memory, uint64_t offset,
                                const uint8_t *source, size_t length) {
     if (!memory || (length && !source)
         || offset > memory->size || length > memory->size - offset) {
@@ -287,7 +292,7 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
     }
 }
 
-bool isteam_guest_memory_begin_mapping(ISteamGuestMemory *memory) {
+bool beginMapping(ISteamGuestMemory *memory) {
     if (!memory) return false;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
@@ -299,7 +304,7 @@ bool isteam_guest_memory_begin_mapping(ISteamGuestMemory *memory) {
     }
 }
 
-bool isteam_guest_memory_map(ISteamGuestMemory *memory, uint64_t offset,
+bool mapMemory(ISteamGuestMemory *memory, uint64_t offset,
                              uint64_t length, uint8_t permissions, bool merge) {
     if (!memory || (permissions & static_cast<uint8_t>(~7u))
         || offset > memory->size || !length || length > memory->size - offset) {
@@ -346,7 +351,7 @@ bool isteam_guest_memory_map(ISteamGuestMemory *memory, uint64_t offset,
     }
 }
 
-bool isteam_guest_memory_protect(ISteamGuestMemory *memory, uint64_t offset,
+bool protectMemory(ISteamGuestMemory *memory, uint64_t offset,
                                  uint64_t length, uint8_t permissions) {
     if (!memory || (permissions & static_cast<uint8_t>(~7u)) || !length
         || offset % pageSize != 0 || offset > memory->size
@@ -370,7 +375,7 @@ bool isteam_guest_memory_protect(ISteamGuestMemory *memory, uint64_t offset,
     }
 }
 
-bool isteam_guest_memory_unmap(ISteamGuestMemory *memory, uint64_t offset,
+bool unmapMemory(ISteamGuestMemory *memory, uint64_t offset,
                                uint64_t length) {
     if (!memory || !length || offset % pageSize != 0
         || offset > memory->size || length > memory->size - offset) return false;
@@ -405,7 +410,7 @@ bool isteam_guest_memory_unmap(ISteamGuestMemory *memory, uint64_t offset,
     }
 }
 
-bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
+bool zeroMemory(ISteamGuestMemory *memory, uint64_t offset,
                               uint64_t length) {
     if (!memory || offset > memory->size || length > memory->size - offset) {
         return false;
@@ -517,7 +522,7 @@ bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
     }
 }
 
-void isteam_guest_memory_clear(ISteamGuestMemory *memory) {
+void clearMemory(ISteamGuestMemory *memory) {
     if (!memory) return;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
@@ -536,7 +541,7 @@ void isteam_guest_memory_clear(ISteamGuestMemory *memory) {
     }
 }
 
-size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory) {
+size_t allocatedPages(ISteamGuestMemory *memory) {
     if (!memory) return 0;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
@@ -548,4 +553,45 @@ size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory) {
     }
 }
 
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+void setReadExecuteTestHook(ISteamGuestMemoryReadExecuteTestHook hook, void *context) {
+    readExecuteTestContext.store(context, std::memory_order_release);
+    readExecuteTestHook.store(hook, std::memory_order_release);
+}
+#endif
+
+}
+
+
+// Stable exported C ABI. Implementation helpers remain private to this translation unit.
+extern "C" {
+ISteamGuestMemory *isteam_guest_memory_create(uint64_t size) {
+    if (size == 0 || size > static_cast<uint64_t>(SIZE_MAX)) return nullptr;
+    try {
+        std::unique_ptr<ISteamGuestMemory> memory(new (std::nothrow) ISteamGuestMemory(size));
+        if (!memory) return nullptr;
+        const uint64_t pageCount = size / pageSize + (size % pageSize != 0 ? 1 : 0);
+        if (pageCount <= densePageLimit) {
+            memory->usesDensePages = true;
+            memory->densePages.resize(static_cast<size_t>(pageCount));
+        }
+        return memory.release();
+    } catch (...) { return nullptr; }
+}
+void isteam_guest_memory_destroy(ISteamGuestMemory *memory) { delete memory; }
+uint64_t isteam_guest_memory_size(const ISteamGuestMemory *memory) { return memory ? memory->size : 0; }
+bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset, uint8_t *destination, size_t length) { return readMemory(memory, offset, destination, length); }
+bool isteam_guest_memory_read_execute(ISteamGuestMemory *memory, uint64_t offset, uint8_t *destination, size_t length) { return readExecuteMemory(memory, offset, destination, length); }
+size_t isteam_guest_memory_read_execute_prefix(ISteamGuestMemory *memory, uint64_t offset, uint8_t *destination, size_t maximum_length) { return readExecutePrefix(memory, offset, destination, maximum_length); }
+bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset, const uint8_t *source, size_t length) { return writeMemory(memory, offset, source, length); }
+bool isteam_guest_memory_begin_mapping(ISteamGuestMemory *memory) { return beginMapping(memory); }
+bool isteam_guest_memory_map(ISteamGuestMemory *memory, uint64_t offset, uint64_t length, uint8_t permissions, bool merge) { return mapMemory(memory, offset, length, permissions, merge); }
+bool isteam_guest_memory_protect(ISteamGuestMemory *memory, uint64_t offset, uint64_t length, uint8_t permissions) { return protectMemory(memory, offset, length, permissions); }
+bool isteam_guest_memory_unmap(ISteamGuestMemory *memory, uint64_t offset, uint64_t length) { return unmapMemory(memory, offset, length); }
+bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset, uint64_t length) { return zeroMemory(memory, offset, length); }
+void isteam_guest_memory_clear(ISteamGuestMemory *memory) { clearMemory(memory); }
+size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory) { return allocatedPages(memory); }
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+void isteam_guest_memory_set_read_execute_test_hook(ISteamGuestMemoryReadExecuteTestHook hook, void *context) { setReadExecuteTestHook(hook, context); }
+#endif
 }
