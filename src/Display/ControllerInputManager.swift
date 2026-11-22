@@ -140,8 +140,9 @@ final class ControllerInputManager {
     }
 
     private static func applyDeadzone(x: Float, y: Float, deadzone: Float) -> (Float, Float) {
-        let magnitude = min(1, (x * x + y * y).squareRoot())
-        guard magnitude > deadzone else { return (0, 0) }
+        let magnitudeSquared = x * x + y * y
+        guard magnitudeSquared > deadzone * deadzone else { return (0, 0) }
+        let magnitude = min(1, magnitudeSquared.squareRoot())
         let scaled = min(1, (magnitude - deadzone) / max(0.0001, 1 - deadzone))
         let factor = scaled / magnitude
         return (x * factor, y * factor)
