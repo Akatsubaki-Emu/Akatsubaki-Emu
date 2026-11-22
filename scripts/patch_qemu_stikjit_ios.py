@@ -6,6 +6,8 @@ import sys
 INCLUDE_ANCHOR = "#ifdef CONFIG_DARWIN\n#include <mach/mach.h>"
 FUNCTION_ANCHOR = "static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)\n{\n"
 MARKER = "alloc_code_gen_buffer_splitwx_stikdebug"
+EXPORT_LIST_REQUIRED = ("qemu_init;", "qemu_main_loop;", "qemu_cleanup;")
+EXPORT_LIST_ADDITIONS = ("qemu_system_shutdown_request;", "isteam_qemu_set_jit_callbacks;")
 
 HELPER = r'''#if TARGET_OS_IOS
 typedef bool (*ISTEAMJITReadyFunction)(void);
@@ -181,14 +183,58 @@ def patch_source(source: str) -> str:
     return source
 
 
+def patch_exported_symbols(source: str) -> str:
+    lines = source.splitlines()
+    missing_base = [
+        symbol for symbol in EXPORT_LIST_REQUIRED
+        if not any(line.strip() == symbol for line in lines)
+    ]
+    if missing_base:
+        raise SystemExit(
+            "QEMU system/qemu.symbols changed: required lifecycle exports not found: "
+            + ", ".join(missing_base)
+        )
+    closing = [i for i, line in enumerate(lines) if line.strip() == "};"]
+    if len(closing) != 1:
+        raise SystemExit("QEMU system/qemu.symbols changed: expected exactly one closing '};' line")
+    close_index = closing[0]
+    for symbol in EXPORT_LIST_ADDITIONS:
+        count = sum(1 for line in lines if line.strip() == symbol)
+        if count > 1:
+            raise SystemExit(f"QEMU system/qemu.symbols contains duplicate export: {symbol}")
+        if count == 0:
+            lines.insert(close_index, "  " + symbol)
+            close_index += 1
+    patched = "\n".join(lines) + ("\n" if source.endswith("\n") else "")
+    if any(
+        not any(line.strip() == symbol for line in patched.splitlines())
+        for symbol in (*EXPORT_LIST_REQUIRED, *EXPORT_LIST_ADDITIONS)
+    ):
+        raise SystemExit("QEMU system/qemu.symbols export verification failed")
+    return patched
+
+
+def patch_qemu_sources(region_path: Path) -> None:
+    qemu_root = region_path.parent.parent
+    symbols_path = qemu_root / "system" / "qemu.symbols"
+    if not symbols_path.is_file():
+        raise SystemExit(f"QEMU export list is missing: {symbols_path}")
+    source = region_path.read_text(encoding="utf-8")
+    symbols = symbols_path.read_text(encoding="utf-8")
+    patched_source = patch_source(source)
+    patched_symbols = patch_exported_symbols(symbols)
+    if patched_symbols != symbols:
+        symbols_path.write_text(patched_symbols, encoding="utf-8")
+    if patched_source != source:
+        region_path.write_text(patched_source, encoding="utf-8")
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: patch_qemu_stikjit_ios.py /path/to/qemu/tcg/region.c")
     path = Path(sys.argv[1])
-    source = path.read_text(encoding="utf-8")
-    patched = patch_source(source)
-    path.write_text(patched, encoding="utf-8")
-    print("Patched QEMU TCG split-W^X allocation to use the StikDebug iOS 26+ TXM breakpoint protocol.")
+    patch_qemu_sources(path)
+    print("Patched QEMU TCG allocation and exported lifecycle/JIT symbols for the StikDebug iOS 26+ TXM protocol.")
 
 
 if __name__ == "__main__":
