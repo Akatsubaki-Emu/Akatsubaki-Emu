@@ -33,7 +33,9 @@ class ELFLoaderCopyTests(unittest.TestCase):
         self.assertIn("let orderedLoadSegments = loadSegments.sorted { $0.virtualAddress < $1.virtualAddress }", loader)
         self.assertIn("forVirtualAddress: relaAddress", relocations)
         self.assertIn("containsGuestRange(target, byteCount: 8", relocations)
-        self.assertIn("while lowerBound < upperBound", relocations)
+        segment_lookup = loader.split("private func loadSegment(containing", 1)[1].split("private func containsGuestRange", 1)[0]
+        self.assertIn("while lowerBound < upperBound", segment_lookup)
+        self.assertIn("loadSegment(containing: address, in: segments)", segment_lookup)
         self.assertNotIn("loadSegments.contains(where:", relocations)
 
 
