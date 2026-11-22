@@ -53,13 +53,15 @@ def patch_script(source: str) -> str:
 
     qemu_build = 'build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS'
     qemu_patch_call = (
-        'if [ "$PLATFORM" != "ios-tci" ]; then\n'
-        '    : "${ISTEAM_QEMU_JIT_PATCHER:?ISTEAM_QEMU_JIT_PATCHER is required for JIT builds}"\n'
-        '    python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"\n'
-        'fi\n'
-        ': "${ISTEAM_QEMU_MESON_PATCHER:?ISTEAM_QEMU_MESON_PATCHER is required}"\n'
-        'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"\n'
-        + qemu_build
+        'if [ "$PLATFORM" = "ios-tci" ]; then\\n'
+        '  : "${ISTEAM_QEMU_TCI_PATCHER:?ISTEAM_QEMU_TCI_PATCHER is required for TCI builds}"\\n'
+        '  echo "TCI mode: adding shutdown export without a JIT callback."\\n'
+        '  python3 "$ISTEAM_QEMU_TCI_PATCHER" "$QEMU_DIR/system/qemu.symbols"\\n'
+        'else\\n'
+        '  : "${ISTEAM_QEMU_JIT_PATCHER:?ISTEAM_QEMU_JIT_PATCHER is required for JIT builds}"\\n'
+        '  python3 "$ISTEAM_QEMU_TCI_PATCHER" "$QEMU_DIR/system/qemu.symbols"',
+        'python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"\\n'
+        'fi\\n'
     )
     source = replace_once(source, qemu_build, qemu_patch_call, "QEMU configure invocation")
 
@@ -85,7 +87,7 @@ def patch_script(source: str) -> str:
         'https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}',
         cross_override,
         '*-tci) ;; # TCI_BUILD_FLAGS already selects the threaded interpreter and guest targets.',
-        "TCI mode: skipping the StikJIT executable-region patch.",
+        "TCI mode: adding shutdown export without a JIT callback.",
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"',
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
