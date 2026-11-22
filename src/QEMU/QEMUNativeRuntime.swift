@@ -16,7 +16,8 @@ final class QEMUNativeRuntime {
     private(set) var started = false
     private var scopedURLs: [URL] = []
 
-    func start(configuration: VMConfiguration, diskImage: URL, firmware: URL? = nil) throws {
+    func start(configuration: VMConfiguration, diskImage: URL, writableDiskImage: URL? = nil,
+               firmware: URL? = nil) throws {
         guard !started else { return }
         try configuration.validateForStart()
         guard configuration.architecture == .x86_64 else {
@@ -74,8 +75,14 @@ final class QEMUNativeRuntime {
             selectedFirmwareVariables = nil
         }
 
+        if let writableDiskImage,
+           writableDiskImage.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+            == diskImage.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL {
+            throw RuntimeError.runtimeUnavailable("The boot image and writable VM disk must be different files.")
+        }
+
         var newlyScoped: [URL] = []
-        for url in [diskImage, selectedFirmware].compactMap({ $0 }) {
+        for url in [diskImage, writableDiskImage, selectedFirmware].compactMap({ $0 }) {
             let granted = url.startAccessingSecurityScopedResource()
             if granted { newlyScoped.append(url) }
             do {
@@ -92,8 +99,9 @@ final class QEMUNativeRuntime {
         }
 
         let args = QEMUCommandBuilder(configuration: configuration)
-            .arguments(diskImage: diskImage, firmware: selectedFirmware,
-                       firmwareVariables: selectedFirmwareVariables) + ["-L", dataDirectory.path]
+            .arguments(diskImage: diskImage, writableDiskImage: writableDiskImage,
+                       firmware: selectedFirmware, firmwareVariables: selectedFirmwareVariables)
+            + ["-L", dataDirectory.path]
         let arguments = ["qemu-system-\(configuration.architecture.rawValue)"] + args
         let strings: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) }
         defer { strings.forEach { if let value = $0 { free(value) } } }
@@ -128,7 +136,8 @@ final class QEMUNativeRuntime {
 
         scopedURLs = newlyScoped
         started = true
-        EmulationLog.shared.write("QEMU launch requested with disk \(diskImage.lastPathComponent)")
+        EmulationLog.shared.write("QEMU launch requested with boot media \(diskImage.lastPathComponent)"
+            + (writableDiskImage.map { " and writable disk \($0.lastPathComponent)" } ?? ""))
     }
 
     private static func containedRegularFile(named names: [String], in directory: URL) -> URL? {

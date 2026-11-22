@@ -56,7 +56,7 @@ This is a packaging check only. It does not prove that the library's dependencie
 - UTM/QEMU runtime binary: must be produced by the runtime workflow and embedded by the release workflow.
 - Physical-device runtime startup, guest boot, display, input, graceful shutdown, and disk persistence: not verified by this validator.
 - Physical-device runtime startup, guest boot, display, input, graceful shutdown, and disk persistence: not verified by this validator. The native bridge is one-shot per app process; relaunch Akatsubaki Emu before starting another QEMU session.
-- The current app runtime configuration is for x86_64 guests; this artifact is not an ARM64 guest runtime.
+- The current app runtime configuration is for x86_64 guests; this artifact is not an ARM64 guest runtime. The launch flow accepts a boot disk or installer/live ISO and an optional writable destination disk. ISO installation attaches the destination as a hard disk and keeps the ISO on a separate optical AHCI port. A blank sparse raw disk can be created in app storage from Launch Setup. Existing one-disk sessions remain supported.
 - tvOS and visionOS need separately built and validated platform runtimes; the iOS binary must not be reused blindly.
 
 A simulator compile, source check, or successful artifact inspection is not evidence of a working physical-device emulator.

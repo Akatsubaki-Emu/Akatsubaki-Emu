@@ -35,7 +35,7 @@ final class VMEngine {
         EmulationLog.shared.write("VM start blocked: no guest disk image was supplied.")
     }
 
-    func start(diskImage: URL, firmware: URL? = nil) {
+    func start(diskImage: URL, writableDiskImage: URL? = nil, firmware: URL? = nil) {
         guard case .stopped = state else { return }
         setState(.starting)
         EmulationLog.shared.write("Preparing session: \(configuration.name)")
@@ -50,7 +50,7 @@ final class VMEngine {
             }
             let candidate = QEMUBackend(configuration: configuration)
             backend = candidate
-            try candidate.start(diskImage: diskImage, firmware: firmware)
+            try candidate.start(diskImage: diskImage, writableDiskImage: writableDiskImage, firmware: firmware)
             startupDeadline = .now() + 60
             EmulationLog.shared.write("QEMU launch accepted; waiting for native initialization.")
             let timer = DispatchSource.makeTimerSource(queue: .main)

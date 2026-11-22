@@ -11,7 +11,10 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
     private let slotField = UITextField()
     private let statusLabel = UILabel()
     private let diskLabel = UILabel()
+    private let writableDiskLabel = UILabel()
     private var selectedDiskURL: URL?
+    private var selectedWritableDiskURL: URL?
+    private var selectingWritableDisk = false
     private var loadedConfiguration: VMConfiguration?
     private var launchInProgress = false
 
@@ -101,10 +104,35 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         stack.addArrangedSubview(diskLabel)
 
         let chooseDiskButton = UIButton(type: .system)
-        chooseDiskButton.setTitle("Choose guest disk / ISO…", for: .normal)
+        chooseDiskButton.setTitle("Choose boot disk / installer ISO…", for: .normal)
         chooseDiskButton.contentHorizontalAlignment = .leading
         chooseDiskButton.addTarget(self, action: #selector(chooseGuestImage), for: .touchUpInside)
         stack.addArrangedSubview(chooseDiskButton)
+
+        writableDiskLabel.text = "Additional writable VM disk: not selected"
+        writableDiskLabel.font = .preferredFont(forTextStyle: .footnote)
+        writableDiskLabel.textColor = .secondaryLabel
+        writableDiskLabel.numberOfLines = 0
+        stack.addArrangedSubview(writableDiskLabel)
+
+        let chooseWritableDiskButton = UIButton(type: .system)
+        chooseWritableDiskButton.setTitle("Choose additional writable VM disk…", for: .normal)
+        chooseWritableDiskButton.contentHorizontalAlignment = .leading
+        chooseWritableDiskButton.addTarget(self, action: #selector(chooseWritableDisk), for: .touchUpInside)
+        stack.addArrangedSubview(chooseWritableDiskButton)
+
+        let createWritableDiskButton = UIButton(type: .system)
+        createWritableDiskButton.setTitle("Create blank VM disk…", for: .normal)
+        createWritableDiskButton.contentHorizontalAlignment = .leading
+        createWritableDiskButton.addTarget(self, action: #selector(createWritableDisk), for: .touchUpInside)
+        stack.addArrangedSubview(createWritableDiskButton)
+
+        let diskHelp = UILabel()
+        diskHelp.text = "To install an operating system from an ISO, select or create a separate writable disk as the installation destination. Without one, the ISO can only be used as live or recovery media."
+        diskHelp.font = .preferredFont(forTextStyle: .footnote)
+        diskHelp.textColor = .secondaryLabel
+        diskHelp.numberOfLines = 0
+        stack.addArrangedSubview(diskHelp)
 
         statusLabel.numberOfLines = 0
         statusLabel.font = .preferredFont(forTextStyle: .footnote)
@@ -246,6 +274,7 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
             chooseGuestImage()
             return
         }
+        let writableDiskURL = selectedWritableDiskURL
         if JITCoordinator.shared.isStikDebugAvailable && !JITCoordinator.shared.isJITReady {
             launchInProgress = true
             statusLabel.text = "Akatsubaki is starting LocalDevVPN and StikDebug. Return here after the JIT handoff; the VM will start automatically."
@@ -254,44 +283,87 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
                 self.launchInProgress = false
                 self.statusLabel.text = "JIT failed • \(message)"
             }) { [weak self] in
-                self?.completeLaunch(configuration: config, diskURL: diskURL)
+                self?.completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)
             }
             return
         }
-        completeLaunch(configuration: config, diskURL: diskURL)
+        completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)
     }
 
 
-    private func completeLaunch(configuration: VMConfiguration, diskURL: URL) {
+    private func completeLaunch(configuration: VMConfiguration, diskURL: URL, writableDiskURL: URL?) {
         launchInProgress = false
         if persistSwitch.isOn {
             do {
-                try VMSaveSlotStore.shared.saveSessionMetadata(configuration: configuration, diskImageURL: diskURL)
+                try VMSaveSlotStore.shared.saveSessionMetadata(configuration: configuration,
+                    diskImageURL: diskURL, writableDiskImageURL: writableDiskURL)
             } catch {
                 statusLabel.text = "Could not save session: \(error.localizedDescription)"
             }
         }
         navigationController?.pushViewController(
-            VMDisplayViewController(configuration: configuration, diskImage: diskURL),
+            VMDisplayViewController(configuration: configuration, diskImage: diskURL,
+                                     writableDiskImage: writableDiskURL),
             animated: true
         )
     }
 
     @objc private func chooseGuestImage() {
+        selectingWritableDisk = false
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: false)
         picker.delegate = self
         picker.allowsMultipleSelection = false
         present(picker, animated: true)
     }
 
+    @objc private func chooseWritableDisk() {
+        selectingWritableDisk = true
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: false)
+        picker.delegate = self
+        picker.allowsMultipleSelection = false
+        present(picker, animated: true)
+    }
+
+    @objc private func createWritableDisk() {
+        let alert = UIAlertController(title: "Create blank VM disk",
+            message: "Creates a sparse raw disk image in Akatsubaki's app storage. Choose its maximum virtual capacity.",
+            preferredStyle: .actionSheet)
+        for size in [16, 32, 64, 128] {
+            alert.addAction(UIAlertAction(title: "\(size) GB", style: .default) { [weak self] _ in
+                do {
+                    let url = try VirtualDiskImageStore.create(sizeGiB: size)
+                    self?.selectedWritableDiskURL = url
+                    self?.writableDiskLabel.text = "Additional writable VM disk: \(url.lastPathComponent) (\(size) GB)"
+                    self?.statusLabel.text = "Created a blank writable disk. It will be attached to the VM and its contents persist in app storage."
+                } catch {
+                    self?.statusLabel.text = "Could not create VM disk: \(error.localizedDescription)"
+                }
+            })
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = view
+            popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
+        }
+        present(alert, animated: true)
+    }
+
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first else { return }
-        selectedDiskURL = url
-        diskLabel.text = "Guest image: \(url.lastPathComponent)"
-        statusLabel.text = "Image selected. Tap Launch to start the VM. SteamOS Gaming Mode needs a compatible bootable image, suitable UEFI firmware, and the bundled QEMU runtime; selecting this mode does not install or provide SteamOS."
+        if selectingWritableDisk {
+            selectedWritableDiskURL = url
+            writableDiskLabel.text = "Additional writable VM disk: \(url.lastPathComponent)"
+            statusLabel.text = "Writable disk selected. It will be attached as an additional AHCI hard disk."
+        } else {
+            selectedDiskURL = url
+            diskLabel.text = "Boot media: \(url.lastPathComponent)"
+            statusLabel.text = "Boot media selected. For installation from an ISO, also choose or create a writable destination disk."
+        }
+        selectingWritableDisk = false
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        statusLabel.text = "No guest image selected; the VM was not started."
+        selectingWritableDisk = false
+        statusLabel.text = "No image selected; the VM was not started."
     }
 }

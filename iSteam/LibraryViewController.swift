@@ -167,7 +167,8 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
             return
         }
         navigationController?.pushViewController(
-            VMDisplayViewController(configuration: session.configuration, diskImage: session.diskImageURL),
+            VMDisplayViewController(configuration: session.configuration, diskImage: session.diskImageURL,
+                                     writableDiskImage: session.writableDiskImageURL),
             animated: true
         )
     }

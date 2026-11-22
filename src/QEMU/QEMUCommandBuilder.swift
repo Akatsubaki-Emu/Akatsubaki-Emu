@@ -34,8 +34,8 @@ enum QEMUDiskImageFormat: String {
 struct QEMUCommandBuilder {
     let configuration: VMConfiguration
 
-    func arguments(diskImage: URL? = nil, firmware: URL? = nil,
-                   firmwareVariables: URL? = nil) -> [String] {
+    func arguments(diskImage: URL? = nil, writableDiskImage: URL? = nil,
+                   firmware: URL? = nil, firmwareVariables: URL? = nil) -> [String] {
         // -nodefaults disables implicit input devices. VNC keyboard/pointer events
         // therefore need an explicit USB controller, keyboard and tablet for every guest.
         let machine = "q35,usb=on"
@@ -68,11 +68,18 @@ struct QEMUCommandBuilder {
         if let firmwareVariables {
             args += ["-drive", "if=pflash,format=raw,file=\(Self.escapeDriveValue(firmwareVariables.path))"]
         }
+        if bootFromISO, let writableDiskImage {
+            let format = QEMUDiskImageFormat.detect(at: writableDiskImage).rawValue
+            args += [
+                "-drive", "if=none,id=isteam-disk,format=\(format),file=\(Self.escapeDriveValue(writableDiskImage.path))",
+                "-device", "ide-hd,drive=isteam-disk,bus=sata0.0"
+            ]
+        }
+
         if let diskImage {
             if bootFromISO {
-                // Attach installation/live media through the explicit AHCI
-                // controller; -cdrom's implicit IDE device is absent under
-                // -nodefaults on a q35 machine.
+                // Installer/live media uses its own AHCI port; a writable
+                // destination disk, when supplied, occupies sata0.0.
                 args += [
                     "-drive", "if=none,id=isteam-cdrom,media=cdrom,format=raw,file=\(Self.escapeDriveValue(diskImage.path))",
                     "-device", "ide-cd,drive=isteam-cdrom,bus=sata0.1,bootindex=1"
@@ -83,6 +90,13 @@ struct QEMUCommandBuilder {
                     "-drive", "if=none,id=isteam-disk,format=\(format),file=\(Self.escapeDriveValue(diskImage.path))",
                     "-device", "ide-hd,drive=isteam-disk,bus=sata0.0,bootindex=1"
                 ]
+                if let writableDiskImage {
+                    let secondaryFormat = QEMUDiskImageFormat.detect(at: writableDiskImage).rawValue
+                    args += [
+                        "-drive", "if=none,id=isteam-secondary-disk,format=\(secondaryFormat),file=\(Self.escapeDriveValue(writableDiskImage.path))",
+                        "-device", "ide-hd,drive=isteam-secondary-disk,bus=sata0.1"
+                    ]
+                }
             }
         }
         return args
