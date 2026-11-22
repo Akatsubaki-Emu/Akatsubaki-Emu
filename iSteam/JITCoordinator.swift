@@ -15,6 +15,8 @@ final class JITCoordinator {
     private var onJITFailure: ((String) -> Void)?
     private var waitingForStikDebugReturn = false
     private var waitingForLocalDevVPN = false
+    private var localDevVPNRequestGeneration: UInt64 = 0
+    private let localDevVPNCallbackTimeout: TimeInterval = 120
     private var readinessChecksRemaining = 0
     private var readinessCheckScheduled = false
 
@@ -110,6 +112,7 @@ final class JITCoordinator {
     func handleCallback(_ url: URL) -> Bool {
         guard url.scheme == Bundle.main.bundleIdentifier, waitingForLocalDevVPN else { return false }
         waitingForLocalDevVPN = false
+        localDevVPNRequestGeneration &+= 1
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
             self?.openStikDebug()
         }
@@ -143,10 +146,22 @@ final class JITCoordinator {
         }
 
         waitingForLocalDevVPN = true
+        localDevVPNRequestGeneration &+= 1
+        let requestGeneration = localDevVPNRequestGeneration
         UIApplication.shared.open(vpnURL, options: [:]) { [weak self] opened in
-            guard let self, !opened else { return }
-            self.waitingForLocalDevVPN = false
-            self.failRequest("LocalDevVPN could not be opened. Install it and approve its VPN configuration before requesting JIT.", title: "VPN unavailable")
+            guard let self,
+                  self.localDevVPNRequestGeneration == requestGeneration,
+                  self.waitingForLocalDevVPN else { return }
+            guard opened else {
+                self.failRequest("LocalDevVPN could not be opened. Install it and approve its VPN configuration before requesting JIT.", title: "VPN unavailable")
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + self.localDevVPNCallbackTimeout) { [weak self] in
+                guard let self,
+                      self.localDevVPNRequestGeneration == requestGeneration,
+                      self.waitingForLocalDevVPN else { return }
+                self.failRequest("LocalDevVPN did not return to Akatsubaki Emu. Open LocalDevVPN, approve or start its VPN profile, then request JIT again.", title: "VPN activation timed out")
+            }
         }
     }
 
@@ -204,6 +219,7 @@ final class JITCoordinator {
     }
 
     private func completeJITRequest() {
+        localDevVPNRequestGeneration &+= 1
         waitingForStikDebugReturn = false
         waitingForLocalDevVPN = false
         readinessChecksRemaining = 0
@@ -219,6 +235,7 @@ final class JITCoordinator {
     }
 
     private func failRequest(_ message: String, title: String) {
+        localDevVPNRequestGeneration &+= 1
         waitingForStikDebugReturn = false
         waitingForLocalDevVPN = false
         readinessChecksRemaining = 0
