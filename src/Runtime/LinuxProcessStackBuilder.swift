@@ -46,18 +46,35 @@ struct LinuxProcessStackBuilder {
               !executablePath.utf8.contains(0), !arguments.contains(where: { $0.utf8.contains(0) }) else {
             throw BuildError.invalidArguments
         }
-        let argv = [executablePath] + arguments
+        let argumentCount = arguments.count + 1
         guard environment.count <= 4096,
               environment.keys.allSatisfy({ !$0.isEmpty && !$0.contains("=") && !$0.utf8.contains(0) }),
               environment.values.allSatisfy({ !$0.utf8.contains(0) }) else {
             throw BuildError.invalidEnvironment
         }
-        let envp = environment.keys.sorted().map { "\($0)=\(environment[$0] ?? "")" }
+        let environmentKeys = environment.keys.sorted()
         var totalStringBytes = 0
-        for value in argv + envp {
-            let (next, overflow) = totalStringBytes.addingReportingOverflow(value.utf8.count + 1)
+        func includeStringBytes(_ byteCount: Int) throws {
+            let (next, overflow) = totalStringBytes.addingReportingOverflow(byteCount)
             guard !overflow, next <= Self.stackSize / 2 else { throw BuildError.insufficientSpace }
             totalStringBytes = next
+        }
+        func includeCString(_ value: String) throws {
+            let (byteCount, overflow) = value.utf8.count.addingReportingOverflow(1)
+            guard !overflow else { throw BuildError.insufficientSpace }
+            try includeStringBytes(byteCount)
+        }
+        try includeCString(executablePath)
+        for value in arguments { try includeCString(value) }
+        for key in environmentKeys {
+            let value = environment[key] ?? ""
+            let (keyBytes, keyOverflow) = key.utf8.count.addingReportingOverflow(1)
+            let (valueBytes, valueOverflow) = value.utf8.count.addingReportingOverflow(1)
+            let (entryBytes, entryOverflow) = keyBytes.addingReportingOverflow(valueBytes)
+            guard !keyOverflow, !valueOverflow, !entryOverflow else {
+                throw BuildError.insufficientSpace
+            }
+            try includeStringBytes(entryBytes)
         }
         if let randomBytes, randomBytes.count != 16 { throw BuildError.invalidRandomData }
         guard memory.size > UInt64(Self.stackSize) + Self.pageSize else { throw BuildError.stackUnavailable }
@@ -66,31 +83,44 @@ struct LinuxProcessStackBuilder {
         let stackBase = alignedTop - UInt64(Self.stackSize)
         guard maximumImageAddress <= stackBase - Self.pageSize else { throw BuildError.imageOverlapsStack }
         let random = randomBytes ?? Self.makeRandomBytes()
-        var buffer = Data(count: Self.stackSize)
         var cursor = Self.stackSize
 
-        func pushString(_ value: String) throws -> UInt64 {
-            let bytes = value.utf8
-            let required = bytes.count + 1
-            guard required <= cursor else { throw BuildError.insufficientSpace }
+        func reserveString(_ value: String) throws -> UInt64 {
+            let (required, overflow) = value.utf8.count.addingReportingOverflow(1)
+            guard !overflow, required <= cursor else { throw BuildError.insufficientSpace }
             cursor -= required
-            if !bytes.isEmpty { buffer.replaceSubrange(cursor..<(cursor + bytes.count), with: bytes) }
-            buffer[cursor + bytes.count] = 0
+            return stackBase + UInt64(cursor)
+        }
+
+        func reserveEnvironmentEntry(_ key: String) throws -> UInt64 {
+            let value = environment[key] ?? ""
+            let (keyBytes, keyOverflow) = key.utf8.count.addingReportingOverflow(1)
+            let (valueBytes, valueOverflow) = value.utf8.count.addingReportingOverflow(1)
+            let (required, requiredOverflow) = keyBytes.addingReportingOverflow(valueBytes)
+            guard !keyOverflow, !valueOverflow, !requiredOverflow, required <= cursor else {
+                throw BuildError.insufficientSpace
+            }
+            cursor -= required
             return stackBase + UInt64(cursor)
         }
 
         var environmentPointers: [UInt64] = []
-        for value in envp.reversed() { environmentPointers.append(try pushString(value)) }
+        environmentPointers.reserveCapacity(environmentKeys.count)
+        for key in environmentKeys.reversed() {
+            environmentPointers.append(try reserveEnvironmentEntry(key))
+        }
         environmentPointers.reverse()
 
         var argumentPointers: [UInt64] = []
-        for value in argv.reversed() { argumentPointers.append(try pushString(value)) }
+        argumentPointers.reserveCapacity(argumentCount)
+        for value in arguments.reversed() { argumentPointers.append(try reserveString(value)) }
+        argumentPointers.append(try reserveString(executablePath))
         argumentPointers.reverse()
 
+        guard cursor >= 16 else { throw BuildError.insufficientSpace }
         cursor -= 16
-        buffer.replaceSubrange(cursor..<(cursor + 16), with: random)
         let randomAddress = stackBase + UInt64(cursor)
-        let platformAddress = try pushString("x86_64")
+        let platformAddress = try reserveString("x86_64")
 
         let auxv: [(UInt64, UInt64)] = [
             (3, programHeaders.address),
@@ -112,34 +142,64 @@ struct LinuxProcessStackBuilder {
             (31, argumentPointers[0]),
             (0, 0)
         ]
-        var words: [UInt64] = [UInt64(argv.count)]
-        words.append(contentsOf: argumentPointers)
-        words.append(0)
-        words.append(contentsOf: environmentPointers)
-        words.append(0)
-        for (type, value) in auxv { words.append(type); words.append(value) }
-
-        let vectorBytes = words.count * 8
-        guard vectorBytes <= cursor else { throw BuildError.insufficientSpace }
+        let vectorWordCount = 1 + argumentPointers.count + 1
+            + environmentPointers.count + 1 + auxv.count * 2
+        let (vectorBytes, vectorBytesOverflow) = vectorWordCount.multipliedReportingOverflow(by: 8)
+        guard !vectorBytesOverflow, vectorBytes <= cursor else { throw BuildError.insufficientSpace }
         let vectorStart = (cursor - vectorBytes) & ~15
+        var buffer = Data(count: Self.stackSize - vectorStart)
+        var writeCursor = Self.stackSize
+        func writeString(_ value: String) throws {
+            let bytes = value.utf8
+            let (required, overflow) = bytes.count.addingReportingOverflow(1)
+            guard !overflow, required <= writeCursor else { throw BuildError.insufficientSpace }
+            writeCursor -= required
+            let offset = writeCursor - vectorStart
+            if !bytes.isEmpty { buffer.replaceSubrange(offset..<(offset + bytes.count), with: bytes) }
+            buffer[offset + bytes.count] = 0
+        }
+        for key in environmentKeys.reversed() {
+            try writeString("\(key)=\(environment[key] ?? "")")
+        }
+        for value in arguments.reversed() { try writeString(value) }
+        try writeString(executablePath)
+        guard writeCursor >= 16 else { throw BuildError.insufficientSpace }
+        writeCursor -= 16
+        let randomOffset = writeCursor - vectorStart
+        buffer.replaceSubrange(randomOffset..<(randomOffset + 16), with: random)
+        try writeString("x86_64")
+        guard writeCursor == cursor,
+              stackBase + UInt64(randomOffset) == randomAddress,
+              stackBase + UInt64(writeCursor) == platformAddress else {
+            throw BuildError.stackUnavailable
+        }
+
         let vectorWritten = buffer.withUnsafeMutableBytes { destination -> Bool in
             guard let base = destination.baseAddress else { return false }
-            for (index, word) in words.enumerated() {
+            var wordIndex = 0
+            func writeWord(_ word: UInt64) {
                 var littleEndian = word.littleEndian
                 withUnsafeBytes(of: &littleEndian) { bytes in
                     if let source = bytes.baseAddress {
-                        base.advanced(by: vectorStart + index * 8)
+                        base.advanced(by: wordIndex * 8)
                             .copyMemory(from: source, byteCount: 8)
                     }
                 }
+                wordIndex += 1
             }
-            return true
+            writeWord(UInt64(argumentCount))
+            for pointer in argumentPointers { writeWord(pointer) }
+            writeWord(0)
+            for pointer in environmentPointers { writeWord(pointer) }
+            writeWord(0)
+            for (type, value) in auxv { writeWord(type); writeWord(value) }
+            return wordIndex == vectorWordCount
         }
         guard vectorWritten else { throw BuildError.stackUnavailable }
 
         let stackPointer = stackBase + UInt64(vectorStart)
         guard stackPointer & 0xF == 0,
-              memory.write(buffer, sourceRange: vectorStart..<Self.stackSize, offset: stackPointer) else {
+              memory.write(buffer, sourceRange: 0..<buffer.count, offset: stackPointer) else {
             throw BuildError.stackUnavailable
         }
         let argumentVectorAddress = stackPointer + 8
