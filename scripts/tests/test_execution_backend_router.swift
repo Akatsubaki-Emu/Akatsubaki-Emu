@@ -13,6 +13,13 @@ struct ExecutionBackendRouterTests {
         precondition(diagnosticPlan.isRunnableAsDiagnosticBringUp)
         precondition(!diagnosticPlan.isExecutableWithInstalledBackends)
 
+        let competingTranslatorPlan = RuntimeBackendRouter.plan(
+            for: diagnosticRequest,
+            availability: RuntimeBackendAvailability(installed: [.x86Interpreter, .fexCore])
+        )
+        precondition(competingTranslatorPlan.dynamicTranslationBackend == .fexCore)
+        precondition(!competingTranslatorPlan.isRunnableAsDiagnosticBringUp)
+
         let noDiagnosticPlan = RuntimeBackendRouter.plan(
             for: diagnosticRequest,
             availability: RuntimeBackendAvailability()
