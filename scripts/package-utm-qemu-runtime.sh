@@ -57,7 +57,7 @@ find "$APP" -type f \( -name '*.dylib' -o -name 'QEMU' -o -name 'qemu-*softmmu*'
   | tee "$OUT/runtime-file-inventory.txt"
 
 has_export() {
-  grep -Eq " _?$\{1}$" <<< "$candidate_exports"
+  grep -Eq " _?${1}$" <<< "$candidate_exports"
 }
 
 candidate=""
