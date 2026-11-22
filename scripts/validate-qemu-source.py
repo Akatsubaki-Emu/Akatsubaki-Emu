@@ -1367,6 +1367,7 @@ if ios_package_start < 0 or ios_package_end < 0:
 else:
     ios_package = release_workflow[ios_package_start:ios_package_end]
     for token in [
+        'test -s "$RUNTIME_DIR/QEMU/runtime-mode-manifest.txt"',
         'JIT_RUNTIME_DIR="$RUNTIME_DIR/QEMU/JIT"',
         'test -s "$JIT_RUNTIME_DIR/runtime-library-path.txt"',
         'test -s "$JIT_RUNTIME_DIR/exports.txt"',
@@ -1383,8 +1384,9 @@ else:
         'test -s "$RUNTIME_DIR/$TCI_RUNTIME_REL"',
         'for SYMBOL in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request; do',
         'grep -Eq " _?${SYMBOL}$" "$TCI_RUNTIME_DIR/exports.txt"',
-        'if grep -Eq \' _?isteam_qemu_set_jit_callbacks$\\' "$TCI_RUNTIME_DIR/exports.txt"; then',
+        'if grep -Eq \' _?isteam_qemu_set_jit_callbacks$\' "$TCI_RUNTIME_DIR/exports.txt"; then',
         'EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"',
+        'test -s "$EMBEDDED_LIBRARY"',
         'test -s "$APP/QEMU/JIT/runtime-library-path.txt"',
         'test -s "$APP/QEMU/JIT/exports.txt"',
         'test -s "$APP/QEMU/TCI/runtime-library-path.txt"',
