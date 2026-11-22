@@ -119,18 +119,26 @@ final class EntitlementViewModel: ObservableObject {
             }
 
             let existingCapabilities = try await fetchExistingCapabilities(for: appID, session: session)
-            if existingCapabilities.contains(where: { $0.type == capability }) {
+            if existingCapabilities.contains(where: { $0.type == capability && $0.enabled }) {
                 status = "Apple already reports \(capability) enabled for \(bundleIdentifier). Reinstall this app through SideStore or AltStore if this installation has not yet received a refreshed provisioning profile."
                 return true
             }
 
-            var capabilitiesToEnable = existingCapabilities
-            capabilitiesToEnable.append((type: capability, settings: []))
+            var capabilitiesToEnable = existingCapabilities.map { item in
+                (
+                    type: item.type,
+                    enabled: item.type == capability ? true : item.enabled,
+                    settings: item.settings
+                )
+            }
+            if !capabilitiesToEnable.contains(where: { $0.type == capability }) {
+                capabilitiesToEnable.append((type: capability, enabled: true, settings: []))
+            }
             let capabilityPayload: [[String: Any]] = capabilitiesToEnable.map { item in
                 [
                     "type": "bundleIdCapabilities",
                     "attributes": [
-                        "enabled": true,
+                        "enabled": item.enabled,
                         "settings": item.settings
                     ],
                     "relationships": [
@@ -203,7 +211,7 @@ final class EntitlementViewModel: ObservableObject {
     private func fetchExistingCapabilities(
         for appID: AppID,
         session: AppleAPISession
-    ) async throws -> [(type: String, settings: [[String: Any]])] {
+    ) async throws -> [(type: String, enabled: Bool, settings: [[String: Any]])] {
         let url = AppleAPI.shared.v1URL
             .appendingPathComponent("bundleIds")
             .appendingPathComponent(appID.identifier)
@@ -255,7 +263,7 @@ final class EntitlementViewModel: ObservableObject {
             )
         }
 
-        let capabilities = records.compactMap { record -> (type: String, settings: [[String: Any]])? in
+        let capabilities = records.compactMap { record -> (type: String, enabled: Bool, settings: [[String: Any]])? in
             let attributes = record["attributes"] as? [String: Any] ?? [:]
             let relationships = record["relationships"] as? [String: Any] ?? [:]
             let capability = relationships["capability"] as? [String: Any] ?? [:]
@@ -270,8 +278,9 @@ final class EntitlementViewModel: ObservableObject {
                     ?? recordSuffix else {
                 return nil
             }
+            guard let enabled = attributes["enabled"] as? Bool else { return nil }
             let settings = attributes["settings"] as? [[String: Any]] ?? []
-            return (type: type, settings: settings)
+            return (type: type, enabled: enabled, settings: settings)
         }
 
         guard capabilities.count == records.count else {
