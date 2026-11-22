@@ -66,7 +66,7 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertIn("values?.isRegularFile == true", library_check)
         self.assertNotIn("isDirectory", library_check)
 
-    def test_start_path_uses_location_only_and_native_start_validates_load(self):
+    def test_start_path_uses_loadability_preflight_before_native_start(self):
         root = Path(__file__).resolve().parents[2]
         status = (root / "src" / "QEMU" / "QEMURuntimeStatus.swift").read_text(encoding="utf-8")
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
@@ -75,8 +75,8 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertIn("validateLoadableLibrary(libraryURL", inspect)
         self.assertNotIn("validateLoadableLibrary", locate)
         self.assertIn("return .ready(libraryURL: library, dataDirectory: dataDirectory)", locate)
-        self.assertIn("switch QEMURuntimeStatus.locate()", runtime)
-        self.assertNotIn("switch QEMURuntimeStatus.inspect()", runtime)
+        self.assertIn("switch QEMURuntimeStatus.inspect()", runtime)
+        self.assertNotIn("switch QEMURuntimeStatus.locate()", runtime)
 
 
 if __name__ == "__main__":
