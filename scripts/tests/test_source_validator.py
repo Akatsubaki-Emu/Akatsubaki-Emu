@@ -43,6 +43,18 @@ class SourceValidatorTests(unittest.TestCase):
                 f"duplicate source-contract tokens for {key.value}: {duplicate_tokens}",
             )
 
+    def test_backend_error_contract_uses_typed_error_description(self):
+        root = Path(__file__).resolve().parents[2]
+        validator = (root / "scripts" / "validate-qemu-source.py").read_text(encoding="utf-8")
+        machine = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        self.assertIn('"GuestEngineError.backendNotInstalled(configuration.architecture)"', validator)
+        self.assertIn('"state = .failed(error.localizedDescription)"', validator)
+        self.assertIn("let error = GuestEngineError.backendNotInstalled(configuration.architecture)", machine)
+        self.assertIn("self.state = .failed(error.localizedDescription)", machine)
+        self.assertNotIn("backendNotInstalled(configuration.architecture).localizedDescription", validator)
+
+
+
     def test_guest_machine_has_one_serialized_stop_entry_point(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
