@@ -38,6 +38,7 @@ targets:
         product: StosSign_Auth
       - package: StosSign
         product: StosSign_Common
+      - sdk: IOKit.framework
       - target: iSteamJITHelper
         embed: true
     settings:
@@ -71,6 +72,7 @@ targets:
         product: StosSign_Auth
       - package: StosSign
         product: StosSign_Common
+      - sdk: IOKit.framework
       - target: iSteamNightlyJITHelper
         embed: true
     settings:

@@ -830,6 +830,15 @@ required = {
         "iSteamJITIsSupported",
         "iSteamJITGetProtocolMode",
         "ISTEAM_JIT_PROTOCOL_UNKNOWN",
+        "#include <IOKit/IOKitLib.h>",
+        "IORegistryEntryFromPath",
+        "kIORegistryEntryPropertyKeysKey",
+        'CFSTR("TXM")',
+        "CFGetTypeID(key) != CFStringGetTypeID()",
+        "iSteamJITHardwareTXMMode(void)",
+        "return iSteamJITHardwareTXMMode();",
+        "#include <sys/sysctl.h>",
+        "P_TRACED",
     ],
     "src/Core/EmulationLog.swift": [
         "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",
@@ -903,10 +912,10 @@ required = {
         "src/Runtime/LinuxSyscallDispatcher.swift",
         "Test VNC key-state source arbitration",
         "scripts/tests/test_vnc_key_state.swift",
-        "runs-on: macos-26",
-        'XCODE_APP="/Applications/Xcode_26.2.app"',
+        "runs-on: xcode-27",
+        'XCODE_APP="/Applications/Xcode_27.1.app"',
         'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-        'if [ "$XCODE_VERSION" != "26.2" ]; then',
+        'if [ "$XCODE_VERSION" != "27.1" ]; then',
     ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
@@ -1023,10 +1032,10 @@ if release_build_start < 0 or release_publish_start < 0:
 else:
     release_build_job = release_workflow[release_build_start:release_publish_start]
     for token in [
-        "runs-on: macos-26",
-        'XCODE_APP="/Applications/Xcode_26.2.app"',
+        "runs-on: xcode-27",
+        'XCODE_APP="/Applications/Xcode_27.1.app"',
         'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-        'if [ "$XCODE_VERSION" != "26.2" ]; then',
+        'if [ "$XCODE_VERSION" != "27.1" ]; then',
     ]:
         if token not in release_build_job:
             print(f"release workflow: Apple build job missing {token!r}", file=sys.stderr)

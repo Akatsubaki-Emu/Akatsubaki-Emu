@@ -142,17 +142,17 @@ jobs:
               raise SystemExit("QEMU/Mesa build requires the macOS 26 runner image.")
           if "runs-on: macos-15" in release or "runs-on: macos-15" in platform_validation:
               raise SystemExit("Apple builds must not use an unpinned macOS 15 runner.")
-          if "runs-on: macos-26" not in release or "runs-on: macos-26" not in platform_validation:
-              raise SystemExit("Apple builds must use the macOS 26 runner image.")
+          if "runs-on: xcode-27" not in release or "runs-on: xcode-27" not in platform_validation:
+              raise SystemExit("Apple app builds must use the Xcode 27 runner image.")
           xcode_contract = [
-              'XCODE_APP="/Applications/Xcode_26.2.app"',
+              'XCODE_APP="/Applications/Xcode_27.1.app"',
               'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-              'if [ "$XCODE_VERSION" != "26.2" ]; then',
+              'if [ "$XCODE_VERSION" != "27.1" ]; then',
           ]
           for workflow in (release, platform_validation):
               for token in xcode_contract:
                   if token not in workflow:
-                      raise SystemExit("Apple build workflow must pin and verify Xcode 26.2: " + token)
+                      raise SystemExit("Apple app workflow must pin and verify Xcode 27.1: " + token)
           release_job = release.split("\n  release:\n", 1)[1]
           if "runs-on: ubuntu-24.04" not in release_job or "sha256sum -c" not in release_job:
               raise SystemExit("Release publication should verify assets on Ubuntu, not consume a macOS runner.")

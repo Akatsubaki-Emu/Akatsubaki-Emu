@@ -36,7 +36,7 @@ The helper's persistent DDI cache lives under its own Library container. The tem
 
 ## Failure handling and security
 
-- Unknown iOS 26 hardware protocol mode blocks helper handoff; the app does not guess between the standard and TXM allocators.
+- iOS 26+ TXM detection uses the same I/O Registry query as StikJIT: it reads the keys on `IODeviceTree:/chosen/memory-map` and checks for `TXM`. Every key must be a string; an unreadable or malformed registry result is `UNKNOWN`, not `STANDARD`. The coordinator and QEMU patcher fail closed instead of guessing, keeping the host readiness check and StikJIT's universal breakpoint script on the same allocator protocol.
 - LocalDevVPN's URL callback does not prove the tunnel is connected. StikJIT's RSD reachability check is authoritative for its next step.
 - StikJIT's DDI download, mount, pairing, and debugger errors are returned to Akatsubaki and shown to the user.
 - The host's entitlement check uses Security task SPI and is a sideload/developer workflow, not an App Store-safe design.
