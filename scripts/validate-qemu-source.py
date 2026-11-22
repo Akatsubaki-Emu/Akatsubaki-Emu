@@ -187,8 +187,6 @@ required = {
         "test_link_verifier_rejects_missing_libobjc",
         "test_qemu_runtime_packager_preserves_firmware_bundle_directories",
         "test_release_publication_is_serialized_and_skips_stale_main_builds",
-        "test_qemu_runtime_packager_preserves_firmware_bundle_directories",
-        "test_release_publication_is_serialized_and_skips_stale_main_builds",
     ],
     "scripts/tests/test_jit_coordinator.py": [
         "test_stikdebug_availability_is_limited_to_physical_ios_devices",
