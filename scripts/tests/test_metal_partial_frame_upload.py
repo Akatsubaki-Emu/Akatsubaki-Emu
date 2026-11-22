@@ -11,7 +11,8 @@ class MetalPartialFramebufferUploadTests(unittest.TestCase):
 
         self.assertIn("current.readers == 0, !current.isUploading", submit)
         self.assertIn("let updatesPublishedSlot: Bool", submit)
-        self.assertIn("let uploadRegion = updatesPublishedSlot ? requestedRegion : fullRegion", submit)
+        self.assertIn("let uploadRegions = updatesPublishedSlot ? requestedRegions : [fullRegion]", submit)
+        self.assertIn("for region in uploadRegions", submit)
         self.assertIn("base.advanced(by: byteOffset)", submit)
         self.assertIn("bytesPerRow: frameWidth * 4", submit)
         self.assertIn("let isUploading = framebuffer?.isUploading ?? false", draw)

@@ -100,7 +100,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     }
 
     func submit(frame: Data, width frameWidth: Int, height frameHeight: Int,
-                dirtyRegion: GPUFrameRegion?) {
+                dirtyRegions: [GPUFrameRegion]?) {
         guard frameWidth > 0, frameHeight > 0,
               frameWidth <= 8192, frameHeight <= 8192,
               frameWidth <= maxFramebufferBytes / frameHeight / 4,
@@ -112,16 +112,16 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         }
 
         let fullRegion = GPUFrameRegion(x: 0, y: 0, width: frameWidth, height: frameHeight)
-        let requestedRegion: GPUFrameRegion
-        if let dirtyRegion,
-           dirtyRegion.x >= 0, dirtyRegion.y >= 0,
-           dirtyRegion.width > 0, dirtyRegion.height > 0,
-           dirtyRegion.width <= frameWidth, dirtyRegion.height <= frameHeight,
-           dirtyRegion.x <= frameWidth - dirtyRegion.width,
-           dirtyRegion.y <= frameHeight - dirtyRegion.height {
-            requestedRegion = dirtyRegion
+        let requestedRegions: [GPUFrameRegion]
+        if let dirtyRegions, !dirtyRegions.isEmpty,
+           dirtyRegions.allSatisfy({
+               $0.x >= 0 && $0.y >= 0 && $0.width > 0 && $0.height > 0
+                   && $0.width <= frameWidth && $0.height <= frameHeight
+                   && $0.x <= frameWidth - $0.width && $0.y <= frameHeight - $0.height
+           }) {
+            requestedRegions = dirtyRegions
         } else {
-            requestedRegion = fullRegion
+            requestedRegions = [fullRegion]
         }
 
         textureLock.lock()
@@ -164,17 +164,18 @@ final class MetalGPUBackend: NSObject, GPUBackend {
 
         // Spare slots can contain older frames; only the published slot may
         // receive a partial upload. All other slots are synchronised in full.
-        let uploadRegion = updatesPublishedSlot ? requestedRegion : fullRegion
+        let uploadRegions = updatesPublishedSlot ? requestedRegions : [fullRegion]
         frame.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
-            let byteOffset = uploadRegion.y * frameWidth * 4 + uploadRegion.x * 4
-            slot.texture.replace(
-                region: MTLRegionMake2D(uploadRegion.x, uploadRegion.y,
-                                        uploadRegion.width, uploadRegion.height),
-                mipmapLevel: 0,
-                withBytes: base.advanced(by: byteOffset),
-                bytesPerRow: frameWidth * 4
-            )
+            for region in uploadRegions {
+                let byteOffset = region.y * frameWidth * 4 + region.x * 4
+                slot.texture.replace(
+                    region: MTLRegionMake2D(region.x, region.y, region.width, region.height),
+                    mipmapLevel: 0,
+                    withBytes: base.advanced(by: byteOffset),
+                    bytesPerRow: frameWidth * 4
+                )
+            }
         }
 
         textureLock.lock()
