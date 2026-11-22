@@ -39,9 +39,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate-release-channel:
+    name: Validate release channel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main ref for Main channel
+        if: github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && github.ref != 'refs/heads/main'
+        shell: bash
+        run: |
+          echo "The Main release channel can only be dispatched from refs/heads/main (got $GITHUB_REF)." >&2
+          exit 1
+
   # This reusable workflow runs inside this run and uploads the artifact here.
   # App jobs cannot start until the runtime is successfully compiled and packaged.
   qemu-runtime:
+    needs: validate-release-channel
     uses: ./.github/workflows/build-qemu-runtime.yml
     with:
       rebuild_dependencies: false
@@ -173,15 +185,20 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
-          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
           APP="build/visionDerivedData/Build/Products/Release-xros/iSteamVision.app"
           test -d "$APP"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "com.xthrx.isteam.visionos"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
           mkdir -p build/visionPayload/Payload
           cp -R "$APP" build/visionPayload/Payload/iSteamVision.app
           ditto -c -k --sequesterRsrc --keepParent build/visionPayload/Payload build/iSteam-visionOS.ipa
           unzip -t build/iSteam-visionOS.ipa >/dev/null
-          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app com.xthrx.isteam.visionos
+          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"
           shasum -a 256 build/iSteam-visionOS.ipa > build/iSteam-visionOS.ipa.sha256
 
       - name: Upload build artifact
@@ -256,6 +273,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ steps.meta.outputs.title }}
           prerelease: ${{ env.RELEASE_CHANNEL == 'nightly' }}
           make_latest: ${{ env.RELEASE_CHANNEL == 'main' && 'true' || 'false' }}

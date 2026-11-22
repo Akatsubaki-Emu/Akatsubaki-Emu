@@ -32,6 +32,14 @@ final class GuestMemory {
         bytes.replaceSubrange(Int(offset)..<Int(offset) + data.count, with: data)
         return true
     }
+    func writeUInt64(_ value: UInt64, offset: UInt64) -> Bool {
+        guard offset <= size, 8 <= size - offset else { return false }
+        for shift in 0..<8 {
+            bytes[Int(offset) + shift] = UInt8(truncatingIfNeeded: value >> (shift * 8))
+        }
+        return true
+    }
+
     func readByte(offset: UInt64) -> UInt8? {
         guard offset < size else { return nil }
         return bytes[Int(offset)]

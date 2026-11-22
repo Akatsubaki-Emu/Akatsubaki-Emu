@@ -347,12 +347,16 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("private func validateRange(address: UInt64, length: UInt64) -> UInt64", source)
         self.assertIn("cursor = min(end, range.upperBound)", source)
 
-    def test_guest_image_load_resets_old_syscall_state_before_replacing_memory(self):
+    def test_guest_image_load_resets_cpu_and_clears_memory_once_in_loader(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        loader = (root / "src" / "Runtime" / "ELF64Loader.swift").read_text(encoding="utf-8")
         load = source.split("func loadELFImage", 1)[1].split("func reset", 1)[0]
-        self.assertLess(load.index("memory.clear()"), load.index("ELF64Loader().load"))
+        loader_body = loader.split("func load(", 1)[1].split("private func", 1)[0]
+        before_loader = load.split("ELF64Loader().load", 1)[0]
+        self.assertNotIn("memory.clear()", before_loader)
         self.assertLess(load.index("try cpu.reset(entryPoint: 0)"), load.index("ELF64Loader().load"))
+        self.assertLess(loader_body.index("memory.clear()"), loader_body.index("for (segment, fileOffset) in pending"))
         self.assertIn("memory.clear()", load.split("} catch {", 1)[1])
         self.assertIn("_ = try? cpu.reset(entryPoint: 0)", load.split("} catch {", 1)[1])
         self.assertNotIn("cpu?.reset(entryPoint: 0)", load.split("} catch {", 1)[1])
@@ -438,13 +442,13 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: false", workflow)
         self.assertIn("test_qemu_runtime_does_not_cancel_in_progress_release_build", tests)
 
-    def test_qemu_runtime_pins_macos26_and_xcode26_2(self):
+    def test_qemu_runtime_pins_xcode_27_1_on_supported_runner(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
-        self.assertIn("runs-on: macos-26", workflow)
-        self.assertIn('XCODE_APP="/Applications/Xcode_26.2.app"', workflow)
+        self.assertIn("runs-on: xcode-27", workflow)
+        self.assertIn('XCODE_APP="/Applications/Xcode_27.1.app"', workflow)
         self.assertIn('sudo xcode-select --switch "$XCODE_APP/Contents/Developer"', workflow)
-        self.assertIn('if [ "$XCODE_VERSION" != "26.2" ]; then', workflow)
+        self.assertIn('if [ "$XCODE_VERSION" != "27.1" ]; then', workflow)
 
 
     def test_release_and_platform_validation_pin_xcode_26_2(self):
@@ -506,6 +510,20 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("framebuffer up to 64 MiB", settings)
         self.assertIn("framebuffer no larger than 64 MiB", settings)
         self.assertIn("self?.showInvalidResolutionAlert(); return", settings)
+
+    def test_entitlement_settings_are_hidden_on_non_ios_targets(self):
+        root = Path(__file__).resolve().parents[2]
+        settings = (root / "iSteam" / "SettingsViewController.swift").read_text(encoding="utf-8")
+        project = (root / "project.yml").read_text(encoding="utf-8")
+        self.assertIn("#if os(iOS)\n        return 12\n#else\n        return 11\n#endif", settings)
+        action = settings.split("case 11:", 1)[1].split("default:", 1)[0]
+        reference = action.index("EntitlementSettingsView()")
+        guard = action.rfind("#if os(iOS)", 0, reference)
+        end = action.find("#endif", reference)
+        self.assertGreater(guard, -1)
+        self.assertGreater(end, reference)
+        vision_target = project.split("  iSteamVision:", 1)[1].split("\n    settings:", 1)[0]
+        self.assertIn("- EntitlementSettingsView.swift", vision_target)
 
     def test_console_uses_the_runtime_router_instead_of_direct_box64(self):
         root = Path(__file__).resolve().parents[2]

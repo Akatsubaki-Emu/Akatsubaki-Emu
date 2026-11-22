@@ -18,7 +18,7 @@ Do not treat a GitLab mirror commit as proof that GitHub Actions has tested the 
 
 ## Release channels
 
-The release workflow supports Main and Nightly channels. Pushes to `main` are configured to produce the nightly channel; manual dispatch selects the requested channel. Nightly pushes, schedules, and manual Nightly runs share one concurrency group and queue behind an active Nightly build. Manual Main runs use a separate group, so they do not block or cancel Nightly builds. Active releases are allowed to finish before the next same-channel run starts.
+The release workflow supports Main and Nightly channels. Manual Main releases are accepted only when dispatched from `refs/heads/main`; Nightly remains available for test builds from other branches. Pushes to `main` are configured to produce the nightly channel; manual dispatch selects the requested channel. Nightly pushes, schedules, and manual Nightly runs share one concurrency group and queue behind an active Nightly build. Manual Main runs use a separate group, so they do not block or cancel Nightly builds. Active releases are allowed to finish before the next same-channel run starts.
 
 The iOS app package must consume the QEMU runtime artifact produced in the same workflow run. Missing runtime artifacts, required lifecycle exports, or package contents must fail the release rather than silently producing an incomplete IPA.
 

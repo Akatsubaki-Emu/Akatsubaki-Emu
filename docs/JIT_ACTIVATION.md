@@ -12,7 +12,7 @@
 4. LocalDevVPN submits its tunnel-start request and calls back to Akatsubaki after its own one-second delay. Akatsubaki waits a further two seconds, then opens StikDebug with the current bundle identifier and process ID using `stikdebug://enable-jit`.
 5. On iOS 26+ devices with TXM/SPTM, the StikDebug request includes `script-name=universal.js`. The QEMU allocator selects the breakpoint-based executable-region protocol only when the host's hardware check reports TXM; non-TXM devices omit the script and retain QEMU's normal Darwin split-W^X allocator.
 6. When Akatsubaki becomes active again, it polls the process debugger/JIT status. QEMU starts only after that state is confirmed. If the request fails or times out, QEMU remains stopped.
-7. During QEMU initialization, the existing native bridge registers `iSteamJITPrepareRegion` and `iSteamJITDetach` callbacks. The QEMU allocator uses those breakpoints to prepare executable regions and detach at the appropriate point; the bridge's required `isteam_qemu_set_jit_callbacks` export remains part of the runtime contract.
+7. Before `qemu_init`, the native bridge resolves QEMU's exported `isteam_qemu_set_jit_callbacks` and registers three direct host callbacks: `iSteamJITIsReady`, `iSteamJITPrepareRegion`, and `iSteamJITDetach`. QEMU separately resolves only `iSteamJITIsSupported` to choose the iOS 26+ TXM path. The QEMU allocator uses the registered callbacks to prepare the executable region and detach after the writable/executable aliases are established.
 
 ## First-time setup
 
@@ -58,3 +58,8 @@ The helper apps are not embedded in Akatsubaki. They remain external dependencie
 - **Not tested:** Python unittest execution, Xcode compilation, IPA packaging, installation, JIT activation on hardware, QEMU guest boot or persistent guest state.
 
 Do not treat source-level integration as proof of a working JIT session until a physical-device build and VM launch have been tested.
+
+
+## Fail-closed TXM detection
+
+On physical iOS 26+ devices, Akatsubaki reads `IODeviceTree:/chosen/memory-map` through IOKit, matching StikJIT's protocol detection. A valid registry result without `TXM` selects standard attach-only JIT; `TXM` selects the StikDebug breakpoint allocator; unreadable, malformed, or empty registry data is UNKNOWN and blocks launch. The QEMU patcher uses the tri-state protocol export and refuses unknown devices.

@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import StosSign_API
 import StosSign_Auth
 import StosSign_Common
@@ -105,13 +106,68 @@ final class EntitlementViewModel: ObservableObject {
                 return
             }
 
-            _ = try await AppleAPI.shared.updateAppID(
-                appID,
-                capabilities: ["INCREASED_MEMORY_LIMIT"],
-                team: team,
-                session: session
+            let existingCapabilities = try await fetchExistingCapabilities(for: appID, session: session)
+            if existingCapabilities.contains(where: { $0.type == "INCREASED_MEMORY_LIMIT" }) {
+                status = "Apple already reports Increased Memory Limit enabled for \(bundleIdentifier). Reinstall this app through SideStore or AltStore if this installation has not yet received a refreshed provisioning profile."
+                return
+            }
+
+            var capabilitiesToEnable = existingCapabilities
+            capabilitiesToEnable.append((type: "INCREASED_MEMORY_LIMIT", settings: []))
+            let capabilityPayload: [[String: Any]] = capabilitiesToEnable.map { capability in
+                [
+                    "type": "bundleIdCapabilities",
+                    "attributes": [
+                        "enabled": true,
+                        "settings": capability.settings
+                    ],
+                    "relationships": [
+                        "capability": [
+                            "data": [
+                                "type": "capabilities",
+                                "id": capability.type
+                            ]
+                        ]
+                    ]
+                ]
+            }
+
+            let payload: [String: Any] = [
+                "data": [
+                    "type": "bundleIds",
+                    "id": appID.identifier,
+                    "attributes": [
+                        "identifier": appID.bundleIdentifier,
+                        "teamId": team.identifier,
+                        "seedId": team.identifier,
+                        "bundleType": "bundle",
+                        "name": appID.name,
+                        "hasExclusiveManagedCapabilities": false
+                    ],
+                    "relationships": [
+                        "bundleIdCapabilities": ["data": capabilityPayload]
+                    ]
+                ]
+            ]
+
+            let response = try await AppleAPI.shared.sendEditRequest(
+                requestURL: AppleAPI.shared.v1URL
+                    .appendingPathComponent("bundleIds")
+                    .appendingPathComponent(appID.identifier),
+                body: payload,
+                session: session,
+                json: true,
+                appendClientId: false
             )
-            status = "Apple accepted the Increased Memory Limit capability update for \(bundleIdentifier). Reinstall this app through SideStore or AltStore using the same account so the provisioning profile is regenerated. The running installation cannot update its own code signature."
+            guard response["data"] as? [String: Any] != nil else {
+                let message = response["error"] as? String ?? "Apple did not confirm the capability update."
+                throw NSError(
+                    domain: "AkatsubakiEntitlements",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: message]
+                )
+            }
+            status = "Apple accepted the Increased Memory Limit capability update for \(bundleIdentifier). Existing App ID capabilities and their settings were preserved. Reinstall this app through SideStore or AltStore using the same account so the provisioning profile is regenerated. The running installation cannot update its own code signature."
         } catch {
             status = error.localizedDescription
         }
@@ -128,6 +184,91 @@ final class EntitlementViewModel: ObservableObject {
         password = ""
         verificationCode = ""
         status = "Signed out."
+    }
+
+
+    private func fetchExistingCapabilities(
+        for appID: AppID,
+        session: AppleAPISession
+    ) async throws -> [(type: String, settings: [[String: Any]])] {
+        let url = AppleAPI.shared.v1URL
+            .appendingPathComponent("bundleIds")
+            .appendingPathComponent(appID.identifier)
+            .appendingPathComponent("bundleIdCapabilities")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+
+        let anisette = session.anisetteData
+        let dateFormatter = ISO8601DateFormatter()
+        let headers: [String: String] = [
+            "Content-Type": "application/vnd.api+json",
+            "User-Agent": "Xcode",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-us",
+            "X-Apple-App-Info": "com.apple.gs.xcode.auth",
+            "X-Xcode-Version": "27.0 (27A5218g)",
+            "X-Apple-I-Identity-Id": session.dsid,
+            "X-Apple-GS-Token": session.authToken,
+            "X-Apple-I-MD-M": anisette.machineID,
+            "X-Apple-I-MD": anisette.oneTimePassword,
+            "X-Apple-I-MD-LU": anisette.localUserID,
+            "X-Apple-I-MD-RINFO": "\(anisette.routingInfo)",
+            "X-Mme-Device-Id": anisette.deviceUniqueIdentifier,
+            "X-MMe-Client-Info": anisette.deviceDescription,
+            "X-Apple-I-Client-Time": dateFormatter.string(from: anisette.date),
+            "X-Apple-Locale": anisette.locale.identifier,
+            "X-Apple-I-Locale": anisette.locale.identifier,
+            "X-Apple-I-TimeZone": anisette.timeZone.abbreviation() ?? "GMT"
+        ]
+        headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
+
+        let (data, response) = try await AppleAPI.shared.session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw NSError(
+                domain: "AkatsubakiEntitlements",
+                code: statusCode,
+                userInfo: [NSLocalizedDescriptionKey: "Apple could not return the existing App ID capabilities (HTTP \(statusCode)). No capability changes were made."]
+            )
+        }
+
+        guard let responseDictionary = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let records = responseDictionary["data"] as? [[String: Any]] else {
+            throw NSError(
+                domain: "AkatsubakiEntitlements",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Apple returned an unreadable capability list. No capability changes were made."]
+            )
+        }
+
+        let capabilities = records.compactMap { record -> (type: String, settings: [[String: Any]])? in
+            let attributes = record["attributes"] as? [String: Any] ?? [:]
+            let relationships = record["relationships"] as? [String: Any] ?? [:]
+            let capability = relationships["capability"] as? [String: Any] ?? [:]
+            let capabilityData = capability["data"] as? [String: Any] ?? [:]
+            let recordID = record["id"] as? String
+            let recordSuffix = recordID.flatMap { id -> String? in
+                let prefix = appID.identifier + "_"
+                return id.hasPrefix(prefix) ? String(id.dropFirst(prefix.count)) : nil
+            }
+            guard let type = (attributes["capabilityType"] as? String)
+                    ?? (capabilityData["id"] as? String)
+                    ?? recordSuffix else {
+                return nil
+            }
+            let settings = attributes["settings"] as? [[String: Any]] ?? []
+            return (type: type, settings: settings)
+        }
+
+        guard capabilities.count == records.count else {
+            throw NSError(
+                domain: "AkatsubakiEntitlements",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Apple returned capability records that Akatsubaki Emu could not safely preserve. No capability changes were made."]
+            )
+        }
+        return capabilities
     }
 
     private func prepareForVerification(using handler: @escaping (String?) -> Void) async {

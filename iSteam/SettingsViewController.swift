@@ -16,7 +16,13 @@ final class SettingsViewController: UITableViewController {
         tableView.tableFooterView = UIView()
     }
 
-    override func numberOfSections(in tableView: UITableView) -> Int { 12 }
+    override func numberOfSections(in tableView: UITableView) -> Int {
+#if os(iOS)
+        return 12
+#else
+        return 11
+#endif
+    }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch section {
@@ -187,7 +193,9 @@ final class SettingsViewController: UITableViewController {
         case 10:
             navigationController?.pushViewController(DroidDeckPortStatusViewController(), animated: true)
         case 11:
+#if os(iOS)
             navigationController?.pushViewController(UIHostingController(rootView: EntitlementSettingsView()), animated: true)
+#endif
         default:
             break
         }

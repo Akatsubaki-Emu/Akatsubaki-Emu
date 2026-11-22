@@ -91,6 +91,8 @@ required = {
         "host = \"enable-jit\"",
         "script-name",
         "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)",
+        "isJITProtocolKnown",
+        "guard isJITProtocolKnown else",
     ],
     "iSteam/CrashLogger.swift": [
         "queueKey = DispatchSpecificKey<UInt8>()",
@@ -179,6 +181,9 @@ required = {
         "cancel-in-progress: false",
     ],
     "scripts/tests/test_qemu_build_patches.py": [
+        "test_qemu_stikjit_patcher_exports_required_runtime_symbols",
+        "test_qemu_stikjit_patcher_updates_region_and_export_list_together",
+        "test_qemu_workflow_probe_shell_syntax_and_steps_are_unique",
         "test_qemu_runtime_does_not_cancel_in_progress_release_build",
         "cancel-in-progress: false",
         "def test_windows_and_steamos_profiles_select_uefi_firmware",
@@ -555,6 +560,7 @@ required = {
         'dlsym(library, "qemu_cleanup")',
         'dlsym(library, "qemu_system_shutdown_request")',
         'dlsym(library, "isteam_qemu_set_jit_callbacks")',
+        "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
         "static bool g_starting = false;",
         "static _Thread_local char error_copy",
         "ISTEAM_QEMU_MAX_ARGUMENTS 4096",
@@ -562,12 +568,6 @@ required = {
         "ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES",
         "strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u)",
         "error_buffer && error_capacity > 0",
-        "static void *g_preflight_library = NULL;",
-        "static char *g_preflight_path = NULL;",
-        "g_preflight_library = library;",
-        "library = g_preflight_library;",
-        "strcmp(g_preflight_path, library_path)",
-
     ],
     "scripts/package-utm-qemu-runtime.sh": [
         " _?isteam_qemu_set_jit_callbacks$",
@@ -838,6 +838,10 @@ required = {
     "iSteam/JIT26Protocol.c": [
         "#if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR",
         "iSteamJITIsSupported",
+        "IORegistryEntryFromPath(",
+        '"IODeviceTree:/chosen/memory-map"',
+        "ISTEAM_JIT_PROTOCOL_UNKNOWN",
+        "iSteamJITGetProtocolMode",
     ],
     "src/Core/EmulationLog.swift": [
         "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",
@@ -917,10 +921,30 @@ required = {
         'if [ "$XCODE_VERSION" != "26.2" ]; then',
     ],
     "scripts/patch_qemu_stikjit_ios.py": [
+        "def patch_exported_symbols(source: str) -> str",
+        "def patch_qemu_sources(region_path: Path) -> None",
+        "qemu_system_shutdown_request;",
+        "isteam_qemu_set_jit_callbacks;",
+        "system/qemu.symbols",
         "isteam_qemu_set_jit_callbacks",
         "__attribute__((visibility(\"default\")))",
         "isteam_jit_prepare_callback",
-        "iSteamJITIsSupported",
+        "#include <mach/mach_vm.h>",
+        "iSteamJITGetProtocolMode",
+        'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
+        "jit_protocol_mode < 0",
+        "jit_protocol_mode > 0",
+        "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
+    ],
+    "iSteam/JIT26Protocol.h": [
+        "ISTEAM_JIT_PROTOCOL_UNKNOWN",
+        "ISTEAM_JIT_PROTOCOL_STANDARD",
+        "ISTEAM_JIT_PROTOCOL_STIKDEBUG",
+        "iSteamJITGetProtocolMode",
+    ],
+    "project.yml": [
+        "- sdk: IOKit.framework",
+        "-Wl,-exported_symbol,_iSteamJITGetProtocolMode",
     ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
@@ -995,7 +1019,7 @@ if r"\n" in builder:
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
 repository_validation = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
-if "utm-ios-arm64-deps-v13-" not in repository_validation or "utm-ios-arm64-deps-v12-" in repository_validation:
+if "utm-ios-arm64-deps-v14-" not in repository_validation or "utm-ios-arm64-deps-v13-" in repository_validation:
     print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
     failed = True
 for step in (
@@ -1014,7 +1038,10 @@ for step in (
     if qemu_workflow.count(marker) != 1:
         print(f"QEMU workflow: expected exactly one {marker!r} step", file=sys.stderr)
         failed = True
-if "grep -Fq '_objc_msgSendClass'; then" not in qemu_workflow:
+if 'SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"' not in qemu_workflow:
+    print("QEMU workflow: Objective-C symbol inspection command is missing", file=sys.stderr)
+    failed = True
+if "if grep -Fq '_objc_msgSendClass' <<<\"$SYMBOLS\"; then" not in qemu_workflow:
     print("QEMU workflow: Objective-C class-selector stub probe is malformed", file=sys.stderr)
     failed = True
 if "\n; then\n" in qemu_workflow:
@@ -1028,14 +1055,17 @@ for token in [
     "-fno-objc-msgsend-class-selector-stubs",
     "export OBJCFLAGS=",
     "grep -Fq",
-    "utm-ios-arm64-deps-v13-",
+    "utm-ios-arm64-deps-v14-",
     "spirv-tools",
     "spirv-llvm-translator",
     "steps.xcode.outputs.version",
-    "runs-on: macos-26",
-    'XCODE_APP="/Applications/Xcode_26.2.app"',
+    "runs-on: xcode-27",
+    'XCODE_APP="/Applications/Xcode_27.1.app"',
     'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-    'if [ "$XCODE_VERSION" != "26.2" ]; then',
+    'if [ "$XCODE_VERSION" != "27.1" ]; then',
+    "PROBE_BINARY=",
+    "-Wl,-objc_stubs_fast",
+    "-lobjc -framework Metal",
 ]:
     if token not in qemu_workflow:
         print(f"QEMU workflow: missing build-integrity step {token!r}", file=sys.stderr)

@@ -2,7 +2,9 @@
 import subprocess
 import sys
 import unittest
+import textwrap
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -164,21 +166,114 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         once = patch_qemu_stikjit_ios.patch_source(source)
         twice = patch_qemu_stikjit_ios.patch_source(once)
         self.assertEqual(once, twice)
-        self.assertIn("iSteamJITIsReady", once)
-        self.assertIn("iSteamJITPrepareRegion", once)
-        self.assertIn("iSteamJITDetach", once)
+        self.assertNotIn(r'\\n', once)
+        self.assertNotIn(r'\\\"', once)
+        self.assertIn("#include <mach/mach_vm.h>", once)
+        self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")', once)
+        self.assertIn("jit_protocol_mode < 0", once)
+        self.assertIn("jit_protocol_mode > 0", once)
+        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITIsReady")', once)
+        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")', once)
+        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITDetach")', once)
         self.assertIn('__attribute__((visibility("default")))', once)
         self.assertIn("void isteam_qemu_set_jit_callbacks(", once)
         self.assertIn("void isteam_qemu_set_jit_callbacks(ISTEAMJITReadyFunction ready,", once)
         self.assertIn("isteam_jit_ready_callback = ready", once)
         self.assertIn("ISTEAMJITPrepareFunction prepare_region = isteam_jit_prepare_callback", once)
-        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")', once)
-        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITIsReady")', once)
         self.assertIn("__builtin_available(iOS 26.0, *)", once)
+        bridge = (Path(__file__).resolve().parents[2] / "iSteam/QEMUNativeBridge.c").read_text(encoding="utf-8")
+        self.assertIn(
+            "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
+            bridge,
+        )
+        self.assertIn(
+            "typedef void (*qemu_set_jit_callbacks_fn)(bool (*)(void), void *(*)(void *, size_t), void (*)(void));",
+            bridge,
+        )
+        with self.assertRaisesRegex(SystemExit, "unexpected host-symbol lookup"):
+            patch_qemu_stikjit_ios.patch_source(
+                once + '\\nvoid *invalid_callback = dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion");'
+            )
         self.assertIn("mach_vm_remap(mach_task_self(), &buf_rw", once)
         self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
         with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
             patch_qemu_stikjit_ios.patch_source("#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n#endif\n")
+
+    def test_qemu_stikjit_patcher_exports_required_runtime_symbols(self):
+        symbols = """{
+  qemu_init;
+  qemu_main_loop;
+  qemu_cleanup;
+  bql_lock_impl;
+  bql_unlock;
+  g_assertion_message_expr;
+  qemu_thread_create;
+  replay_mutex_lock;
+  replay_mutex_unlock;
+};
+"""
+        once = patch_qemu_stikjit_ios.patch_exported_symbols(symbols)
+        self.assertEqual(once, patch_qemu_stikjit_ios.patch_exported_symbols(once))
+        generated = [
+            "_" + line.strip()[:-1]
+            for line in once.splitlines()
+            if line.strip().endswith(";")
+        ]
+        self.assertIn("_qemu_system_shutdown_request", generated)
+        self.assertIn("_isteam_qemu_set_jit_callbacks", generated)
+        self.assertEqual(once.count("qemu_system_shutdown_request;"), 1)
+        self.assertEqual(once.count("isteam_qemu_set_jit_callbacks;"), 1)
+        with self.assertRaisesRegex(SystemExit, "expected exactly one closing"):
+            patch_qemu_stikjit_ios.patch_exported_symbols("{\n  qemu_init;\n  qemu_main_loop;\n  qemu_cleanup;\n")
+
+
+    def test_qemu_stikjit_patcher_updates_region_and_export_list_together(self):
+        with TemporaryDirectory() as temporary:
+            qemu_root = Path(temporary)
+            region = qemu_root / "tcg" / "region.c"
+            symbols = qemu_root / "system" / "qemu.symbols"
+            region.parent.mkdir()
+            symbols.parent.mkdir()
+            region.write_text(
+                "#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n"
+                "static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)\n"
+                "{\n    return 0;\n}\n#endif\n",
+                encoding="utf-8",
+            )
+            symbols.write_text(
+                "{\n  qemu_init;\n  qemu_main_loop;\n  qemu_cleanup;\n};\n",
+                encoding="utf-8",
+            )
+            patch_qemu_stikjit_ios.patch_qemu_sources(region)
+            first_region = region.read_text(encoding="utf-8")
+            first_symbols = symbols.read_text(encoding="utf-8")
+            self.assertIn("isteam_qemu_set_jit_callbacks", first_region)
+            self.assertIn("qemu_system_shutdown_request;", first_symbols)
+            self.assertIn("isteam_qemu_set_jit_callbacks;", first_symbols)
+            patch_qemu_stikjit_ios.patch_qemu_sources(region)
+            self.assertEqual(region.read_text(encoding="utf-8"), first_region)
+            self.assertEqual(symbols.read_text(encoding="utf-8"), first_symbols)
+
+
+    def test_qemu_workflow_probe_shell_syntax_and_steps_are_unique(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        probe = source.split("      - name: Verify Objective-C class-selector stub compatibility", 1)[1]
+        probe = probe.split("      - name: Install UTM build dependencies", 1)[0]
+        script = textwrap.dedent(probe.split("        run: |\n", 1)[1])
+        result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for name in (
+            "Verify Objective-C class-selector stub compatibility",
+            "Install UTM build dependencies",
+            "Cache UTM dependency build and sysroot",
+            "Build UTM dependencies for physical iOS arm64",
+            "Build UTM iOS archive",
+            "Package and verify in-process QEMU runtime",
+            "Upload verified QEMU runtime artifact",
+        ):
+            self.assertEqual(source.count("      - name: " + name), 1)
+
 
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):
         root = Path(__file__).resolve().parents[2]
@@ -202,14 +297,53 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("spirv-tools", source)
         self.assertIn("spirv-llvm-translator", source)
 
-    def test_qemu_workflow_disables_unsupported_objc_class_selector_stubs(self):
+    def test_qemu_workflow_uses_supported_xcode_for_objc_class_selector_stubs(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
         source = workflow.read_text(encoding="utf-8")
         self.assertIn("Verify Objective-C class-selector stub compatibility", source)
+        self.assertIn("runs-on: xcode-27", source)
+        self.assertIn('XCODE_APP="/Applications/Xcode_27.1.app"', source)
+        self.assertIn('if [ "$XCODE_VERSION" != "27.1" ]; then', source)
+        self.assertIn("utm-ios-arm64-deps-v14-", source)
+        self.assertIn("PROBE_BINARY=", source)
+        self.assertIn("-Wl,-objc_stubs_fast", source)
+        self.assertIn("-lobjc -framework Metal", source)
         self.assertIn("-fno-objc-msgsend-class-selector-stubs", source)
         self.assertIn("export OBJCFLAGS=", source)
         self.assertIn("grep -Fq", source)
+        self.assertIn('SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"', source)
+        self.assertIn('if grep -Fq \'_objc_msgSendClass\' <<<"$SYMBOLS"; then', source)
+        self.assertNotIn('nm -u "$PROBE_OBJECT" | grep', source)
         self.assertNotIn("\n; then\n", source)
+
+    def test_release_tag_is_created_from_the_workflow_commit(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("tag_name: ${{ steps.meta.outputs.tag }}", source)
+        self.assertIn("target_commitish: ${{ github.sha }}", source)
+
+
+    def test_main_release_dispatch_is_limited_to_main_branch(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("validate-release-channel:", source)
+        self.assertIn("needs: validate-release-channel", source)
+        self.assertIn("inputs.channel == 'Main'", source)
+        self.assertIn("github.ref != 'refs/heads/main'", source)
+        self.assertIn("The Main release channel can only be dispatched from refs/heads/main", source)
+
+
+    def test_visionos_release_channel_uses_distinct_bundle_identifiers(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        step = source.split("- name: Build and package visionOS app", 1)[1].split("- name: Upload build artifact", 1)[0]
+        self.assertIn('if [ "$RELEASE_CHANNEL" = "main" ]; then', step)
+        self.assertIn('EXPECTED_BUNDLE="com.xthrx.isteam.visionos"', step)
+        self.assertIn('EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"', step)
+        self.assertIn('PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE"', step)
+        self.assertIn('grep -Fx "$EXPECTED_BUNDLE"', step)
+        self.assertIn('bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"', step)
+
 
     def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects

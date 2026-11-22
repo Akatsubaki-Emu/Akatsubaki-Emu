@@ -4,12 +4,12 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <string.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
-#include <sys/utsname.h>
 #include <unistd.h>
+#if TARGET_OS_IOS && !TARGET_OS_SIMULATOR
+#include <IOKit/IOKitLib.h>
+#endif
 #endif
 
 #if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR
@@ -44,40 +44,47 @@ bool iSteamJITHasGetTaskAllow(void) {
     return allowed;
 }
 
-static bool iSteamJITHardwareSupportsTXM(const char *hardwareIdentifier, bool isIOS27OrNewer) {
-    if (hardwareIdentifier == NULL || hardwareIdentifier[0] == '\0') {
-        return false;
+static int iSteamJITHardwareTXMMode(void) {
+    io_registry_entry_t memoryMap = IORegistryEntryFromPath(
+        kIOMainPortDefault, "IODeviceTree:/chosen/memory-map"
+    );
+    if (memoryMap == IO_OBJECT_NULL) return ISTEAM_JIT_PROTOCOL_UNKNOWN;
+
+    CFTypeRef keysValue = IORegistryEntryCreateCFProperty(
+        memoryMap, kIORegistryEntryPropertyKeysKey, kCFAllocatorDefault, 0
+    );
+    IOObjectRelease(memoryMap);
+    if (keysValue == NULL || CFGetTypeID(keysValue) != CFArrayGetTypeID()) {
+        if (keysValue != NULL) CFRelease(keysValue);
+        return ISTEAM_JIT_PROTOCOL_UNKNOWN;
     }
 
-    if (isIOS27OrNewer) {
-        return strcmp(hardwareIdentifier, "iPad8,11") != 0
-            && strcmp(hardwareIdentifier, "iPad8,12") != 0;
+    CFArrayRef keys = (CFArrayRef)keysValue;
+    CFIndex keyCount = CFArrayGetCount(keys);
+    if (keyCount == 0) {
+        CFRelease(keysValue);
+        return ISTEAM_JIT_PROTOCOL_UNKNOWN;
+    }
+    for (CFIndex index = 0; index < keyCount; index++) {
+        CFTypeRef key = (CFTypeRef)CFArrayGetValueAtIndex(keys, index);
+        if (key == NULL || CFGetTypeID(key) != CFStringGetTypeID()) {
+            CFRelease(keysValue);
+            return ISTEAM_JIT_PROTOCOL_UNKNOWN;
+        }
     }
 
-    int major = 0;
-    int minor = 0;
-    if (sscanf(hardwareIdentifier, "iPhone%d,%d", &major, &minor) == 2) {
-        return major > 14 || (major == 14 && minor >= 2);
-    }
-    if (sscanf(hardwareIdentifier, "iPad%d,%d", &major, &minor) == 2) {
-        return major > 14 || (major == 14 && minor >= 5);
-    }
-    return false;
+    bool hasTXM = CFArrayContainsValue(keys, CFRangeMake(0, keyCount), CFSTR("TXM"));
+    CFRelease(keysValue);
+    return hasTXM ? ISTEAM_JIT_PROTOCOL_STIKDEBUG : ISTEAM_JIT_PROTOCOL_STANDARD;
+}
+
+int iSteamJITGetProtocolMode(void) {
+    if (__builtin_available(iOS 26.0, *)) return iSteamJITHardwareTXMMode();
+    return ISTEAM_JIT_PROTOCOL_STANDARD;
 }
 
 bool iSteamJITIsSupported(void) {
-    struct utsname systemInfo;
-    if (uname(&systemInfo) != 0) {
-        return false;
-    }
-
-    if (__builtin_available(iOS 27.0, *)) {
-        return iSteamJITHardwareSupportsTXM(systemInfo.machine, true);
-    }
-    if (__builtin_available(iOS 26.0, *)) {
-        return iSteamJITHardwareSupportsTXM(systemInfo.machine, false);
-    }
-    return false;
+    return iSteamJITGetProtocolMode() == ISTEAM_JIT_PROTOCOL_STIKDEBUG;
 }
 
 static bool iSteamJITDebuggerIsAttached(void) {
@@ -101,8 +108,10 @@ bool iSteamJITIsReady(void) {
         return false;
     }
 
-    if (__builtin_available(iOS 26.0, *) && iSteamJITIsSupported()) {
-        return iSteamJITDebuggerIsAttached();
+    if (__builtin_available(iOS 26.0, *)) {
+        int protocolMode = iSteamJITGetProtocolMode();
+        if (protocolMode == ISTEAM_JIT_PROTOCOL_UNKNOWN) return false;
+        if (protocolMode == ISTEAM_JIT_PROTOCOL_STIKDEBUG) return iSteamJITDebuggerIsAttached();
     }
     return true;
 }

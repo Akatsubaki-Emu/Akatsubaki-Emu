@@ -9,6 +9,7 @@ class InputHotPathOptimizationTests(unittest.TestCase):
         cls.root = Path(__file__).resolve().parents[2]
         cls.touch = (cls.root / "src" / "Display" / "TouchGamepadView.swift").read_text(encoding="utf-8")
         cls.controller = (cls.root / "src" / "Display" / "ControllerInputManager.swift").read_text(encoding="utf-8")
+        cls.controller_mapping = (cls.root / "src" / "Display" / "ControllerMappingStore.swift").read_text(encoding="utf-8")
 
     def test_touch_stick_caches_radius_and_skips_in_radius_square_root(self):
         stick = self.touch.split("private final class StickControl", 1)[1]
@@ -22,10 +23,18 @@ class InputHotPathOptimizationTests(unittest.TestCase):
         self.assertIn(": movementRadius / sqrt(distanceSquared)", update)
 
     def test_controller_deadzone_rejects_inside_radius_before_square_root(self):
-        function = self.controller.split("private static func applyDeadzone", 1)[1]
-        self.assertIn("let magnitudeSquared = x * x + y * y", function)
-        self.assertIn("guard magnitudeSquared > deadzone * deadzone else { return (0, 0) }", function)
-        self.assertIn("let magnitude = min(1, magnitudeSquared.squareRoot())", function)
+        if "struct ControllerDeadzone" in self.controller_mapping:
+            function = self.controller_mapping.split("struct ControllerDeadzone", 1)[1].split("final class ControllerMappingStore", 1)[0]
+            self.assertIn("let magnitudeSquared = x * x + y * y", function)
+            self.assertIn("guard magnitudeSquared > deadzoneSquared else { return (0, 0) }", function)
+            self.assertIn("let magnitude = min(1, magnitudeSquared.squareRoot())", function)
+            self.assertIn("deadzoneSquared = normalized * normalized", function)
+            self.assertIn("inverseRange = 1 / (1 - normalized)", function)
+        else:
+            function = self.controller.split("private static func applyDeadzone", 1)[1]
+            self.assertIn("let magnitudeSquared = x * x + y * y", function)
+            self.assertIn("guard magnitudeSquared > deadzone * deadzone else { return (0, 0) }", function)
+            self.assertIn("let magnitude = min(1, magnitudeSquared.squareRoot())", function)
 
     def test_touch_stick_formula_matches_previous_clamp(self):
         radius = 34.2

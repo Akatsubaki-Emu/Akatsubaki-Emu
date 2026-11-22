@@ -6,6 +6,8 @@ import sys
 INCLUDE_ANCHOR = "#ifdef CONFIG_DARWIN\n#include <mach/mach.h>"
 FUNCTION_ANCHOR = "static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)\n{\n"
 MARKER = "alloc_code_gen_buffer_splitwx_stikdebug"
+EXPORT_LIST_REQUIRED = ("qemu_init;", "qemu_main_loop;", "qemu_cleanup;")
+EXPORT_LIST_ADDITIONS = ("qemu_system_shutdown_request;", "isteam_qemu_set_jit_callbacks;")
 
 HELPER = r'''#if TARGET_OS_IOS
 typedef bool (*ISTEAMJITReadyFunction)(void);
@@ -107,25 +109,31 @@ def patch_source(source: str) -> str:
             "isteam_jit_ready_callback",
             "isteam_jit_prepare_callback",
             "isteam_jit_detach_callback",
-            "iSteamJITIsSupported",
-            "iSteamJITIsReady",
-            "iSteamJITPrepareRegion",
-            "iSteamJITDetach",
-            "jit_protocol_supported()",
+            "#include <mach/mach_vm.h>",
+            "iSteamJITGetProtocolMode",
+            'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
+            "jit_protocol_mode > 0",
             "__builtin_available(iOS 26.0, *)",
             "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
             "tcg_splitwx_diff = buf_rx - buf_rw",
         ]
         missing = [item for item in required if item not in source]
-        if missing:
-            raise SystemExit("Existing StikDebug QEMU patch is incomplete: " + ", ".join(missing))
+        forbidden = [
+            'dlsym(RTLD_DEFAULT, "iSteamJITIsReady")',
+            'dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")',
+            'dlsym(RTLD_DEFAULT, "iSteamJITDetach")',
+        ]
+        unexpected = [item for item in forbidden if item in source]
+        if missing or unexpected:
+            details = missing + ["unexpected host-symbol lookup: " + item for item in unexpected]
+            raise SystemExit("Existing StikDebug QEMU patch is incomplete: " + ", ".join(details))
         return source
 
     if INCLUDE_ANCHOR not in source:
         raise SystemExit("QEMU tcg/region.c changed: Darwin Mach include anchor not found")
     source = source.replace(
         INCLUDE_ANCHOR,
-        "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <stdbool.h>\n#include <stddef.h>\n#include <dlfcn.h>\n#include <mach/mach.h>",
+        "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <stdbool.h>\n#include <stddef.h>\n#include <dlfcn.h>\n#include <mach/mach.h>\n#include <mach/mach_vm.h>",
         1,
     )
     if FUNCTION_ANCHOR not in source:
@@ -133,19 +141,23 @@ def patch_source(source: str) -> str:
     replacement = HELPER + FUNCTION_ANCHOR + (
         "#if TARGET_OS_IOS\n"
         "    if (__builtin_available(iOS 26.0, *)) {\n"
-        "        typedef bool (*JITProtocolSupportedFunction)(void);\n"
-        "        JITProtocolSupportedFunction jit_protocol_supported =\n"
-        "            (JITProtocolSupportedFunction)dlsym(RTLD_DEFAULT, \"iSteamJITIsSupported\");\n"
-        "        if (jit_protocol_supported == NULL) {\n"
-        "            error_setg(errp, \"Could not determine whether this iOS device requires the StikDebug JIT breakpoint protocol.\");\n"
+        "        typedef int (*JITProtocolModeFunction)(void);\n"
+        "        JITProtocolModeFunction get_jit_protocol_mode =\n"
+        "            (JITProtocolModeFunction)dlsym(RTLD_DEFAULT, \"iSteamJITGetProtocolMode\");\n"
+        "        int jit_protocol_mode = get_jit_protocol_mode ? get_jit_protocol_mode() : -1;\n"
+        "        if (jit_protocol_mode < 0) {\n"
+        "            error_setg(errp, \"Could not determine this iOS device's JIT protocol; refusing QEMU startup.\");\n"
         "            return -1;\n"
         "        }\n"
-        "        if (jit_protocol_supported()) {\n"
+        "        if (jit_protocol_mode > 0) {\n"
         "            return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);\n"
         "        }\n"
         "    }\n"
         "#endif\n"
     )
+    if "\\n" in replacement or "\\\"" in replacement:
+        raise ValueError("StikDebug allocator patch contains escaped C source delimiters")
+
     source = source.replace(FUNCTION_ANCHOR, replacement, 1)
     required = [
         "#include <TargetConditionals.h>",
@@ -157,12 +169,11 @@ def patch_source(source: str) -> str:
         "isteam_jit_ready_callback",
         "isteam_jit_prepare_callback",
         "isteam_jit_detach_callback",
-        "iSteamJITIsSupported",
-        "iSteamJITIsReady",
-        "iSteamJITPrepareRegion",
-        "iSteamJITDetach",
-        "jit_protocol_supported()",
-        "if (jit_protocol_supported())",
+        "#include <mach/mach_vm.h>",
+        "iSteamJITGetProtocolMode",
+        'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
+        "jit_protocol_mode > 0",
+        "if (jit_protocol_mode > 0)",
         "__builtin_available(iOS 26.0, *)",
         "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
         "mach_vm_remap(mach_task_self(), &buf_rw",
@@ -175,14 +186,58 @@ def patch_source(source: str) -> str:
     return source
 
 
+def patch_exported_symbols(source: str) -> str:
+    lines = source.splitlines()
+    missing_base = [
+        symbol for symbol in EXPORT_LIST_REQUIRED
+        if not any(line.strip() == symbol for line in lines)
+    ]
+    if missing_base:
+        raise SystemExit(
+            "QEMU system/qemu.symbols changed: required lifecycle exports not found: "
+            + ", ".join(missing_base)
+        )
+    closing = [i for i, line in enumerate(lines) if line.strip() == "};"]
+    if len(closing) != 1:
+        raise SystemExit("QEMU system/qemu.symbols changed: expected exactly one closing '};' line")
+    close_index = closing[0]
+    for symbol in EXPORT_LIST_ADDITIONS:
+        count = sum(1 for line in lines if line.strip() == symbol)
+        if count > 1:
+            raise SystemExit(f"QEMU system/qemu.symbols contains duplicate export: {symbol}")
+        if count == 0:
+            lines.insert(close_index, "  " + symbol)
+            close_index += 1
+    patched = "\n".join(lines) + ("\n" if source.endswith("\n") else "")
+    if any(
+        not any(line.strip() == symbol for line in patched.splitlines())
+        for symbol in (*EXPORT_LIST_REQUIRED, *EXPORT_LIST_ADDITIONS)
+    ):
+        raise SystemExit("QEMU system/qemu.symbols export verification failed")
+    return patched
+
+
+def patch_qemu_sources(region_path: Path) -> None:
+    qemu_root = region_path.parent.parent
+    symbols_path = qemu_root / "system" / "qemu.symbols"
+    if not symbols_path.is_file():
+        raise SystemExit(f"QEMU export list is missing: {symbols_path}")
+    source = region_path.read_text(encoding="utf-8")
+    symbols = symbols_path.read_text(encoding="utf-8")
+    patched_source = patch_source(source)
+    patched_symbols = patch_exported_symbols(symbols)
+    if patched_symbols != symbols:
+        symbols_path.write_text(patched_symbols, encoding="utf-8")
+    if patched_source != source:
+        region_path.write_text(patched_source, encoding="utf-8")
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: patch_qemu_stikjit_ios.py /path/to/qemu/tcg/region.c")
     path = Path(sys.argv[1])
-    source = path.read_text(encoding="utf-8")
-    patched = patch_source(source)
-    path.write_text(patched, encoding="utf-8")
-    print("Patched QEMU TCG split-W^X allocation to use the StikDebug iOS 26+ TXM breakpoint protocol.")
+    patch_qemu_sources(path)
+    print("Patched QEMU TCG allocation and exported lifecycle/JIT symbols for the StikDebug iOS 26+ TXM protocol.")
 
 
 if __name__ == "__main__":
