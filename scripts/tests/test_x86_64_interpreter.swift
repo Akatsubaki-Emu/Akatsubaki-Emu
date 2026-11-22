@@ -59,10 +59,11 @@ final class GuestMemory {
         return true
     }
 
-    func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int? {
+    func readPrefix(offset: UInt64, maximumLength: Int? = nil, into buffer: inout [UInt8]) -> Int? {
         readPrefixCalls += 1
         guard offset <= size else { return nil }
-        let count = Int(min(UInt64(buffer.count), size - offset))
+        let limit = min(buffer.count, max(0, maximumLength ?? buffer.count))
+        let count = Int(min(UInt64(limit), size - offset))
         if count > 0 {
             let start = Int(offset)
             for index in 0..<count { buffer[index] = bytes[start + index] }
