@@ -26,12 +26,27 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch GitLab mirror
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
-          git remote add gitlab https://gitlab.com/chantinlongx/I-steam.git
-          git fetch --no-tags gitlab main
+          set -euo pipefail
+          if [ -z "${GITLAB_TOKEN}" ]; then
+            echo "::error::Missing GITLAB_TOKEN with read_repository permission."
+            exit 1
+          fi
+          git remote add gitlab "https://oauth2:${GITLAB_TOKEN}@gitlab.com/chantinlongxthrx/I-steam.git"
+          for attempt in 1 2 3 4 5; do
+            if git fetch --no-tags gitlab main; then
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "::error::Unable to fetch GitLab main after five attempts."
+          exit 1
 
       - name: Merge mirror history without rewriting
         run: |
+          set -euo pipefail
           if git merge-base --is-ancestor refs/remotes/gitlab/main HEAD; then
             echo "GitLab main is already included in canonical main."
             exit 0
