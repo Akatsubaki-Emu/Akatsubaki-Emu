@@ -36,6 +36,10 @@ def patch_script(source: str) -> str:
         "Meson cross-file feature overrides"
     )
 
+    objc_args_anchor = 'echo "objc_args = [${OBJCFLAGS:+$(meson_quote $OBJCFLAGS)}]" >> $cross'
+    if objc_args_anchor not in source:
+        raise SystemExit("UTM build_dependencies.sh changed: Objective-C flags are not propagated to Meson")
+
     qemu_flags = 'QEMU_PLATFORM_BUILD_FLAGS="--enable-shared-lib --disable-cocoa --disable-sdl --disable-coreaudio --disable-slirp-smbd --enable-ucontext --with-coroutine=libucontext $HVF_FLAGS $TCI_BUILD_FLAGS"'
     qemu_flags_with_target = qemu_flags[:-1] + ' --target-list=x86_64-softmmu"'
     source = replace_once(source, qemu_flags, qemu_flags_with_target, "iOS QEMU target-list configuration")
@@ -71,6 +75,7 @@ def patch_script(source: str) -> str:
         'http://ftp.gnu.org/gnu/libiconv/*',
         'https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}',
         cross_override,
+        objc_args_anchor,
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"',
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
