@@ -18,7 +18,13 @@ final class KenranButoAOTCompiler {
         self.translator = translator
     }
 
-    func compile(_ guestCode: Data, guestABI: String) throws -> Compilation {
+    static func cacheGuestABI(_ guestABI: String, maximumInstructions: Int) -> String {
+        "\(guestABI)-i\(maximumInstructions)"
+    }
+
+    func compile(_ guestCode: Data, guestABI: String,
+                 maximumInstructions: Int = 4096) throws -> Compilation {
+        let budget = min(maximumInstructions, 4096)
         let identity = TranslationCacheIdentity(
             guestCodeSHA256: Self.sha256(guestCode),
             guestArchitecture: "x86_64",
@@ -26,19 +32,20 @@ final class KenranButoAOTCompiler {
             translatorVersion: X86_64AOTTranslator.translatorVersion,
             hostArchitecture: X86_64AOTTranslator.hostArchitecture,
             cpuFeatures: X86_64AOTTranslator.cpuFeatures,
-            guestABI: guestABI
+            guestABI: Self.cacheGuestABI(guestABI, maximumInstructions: budget)
         )
-
         if let cached = try cache.load(identity) {
             if let translation = try? JSONDecoder().decode(X86_64AOTTranslation.self, from: cached),
-               translation.isCacheable,
-               translation.isValid(for: guestCode) {
-                return Compilation(translation: translation, cacheHit: true)
+               translation.isCacheable && translation.isValid(for: guestCode) {
+                // Structural validation alone cannot authenticate cached machine code.
+                let canonical = translator.translate(guestCode, maximumInstructions: budget)
+                if translation == canonical {
+                    return Compilation(translation: translation, cacheHit: true)
+                }
             }
             try cache.invalidate(identity)
         }
-
-        let translation = translator.translate(guestCode)
+        let translation = translator.translate(guestCode, maximumInstructions: budget)
         if translation.isCacheable {
             try cache.store(try JSONEncoder().encode(translation), for: identity)
         }

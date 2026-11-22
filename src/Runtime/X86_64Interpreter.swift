@@ -3,10 +3,18 @@ import Foundation
 /// Small, dependency-free x86-64 interpreter for bring-up and instruction tests.
 /// This is not a Linux userspace runtime: syscalls, paging, exceptions, and most
 /// x86-64 instructions are intentionally unsupported and report a visible exit.
+enum KenranButoAOTExitReason: UInt32 { case none=0, unsupportedInstruction=1, truncatedInstruction=2, inputLimit=3, instructionLimit=4, outputLimit=5, endOfInput=6, memoryReadFault=7, memoryWriteFault=8, invalidState=9 }
+struct KenranButoAOTExecutionResult { let guestBytesConsumed:Int; let instructionCount:Int; let exitReason:KenranButoAOTExitReason; let exitRip:UInt64; let exitAddress:UInt64 }
+protocol KenranButoAOTExecuting: AnyObject {
+ func execute(guestCode:Data,registers:inout [UInt64],rip:UInt64,rflags:UInt64,fsBase:UInt64,gsBase:UInt64,memory:GuestMemory,maximumInstructions:Int)->KenranButoAOTExecutionResult?
+ func invalidateAll()
+}
+
 final class X86_64Interpreter: GuestCPUBackend {
     let architecture: VMConfiguration.Architecture = .x86_64
     private(set) var instructionCount: UInt64 = 0
     private let memory: GuestMemory
+    private let aotExecutor: KenranButoAOTExecuting?
     private let syscallDispatcher: LinuxSyscallDispatcher
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
@@ -22,12 +30,14 @@ final class X86_64Interpreter: GuestCPUBackend {
     private let stopLock = NSLock()
     private var stopRequested = false
 
-    init(memory: GuestMemory) {
+    init(memory: GuestMemory, aotExecutor: KenranButoAOTExecuting? = nil) {
         self.memory = memory
+        self.aotExecutor = aotExecutor
         syscallDispatcher = LinuxSyscallDispatcher(memory: memory)
     }
 
     func reset(entryPoint: UInt64) throws {
+        aotExecutor?.invalidateAll()
         guard entryPoint < memory.size else {
             throw GuestEngineError.backendNotInstalled(.x86_64)
         }
@@ -92,6 +102,41 @@ final class X86_64Interpreter: GuestCPUBackend {
             let instructionAddress = rip
             instructionLengthExceeded = false
             prepareInstructionWindow(at: instructionAddress)
+            if let aotExecutor, instructionWindowLength > 0 {
+                let remaining = maxInstructions - executed
+                let budget = Int(min(remaining, 4096))
+                if let result = aotExecutor.execute(
+                    guestCode: Data(instructionWindow.prefix(instructionWindowLength)),
+                    registers: &registers, rip: instructionAddress, rflags: flags,
+                    fsBase: fsBase, gsBase: gsBase, memory: memory,
+                    maximumInstructions: budget
+                ) {
+                    guard result.instructionCount >= 0 && result.instructionCount <= budget &&
+                          result.guestBytesConsumed >= 0 &&
+                          result.guestBytesConsumed <= instructionWindowLength else {
+                        return .backendUnavailable("Kenran Butō AOT returned an invalid block result.")
+                    }
+                    if result.instructionCount > 0 {
+                        let count = UInt64(result.instructionCount)
+                        executed += count
+                        instructionCount &+= count
+                    }
+                    rip = result.exitRip
+                    switch result.exitReason {
+                    case .memoryReadFault, .memoryWriteFault:
+                        return .memoryFault(address: result.exitAddress)
+                    case .invalidState:
+                        return .backendUnavailable("Kenran Butō AOT guest-state ABI validation failed.")
+                    default: break
+                    }
+                    let (expectedRip, overflow) = instructionAddress.addingReportingOverflow(UInt64(result.guestBytesConsumed))
+                    guard !overflow && result.exitRip == expectedRip &&
+                          result.guestBytesConsumed > 0 && result.instructionCount > 0 else {
+                        return .backendUnavailable("Kenran Butō AOT side exit did not preserve exact guest RIP.")
+                    }
+                    continue
+                }
+            }
             guard var opcode = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
             var rex: UInt8 = 0
             activeSegmentBase = 0

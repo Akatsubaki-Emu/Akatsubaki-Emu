@@ -82,3 +82,27 @@ The current conservative translator is a bounded bring-up subset, not an executa
 The focused regression harness is `scripts/tests/test_kenran_buto_aot_translator.swift`. It checks AArch64 MOVZ/MOVK encodings, register moves, both REX.B exchange forms, legal 15-byte and rejected 16-byte instructions, input limits, ENDBR64 fallback, unsupported/truncated boundaries, and output/instruction budgets. `.github/workflows/validate-kenran-buto-aot.yml` compiles and runs both the decoder harness and translation-cache integration harness on macOS.
 
 These changes improve decoder safety and regression coverage only. The emitter still produces standalone instruction words rather than a versioned guest-state block ABI; it does not yet save/restore guest registers and flags, allocate executable memory, dispatch translated blocks, or resume the interpreter after side exits. Do not mark `.staticAOT` operational or route real guest processes through it until those execution and differential-correctness layers are implemented and tested on device.
+
+## Kenran Butō AOT execution adapter — ABI v1
+
+The AOT path now has an executable, interpreter-cooperative adapter. ABI v1 passes
+a versioned guest-state structure with the 16 GPRs, RIP/RFLAGS, FS/GS bases, an
+instruction budget and explicit GuestMemory read/write callbacks. Generated blocks
+receive the state pointer, not an unversioned bare register-array pointer.
+
+The adapter uses a bounded 64-block cache. Persistent translation-cache hits are
+re-decoded and compared with canonical translator output before being trusted.
+Executable memory is W^X: standard mode seals writable mappings read/execute, while
+StikDebug/TXM mode uses separate executable and writable aliases. Both aliases are
+released on every remap/protection failure path.
+
+The current translator emits only register-only NOP/MOV instructions. Unsupported,
+truncated and budget-limited blocks return to the interpreter at the exact next guest
+RIP; memory callbacks and explicit fault metadata are ready for subsequent memory-op
+lowering. The diagnostic `GuestMachine` installs this fast path. QEMU remains the
+full-system execution route.
+
+**Verification boundary:** the ARM64 native harness executes generated AArch64 blocks
+and compares interpreter state. This does not prove StikDebug/TXM execution on a
+physical iPad. Do not advertise the AOT backend as generally operational until a
+physical iOS ARM64 run is independently recorded.
