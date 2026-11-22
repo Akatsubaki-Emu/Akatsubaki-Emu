@@ -35,19 +35,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
-            latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 {print $1}')"
-            if [ -z "$latest_main" ]; then
-              echo "Unable to determine the current main commit." >&2
-              exit 1
-            fi
-            if [ "$latest_main" != "$GITHUB_SHA" ]; then
-              echo "Skipping stale QEMU build from $GITHUB_SHA; main is now $latest_main."
-              echo "build=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+          build_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "build=$build_current" >> "$GITHUB_OUTPUT"
+          if [ "$build_current" != "true" ]; then
+            echo "Skipping this QEMU build because a newer build-relevant main commit exists."
           fi
-          echo "build=true" >> "$GITHUB_OUTPUT"
 
       - name: Checkout UTM with submodules
         if: steps.freshness.outputs.build == 'true'
