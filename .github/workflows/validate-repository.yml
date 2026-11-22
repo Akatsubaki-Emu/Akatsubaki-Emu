@@ -215,12 +215,13 @@ jobs:
           if push_contract not in platform_validation:
               raise SystemExit("Platform validation should not duplicate release builds on every main push.")
           for token in [
-              'XCODE_APP="/Applications/Xcode_27.1.app"',
-              'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-              'if [ "$XCODE_VERSION" != "27.1" ]; then',
+              'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
+              'case "$XCODE_VERSION" in',
+              '27.*) ;;',
+              'Expected Xcode 27.x on the xcode-27 runner',
           ]:
               if token not in qemu:
-                  raise SystemExit("QEMU build must pin and verify Xcode 27.1: " + token)
+                  raise SystemExit("QEMU build must select and verify its Xcode 27 toolchain: " + token)
           if "spirv-tools" not in qemu or "spirv-llvm-translator" not in qemu:
               raise SystemExit("QEMU Mesa dependency build must install SPIRV-Tools and its LLVM translator.")
           if "utm-ios-arm64-deps-v14-" not in qemu:
