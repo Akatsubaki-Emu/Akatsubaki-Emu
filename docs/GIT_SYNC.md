@@ -1,45 +1,51 @@
-# GitLab ↔ GitHub synchronization and GitHub Actions CI/CD
+# GitHub Actions CI/CD and GitLab mirror synchronization
 
 ## Repositories
 
-- **GitLab:** https://gitlab.com/chantinlongxthrx/I-steam
-- **GitHub:** https://github.com/Akatsubaki-Emu/Akatsubaki-Emu
-- **Branch:** `main`
+- **Canonical source:** https://github.com/Akatsubaki-Emu/Akatsubaki-Emu
+- **Downstream mirror:** https://gitlab.com/chantinlongxthrx/I-steam
+- **Canonical branch:** `main`
 
-GitHub is the canonical source repository; GitLab is its mirror. Both configured synchronization directions are retained for recovery and owner-directed workflows:
+GitHub is the source of truth. All repository CI, regression tests, Apple-platform builds, QEMU/UTM runtime builds, and release publication execute through GitHub Actions. GitLab is retained as a downstream mirror and is not a CI runner.
 
-1. **GitHub → GitLab:** `.github/workflows/blank.yml` pushes canonical GitHub main commits to GitLab main using the existing `GITLAB_TOKEN` secret. This workflow has been restored byte-for-byte from the commit immediately before its accidental deletion and is intentionally left unchanged.
-2. **GitLab → GitHub:** the owner-configured GitLab push mirror can publish owner-requested GitLab commits to canonical GitHub. This is configured in GitLab project settings, not by a repository workflow.
+## GitHub Actions workflows
 
-Do not edit, rename, disable, or delete `.github/workflows/blank.yml` without explicit owner approval. The scheduled `.github/workflows/mirror-from-gitlab.yml` polling workflow has been removed because the owner-configured GitLab push mirror already handles GitLab → GitHub synchronization. A supplemental `.gitlab-ci.yml` is present on GitLab and runs the Swift runtime harnesses, native guest-memory regression tests, and Python source-contract/regression suite. It does not run Xcode, QEMU/UTM builds, simulator builds, or releases.
+All repository automation is stored in `.github/workflows/`:
 
-## Important bidirectional-mirror caution
+- `validate-repository.yml` — validates workflow/project YAML, packaging-script shell syntax, QEMU source assumptions, Python source-contract/regression tests, native C/C++ bridge and guest-memory tests, and standalone Swift runtime harnesses.
+- `validate-ios-build.yml` — compiles the iOS, tvOS, and visionOS simulator targets and runs focused Apple-platform checks.
+- `build-qemu-runtime.yml` — reusable and manual build of the physical iOS arm64 QEMU/UTM JIT and TCI runtime variants.
+- `release.yml` — orchestrates the QEMU runtime and Apple-platform packaging, verifies release assets, and publishes Nightly/Main GitHub releases.
+- `Update stats.yml` — refreshes repository metrics.
+- `blank.yml` — retained GitHub-to-GitLab main synchronization. Do not rename, remove, or disable it without explicit owner approval.
+- `reconcile-gitlab-main.yml` — manually invoked history reconciliation helper. Review divergence and the exact GitLab commits before dispatching; never use it to bypass canonical GitHub review.
 
-Two active push directions can race or create divergent histories if both sides receive independent commits. The GitHub → GitLab workflow contains ancestry checks and refuses some unsafe updates, but that is not a complete distributed synchronization protocol. Make ordinary source changes on canonical GitHub and let the retained GitHub → GitLab workflow update the mirror. If the owner explicitly requests direct GitLab commits, verify that the GitLab → GitHub push mirror has caught up before making further canonical changes. Never force-push either side to resolve a divergence without explicit review.
+There is no `.gitlab-ci.yml` in the canonical repository. Do not recreate GitLab CI jobs. The former GitLab Swift, native-memory, and Python validation jobs are now covered by `validate-repository.yml`.
 
-## GitHub Actions CI/CD
+## GitHub → GitLab synchronization
 
-Apple-platform, QEMU/UTM, and release workflows live in `.github/workflows/` and execute on GitHub:
+The retained `.github/workflows/blank.yml` workflow pushes canonical GitHub `main` to GitLab `main` using the existing `GITLAB_TOKEN` GitHub Actions secret. It:
 
-- `validate-repository.yml` — YAML/configuration validation, duplicate-key detection, QEMU source validation, and shell syntax checks.
-- `validate-ios-build.yml` — iOS, tvOS, and visionOS simulator compile checks.
-- `build-qemu-runtime.yml` — builds and packages the iOS arm64 QEMU/UTM runtime; supports manual and reusable-workflow calls.
-- `release.yml` — builds the runtime first, then platform packages and combined GitHub releases. The separate website repository's `update-xthrx-alt-source.yml` workflow refreshes official AltStore/PAL feeds from published releases.
-- `blank.yml` — synchronization only; not a build or validation job. Keep unchanged.
+- fetches GitLab history before pushing;
+- exits when both main refs already match;
+- only fast-forwards GitLab when its current head is an ancestor of GitHub;
+- retries only detected rate-limit responses, with increasing waits and fresh ancestry checks;
+- refuses to overwrite newer GitLab history or auto-resolve divergent histories;
+- serializes sync runs without cancelling an in-progress mirror update.
 
-Required app-repository GitHub secrets include `GITLAB_TOKEN` for the retained GitHub → GitLab sync. The app release workflow no longer needs a website write token; the website repository owns its feed updater and `contents: write` permission. The GitLab push-mirror credentials remain configured in GitLab settings and must not be committed to source.
+Keep the workflow unchanged unless the owner explicitly approves a modification. The GitLab push-mirror configuration is external project settings and is not changed by this repository migration. Verify it separately in GitLab Settings → Repository → Mirroring repositories.
 
-## Mirror verification
+## Development rules
 
-The GitLab push mirror is external project configuration. Verify it in GitLab Settings → Repository → Mirroring repositories. Confirm the GitHub target, enabled status, and successful last update. This repository change does not alter those settings.
+1. Make ordinary source, workflow, and documentation changes on canonical GitHub `main` or through reviewed GitHub pull requests.
+2. Let the retained GitHub Actions sync workflow propagate accepted commits to GitLab.
+3. Compare commit SHAs on both hosts before assuming synchronization completed.
+4. Never force-push either host or auto-merge divergent histories to make the refs appear synchronized.
+5. A GitHub workflow run is evidence only for the jobs that actually ran. A queued, skipped, cancelled, or failed run is not a passing test.
+6. Simulator compilation, an IPA archive, or a QEMU runtime artifact does not prove physical-device installation or successful guest execution.
 
-## Supplemental GitLab validation
+## Required secrets
 
-The GitLab `.gitlab-ci.yml` contains three validation jobs: `swift-runtime-tests`, `native-memory-tests`, and `python-source-contracts`. They compile/run the standalone Swift runtime harnesses, compile/run the C++ guest-memory test, and execute the source validator plus Python regression suite. These jobs are not a substitute for Xcode platform builds or QEMU runtime packaging. GitLab's current pipeline quota has prevented these jobs from starting (`ci_quota_exceeded`, no runner assigned); check the live pipeline and do not treat a created pipeline as a successful test run.
+- `GITLAB_TOKEN` — GitLab project access token with the minimum repository write scope required by the GitHub → GitLab sync workflow.
 
-## Validation and limitations
-
-- A successful GitHub workflow run proves only the checks it actually executes.
-- Simulator compilation and IPA packaging do not prove physical-device installation, guest OS boot, persistence, or game compatibility.
-- The QEMU runtime build must produce and package its artifact in the same release workflow run before the iOS app packaging job can proceed.
-- GitHub Actions sync success and GitLab push-mirror success must be checked independently.
+Do not commit tokens or mirror credentials. The website repository separately owns the AltStore/PAL source updater and its publishing permissions.
