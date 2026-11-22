@@ -130,7 +130,7 @@ final class EntitlementViewModel: ObservableObject {
         status = "Signed out."
     }
 
-    private func prepareForVerification(using handler: @escaping (String?) -> Void) {
+    private func prepareForVerification(using handler: @escaping (String?) -> Void) async {
         verificationCodeHandler = handler
         verificationCode = ""
         needsVerificationCode = true
