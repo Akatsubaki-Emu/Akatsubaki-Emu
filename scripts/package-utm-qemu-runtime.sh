@@ -12,6 +12,12 @@ esac
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 
+if [ ! -d "$ARCHIVE" ]; then
+  echo "UTM archive directory missing: $ARCHIVE" >&2
+  exit 1
+fi
+ARCHIVE_ROOT="$(cd "$ARCHIVE" && pwd -P)"
+
 # The next step removes OUT recursively, so accept only a single named child of
 # the real repository build/ directory. No absolute paths, traversal or symlinks.
 case "$OUT_REQUEST" in
@@ -35,7 +41,17 @@ if [ -L "$OUT" ]; then
     echo "Refusing to replace a symlink output directory: $OUT" >&2
     exit 2
 fi
-APP="$ARCHIVE/Products/Applications/UTM.app"
+path_is_within() {
+  local candidate="$1" parent="$2"
+  [[ "$candidate" == "$parent" ]] && return 0
+  case "$candidate/" in "$parent/"*) return 0 ;; esac
+  return 1
+}
+if path_is_within "$OUT" "$ARCHIVE_ROOT" || path_is_within "$ARCHIVE_ROOT" "$OUT"; then
+  echo "Refusing output directory that overlaps the input UTM archive: $OUT" >&2
+  exit 2
+fi
+APP="$ARCHIVE_ROOT/Products/Applications/UTM.app"
 test -d "$APP" || { echo "UTM.app missing from archive: $APP" >&2; exit 1; }
 
 rm -rf "$OUT"
