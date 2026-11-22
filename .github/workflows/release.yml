@@ -34,9 +34,6 @@ permissions:
   contents: write
   actions: write
 
-concurrency:
-  group: isteam-release${{ github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && '-main' || '' }}
-  cancel-in-progress: false
 
 jobs:
   validate-release-channel:
