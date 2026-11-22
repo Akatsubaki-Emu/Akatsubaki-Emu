@@ -125,11 +125,11 @@ final class RuntimeSettings {
         set { defaults.set(newValue.rawValue, forKey: "iSteam.resolution") }
     }
     var customWidth: Int {
-        get { let v = defaults.integer(forKey: "iSteam.customWidth"); return v >= 320 ? v : 1920 }
+        get { let v = defaults.integer(forKey: "iSteam.customWidth"); return v >= 320 ? min(v, 8192) : 1920 }
         set { defaults.set(min(max(newValue, 320), 8192), forKey: "iSteam.customWidth") }
     }
     var customHeight: Int {
-        get { let v = defaults.integer(forKey: "iSteam.customHeight"); return v >= 240 ? v : 1080 }
+        get { let v = defaults.integer(forKey: "iSteam.customHeight"); return v >= 240 ? min(v, 8192) : 1080 }
         set { defaults.set(min(max(newValue, 240), 8192), forKey: "iSteam.customHeight") }
     }
     var customFPS: Int {
