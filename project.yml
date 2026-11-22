@@ -34,7 +34,7 @@ targets:
         INFOPLIST_FILE: iSteam/Info.plist
         CODE_SIGN_ENTITLEMENTS: iSteam/iSteam.entitlements
         SWIFT_OBJC_BRIDGING_HEADER: iSteam/iSteam-Bridging-Header.h
-        OTHER_LDFLAGS: ["$(inherited)", "-ObjC", "-framework", "Metal", "-framework", "MetalKit", "-Wl,-exported_symbol,_iSteamJITIsSupported", "-Wl,-exported_symbol,_iSteamJITIsReady", "-Wl,-exported_symbol,_iSteamJITPrepareRegion", "-Wl,-exported_symbol,_iSteamJITDetach"]
+        OTHER_LDFLAGS: ["$(inherited)", "-ObjC", "-framework", "Metal", "-framework", "MetalKit", "-framework", "Security", "-framework", "Security", "-Wl,-exported_symbol,_iSteamJITIsSupported", "-Wl,-exported_symbol,_iSteamJITIsReady", "-Wl,-exported_symbol,_iSteamJITPrepareRegion", "-Wl,-exported_symbol,_iSteamJITDetach"]
   iSteamNightly:
     type: application
     platform: iOS

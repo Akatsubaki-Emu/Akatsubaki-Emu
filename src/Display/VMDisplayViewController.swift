@@ -18,6 +18,7 @@ final class VMDisplayViewController: UIViewController {
     private var lastMotionStatusUpdate: TimeInterval = 0
     private var lastReportedGuestFrameWidth = 0
     private var lastReportedGuestFrameHeight = 0
+    private var engineStartRequested = false
 
     init(configuration: VMConfiguration, diskImage: URL) {
         self.configuration = configuration
@@ -113,6 +114,24 @@ final class VMDisplayViewController: UIViewController {
                 }
             }
         }
+        #if os(iOS)
+        if #available(iOS 17.4, *), JITCoordinator.shared.isStikDebugAvailable,
+           !JITCoordinator.shared.isJITReady {
+            status.text = "Waiting for JIT • preparing LocalDevVPN and StikDebug"
+            JITCoordinator.shared.requestJIT(from: self) { [weak self] in
+                self?.startEngine()
+            }
+        } else {
+            startEngine()
+        }
+        #else
+        startEngine()
+        #endif
+    }
+
+    private func startEngine() {
+        guard !engineStartRequested else { return }
+        engineStartRequested = true
         status.text = "Starting QEMU • waiting for guest display"
         engine.start(diskImage: diskImage)
         if case .failed(let message) = engine.state {

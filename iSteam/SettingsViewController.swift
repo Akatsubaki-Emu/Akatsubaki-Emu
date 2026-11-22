@@ -87,7 +87,7 @@ final class SettingsViewController: UITableViewController {
                 let method = jitMethods[indexPath.row]
                 c.text = method.rawValue
                 c.secondaryText = method == .stikDebug
-                    ? "Use the installed StikDebug app to request JIT for this process."
+                    ? "Automatically start LocalDevVPN, then request JIT for this process with StikDebug."
                     : "Wait for a compatible debugger to attach."
                 cell.accessoryType = JITCoordinator.shared.selectedMethod == method ? .checkmark : .none
             } else {

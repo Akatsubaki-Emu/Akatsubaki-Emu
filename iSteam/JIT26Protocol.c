@@ -1,6 +1,7 @@
 #include "JIT26Protocol.h"
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
+#include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -20,6 +21,25 @@ void *iSteamJITPrepareRegion(void *address, size_t length) {
                      "brk #0xf00d\n"
                      "ret\n");
 }
+
+bool iSteamJITHasGetTaskAllow(void) {
+    typedef CFTypeRef (*SecTaskCreateFromSelfFunction)(CFAllocatorRef);
+    typedef CFTypeRef (*SecTaskCopyValueForEntitlementFunction)(CFTypeRef, CFStringRef, CFErrorRef *);
+    SecTaskCreateFromSelfFunction createTask =
+        (SecTaskCreateFromSelfFunction)dlsym(RTLD_DEFAULT, "SecTaskCreateFromSelf");
+    SecTaskCopyValueForEntitlementFunction copyEntitlement =
+        (SecTaskCopyValueForEntitlementFunction)dlsym(RTLD_DEFAULT, "SecTaskCopyValueForEntitlement");
+    if (createTask == NULL || copyEntitlement == NULL) return false;
+
+    CFTypeRef task = createTask(kCFAllocatorDefault);
+    if (task == NULL) return false;
+    CFTypeRef value = copyEntitlement(task, CFSTR("get-task-allow"), NULL);
+    bool allowed = value == kCFBooleanTrue;
+    if (value != NULL) CFRelease(value);
+    CFRelease(task);
+    return allowed;
+}
+
 bool iSteamJITIsSupported(void) { return true; }
 
 bool iSteamJITIsReady(void) {
@@ -31,6 +51,7 @@ bool iSteamJITIsReady(void) {
         && (status & UINT32_C(0x10000000)) != 0;
 }
 #else
+bool iSteamJITHasGetTaskAllow(void) { return false; }
 void iSteamJITDetach(void) {}
 void *iSteamJITPrepareRegion(void *address, size_t length) {
     (void)address;
