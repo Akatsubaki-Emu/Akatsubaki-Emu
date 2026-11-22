@@ -150,6 +150,9 @@ required = {
         "guard arg4 == UInt64.max, arg5 == 0",
         "case 9:",
         "case 20:",
+        "case 63:",
+        "writeUname(at: arg0)",
+        "private func writeUname(at address: UInt64)",
         "closedStandardDescriptorMask",
         "isStandardDescriptorClosed(_ descriptor: UInt64) -> Bool",
         "closedStandardDescriptorMask |= bit",
@@ -232,7 +235,7 @@ required = {
         "isteam_guest_memory_allocated_pages(partial) == 0",
     ],
     "scripts/tests/test_linux_syscall_dispatcher.swift": [
-        "Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/identity and reset tests passed",
+        "Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/uname/identity and reset tests passed",
         "dispatcher.dispatch(number: 9999",
         "precondition(hintedAddress == 0x48000)",
         "precondition(fixedAddress == mapped)",
