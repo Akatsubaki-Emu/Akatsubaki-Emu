@@ -56,6 +56,8 @@ swift-runtime-tests:
     - /tmp/test-linux-syscalls
     - swiftc -parse-as-library -swift-version 5 src/Runtime/ExecutionBackendRouter.swift scripts/tests/test_execution_backend_router.swift -o /tmp/test-backend-router
     - /tmp/test-backend-router
+    - swiftc -parse-as-library -swift-version 5 src/Runtime/KenranButoAOT.swift scripts/tests/test_kenran_buto_aot.swift -o /tmp/test-kenran-buto-aot
+    - /tmp/test-kenran-buto-aot
     - swiftc -parse-as-library -swift-version 5 src/GPU/GPUBackend.swift scripts/tests/test_gpu_frame_region.swift -o /tmp/test-gpu-frame-region
     - /tmp/test-gpu-frame-region
     - swiftc -parse-as-library -swift-version 5 src/Display/TouchStickMath.swift scripts/tests/test_touch_stick_math.swift -o /tmp/test-touch-stick
