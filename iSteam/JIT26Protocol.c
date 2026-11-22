@@ -4,8 +4,12 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/sysctl.h>
 #include <sys/types.h>
 #include <sys/sysctl.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 #endif
 
@@ -41,7 +45,51 @@ bool iSteamJITHasGetTaskAllow(void) {
     return allowed;
 }
 
-bool iSteamJITIsSupported(void) { return true; }
+static bool iSteamJITHardwareSupportsTXM(const char *hardwareIdentifier, bool isIOS27OrNewer) {
+    if (hardwareIdentifier == NULL || hardwareIdentifier[0] == '\0') {
+        return false;
+    }
+
+    if (isIOS27OrNewer) {
+        return strcmp(hardwareIdentifier, "iPad8,11") != 0
+            && strcmp(hardwareIdentifier, "iPad8,12") != 0;
+    }
+
+    int major = 0;
+    int minor = 0;
+    if (sscanf(hardwareIdentifier, "iPhone%d,%d", &major, &minor) == 2) {
+        return major > 14 || (major == 14 && minor >= 2);
+    }
+    if (sscanf(hardwareIdentifier, "iPad%d,%d", &major, &minor) == 2) {
+        return major > 14 || (major == 14 && minor >= 5);
+    }
+    return false;
+}
+
+bool iSteamJITIsSupported(void) {
+    struct utsname systemInfo;
+    if (uname(&systemInfo) != 0) {
+        return false;
+    }
+
+    if (__builtin_available(iOS 27.0, *)) {
+        return iSteamJITHardwareSupportsTXM(systemInfo.machine, true);
+    }
+    if (__builtin_available(iOS 26.0, *)) {
+        return iSteamJITHardwareSupportsTXM(systemInfo.machine, false);
+    }
+    return false;
+}
+
+static bool iSteamJITDebuggerIsAttached(void) {
+    int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid() };
+    struct kinfo_proc info;
+    size_t size = sizeof(info);
+    info.kp_proc.p_flag = 0;
+    return sysctl(mib, 4, &info, &size, NULL, 0) == 0
+        && size >= sizeof(info)
+        && (info.kp_proc.p_flag & P_TRACED) != 0;
+}
 
 static bool iSteamJITDebuggerIsAttached(void) {
     int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid() };
@@ -65,6 +113,7 @@ bool iSteamJITIsReady(void) {
     }
 
     if (__builtin_available(iOS 26.0, *)) {
+    if (__builtin_available(iOS 26.0, *) && iSteamJITIsSupported()) {
         return iSteamJITDebuggerIsAttached();
     }
     return true;

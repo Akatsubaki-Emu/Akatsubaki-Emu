@@ -135,19 +135,18 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("Enable JIT for Akatsubaki Emu with StikDebug", source)
 
 
-    def test_launch_setup_waits_for_stikdebug_jit_before_presenting_vm(self):
+    def test_launch_setup_uses_jit_callbacks_before_presenting_vm(self):
         root = Path(__file__).resolve().parents[2]
         launch = (root / "iSteam/LaunchSetupViewController.swift").read_text(encoding="utf-8")
         native = (root / "src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8")
         launch_method = launch.split("@objc private func launchSession()", 1)[1].split("@objc private func chooseGuestImage()", 1)[0]
-        wait_method = launch.split("private func waitForJIT(until deadline: Date)", 1)[1].split("private func completeLaunch", 1)[0]
         complete_method = launch.split("private func completeLaunch", 1)[1].split("@objc private func chooseGuestImage()", 1)[0]
         self.assertIn("guard !launchInProgress", launch_method)
-        self.assertIn("JITCoordinator.shared.requestJIT(from: self)", launch_method)
-        self.assertIn("waitForJIT(until:", launch_method)
-        self.assertLess(launch_method.index("JITCoordinator.shared.requestJIT"), launch_method.index("waitForJIT(until:"))
-        self.assertIn("JITCoordinator.shared.isJITReady", wait_method)
-        self.assertIn("addingTimeInterval(180)", launch_method)
+        self.assertIn("JITCoordinator.shared.requestJIT(from: self, onFailure:", launch_method)
+        self.assertIn("self?.completeLaunch(configuration: config, diskURL: diskURL)", launch_method)
+        self.assertLess(launch_method.index("JITCoordinator.shared.requestJIT"), launch_method.index("completeLaunch"))
+        self.assertIn("self.launchInProgress = false", launch_method)
+        self.assertNotIn("waitForJIT", launch)
         self.assertIn("VMDisplayViewController(configuration: configuration", complete_method)
         self.assertIn("!JITCoordinator.shared.isJITReady", native)
 

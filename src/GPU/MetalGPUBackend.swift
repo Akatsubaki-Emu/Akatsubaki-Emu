@@ -99,7 +99,8 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         }
     }
 
-    func submit(frame: Data, width frameWidth: Int, height frameHeight: Int) {
+    func submit(frame: Data, width frameWidth: Int, height frameHeight: Int,
+                dirtyRegion: GPUFrameRegion?) {
         guard frameWidth > 0, frameHeight > 0,
               frameWidth <= 8192, frameHeight <= 8192,
               frameWidth <= maxFramebufferBytes / frameHeight / 4,
@@ -108,6 +109,19 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         else {
             EmulationLog.shared.write("Metal framebuffer ignored: invalid dimensions or byte count")
             return
+        }
+
+        let fullRegion = GPUFrameRegion(x: 0, y: 0, width: frameWidth, height: frameHeight)
+        let requestedRegion: GPUFrameRegion
+        if let dirtyRegion,
+           dirtyRegion.x >= 0, dirtyRegion.y >= 0,
+           dirtyRegion.width > 0, dirtyRegion.height > 0,
+           dirtyRegion.width <= frameWidth, dirtyRegion.height <= frameHeight,
+           dirtyRegion.x <= frameWidth - dirtyRegion.width,
+           dirtyRegion.y <= frameHeight - dirtyRegion.height {
+            requestedRegion = dirtyRegion
+        } else {
+            requestedRegion = fullRegion
         }
 
         textureLock.lock()
@@ -124,14 +138,20 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         let frameByteCount = frameWidth * frameHeight * 4
         let slotLimit = max(2, min(maxFramebufferSlots, maxFramebufferPoolBytes / frameByteCount))
         let slot: FramebufferSlot
-        if let reusable = framebufferSlots.first(where: {
+        let updatesPublishedSlot: Bool
+        if let current = framebuffer, current.readers == 0, !current.isUploading {
+            slot = current
+            updatesPublishedSlot = true
+        } else if let reusable = framebufferSlots.first(where: {
             $0 !== framebuffer && $0.readers == 0 && !$0.isUploading
         }) {
             slot = reusable
+            updatesPublishedSlot = false
         } else if framebufferSlots.count < slotLimit,
                   let texture = makeTexture(device: device, width: frameWidth, height: frameHeight) {
             slot = FramebufferSlot(texture: texture)
             framebufferSlots.append(slot)
+            updatesPublishedSlot = false
         } else {
             textureLock.unlock()
             return
@@ -142,10 +162,19 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         let generation = framebufferGeneration
         textureLock.unlock()
 
+        // Spare slots can contain older frames; only the published slot may
+        // receive a partial upload. All other slots are synchronised in full.
+        let uploadRegion = updatesPublishedSlot ? requestedRegion : fullRegion
         frame.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
-            slot.texture.replace(region: MTLRegionMake2D(0, 0, frameWidth, frameHeight),
-                                 mipmapLevel: 0, withBytes: base, bytesPerRow: frameWidth * 4)
+            let byteOffset = uploadRegion.y * frameWidth * 4 + uploadRegion.x * 4
+            slot.texture.replace(
+                region: MTLRegionMake2D(uploadRegion.x, uploadRegion.y,
+                                        uploadRegion.width, uploadRegion.height),
+                mipmapLevel: 0,
+                withBytes: base.advanced(by: byteOffset),
+                bytesPerRow: frameWidth * 4
+            )
         }
 
         textureLock.lock()
@@ -191,9 +220,16 @@ extension MetalGPUBackend: MTKViewDelegate {
               let pass = view.currentRenderPassDescriptor else { return }
 
         textureLock.lock()
-        let source = framebuffer
-        source?.readers += 1
+        let source: FramebufferSlot?
+        let isUploading = framebuffer?.isUploading ?? false
+        if let current = framebuffer, !isUploading {
+            current.readers += 1
+            source = current
+        } else {
+            source = nil
+        }
         textureLock.unlock()
+        if isUploading { return }
 
         if let source {
             guard let blit = commandBuffer.makeBlitCommandEncoder() else {

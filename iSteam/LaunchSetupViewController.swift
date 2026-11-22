@@ -14,8 +14,6 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
     private var selectedDiskURL: URL?
     private var loadedConfiguration: VMConfiguration?
     private var launchInProgress = false
-    private var pendingLaunchConfiguration: VMConfiguration?
-    private var pendingLaunchDiskURL: URL?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -250,42 +248,22 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         }
         if JITCoordinator.shared.isStikDebugAvailable && !JITCoordinator.shared.isJITReady {
             launchInProgress = true
-            pendingLaunchConfiguration = config
-            pendingLaunchDiskURL = diskURL
-            statusLabel.text = "Waiting for StikDebug to enable JIT. Return to Akatsubaki Emu after attaching; the VM will start automatically."
-            JITCoordinator.shared.requestJIT(from: self)
-            waitForJIT(until: Date().addingTimeInterval(180))
+            statusLabel.text = "Akatsubaki is starting LocalDevVPN and StikDebug. Return here after the JIT handoff; the VM will start automatically."
+            JITCoordinator.shared.requestJIT(from: self, onFailure: { [weak self] message in
+                guard let self else { return }
+                self.launchInProgress = false
+                self.statusLabel.text = "JIT failed • \(message)"
+            }) { [weak self] in
+                self?.completeLaunch(configuration: config, diskURL: diskURL)
+            }
             return
         }
         completeLaunch(configuration: config, diskURL: diskURL)
     }
 
 
-    private func waitForJIT(until deadline: Date) {
-        guard launchInProgress,
-              let configuration = pendingLaunchConfiguration,
-              let diskURL = pendingLaunchDiskURL else { return }
-
-        if JITCoordinator.shared.isJITReady {
-            completeLaunch(configuration: configuration, diskURL: diskURL)
-            return
-        }
-        guard Date() < deadline else {
-            launchInProgress = false
-            pendingLaunchConfiguration = nil
-            pendingLaunchDiskURL = nil
-            statusLabel.text = "JIT was not enabled. The VM was not started. Enable JIT in StikDebug and tap Launch again."
-            return
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.waitForJIT(until: deadline)
-        }
-    }
-
     private func completeLaunch(configuration: VMConfiguration, diskURL: URL) {
         launchInProgress = false
-        pendingLaunchConfiguration = nil
-        pendingLaunchDiskURL = nil
         if persistSwitch.isOn {
             do {
                 try VMSaveSlotStore.shared.saveSessionMetadata(configuration: configuration, diskImageURL: diskURL)

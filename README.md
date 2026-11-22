@@ -97,22 +97,7 @@ The project currently declares iOS 16, tvOS 17, and visionOS 1.0 deployment targ
 
 ## Automatic JIT activation
 
-On supported physical iOS devices running iOS 17.4 or later, launching a QEMU VM now requests JIT before starting the emulation engine:
-
-1. Akatsubaki checks the running process for the `get-task-allow` signing entitlement.
-2. It opens [LocalDevVPN](https://github.com/jkcoxson/LocalDevVPN) using its `localdevvpn://enable` URL and returns through a bundle-specific callback. LocalDevVPN's callback confirms that its tunnel-start request was submitted; it does not prove that the VPN is connected.
-3. Akatsubaki opens [StikDebug](https://github.com/StikDebug/StikDebug) for its own bundle identifier and process ID. On iOS 26 and later it also requests the `universal.js` breakpoint protocol used by the existing QEMU executable-region callbacks.
-4. QEMU starts only after the process JIT/debugger state is confirmed. If acquisition fails, the VM is not started.
-
-### First-time setup
-
-- Install StikDebug and LocalDevVPN separately.
-- Open LocalDevVPN once and approve its VPN configuration.
-- Import the device pairing file into StikDebug and enable iOS Developer Mode.
-- Use a signing method that preserves `get-task-allow`; Akatsubaki checks the entitlement at runtime.
-- When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
-
-This is a sideload/developer workflow, not an App Store-safe feature: entitlement inspection uses Security task SPI. The LocalDevVPN callback is only a start-request handoff; if JIT is not confirmed, check that the VPN is actually connected and that StikDebug pairing/signing are valid. Simulators and Mac Catalyst are excluded. The iOS 26 breakpoint path still requires physical-device validation.
+Akatsubaki can orchestrate JIT acquisition for its QEMU VM on supported physical iOS devices through LocalDevVPN and StikDebug. This sideload/developer workflow requires a valid `get-task-allow` entitlement. See [Automatic JIT activation](docs/JIT_ACTIVATION.md) for setup, lifecycle, failure handling and validation.
 
 ## Building
 
@@ -160,6 +145,7 @@ Bug reports, documentation improvements, and focused pull requests are welcome. 
 - [QEMU runtime build and failure diagnostics](docs/QEMU_BUILD_WORKFLOW.md)
 - [DroidDeck feature-port plan](docs/DROIDDECK_PORT_PLAN.md)
 - [DroidDeck port status](docs/DROIDDECK_PORT_STATUS.md)
+- [iOS memory entitlements](docs/IOS_ENTITLEMENTS.md)
 - Portable library transfer, per-game profile defaults, and feature readiness services: `src/Steam/DroidDeckFeatureServices.swift`
 - Artwork cache: `src/Steam/GameArtworkStore.swift`
 - Compatibility records: `src/Windows/GameCompatibilityDatabase.swift`
