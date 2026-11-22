@@ -27,10 +27,10 @@ enum VMAccelerationBackend: String, CaseIterable {
     case hypervisor = "Hypervisor.framework"
     var detail: String {
         switch self {
-        case .automatic: return "Prefers QEMU TCG + JIT when available and falls back to the TCI interpreter"
+        case .automatic: return "Prefers QEMU TCG + JIT when available and falls back to TCI only when its separate runtime artifact is packaged"
         case .qemuJIT: return "TCG with a 128 MiB translation-block cache and split-WX enabled"
         case .qemuInterpreter: return "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG"
-        case .hypervisor: return "Unavailable on standard iOS; stored selections fall back to QEMU TCI (no JIT)"
+        case .hypervisor: return "Unavailable on standard iOS; stored selections map to QEMU TCI (no JIT), which requires its separate runtime artifact"
         }
     }
     static var hypervisorAvailable: Bool { false }
