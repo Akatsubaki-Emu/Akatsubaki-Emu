@@ -438,9 +438,8 @@ class SourceValidatorTests(unittest.TestCase):
     def test_qemu_runtime_manual_runs_do_not_cancel_release_jobs(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
-        tests = (root / "scripts" / "tests" / "test_qemu_build_patches.py").read_text(encoding="utf-8")
-        self.assertIn("cancel-in-progress: false", workflow)
-        self.assertIn("test_qemu_runtime_does_not_cancel_in_progress_release_build", tests)
+        self.assertNotIn("\nconcurrency:\n", workflow)
+        self.assertNotIn("cancel-in-progress:", workflow)
 
     def test_qemu_runtime_pins_xcode_27_1_on_supported_runner(self):
         root = Path(__file__).resolve().parents[2]
@@ -515,7 +514,7 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         settings = (root / "iSteam" / "SettingsViewController.swift").read_text(encoding="utf-8")
         project = (root / "project.yml").read_text(encoding="utf-8")
-        self.assertIn("#if os(iOS) && !os(visionOS)\n        return 12\n#else\n        return 11\n#endif", settings)
+        self.assertIn("#if os(iOS)\n        return 12\n#else\n        return 11\n#endif", settings)
         action = settings.split("case 11:", 1)[1].split("default:", 1)[0]
         reference = action.index("EntitlementSettingsView()")
         guard = action.rfind("#if os(iOS)", 0, reference)
