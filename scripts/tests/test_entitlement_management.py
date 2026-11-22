@@ -84,6 +84,12 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("Reinstall this app through SideStore or AltStore", self.view)
         self.assertIn("cannot update its own code signature", self.view)
 
+    def test_sign_out_clears_the_shared_authenticated_session(self):
+        self.assertIn("func signOut()", self.view)
+        self.assertIn("session = nil", self.view)
+        self.assertIn("accountEmail = nil", self.view)
+        self.assertIn('status = "Signed out."', self.view)
+
     def test_no_password_is_persisted(self):
         self.assertNotIn("UserDefaults.standard.set(password", self.view)
         self.assertNotIn("appleIDPassword", self.view)

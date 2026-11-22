@@ -187,6 +187,19 @@ final class EntitlementViewModel: ObservableObject {
         }
     }
 
+    func signOut() {
+        session = nil
+        accountEmail = nil
+        appleID = ""
+        availableTeams = []
+        selectedTeam = nil
+        verificationCodeHandler = nil
+        needsVerificationCode = false
+        password = ""
+        verificationCode = ""
+        status = "Signed out."
+    }
+
     private func fetchExistingCapabilities(
         for appID: AppID,
         session: AppleAPISession
