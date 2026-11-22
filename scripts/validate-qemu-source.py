@@ -1273,6 +1273,20 @@ else:
         print("release workflow: must not silently publish IPA without QEMU", file=sys.stderr)
         failed = True
 
+
+# ENDBR64 support must remain exact: F3 0F 1E FA only, with malformed,
+# truncated, unprefixed and unrelated F3-prefixed forms covered by regressions.
+x86_interpreter_source = Path("src/Runtime/X86_64Interpreter.swift").read_text(encoding="utf-8")
+x86_interpreter_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
+for token in ("var endbrPrefix = false", "second == 0x1E", "modrm == 0xFA"):
+    if token not in x86_interpreter_source:
+        print(f"x86-64 interpreter: missing ENDBR64 decoder contract {token!r}", file=sys.stderr)
+        failed = True
+for token in ("endbr64Memory", "malformedEndbr64Memory", "truncatedEndbr64Memory", "unprefixedEndbr64Memory", "invalidF3Memory"):
+    if token not in x86_interpreter_tests:
+        print(f"x86-64 interpreter tests: missing ENDBR64 prefix regression {token!r}", file=sys.stderr)
+        failed = True
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")
