@@ -863,6 +863,11 @@ required = {
         "GameRuntimeProfileStore.shared.removeProfile(for: id)",
     ],
     "src/Steam/GameLibraryQuery.swift": [
+        "if limit == 0 || source.isEmpty { return [] }",
+        "let orderedBefore: (GameEntry, GameEntry) -> Bool",
+        "if limit == 1",
+        "result.min(by: orderedBefore)",
+        "result.sort(by: orderedBefore)",
         "for game in games",
         "for rawTag in game.tags",
         "let key = tag.folding(options: .caseInsensitive, locale: .current)",
