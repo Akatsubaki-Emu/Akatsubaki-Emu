@@ -102,6 +102,29 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn('dlsym(library, "isteam_qemu_set_jit_callbacks")', bridge)
         self.assertNotIn("duplicate_string", bridge)
 
+    def test_runtime_validator_has_one_complete_tool_and_export_scan(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "scripts" / "validate-qemu-runtime.sh").read_text(encoding="utf-8")
+        self.assertEqual(source.count("for tool in file lipo nm codesign vtool; do"), 1)
+        self.assertEqual(
+            source.count("for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request isteam_qemu_set_jit_callbacks; do"),
+            1,
+        )
+        self.assertEqual(source.count("codesign --verify --strict"), 1)
+        self.assertNotIn("optional graceful-shutdown export", source)
+        self.assertNotIn("for tool in file lipo nm codesign; do", source)
+
+    def test_native_runtime_probes_loadability_before_start(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        self.assertIn("switch QEMURuntimeStatus.inspect()", source)
+        self.assertNotIn("switch QEMURuntimeStatus.locate()", source)
+
+    def test_repository_validation_checks_runtime_validator_shell_syntax(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "validate-repository.yml").read_text(encoding="utf-8")
+        self.assertIn("bash -n scripts/validate-qemu-runtime.sh", workflow)
+
     def test_qemu_ios_platform_guard_rejects_simulator_platforms(self):
         pattern = "platform[[:space:]]+IOS([[:space:]]|$)"
         device = subprocess.run(

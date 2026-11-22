@@ -517,7 +517,7 @@ required = {
         "backend = candidate",
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
-        "QEMURuntimeStatus.locate()",
+        "switch QEMURuntimeStatus.inspect()",
         "isteam_qemu_start",
         "isteam_qemu_request_stop",
         "findUEFIFirmwarePair(in directory: URL)",
@@ -569,10 +569,15 @@ required = {
         "dynamically linked shared library",
     ],
     "scripts/validate-qemu-runtime.sh": [
+        "for tool in file lipo nm codesign vtool; do",
         "for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request isteam_qemu_set_jit_callbacks; do",
+        "codesign --verify --strict",
         "vtool -show-build",
         "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
+    ],
+    ".github/workflows/validate-repository.yml": [
+        "bash -n scripts/validate-qemu-runtime.sh",
     ],
     "src/QEMU/QEMURuntimeStatus.swift": [
         "bundleRoot = bundle.bundleURL.resolvingSymlinksInPath()",

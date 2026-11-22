@@ -86,6 +86,14 @@ jobs:
               print(f"Validated {path}")
           PY
 
+      - name: Check packaging script shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/package-utm-qemu-runtime.sh
+          bash -n scripts/validate-qemu-runtime.sh
+          bash -n scripts/validate-apple-package.sh
+
       - name: Validate GitHub Actions and GitLab CI while preserving sync directions
         shell: bash
         run: |
