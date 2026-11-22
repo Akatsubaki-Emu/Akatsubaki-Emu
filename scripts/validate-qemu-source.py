@@ -290,6 +290,7 @@ required = {
         "if type == 2",
         "type == 3 || type == 7",
         "applyStaticPIERelocations",
+        "let relaFileOffset = self.fileOffset(",
         "relocationType == 8",
         "relaEntrySize == 24",
         "alignment & (alignment - 1) == 0",
@@ -545,7 +546,7 @@ required = {
         "Self.escapeDriveValue(diskImage.path)",
         "replacingOccurrences(of: \",\", with: \",,\")",
         "tcg,tb-size=128,split-wx=on",
-        "tcg,tb-size=64,split-wx=on",
+        "configuration.accelerator == .jit ? \"tcg,tb-size=128,split-wx=on\" : \"tcg\"",
     ],
     "src/Core/VMEngine.swift": [
         "var onStateChange: ((State) -> Void)?",
@@ -555,7 +556,8 @@ required = {
         "backend = candidate",
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
-        "switch QEMURuntimeStatus.inspect()",
+        "let requiresJIT = configuration.accelerator == .jit",
+        "switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)",
         "isteam_qemu_start",
         "isteam_qemu_request_stop",
         "findUEFIFirmwarePair(in directory: URL)",
@@ -609,6 +611,9 @@ required = {
         "error_buffer && error_capacity > 0",
     ],
     "scripts/tests/fake_qemu_runtime.c": [
+        "#ifndef FAKE_QEMU_NO_JIT_CALLBACK",
+        "void isteam_qemu_set_jit_callbacks",
+        "fake_qemu_jit_callbacks_installed",
         "void qemu_init(int argc, char *argv[])",
         "poison_nonzero_return_register();",
         "int qemu_main_loop(void)",
@@ -620,6 +625,9 @@ required = {
     "scripts/package-utm-qemu-runtime.sh": [
         " _?isteam_qemu_set_jit_callbacks$",
         "isteam_qemu_set_jit_callbacks",
+        '{ [ "$MODE" = "tci" ] && [ "$has_jit_callbacks" = false ]; }; then',
+        "MODE_DIRECTORY",
+        "QEMU-TCI.framework",
         "vtool -show-build",
         "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
@@ -628,16 +636,40 @@ required = {
         'target_dir="$OUT/QEMU/firmware/$relative_dir"',
         'cp "$firmware_file" "$target_dir/"',
     ],
+    "scripts/package-utm-qemu-tci-runtime.sh": [
+        "has_jit_callbacks=false",
+        "QEMU-TCI.framework",
+        'bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci',
+        "StikJIT callback export: absent by design",
+        "runtime-library-path.txt",
+        'printf \'%s\\n\' "$exports" | grep -E',
+        '> "$OUT/exports.txt"',
+    ],
+        "scripts/merge-qemu-runtime-variants.sh": [
+        'build/*) OUT_NAME="${OUT_REQUEST#build/}"',
+        "safe_relative_path() {",
+        'cmp -s "$entry" "$target"',
+        "different JIT/TCI dependency bytes",
+        'mkdir -p "$TEMP_OUT/Frameworks" "$TEMP_OUT/QEMU/JIT" "$TEMP_OUT/QEMU/TCI"',
+        'tci_library_merged="Frameworks/TCI/$tci_framework_relative"',
+        'cp -a "$JIT_DIR/QEMU/." "$TEMP_OUT/QEMU/JIT/"',
+        'cp -a "$TCI_DIR/QEMU/." "$TEMP_OUT/QEMU/TCI/"',
+    ],
     "scripts/validate-qemu-runtime.sh": [
         "for tool in file lipo nm codesign vtool; do",
-        "for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request isteam_qemu_set_jit_callbacks; do",
+        "required_symbols=(qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request)",
+        'if [[ "$mode" == "jit" ]]; then',
+        'if [[ "$mode" == "tci" ]] && grep -Eq',
+        "TCI runtime must not export the StikDebug JIT callback.",
+        "required_symbols+=(isteam_qemu_set_jit_callbacks)",
+        'for symbol in "${required_symbols[@]}"; do',
         "codesign --verify --strict",
         "vtool -show-build",
         "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
     ],
     "runtime/qemu/README.md": [
-        "QEMURuntimeStatus.inspect()",
+        "QEMURuntimeStatus.inspect(requiresJIT:)",
         "qemu_system_shutdown_request",
         "isteam_qemu_set_jit_callbacks",
         "physical iOS 17.4",
@@ -651,7 +683,10 @@ required = {
         "bundlePrefix",
         "resolvingSymlinksInPath()",
         "isteam_qemu_validate_library(",
-        "validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory)",
+        "validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory,",
+        "requiresJIT: requiresJIT",
+        "QEMU-TCI.framework/QEMU",
+        "The no-JIT QEMU TCI runtime is not packaged.",
         "The bundled QEMU library failed its load/export validation.",
     ],
     "src/Runtime/RuntimeCapabilityRegistry.swift": [
@@ -706,10 +741,10 @@ required = {
     ],
     "src/Core/RuntimeSettings.swift": [
         "?? .linuxVM",
-        "Uses the configured QEMU TCG translation profile",
         "TCG with a 128 MiB translation-block cache and split-WX enabled",
-        "TCG with a 64 MiB split-WX translation buffer; still requires JIT executable memory",
-        "stored selections fall back to QEMU TCG",
+        "case qemuInterpreter = \"QEMU TCI (no JIT)\"",
+        "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG",
+        "stored selections fall back to QEMU TCI (no JIT)",
     ],
     "src/Core/VMConfiguration.swift": [
         "static var defaultAccelerator: Accelerator",
@@ -755,7 +790,7 @@ required = {
         "void qemu_init(int argc, char *argv[])",
         "poison_nonzero_return_register();",
         "self.assertIn(\"malloc(total_argument_bytes)\", start)",
-        "def test_jit_callback_export_is_required_during_validation_and_start(self):",
+        "def test_jit_callback_export_is_required_only_for_jit_runtime(self):",
         "typedef void (*qemu_set_jit_callbacks_fn)",
         "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
     ],
@@ -1005,6 +1040,14 @@ required = {
     ],
     ".github/workflows/validate-ios-build.yml": [
         "src/Runtime/LinuxSyscallDispatcher.swift",
+        "      - src/**",
+        "      - iSteam/**",
+        "      - project.yml",
+        "      - scripts/tests/**",
+        "build-ios-device:",
+        "-sdk iphoneos",
+        "-destination 'generic/platform=iOS'",
+        "CODE_SIGNING_ALLOWED=NO",
         "Test VNC key-state source arbitration",
         "scripts/tests/test_vnc_key_state.swift",
         "runs-on: macos-26",
@@ -1030,6 +1073,7 @@ required = {
         "__attribute__((visibility(\"default\")))",
         "isteam_jit_prepare_callback",
         "#if TARGET_OS_IPHONE",
+        "#elif TARGET_OS_IOS",
         "#include <mach/mach_init.h>",
         "#include <mach/vm_map.h>",
         "#define mach_vm_address_t vm_address_t",
@@ -1056,6 +1100,7 @@ required = {
         "-Wl,-exported_symbol,_iSteamJITGetProtocolMode",
     ],
     "scripts/patch_utm_qemu_ios.py": [
+        'if [ "$PLATFORM" != "ios-tci" ]; then',
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
@@ -1148,6 +1193,8 @@ required = {
         "def test_console_uses_the_runtime_router_instead_of_direct_box64(self):",
         "def test_imported_games_are_reachable_from_the_ios_library(self):",
         "def test_qemu_ios_platform_guard_rejects_simulator_platforms(self):",
+        "def test_static_pie_relocation_uses_loader_method_not_shadowed_parameter(self):",
+        "def test_platform_validation_compiles_physical_ios_arm64(self):",
     ],
 }
 failed = False
@@ -1169,7 +1216,7 @@ if r"\n" in builder:
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
 repository_validation = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
-if "utm-ios-arm64-deps-v14-" not in repository_validation or "utm-ios-arm64-deps-v13-" in repository_validation:
+if "utm-ios-arm64-deps-v15-" not in repository_validation or "utm-ios-arm64-deps-v14-" in repository_validation:
     print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
     failed = True
 for step in (
@@ -1183,7 +1230,9 @@ for step in (
     "Install UTM build dependencies",
     "Cache UTM dependency build and sysroot",
     "Build UTM dependencies for physical iOS arm64",
+    "Build UTM TCI dependencies for physical iOS arm64",
     "Build UTM iOS archive",
+    "Build UTM iOS TCI archive",
     "Package and verify in-process QEMU runtime",
     "Upload verified QEMU runtime artifact",
 ):
@@ -1191,6 +1240,20 @@ for step in (
     if qemu_workflow.count(marker) != 1:
         print(f"QEMU workflow: expected exactly one {marker!r} step", file=sys.stderr)
         failed = True
+for token in (
+    "UTM/build-iOS-TCI-arm64",
+    "UTM/sysroot-iOS-TCI-arm64",
+    "./scripts/build_dependencies.sh -p ios-tci -a arm64",
+    "./scripts/build_utm.sh -k iphoneos -s iOS-TCI -a arm64 -o UTMBuildTCI",
+    "test -s build/qemu-runtime/QEMU/JIT/runtime-library-path.txt",
+    "test -s build/qemu-runtime/QEMU/TCI/runtime-library-path.txt",
+    "bash scripts/package-utm-qemu-tci-runtime.sh UTM/UTMBuildTCI.xcarchive build/qemu-runtime-tci",
+    "bash scripts/merge-qemu-runtime-variants.sh build/qemu-runtime-jit build/qemu-runtime-tci build/qemu-runtime",
+):
+    if token not in qemu_workflow:
+        print(f"QEMU workflow: TCI build/package contract is missing {token!r}", file=sys.stderr)
+        failed = True
+
 if 'SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"' not in qemu_workflow:
     print("QEMU workflow: Objective-C symbol inspection command is missing", file=sys.stderr)
     failed = True
@@ -1214,7 +1277,7 @@ for token in [
     "-fno-objc-msgsend-class-selector-stubs",
     "export OBJCFLAGS=",
     "grep -Fq",
-    "utm-ios-arm64-deps-v14-",
+    "utm-ios-arm64-deps-v15-",
     "spirv-tools",
     "spirv-llvm-translator",
     "steps.xcode.outputs.version",
@@ -1305,19 +1368,51 @@ if ios_package_start < 0 or ios_package_end < 0:
 else:
     ios_package = release_workflow[ios_package_start:ios_package_end]
     for token in [
-        'test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt"',
-        'test -s "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_init$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_main_loop$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_cleanup$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_system_shutdown_request$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?isteam_qemu_set_jit_callbacks$\' "$RUNTIME_DIR/exports.txt"',
+        'test -s "$RUNTIME_DIR/QEMU/JIT/runtime-library-path.txt"',
+        'test -s "$RUNTIME_DIR/QEMU/JIT/exports.txt"',
+        'grep -Eq \' _?qemu_init$\' "$RUNTIME_DIR/QEMU/JIT/exports.txt"',
+        'grep -Eq \' _?qemu_main_loop$\' "$RUNTIME_DIR/QEMU/JIT/exports.txt"',
+        'grep -Eq \' _?qemu_cleanup$\' "$RUNTIME_DIR/QEMU/JIT/exports.txt"',
+        'grep -Eq \' _?qemu_system_shutdown_request$\' "$RUNTIME_DIR/QEMU/JIT/exports.txt"',
+        'grep -Eq \' _?isteam_qemu_set_jit_callbacks$\' "$RUNTIME_DIR/QEMU/JIT/exports.txt"',
+        'TCI_RUNTIME_DIR="$RUNTIME_DIR/QEMU/TCI"',
+        'test -s "$TCI_RUNTIME_DIR/runtime-library-path.txt"',
+        'test -s "$TCI_RUNTIME_DIR/exports.txt"',
+        '"TCI runtime unexpectedly exports the StikDebug JIT callback."',
+        'TCI_RUNTIME_REL="$(head -n 1 "$TCI_RUNTIME_DIR/runtime-library-path.txt")"',
+        'test -s "$RUNTIME_DIR/$TCI_RUNTIME_REL"',
+        'test -s "$APP/QEMU/TCI/runtime-library-path.txt"',
+        'test -s "$APP/$TCI_RUNTIME_REL"',
+        'test -s "$APP/QEMU/TCI/exports.txt"',
     ]:
         if token not in ios_package:
             print(f"release workflow: runtime packaging guard missing: {token}", file=sys.stderr)
             failed = True
     if "No verified QEMU runtime artifact is available" in ios_package:
         print("release workflow: must not silently publish IPA without QEMU", file=sys.stderr)
+        failed = True
+
+
+# The no-JIT bridge test must use a fake library that truly lacks the JIT callback.
+fake_qemu_runtime = Path("scripts/tests/fake_qemu_runtime.c").read_text(encoding="utf-8")
+native_bridge_test = Path("scripts/tests/test_qemu_native_bridge.c").read_text(encoding="utf-8")
+validation_workflow = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
+for token in (
+    "-DFAKE_QEMU_NO_JIT_CALLBACK",
+    'test-qemu-native-bridge" jit',
+    'test-qemu-native-bridge" tci',
+    "libfakeqemu-jit.so",
+    "libfakeqemu-tci.so",
+):
+    if token not in validation_workflow:
+        print(f"repository validation workflow: missing JIT/TCI bridge test {token!r}", file=sys.stderr)
+        failed = True
+if "#ifndef FAKE_QEMU_NO_JIT_CALLBACK" not in fake_qemu_runtime:
+    print("fake QEMU runtime: no-JIT fixture does not omit the callback export", file=sys.stderr)
+    failed = True
+for token in ('assert(argc == 3);', 'strcmp(argv[1], "jit")', 'strcmp(argv[1], "tci")'):
+    if token not in native_bridge_test:
+        print(f"native QEMU bridge test: missing mode selection {token!r}", file=sys.stderr)
         failed = True
 
 
