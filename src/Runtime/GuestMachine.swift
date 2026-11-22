@@ -188,7 +188,6 @@ final class GuestMachine {
                 guard configuration.architecture == .x86_64 else {
                     throw GuestEngineError.backendNotInstalled(configuration.architecture)
                 }
-                memory.clear()
                 try cpu.reset(entryPoint: 0)
                 let image = try ELF64Loader().load(url, into: memory,
                                                    expectedArchitecture: configuration.architecture)
