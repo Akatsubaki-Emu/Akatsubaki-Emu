@@ -63,7 +63,7 @@ The source includes separate entries for iOS Main, iOS Nightly, tvOS Main, and t
 - Research into app-container and binary-execution approaches used by projects such as LiveContainer.
 - Native DroidDeck-inspired library backup/restore, per-game profile defaults, artwork caching, local compatibility records, and runtime component integrity verification.
 
-These are works in progress. Importing a file or inspecting its metadata does not execute it, and a storage prototype is not a complete virtual storage controller. JIT behavior depends on iOS version, device, signing, entitlements, and supported tooling; Akatsubaki Emu does not enable JIT for every app.
+These are works in progress. Importing a file or inspecting its metadata does not execute it, and a storage prototype is not a complete virtual storage controller. JIT behavior depends on iOS version, device, signing, entitlements, and supported tooling. Akatsubaki Emu requests JIT only for its QEMU VM process through the LocalDevVPN/StikDebug flow; it does not enable JIT for unrelated apps.
 
 ### tvOS app
 
@@ -94,6 +94,25 @@ The project currently declares iOS 16, tvOS 17, and visionOS 1.0 deployment targ
 - **AltStore source:** add `https://akatsubaki-emu.github.io/AltSource.json` in a compatible app.
 - **Troubleshooting:** include your device/OS version and the relevant build or crash log when reporting an issue.
 - **File access:** iOS file-picker access and persistent bookmark access are different; a selected file may not remain accessible if its security-scoped bookmark cannot be created or reopened.
+
+## Automatic JIT activation
+
+On supported physical iOS devices running iOS 17.4 or later, launching a QEMU VM now requests JIT before starting the emulation engine:
+
+1. Akatsubaki checks the running process for the `get-task-allow` signing entitlement.
+2. It opens [LocalDevVPN](https://github.com/jkcoxson/LocalDevVPN) using its `localdevvpn://enable` URL and returns through a bundle-specific callback. LocalDevVPN's callback confirms that its tunnel-start request was submitted; it does not prove that the VPN is connected.
+3. Akatsubaki opens [StikDebug](https://github.com/StikDebug/StikDebug) for its own bundle identifier and process ID. On iOS 26 and later it also requests the `universal.js` breakpoint protocol used by the existing QEMU executable-region callbacks.
+4. QEMU starts only after the process JIT/debugger state is confirmed. If acquisition fails, the VM is not started.
+
+### First-time setup
+
+- Install StikDebug and LocalDevVPN separately.
+- Open LocalDevVPN once and approve its VPN configuration.
+- Import the device pairing file into StikDebug and enable iOS Developer Mode.
+- Use a signing method that preserves `get-task-allow`; Akatsubaki checks the entitlement at runtime.
+- When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
+
+This is a sideload/developer workflow, not an App Store-safe feature: entitlement inspection uses Security task SPI. The LocalDevVPN callback is only a start-request handoff; if JIT is not confirmed, check that the VPN is actually connected and that StikDebug pairing/signing are valid. Simulators and Mac Catalyst are excluded. The iOS 26 breakpoint path still requires physical-device validation.
 
 ## Building
 
