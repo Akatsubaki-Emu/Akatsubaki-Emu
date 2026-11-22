@@ -433,16 +433,23 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("id: freshness", release_job)
         self.assertIn('publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"', release_job)
         self.assertIn('echo "publish=$publish_current" >> "$GITHUB_OUTPUT"', release_job)
+        self.assertIn("id: final-freshness", release_job)
+        self.assertIn('publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"', release_job)
         for name in (
             "Download iOS build",
             "Download tvOS build",
             "Download visionOS build",
             "Verify combined release assets",
-            "Set release metadata",
-            "Publish combined release",
         ):
             step = release_job.split("- name: " + name, 1)[1].split("\n      - name:", 1)[0]
             self.assertIn("if: steps.freshness.outputs.publish == 'true'", step)
+        for name in (
+            "Set release metadata",
+            "Publish combined release",
+            "Update rolling channel tag",
+        ):
+            step = release_job.split("- name: " + name, 1)[1].split("\n      - name:", 1)[0]
+            self.assertIn("if: steps.final-freshness.outputs.publish == 'true'", step)
 
 
     def test_release_tag_is_created_from_the_workflow_commit(self):
