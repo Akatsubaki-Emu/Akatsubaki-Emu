@@ -174,10 +174,36 @@ final class QEMUNativeRuntime {
             ("edk2-x86_64-code.fd", "edk2-x86_64-vars.fd"),
             ("edk2-x86_64-code.secboot.fd", "edk2-x86_64-vars.fd"),
         ]
+        let requiredNames = Set(pairs.flatMap { [$0.0, $0.1] })
+        let root = directory.resolvingSymlinksInPath().standardizedFileURL
+        let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+
+        var candidatesByDirectory: [String: [String: URL]] = [:]
+        for case let url as URL in enumerator where requiredNames.contains(url.lastPathComponent) {
+            let resolved = url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+            let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey])
+            guard resolved.path.hasPrefix(prefix), values?.isRegularFile == true else { continue }
+            let parent = resolved.deletingLastPathComponent().path
+            candidatesByDirectory[parent, default: [:]][resolved.lastPathComponent] = resolved
+        }
+
+        let sortedDirectories = candidatesByDirectory.keys.sorted { lhs, rhs in
+            let lhsDepth = lhs.split(separator: "/").count
+            let rhsDepth = rhs.split(separator: "/").count
+            return lhsDepth == rhsDepth ? lhs < rhs : lhsDepth < rhsDepth
+        }
         for (codeName, variablesName) in pairs {
-            guard let code = containedRegularFile(named: [codeName], in: directory),
-                  let variables = containedRegularFile(named: [variablesName], in: directory) else { continue }
-            return (code: code, variables: variables)
+            for parent in sortedDirectories {
+                guard let directoryCandidates = candidatesByDirectory[parent],
+                      let code = directoryCandidates[codeName],
+                      let variables = directoryCandidates[variablesName] else { continue }
+                return (code: code, variables: variables)
+            }
         }
         return nil
     }

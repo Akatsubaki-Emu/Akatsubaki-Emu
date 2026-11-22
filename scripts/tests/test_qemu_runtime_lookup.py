@@ -22,6 +22,11 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         pair_finder = runtime.split("private static func findUEFIFirmwarePair", 1)[1].split(
             "private static func findUEFIVariables", 1
         )[0]
+        self.assertIn("var candidatesByDirectory: [String: [String: URL]] = [:]", pair_finder)
+        self.assertIn("resolved.deletingLastPathComponent().path", pair_finder)
+        self.assertIn("candidatesByDirectory[parent, default: [:]]", pair_finder)
+        self.assertIn("let sortedDirectories = candidatesByDirectory.keys.sorted", pair_finder)
+        self.assertNotIn("containedRegularFile(named: [codeName]", pair_finder)
         for code, variables in (
             ("OVMF_CODE.fd", "OVMF_VARS.fd"),
             ("OVMF_CODE_4M.fd", "OVMF_VARS_4M.fd"),
