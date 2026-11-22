@@ -1243,6 +1243,27 @@ struct InterpreterTests {
         precondition(leaveFault.registerValue(4) == 56)
         precondition(leaveFault.registerValue(5) == 72)
 
+        // Report comparable total guest-instruction throughput for read-only
+        // and write-heavy loops. Results are informational (runner timing is noisy).
+        func benchmarkInstructionWindow(_ name: String, program: [UInt8]) throws {
+            let benchmarkMemory = GuestMemory(size: 4096)
+            precondition(benchmarkMemory.write(Data(program), offset: 0))
+            let benchmark = X86_64Interpreter(memory: benchmarkMemory)
+            try benchmark.reset(entryPoint: 0)
+            let budget: UInt64 = 200_000
+            let started = DispatchTime.now().uptimeNanoseconds
+            let exit = try benchmark.run(maxInstructions: budget)
+            let elapsed = max(DispatchTime.now().uptimeNanoseconds - started, 1)
+            precondition(exit == .instructionLimit)
+            let instructionsPerSecond = Double(benchmark.instructionCount) * 1_000_000_000.0 / Double(elapsed)
+            print("X86_WINDOW_BENCH name=\(name) instructions_per_second=\(Int(instructionsPerSecond)) read_prefix_calls=\(benchmarkMemory.readPrefixCalls)")
+        }
+        try benchmarkInstructionWindow("read-only", program: [0xEB, 0xFE])
+        try benchmarkInstructionWindow("write-heavy", program: [
+            0xC7, 0x05, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0xEB, 0xF4
+        ])
+
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
