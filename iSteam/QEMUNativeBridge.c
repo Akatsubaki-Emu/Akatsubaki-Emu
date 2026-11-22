@@ -47,7 +47,7 @@ static qemu_main_loop_fn g_qemu_main_loop = NULL;
 static qemu_cleanup_fn g_qemu_cleanup = NULL;
 static qemu_shutdown_request_fn g_qemu_shutdown = NULL;
 
-remove unused set_errorstatic void clear_starting(void) {
+static void clear_starting(void) {
     pthread_mutex_lock(&g_lock);
     g_starting = false;
     pthread_mutex_unlock(&g_lock);
