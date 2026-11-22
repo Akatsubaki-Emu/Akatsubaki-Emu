@@ -592,5 +592,13 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertNotIn("  cancel-in-progress: true", workflow)
 
 
+    def test_guest_shared_paths_reject_embedded_nul_before_url_resolution(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "HostDeviceBridge.swift").read_text(encoding="utf-8")
+        resolver = source.split("private func sharedFileURL", 1)[1].split("private static func machineIdentifier", 1)[0]
+        nul_guard = '!relativePath.contains("\\0")'
+        self.assertIn(nul_guard, resolver)
+        self.assertLess(resolver.index(nul_guard), resolver.index("appendingPathComponent(relativePath)"))
+
 if __name__ == "__main__":
     unittest.main()

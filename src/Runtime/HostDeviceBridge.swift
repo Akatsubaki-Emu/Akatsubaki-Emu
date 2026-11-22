@@ -178,6 +178,7 @@ final class HostDeviceBridge {
         guard !relativePath.isEmpty,
               !relativePath.hasPrefix("/"),
               !relativePath.contains("\\"),
+              !relativePath.contains("\0"),
               !relativePath.split(separator: "/", omittingEmptySubsequences: false)
                 .contains(where: { $0 == "." || $0 == ".." }) else {
             throw BridgeError.invalidPath
