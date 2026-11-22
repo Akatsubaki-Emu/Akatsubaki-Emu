@@ -10,9 +10,9 @@
 2. `JITCoordinator` checks the running process's actual `get-task-allow` entitlement using `SecTaskCreateFromSelf` and `SecTaskCopyValueForEntitlement` resolved from Security at runtime. If the entitlement is missing, the VM is not started.
 3. The coordinator opens LocalDevVPN with `localdevvpn://enable?scheme=<bundle-id>`. The bundle ID is also registered as Akatsubaki's callback URL scheme, so stable and nightly builds can return to their own app instance.
 4. LocalDevVPN submits its tunnel-start request and calls back to Akatsubaki after its own one-second delay. Akatsubaki waits a further two seconds, then opens StikDebug with the current bundle identifier and process ID using `stikdebug://enable-jit`.
-5. On iOS 26+ devices with TXM/SPTM, the StikDebug request includes `script-name=universal.js`. The QEMU allocator selects the breakpoint-based executable-region protocol only when the host's hardware check reports TXM; non-TXM devices omit the script and retain QEMU's normal Darwin split-W^X allocator.
-6. When Akatsubaki becomes active again, it polls the process debugger/JIT status. QEMU starts only after that state is confirmed. If the request fails or times out, QEMU remains stopped.
-7. Before `qemu_init`, the native bridge resolves QEMU's exported `isteam_qemu_set_jit_callbacks` and registers three direct host callbacks: `iSteamJITIsReady`, `iSteamJITPrepareRegion`, and `iSteamJITDetach`. QEMU separately resolves only `iSteamJITIsSupported` to choose the iOS 26+ TXM path. The QEMU allocator uses the registered callbacks to prepare the executable region and detach after the writable/executable aliases are established.
+5. On iOS 26+ devices, the app uses StikDebug's published hardware-identifier rules: iOS 26 applies the iPhone 14,2 and iPad 14,5 thresholds; iOS 27+ selects TXM except for iPad8,11 and iPad8,12. The StikDebug request includes the current PID and, only on TXM, `script-name=universal.js`.
+6. On TXM, Akatsubaki records script readiness only after its own PID-targeted StikDebug request returns and both `CS_DEBUGGED` and `P_TRACED` are present. Generic debugger attachment is insufficient. The QEMU host readiness callback and guarded prepare callback fail closed until that handoff is recorded. Standard devices retain the normal split-W^X allocator.
+7. Before `qemu_init`, the native bridge resolves QEMU's exported `isteam_qemu_set_jit_callbacks` and registers three host callbacks: `iSteamJITIsReady`, `iSteamJITPrepareRegionIfReady`, and `iSteamJITDetach`. QEMU separately resolves `iSteamJITIsSupported` and the tri-state protocol mode. The guarded prepare callback returns `NULL` rather than issuing an unhandled breakpoint when the TXM handoff is incomplete.
 
 ## First-time setup
 
@@ -24,22 +24,21 @@
 - Sign Akatsubaki with a profile that preserves `get-task-allow`.
 - When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
 
-The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM hardware classification independently follows the public model/version rules in [StikDebug's ProcessInfo+TXM implementation](https://github.com/StikDebug/StikDebug/blob/main/StikDebug/Support/ProcessInfo+TXM.swift).
+The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM classification follows [StikDebug's ProcessInfo+TXM implementation](https://github.com/StikDebug/StikDebug/blob/main/StikDebug/Support/ProcessInfo+TXM.swift); the C helper preserves its model thresholds and iOS 27 exceptions while returning UNKNOWN for unrecognised iOS 26 hardware.
 The **Increased Memory Limit** capability is separate from `get-task-allow`. Requesting that memory capability does not grant `get-task-allow` or make the process debuggable; the development provisioning profile must still provide `get-task-allow=true`.
-
-The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user.
 
 ## Failure handling and security
 
 - Missing LocalDevVPN, missing StikDebug, an unavailable callback, or a missing `get-task-allow` entitlement prevents QEMU startup. The LocalDevVPN activation callback has a five-minute timeout; only one JIT acquisition may be active per process, and delayed callbacks from an expired request are ignored.
+- On TXM, **Wait for Debugger is unavailable** because a generic debugger does not prove that `universal.js` is active. Settings selects StikDebug instead. If another debugger is already attached before Akatsubaki's handoff, detach it and request JIT again from Akatsubaki.
 - LocalDevVPN's callback confirms that the tunnel-start request was submitted; it does **not** confirm that the VPN is connected. The readiness check is separate. If acquisition fails, verify the VPN is connected, StikDebug pairing is valid, Developer Mode is enabled, and the signing entitlement is present.
 - The entitlement query uses Security task SPI. This is a sideload/developer workflow and is not suitable for App Store submission.
-- The coordinator owns one foreground readiness poll and reports completion through callbacks; Launch Setup does not run a second polling loop. Every supported JIT path requires `CS_DEBUGGED`. On iOS 26+ TXM/SPTM devices, readiness additionally requires a live `P_TRACED` debugger because QEMU must complete the universal breakpoint protocol before detaching. Non-TXM devices use the normal split-W^X allocator and do not require a live debugger after JIT is enabled. A successful helper handoff alone is not treated as proof of a usable VM session.
+- The coordinator owns one foreground readiness poll and reports completion through callbacks; Launch Setup does not run a second polling loop. Every supported JIT path requires `CS_DEBUGGED`. On iOS 26+ TXM/SPTM devices, readiness additionally requires a live `P_TRACED` debugger and the process-local universal.js handoff flag. The flag is set only after Akatsubaki returns from its PID-targeted StikDebug request; generic debugger attachment cannot satisfy the gate. The QEMU prepare callback independently checks the same readiness state and returns `NULL` rather than issuing an unhandled breakpoint. Non-TXM devices use the normal split-W^X allocator and do not require a live debugger after JIT is enabled.
 
 ## Build integration
 
 - `iSteam/JITCoordinator.swift` — helper orchestration, entitlement gate, callback handling and readiness polling.
-- `iSteam/JIT26Protocol.c` / `.h` — runtime signing-entitlement inspection, StikDebug TXM hardware detection, version-aware readiness, and iOS 26 breakpoint protocol entry points.
+- `iSteam/JIT26Protocol.c` / `.h` and `iSteam/JITHardwareModel.h` — runtime signing-entitlement inspection, StikDebug hardware-identifier detection, tri-state protocol selection, process-local universal.js handoff state, and fail-closed breakpoint preparation.
 - `iSteam/Info.plist` — LocalDevVPN query permission and per-bundle callback URL scheme.
 - `iSteam/AppDelegate.swift` — callback dispatch and app-activation readiness polling.
 - `iSteam/LaunchSetupViewController.swift` — waits for the coordinator's success/failure callback before presenting the VM.
@@ -47,19 +46,19 @@ The helper apps are not embedded in Akatsubaki. They remain external dependencie
 - `iSteam/SettingsViewController.swift` — describes the automatic helper sequence.
 - `project.yml` — links Security for the stable and nightly iOS targets.
 - `scripts/patch_qemu_stikjit_ios.py` — selects the breakpoint allocator only on TXM devices; non-TXM iOS 26 devices retain the upstream split-W^X allocator.
-- `scripts/tests/test_jit_protocol.py` — source-contract regression coverage for TXM model detection, live-debugger gating, and QEMU allocator routing.
+- `scripts/tests/test_jit_protocol.py` and `scripts/tests/test_jit_hardware_model.py` — source-contract and compiled C matrix coverage for model thresholds, exceptions, unknown hardware and TXM handoff gating.
 - `scripts/tests/test_jit_coordinator.py` — source-contract regression coverage.
 
 ## Validation status
 
 - **Source readback:** completed for all changed implementation, project, settings and test files.
 - **Static contract checks:** passed for the physical-device guards, entitlement lookup, LocalDevVPN and StikDebug URL construction, iOS 26 script gate, callback registration, Security linker flags, VM launch gate and source-validator contract.
-- **Hosted tests/build:** blocked. GitLab pipeline `3099547557` failed before runner startup with `failure_reason=ci_quota_exceeded`; its `python-source-contracts` job had `started_at=null` and no runner assigned. Manual pipeline creation is rejected by the repository's workflow rules.
-- **Not tested:** Python unittest execution, Xcode compilation, IPA packaging, installation, JIT activation on hardware, QEMU guest boot or persistent guest state.
+- **Hosted validation:** the latest main source validator exposed a stale GuestMachine initialization-error assertion; this branch updates it and adds compiled C hardware-model matrix coverage plus TXM handoff regression tests. Hosted results must be checked after commit.
+- **Not tested:** Xcode compilation, IPA packaging, installation, JIT activation on hardware, QEMU guest boot or persistent guest state.
 
 Do not treat source-level integration as proof of a working JIT session until a physical-device build and VM launch have been tested.
 
 
 ## Fail-closed TXM detection
 
-On physical iOS 26+ devices, Akatsubaki reads `IODeviceTree:/chosen/memory-map` through IOKit, matching StikJIT's protocol detection. A valid registry result without `TXM` selects standard attach-only JIT; `TXM` selects the StikDebug breakpoint allocator; unreadable, malformed, or empty registry data is UNKNOWN and blocks launch. The QEMU patcher uses the tri-state protocol export and refuses unknown devices.
+On physical iOS 26+ devices, Akatsubaki follows StikDebug's `ProcessInfo.hasTXM` hardware-identifier rules. iOS 26 uses the iPhone 14,2 and iPad 14,5 thresholds; iOS 27+ selects TXM except for iPad8,11 and iPad8,12. An unreadable or unrecognised iOS 26 hardware identifier is UNKNOWN and blocks launch. The QEMU patcher uses the tri-state protocol export and refuses unknown devices.

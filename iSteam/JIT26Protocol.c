@@ -1,18 +1,19 @@
 #include "JIT26Protocol.h"
+#include "JITHardwareModel.h"
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <unistd.h>
-#if TARGET_OS_IOS && !TARGET_OS_SIMULATOR
-#include <IOKit/IOKitLib.h>
-#endif
 #endif
 
 #if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR
+static atomic_bool g_txm_script_ready = ATOMIC_VAR_INIT(false);
 __attribute__((noinline, optnone, naked))
 void iSteamJITDetach(void) {
     __asm__ volatile("mov x16, #0\n"
@@ -45,37 +46,15 @@ bool iSteamJITHasGetTaskAllow(void) {
 }
 
 static int iSteamJITHardwareTXMMode(void) {
-    io_registry_entry_t memoryMap = IORegistryEntryFromPath(
-        kIOMainPortDefault, "IODeviceTree:/chosen/memory-map"
-    );
-    if (memoryMap == IO_OBJECT_NULL) return ISTEAM_JIT_PROTOCOL_UNKNOWN;
-
-    CFTypeRef keysValue = IORegistryEntryCreateCFProperty(
-        memoryMap, kIORegistryEntryPropertyKeysKey, kCFAllocatorDefault, 0
-    );
-    IOObjectRelease(memoryMap);
-    if (keysValue == NULL || CFGetTypeID(keysValue) != CFArrayGetTypeID()) {
-        if (keysValue != NULL) CFRelease(keysValue);
-        return ISTEAM_JIT_PROTOCOL_UNKNOWN;
+    struct utsname systemInfo;
+    if (uname(&systemInfo) != 0) return ISTEAM_JIT_PROTOCOL_UNKNOWN;
+    if (__builtin_available(iOS 27.0, *)) {
+        return iSteamJITHardwareModelTXMModeForOS(systemInfo.machine, true, true);
     }
-
-    CFArrayRef keys = (CFArrayRef)keysValue;
-    CFIndex keyCount = CFArrayGetCount(keys);
-    if (keyCount == 0) {
-        CFRelease(keysValue);
-        return ISTEAM_JIT_PROTOCOL_UNKNOWN;
+    if (__builtin_available(iOS 26.0, *)) {
+        return iSteamJITHardwareModelTXMModeForOS(systemInfo.machine, false, true);
     }
-    for (CFIndex index = 0; index < keyCount; index++) {
-        CFTypeRef key = (CFTypeRef)CFArrayGetValueAtIndex(keys, index);
-        if (key == NULL || CFGetTypeID(key) != CFStringGetTypeID()) {
-            CFRelease(keysValue);
-            return ISTEAM_JIT_PROTOCOL_UNKNOWN;
-        }
-    }
-
-    bool hasTXM = CFArrayContainsValue(keys, CFRangeMake(0, keyCount), CFSTR("TXM"));
-    CFRelease(keysValue);
-    return hasTXM ? ISTEAM_JIT_PROTOCOL_STIKDEBUG : ISTEAM_JIT_PROTOCOL_STANDARD;
+    return ISTEAM_JIT_PROTOCOL_STANDARD;
 }
 
 int iSteamJITGetProtocolMode(void) {
@@ -87,7 +66,7 @@ bool iSteamJITIsSupported(void) {
     return iSteamJITGetProtocolMode() == ISTEAM_JIT_PROTOCOL_STIKDEBUG;
 }
 
-static bool iSteamJITDebuggerIsAttached(void) {
+bool iSteamJITIsDebuggerAttached(void) {
     int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid() };
     struct kinfo_proc info;
     size_t size = sizeof(info);
@@ -111,9 +90,22 @@ bool iSteamJITIsReady(void) {
     if (__builtin_available(iOS 26.0, *)) {
         int protocolMode = iSteamJITGetProtocolMode();
         if (protocolMode == ISTEAM_JIT_PROTOCOL_UNKNOWN) return false;
-        if (protocolMode == ISTEAM_JIT_PROTOCOL_STIKDEBUG) return iSteamJITDebuggerIsAttached();
+        if (protocolMode == ISTEAM_JIT_PROTOCOL_STIKDEBUG) {
+            return iSteamJITIsDebuggerAttached()
+                && atomic_load_explicit(&g_txm_script_ready, memory_order_acquire);
+        }
     }
     return true;
+}
+
+void iSteamJITSetTXMScriptReady(bool ready) {
+    atomic_store_explicit(&g_txm_script_ready, ready, memory_order_release);
+}
+
+void *iSteamJITPrepareRegionIfReady(void *address, size_t length) {
+    if (iSteamJITGetProtocolMode() != ISTEAM_JIT_PROTOCOL_STIKDEBUG
+        || !iSteamJITIsReady()) return NULL;
+    return iSteamJITPrepareRegion(address, length);
 }
 #else
 int iSteamJITGetProtocolMode(void) {
@@ -128,4 +120,11 @@ void *iSteamJITPrepareRegion(void *address, size_t length) {
 }
 bool iSteamJITIsSupported(void) { return false; }
 bool iSteamJITIsReady(void) { return false; }
+bool iSteamJITIsDebuggerAttached(void) { return false; }
+void iSteamJITSetTXMScriptReady(bool ready) { (void)ready; }
+void *iSteamJITPrepareRegionIfReady(void *address, size_t length) {
+    (void)address;
+    (void)length;
+    return NULL;
+}
 #endif

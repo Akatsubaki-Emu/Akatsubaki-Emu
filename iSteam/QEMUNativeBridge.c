@@ -204,7 +204,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
         clear_starting();
         return false;
     }
-    set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);
+    set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegionIfReady, iSteamJITDetach);
 
     char **copied_argv = calloc((size_t)argc + 1, sizeof(char *));
     char *argument_storage = malloc(total_argument_bytes);

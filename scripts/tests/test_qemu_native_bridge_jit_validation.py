@@ -30,7 +30,7 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
+            "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegionIfReady, iSteamJITDetach);",
             source,
         )
         patcher = (root / "scripts" / "patch_qemu_stikjit_ios.py").read_text(encoding="utf-8")

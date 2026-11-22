@@ -9,6 +9,9 @@ bool iSteamJITHasGetTaskAllow(void);
 int iSteamJITGetProtocolMode(void);
 bool iSteamJITIsSupported(void);
 bool iSteamJITIsReady(void);
+bool iSteamJITIsDebuggerAttached(void);
+void iSteamJITSetTXMScriptReady(bool ready);
 void iSteamJITDetach(void);
 void *iSteamJITPrepareRegion(void *address, size_t length);
+void *iSteamJITPrepareRegionIfReady(void *address, size_t length);
 #endif

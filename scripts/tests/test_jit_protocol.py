@@ -20,22 +20,22 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn("queryStatus(getpid(), 0, &status, sizeof(status)) == 0", source)
         self.assertIn("status & UINT32_C(0x10000000)", source)
         self.assertIn("bool iSteamJITIsReady(void) { return false; }", source)
+        self.assertIn("bool iSteamJITIsDebuggerAttached(void) { return false; }", source)
+        self.assertIn("void iSteamJITSetTXMScriptReady(bool ready)", source)
+        self.assertIn("iSteamJITPrepareRegionIfReady", source)
 
-    def test_txm_detection_uses_stikjit_ioregistry_query_and_fails_closed(self):
+    def test_txm_detection_matches_stikdebug_hardware_version_rules(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
-        self.assertIn("#include <IOKit/IOKitLib.h>", source)
-        self.assertIn("IORegistryEntryFromPath(", source)
-        self.assertIn('"IODeviceTree:/chosen/memory-map"', source)
-        self.assertIn("kIORegistryEntryPropertyKeysKey", source)
-        self.assertIn('CFSTR("TXM")', source)
-        self.assertIn("CFGetTypeID(keysValue) != CFArrayGetTypeID()", source)
-        self.assertIn("CFGetTypeID(key) != CFStringGetTypeID()", source)
-        self.assertIn("keyCount == 0", source)
-        self.assertIn("return ISTEAM_JIT_PROTOCOL_UNKNOWN;", source)
-        self.assertIn("iSteamJITGetProtocolMode()", source)
-        self.assertNotIn("uname(&systemInfo)", source)
-        self.assertNotIn("sscanf(hardwareIdentifier", source)
+        helper = (root / "iSteam" / "JITHardwareModel.h").read_text(encoding="utf-8")
+        self.assertIn("uname(&systemInfo)", source)
+        self.assertIn("iSteamJITHardwareModelTXMModeForOS", source)
+        self.assertIn('"iPad8,11"', helper)
+        self.assertIn('"iPad8,12"', helper)
+        self.assertIn("double threshold = isIPad ? 14.5 : 14.2;", helper)
+        self.assertIn("return ISTEAM_JIT_PROTOCOL_UNKNOWN;", helper)
+        self.assertNotIn("IORegistryEntryFromPath", source)
+        self.assertNotIn("#include <IOKit/IOKitLib.h>", source)
 
     def test_live_debugger_is_required_only_for_txm_breakpoint_protocol(self):
         root = Path(__file__).resolve().parents[2]
@@ -43,7 +43,8 @@ class JITProtocolSourceTests(unittest.TestCase):
         readiness = source.split("bool iSteamJITIsReady(void) {", 1)[1].split("\n}\n", 1)[0]
         self.assertIn("protocolMode == ISTEAM_JIT_PROTOCOL_UNKNOWN", readiness)
         self.assertIn("protocolMode == ISTEAM_JIT_PROTOCOL_STIKDEBUG", readiness)
-        self.assertIn("return iSteamJITDebuggerIsAttached();", readiness)
+        self.assertIn("return iSteamJITIsDebuggerAttached()", readiness)
+        self.assertIn("atomic_load_explicit(&g_txm_script_ready, memory_order_acquire)", readiness)
         self.assertTrue(readiness.rstrip().endswith("return true;"))
 
     def test_qemu_uses_breakpoint_allocator_only_when_txm_is_present(self):
@@ -66,10 +67,10 @@ class JITProtocolSourceTests(unittest.TestCase):
                 self.assertIn("-Wl,-exported_symbol,_" + symbol, block)
 
 
-    def test_ios_targets_link_iokit_and_export_the_protocol_mode(self):
+    def test_ios_targets_use_model_detection_without_iokit_framework(self):
         root = Path(__file__).resolve().parents[2]
         project = (root / "project.yml").read_text(encoding="utf-8")
-        self.assertEqual(project.count("- sdk: IOKit.framework"), 2)
+        self.assertNotIn("- sdk: IOKit.framework", project)
         self.assertEqual(project.count("-Wl,-exported_symbol,_iSteamJITGetProtocolMode"), 2)
 
     def test_non_device_builds_export_unknown_protocol_mode(self):
@@ -87,6 +88,21 @@ class JITProtocolSourceTests(unittest.TestCase):
         coordinator = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
         self.assertIn("var isJITProtocolKnown: Bool", coordinator)
         self.assertIn("guard isJITProtocolKnown else", coordinator)
+
+    def test_txm_script_readiness_is_required_before_region_preparation(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
+        header = (root / "iSteam" / "JIT26Protocol.h").read_text(encoding="utf-8")
+        self.assertIn("#include <stdatomic.h>", source)
+        self.assertIn("static atomic_bool g_txm_script_ready = ATOMIC_VAR_INIT(false);", source)
+        self.assertIn("atomic_load_explicit(&g_txm_script_ready, memory_order_acquire)", source)
+        self.assertIn("void iSteamJITSetTXMScriptReady(bool ready)", source)
+        self.assertIn("bool iSteamJITIsDebuggerAttached(void)", source)
+        self.assertIn("void *iSteamJITPrepareRegionIfReady(void *address, size_t length)", source)
+        self.assertIn("iSteamJITSetTXMScriptReady(bool ready);", header)
+        self.assertIn("iSteamJITPrepareRegionIfReady(void *address, size_t length);", header)
+        self.assertIn("protocolMode != ISTEAM_JIT_PROTOCOL_STIKDEBUG", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -23,10 +23,12 @@ final class JITCoordinator {
 
     var selectedMethod: JITMethod {
         get {
-            JITMethod(rawValue: UserDefaults.standard.string(forKey: "iSteam.jitMethod") ?? "") ?? .stikDebug
+            let stored = JITMethod(rawValue: UserDefaults.standard.string(forKey: "iSteam.jitMethod") ?? "") ?? .stikDebug
+            return isJITProtocolSupported && stored == .waitForDebugger ? .stikDebug : stored
         }
         set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: "iSteam.jitMethod")
+            let effective = isJITProtocolSupported && newValue == .waitForDebugger ? .stikDebug : newValue
+            UserDefaults.standard.set(effective.rawValue, forKey: "iSteam.jitMethod")
         }
     }
 
@@ -126,13 +128,28 @@ final class JITCoordinator {
             failRequest("Akatsubaki Emu cannot identify this device's iOS 26 JIT protocol. Update the app before starting a VM.", title: "JIT compatibility unknown")
             return
         }
-        guard !isJITReady else {
+        guard isQEMUProtocolAvailable else {
+            failRequest("The QEMU runtime requires iOS 26.0 or later on a physical device with a recognised JIT protocol.", title: "QEMU unavailable")
+            return
+        }
+        guard !isQEMUJITReady else {
             completeJITRequest()
             return
+        }
+        if isJITProtocolSupported {
+            guard !iSteamJITIsDebuggerAttached() else {
+                failRequest("A debugger is already attached, but Akatsubaki has not completed the TXM StikDebug universal.js handoff. Detach the existing debugger and request JIT again from Akatsubaki.", title: "StikDebug handoff required")
+                return
+            }
+            iSteamJITSetTXMScriptReady(false)
         }
 
         switch selectedMethod {
         case .waitForDebugger:
+            guard !isJITProtocolSupported else {
+                failRequest("TXM devices require StikDebug with universal.js to complete the breakpoint protocol. Select StikDebug in Settings.", title: "StikDebug required")
+                return
+            }
             waitingForStikDebugReturn = true
             readinessChecksRemaining = 30
             show("Waiting for a compatible debugger to attach. Return to Akatsubaki Emu after enabling JIT.", title: "Waiting for debugger")
@@ -231,7 +248,10 @@ final class JITCoordinator {
 
     private func checkReadiness() {
         guard isRequestInProgress, waitingForStikDebugReturn, !readinessCheckScheduled else { return }
-        if isJITReady {
+        if isJITProtocolSupported && iSteamJITIsDebuggerAttached() {
+            iSteamJITSetTXMScriptReady(true)
+        }
+        if isQEMUJITReady {
             completeJITRequest()
             return
         }
@@ -269,6 +289,9 @@ final class JITCoordinator {
     }
 
     private func failRequest(_ message: String, title: String) {
+        if isJITProtocolSupported {
+            iSteamJITSetTXMScriptReady(false)
+        }
         isRequestInProgress = false
         requestGeneration &+= 1
         waitingForStikDebugReturn = false

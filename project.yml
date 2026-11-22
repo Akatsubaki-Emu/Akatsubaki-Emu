@@ -37,7 +37,6 @@ targets:
         product: StosSign_Auth
       - package: StosSign
         product: StosSign_Common
-      - sdk: IOKit.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam
@@ -68,7 +67,6 @@ targets:
         product: StosSign_Auth
       - package: StosSign
         product: StosSign_Common
-      - sdk: IOKit.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.nightly
