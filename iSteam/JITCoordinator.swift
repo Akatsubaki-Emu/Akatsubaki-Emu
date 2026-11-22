@@ -95,7 +95,9 @@ final class JITCoordinator {
     func handleCallback(_ url: URL) -> Bool {
         guard url.scheme == Bundle.main.bundleIdentifier, waitingForLocalDevVPN else { return false }
         waitingForLocalDevVPN = false
-        openStikDebug()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            self?.openStikDebug()
+        }
         return true
     }
 
@@ -156,14 +158,12 @@ final class JITCoordinator {
             return
         }
 
+        waitingForStikDebugReturn = true
+        readinessChecksRemaining = 30
         UIApplication.shared.open(url, options: [:]) { [weak self] opened in
             guard let self else { return }
-            guard opened else {
-                self.failRequest("StikDebug could not be opened. Install StikDebug, import this device's pairing file into it, and try again.", title: "StikDebug unavailable")
-                return
-            }
-            self.waitingForStikDebugReturn = true
-            self.readinessChecksRemaining = 30
+            guard !opened else { return }
+            self.failRequest("StikDebug could not be opened. Install StikDebug, import this device's pairing file into it, and try again.", title: "StikDebug unavailable")
         }
     }
 

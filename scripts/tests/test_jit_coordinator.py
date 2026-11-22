@@ -30,6 +30,19 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn('components.scheme = "stikdebug"', source)
         self.assertIn('components.host = "enable-jit"', source)
 
+    def test_ios_26_breakpoint_script_is_gated_to_supported_devices(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("if #available(iOS 26.0, *), isJITProtocolSupported", source)
+        self.assertIn('queryItems.append(URLQueryItem(name: "script-name", value: "universal.js"))', source)
+        self.assertNotIn('URLQueryItem(name: "script-name", value: "universal.js")\\n        ]', source)
+
+    def test_ios_targets_link_security_exactly_once(self):
+        root = Path(__file__).resolve().parents[2]
+        project = (root / "project.yml").read_text(encoding="utf-8")
+        self.assertEqual(project.count('"MetalKit", "-framework", "Security",'), 2)
+        self.assertNotIn('"Security", "-framework", "Security"', project)
+
     def test_localdevvpn_starts_before_stikdebug_and_returns_to_this_bundle(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
