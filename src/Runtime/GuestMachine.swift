@@ -122,7 +122,7 @@ final class GuestMachine {
         // Ship the small x86-64 interpreter as the first runnable backend.
         // Other architectures still require a compatible backend integration.
         if configuration.architecture == .x86_64 {
-            self.cpu = X86_64Interpreter(memory: self.memory)
+            self.cpu = X86_64Interpreter(memory: self.memory, aotExecutor: KenranButoAOTExecutor())
             self.state = .configured
         } else {
             let error = GuestEngineError.backendNotInstalled(configuration.architecture)
