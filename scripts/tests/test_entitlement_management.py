@@ -126,9 +126,17 @@ class EntitlementManagementSourceTests(unittest.TestCase):
     def test_custom_capability_requests_are_validated_and_use_existing_capability_state(self):
         self.assertIn("func addCapability(_ rawCapability: String) async -> Bool", self.view)
         self.assertIn('capability.range(of: "^[A-Za-z0-9_.-]+$", options: .regularExpression)', self.view)
-        self.assertIn("capabilitiesToEnable.append((type: capability, settings: []))", self.view)
+        self.assertIn("capabilitiesToEnable.append((type: capability, enabled: true, settings: []))", self.view)
         self.assertIn("fetchExistingCapabilities(for: appID, session: session)", self.view)
         self.assertIn("Existing App ID capabilities and their settings were preserved", self.view)
+
+    def test_existing_capability_enabled_states_are_preserved(self):
+        self.assertIn("enabled: Bool, settings: [[String: Any]]", self.view)
+        self.assertIn('guard let enabled = attributes["enabled"] as? Bool else { return nil }', self.view)
+        self.assertIn('$0.type == capability && $0.enabled', self.view)
+        self.assertIn('enabled: item.type == capability ? true : item.enabled', self.view)
+        self.assertIn('"enabled": item.enabled', self.view)
+        self.assertNotIn('"enabled": true,\n                        "settings": item.settings', self.view)
 
     def test_existing_memory_entitlement_declarations_are_preserved(self):
         self.assertIn("com.apple.developer.kernel.increased-memory-limit", self.entitlements)
