@@ -103,6 +103,31 @@ int main() {
     assert(isteam_guest_memory_allocated_pages(sparse) == 0);
     isteam_guest_memory_destroy(sparse);
 
+    // Above the 1 GiB dense-table threshold, retain sparse-map storage.
+    constexpr uint64_t sparseFallbackSize = largeSize + 1;
+    ISteamGuestMemory *fallback = isteam_guest_memory_create(sparseFallbackSize);
+    assert(fallback != nullptr);
+    const uint8_t fallbackMarker = 0x7B;
+    std::array<uint8_t, 1> fallbackValue{};
+    assert(isteam_guest_memory_write(fallback, sparseFallbackSize - 1, &fallbackMarker, 1));
+    assert(isteam_guest_memory_allocated_pages(fallback) == 1);
+    assert(isteam_guest_memory_read(fallback, sparseFallbackSize - 1, fallbackValue.data(), 1));
+    assert(fallbackValue[0] == fallbackMarker);
+    assert(isteam_guest_memory_zero(fallback, largeSize, 1));
+    assert(isteam_guest_memory_allocated_pages(fallback) == 0);
+    isteam_guest_memory_destroy(fallback);
+
+    // Extremely large logical memories must remain sparse and overflow-safe.
+    ISteamGuestMemory *huge = isteam_guest_memory_create(UINT64_MAX);
+    assert(huge != nullptr);
+    assert(isteam_guest_memory_write(huge, UINT64_MAX - 1, &fallbackMarker, 1));
+    fallbackValue[0] = 0;
+    assert(isteam_guest_memory_read(huge, UINT64_MAX - 1, fallbackValue.data(), 1));
+    assert(fallbackValue[0] == fallbackMarker);
+    assert(isteam_guest_memory_zero(huge, 0, UINT64_MAX));
+    assert(isteam_guest_memory_allocated_pages(huge) == 0);
+    isteam_guest_memory_destroy(huge);
+
     isteam_guest_memory_clear(memory);
     assert(isteam_guest_memory_allocated_pages(memory) == 0);
     isteam_guest_memory_destroy(memory);

@@ -7,25 +7,72 @@
 #include <mutex>
 #include <new>
 #include <unordered_map>
+#include <vector>
 
 namespace {
 constexpr uint64_t pageSize = 4096;
-using Page = std::array<uint8_t, pageSize>;
+constexpr uint64_t densePageLimit = (1ULL << 30) / pageSize;
+
+struct Page {
+    std::array<uint8_t, pageSize> bytes{};
+    size_t allocatedIndex = 0;
+};
 }
 
 struct ISteamGuestMemory {
     explicit ISteamGuestMemory(uint64_t byteCount) : size(byteCount) {}
 
     uint64_t size;
+    bool usesDensePages = false;
+    size_t densePageCount = 0;
+    std::vector<std::unique_ptr<Page>> densePages;
+    std::vector<uint64_t> denseAllocatedPageIndices;
     std::unordered_map<uint64_t, std::unique_ptr<Page>> pages;
     mutable std::mutex mutex;
 };
+
+namespace {
+Page *allocateDensePage(ISteamGuestMemory *memory, uint64_t pageIndex) {
+    auto page = std::unique_ptr<Page>(new (std::nothrow) Page{});
+    if (!page) return nullptr;
+    page->allocatedIndex = memory->denseAllocatedPageIndices.size();
+    try {
+        memory->denseAllocatedPageIndices.push_back(pageIndex);
+    } catch (...) {
+        return nullptr;
+    }
+    Page *result = page.get();
+    memory->densePages[static_cast<size_t>(pageIndex)] = std::move(page);
+    ++memory->densePageCount;
+    return result;
+}
+
+void removeDensePage(ISteamGuestMemory *memory, uint64_t pageIndex) {
+    Page *page = memory->densePages[static_cast<size_t>(pageIndex)].get();
+    if (!page) return;
+    const size_t allocatedIndex = page->allocatedIndex;
+    const uint64_t movedPageIndex = memory->denseAllocatedPageIndices.back();
+    memory->denseAllocatedPageIndices[allocatedIndex] = movedPageIndex;
+    memory->denseAllocatedPageIndices.pop_back();
+    memory->densePages[static_cast<size_t>(pageIndex)].reset();
+    if (movedPageIndex != pageIndex) {
+        memory->densePages[static_cast<size_t>(movedPageIndex)]->allocatedIndex = allocatedIndex;
+    }
+    --memory->densePageCount;
+}
+}
 
 extern "C" {
 
 ISteamGuestMemory *isteam_guest_memory_create(uint64_t size) {
     try {
-        return new ISteamGuestMemory(size);
+        auto memory = std::make_unique<ISteamGuestMemory>(size);
+        const uint64_t pageCount = size / pageSize + (size % pageSize == 0 ? 0 : 1);
+        if (pageCount <= densePageLimit) {
+            memory->densePages.resize(static_cast<size_t>(pageCount));
+            memory->usesDensePages = true;
+        }
+        return memory.release();
     } catch (...) {
         return nullptr;
     }
@@ -50,13 +97,36 @@ bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
         const uint64_t lastAddress = offset + length - 1;
+        if (memory->usesDensePages) {
+            if (offset / pageSize == lastAddress / pageSize) {
+                const size_t pageIndex = static_cast<size_t>(offset / pageSize);
+                const size_t pageOffset = static_cast<size_t>(offset % pageSize);
+                const Page *page = memory->densePages[pageIndex].get();
+                if (!page) std::fill_n(destination, length, uint8_t{0});
+                else std::copy_n(page->bytes.data() + pageOffset, length, destination);
+                return true;
+            }
+            size_t completed = 0;
+            while (completed < length) {
+                const uint64_t address = offset + completed;
+                const size_t pageIndex = static_cast<size_t>(address / pageSize);
+                const size_t pageOffset = static_cast<size_t>(address % pageSize);
+                const size_t amount = std::min(length - completed,
+                                               static_cast<size_t>(pageSize) - pageOffset);
+                const Page *page = memory->densePages[pageIndex].get();
+                if (!page) std::fill_n(destination + completed, amount, uint8_t{0});
+                else std::copy_n(page->bytes.data() + pageOffset, amount, destination + completed);
+                completed += amount;
+            }
+            return true;
+        }
         if (offset / pageSize == lastAddress / pageSize) {
             const size_t pageOffset = static_cast<size_t>(offset % pageSize);
             const auto found = memory->pages.find(offset / pageSize);
             if (found == memory->pages.end() || !found->second) {
                 std::memset(destination, 0, length);
             } else {
-                std::memcpy(destination, found->second->data() + pageOffset, length);
+                std::memcpy(destination, found->second->bytes.data() + pageOffset, length);
             }
             return true;
         }
@@ -72,7 +142,7 @@ bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
                 std::memset(destination + completed, 0, amount);
             } else {
                 std::memcpy(destination + completed,
-                            found->second->data() + pageOffset, amount);
+                            found->second->bytes.data() + pageOffset, amount);
             }
             completed += amount;
         }
@@ -93,6 +163,31 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
         const uint64_t lastAddress = offset + length - 1;
+        if (memory->usesDensePages) {
+            if (offset / pageSize == lastAddress / pageSize) {
+                const uint64_t pageIndex = offset / pageSize;
+                const size_t pageOffset = static_cast<size_t>(offset % pageSize);
+                Page *page = memory->densePages[static_cast<size_t>(pageIndex)].get();
+                if (!page) page = allocateDensePage(memory, pageIndex);
+                if (!page) return false;
+                std::memcpy(page->bytes.data() + pageOffset, source, length);
+                return true;
+            }
+            size_t completed = 0;
+            while (completed < length) {
+                const uint64_t address = offset + completed;
+                const uint64_t pageIndex = address / pageSize;
+                const size_t pageOffset = static_cast<size_t>(address % pageSize);
+                const size_t amount = std::min(length - completed,
+                                               static_cast<size_t>(pageSize) - pageOffset);
+                Page *page = memory->densePages[static_cast<size_t>(pageIndex)].get();
+                if (!page) page = allocateDensePage(memory, pageIndex);
+                if (!page) return false;
+                std::memcpy(page->bytes.data() + pageOffset, source + completed, amount);
+                completed += amount;
+            }
+            return true;
+        }
         if (offset / pageSize == lastAddress / pageSize) {
             const uint64_t pageIndex = offset / pageSize;
             const size_t pageOffset = static_cast<size_t>(offset % pageSize);
@@ -103,7 +198,7 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
                 found = memory->pages.emplace(pageIndex, std::move(page)).first;
             }
             if (!found->second) return false;
-            std::memcpy(found->second->data() + pageOffset, source, length);
+            std::memcpy(found->second->bytes.data() + pageOffset, source, length);
             return true;
         }
         size_t completed = 0;
@@ -125,7 +220,7 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
             }
             if (!found->second) return false;
 
-            std::memcpy(found->second->data() + pageOffset,
+            std::memcpy(found->second->bytes.data() + pageOffset,
                         source + completed, amount);
             completed += amount;
         }
@@ -149,6 +244,50 @@ bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
         const uint64_t firstPage = offset / pageSize;
         const uint64_t lastPage = (end - 1) / pageSize;
         const uint64_t rangePageCount = lastPage - firstPage + 1;
+        if (memory->usesDensePages) {
+            if (rangePageCount > static_cast<uint64_t>(memory->denseAllocatedPageIndices.size())) {
+                size_t index = 0;
+                while (index < memory->denseAllocatedPageIndices.size()) {
+                    const uint64_t pageIndex = memory->denseAllocatedPageIndices[index];
+                    const uint64_t pageStart = pageIndex * pageSize;
+                    const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);
+                    const uint64_t pageEnd = pageStart + pageLength;
+                    if (pageStart >= end || pageEnd <= offset) {
+                        ++index;
+                        continue;
+                    }
+                    const uint64_t overlapStart = std::max(offset, pageStart);
+                    const uint64_t overlapEnd = std::min(end, pageEnd);
+                    const size_t pageOffset = static_cast<size_t>(overlapStart - pageStart);
+                    const size_t amount = static_cast<size_t>(overlapEnd - overlapStart);
+                    if (pageOffset == 0 && static_cast<uint64_t>(amount) == pageLength) {
+                        removeDensePage(memory, pageIndex);
+                    } else {
+                        Page *page = memory->densePages[static_cast<size_t>(pageIndex)].get();
+                        std::fill_n(page->bytes.data() + pageOffset, amount, uint8_t{0});
+                        ++index;
+                    }
+                }
+            } else {
+                for (uint64_t pageIndex = firstPage; pageIndex <= lastPage; ++pageIndex) {
+                    const uint64_t pageStart = pageIndex * pageSize;
+                    const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);
+                    const uint64_t pageEnd = pageStart + pageLength;
+                    const uint64_t overlapStart = std::max(offset, pageStart);
+                    const uint64_t overlapEnd = std::min(end, pageEnd);
+                    const size_t pageOffset = static_cast<size_t>(overlapStart - pageStart);
+                    const size_t amount = static_cast<size_t>(overlapEnd - overlapStart);
+                    Page *page = memory->densePages[static_cast<size_t>(pageIndex)].get();
+                    if (!page) continue;
+                    if (pageOffset == 0 && static_cast<uint64_t>(amount) == pageLength) {
+                        removeDensePage(memory, pageIndex);
+                    } else {
+                        std::fill_n(page->bytes.data() + pageOffset, amount, uint8_t{0});
+                    }
+                }
+            }
+            return true;
+        }
         if (rangePageCount > static_cast<uint64_t>(memory->pages.size())) {
             // Large sparse ranges are cheaper to clear by visiting allocated pages
             // than by hashing every page number in the requested address range.
@@ -175,7 +314,7 @@ bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
                 if (pageOffset == 0 && amount == pageLength) {
                     it = memory->pages.erase(it);
                 } else {
-                    std::memset(it->second->data() + pageOffset, 0, amount);
+                    std::memset(it->second->bytes.data() + pageOffset, 0, amount);
                     ++it;
                 }
             }
@@ -192,7 +331,7 @@ bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
                     if (pageOffset == 0 && static_cast<uint64_t>(amount) == pageLength) {
                         memory->pages.erase(found);
                     } else {
-                        std::memset(found->second->data() + pageOffset, 0, amount);
+                        std::memset(found->second->bytes.data() + pageOffset, 0, amount);
                     }
                 }
                 address += amount;
@@ -208,7 +347,15 @@ void isteam_guest_memory_clear(ISteamGuestMemory *memory) {
     if (!memory) return;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
-        memory->pages.clear();
+        if (memory->usesDensePages) {
+            for (uint64_t pageIndex : memory->denseAllocatedPageIndices) {
+                memory->densePages[static_cast<size_t>(pageIndex)].reset();
+            }
+            memory->denseAllocatedPageIndices.clear();
+            memory->densePageCount = 0;
+        } else {
+            memory->pages.clear();
+        }
     } catch (...) {
         // This void API has no error channel; keep exceptions inside C++.
     }
@@ -218,7 +365,7 @@ size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory) {
     if (!memory) return 0;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
-        return memory->pages.size();
+        return memory->usesDensePages ? memory->densePageCount : memory->pages.size();
     } catch (...) {
         return 0;
     }
