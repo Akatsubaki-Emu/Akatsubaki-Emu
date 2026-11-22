@@ -229,7 +229,8 @@ struct StaticELFExecutionTests {
         return (Data(bytes), message)
     }
 
-    static func makePIE(relocationType: UInt32 = 8, includeDependency: Bool = false) -> Data {
+    static func makePIE(relocationType: UInt32 = 8, includeDependency: Bool = false,
+                        loadAlignment: UInt64 = 4096) -> Data {
         var bytes = [UInt8](repeating: 0, count: 4096)
         bytes[0...3] = [0x7F, 0x45, 0x4C, 0x46]
         bytes[4] = 2
@@ -252,7 +253,7 @@ struct StaticELFExecutionTests {
         put64(0, load + 24, &bytes)
         put64(4096, load + 32, &bytes)
         put64(4096, load + 40, &bytes)
-        put64(4096, load + 48, &bytes)
+        put64(loadAlignment, load + 48, &bytes)
 
         let phdr = load + 56
         put32(6, phdr, &bytes)
@@ -346,6 +347,7 @@ struct StaticELFExecutionTests {
         precondition(pieMemory.readUInt64(offset: 0x400600) == 0x400700)
         precondition(rejectsPIE(makePIE(includeDependency: true)))
         precondition(rejectsPIE(makePIE(relocationType: 1)))
+        precondition(rejectsPIE(makePIE(loadAlignment: 8 * 1024 * 1024)))
         print("Static ET_EXEC execution and static PIE load-bias/relative-relocation checks passed")
     }
 }

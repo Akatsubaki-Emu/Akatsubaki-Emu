@@ -293,6 +293,8 @@ required = {
         "relocationType == 8",
         "relaEntrySize == 24",
         "alignment & (alignment - 1) == 0",
+        "loadBias % alignment == 0",
+        "dynamicSegment.virtualAddress",
         "orderedSegments",
         "entry - $0.guestAddress < $0.fileSize",
         "programHeaderAddress",
