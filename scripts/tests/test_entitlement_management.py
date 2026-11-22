@@ -59,6 +59,8 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertEqual(self.project.count("product: StosSign_Common"), 2)
         vision = self.project.split("  iSteamVision:", 1)[1]
         self.assertIn("EntitlementSettingsView.swift", vision)
+        self.assertIn("AnisetteDataHelper.swift", vision)
+        self.assertIn("EntitlementKeychain.swift", vision)
         self.assertNotIn("dependencies:", vision)
 
     def test_existing_memory_entitlement_declarations_are_preserved(self):
