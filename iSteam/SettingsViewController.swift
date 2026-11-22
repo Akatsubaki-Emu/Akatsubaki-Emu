@@ -17,7 +17,7 @@ final class SettingsViewController: UITableViewController {
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int {
-#if os(iOS)
+#if os(iOS) && !os(visionOS)
         return 13
 #else
         return 11
@@ -199,11 +199,11 @@ final class SettingsViewController: UITableViewController {
         case 10:
             navigationController?.pushViewController(DroidDeckPortStatusViewController(), animated: true)
         case 11:
-#if os(iOS)
+#if os(iOS) && !os(visionOS)
             navigationController?.pushViewController(UIHostingController(rootView: EntitlementSettingsView()), animated: true)
 #endif
         case 12:
-#if os(iOS)
+#if os(iOS) && !os(visionOS)
             navigationController?.pushViewController(UIHostingController(rootView: ExperimentsView()), animated: true)
 #endif
         default:
