@@ -109,5 +109,14 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("isRequestInProgress = false", source)
         self.assertIn("requestGeneration &+= 1", source)
 
+    def test_overlapping_request_notifies_rejected_caller_without_replacing_active_callbacks(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        rejected = source.split("guard !isRequestInProgress else", 1)[1].split("isRequestInProgress = true", 1)[0]
+        self.assertIn("if let onFailure", rejected)
+        self.assertIn("onFailure(message)", rejected)
+        self.assertIn("presentationController = controller", rejected)
+        self.assertNotIn("onJITFailure = onFailure", rejected)
+
 if __name__ == "__main__":
     unittest.main()

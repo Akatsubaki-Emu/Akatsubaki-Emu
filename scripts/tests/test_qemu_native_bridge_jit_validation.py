@@ -40,6 +40,20 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertIn("isteam_jit_detach_callback = detach;", patcher)
         self.assertIn('__attribute__((visibility("default")))', patcher)
 
+    def test_qemu_init_uses_the_upstream_void_abi(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
+        thread = source.split("static void *qemu_thread_main", 1)[1].split(
+            "bool isteam_qemu_validate_library", 1
+        )[0]
+        fake = (root / "scripts" / "tests" / "fake_qemu_runtime.c").read_text(encoding="utf-8")
+        self.assertIn("typedef void (*qemu_init_fn)(int, char **);", source)
+        self.assertIn("g_qemu_init(g_argc, g_argv);", thread)
+        self.assertNotIn("init_result", thread)
+        self.assertNotIn("environ", source)
+        self.assertIn("void qemu_init(int argc, char *argv[])", fake)
+        self.assertIn("poison_nonzero_return_register();", fake)
+
 
 if __name__ == "__main__":
     unittest.main()

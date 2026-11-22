@@ -80,7 +80,15 @@ final class JITCoordinator {
 
     func requestJIT(from controller: UIViewController?, onFailure: ((String) -> Void)? = nil, onReady: (() -> Void)? = nil) {
         guard !isRequestInProgress else {
-            show("A JIT request is already in progress. Wait for it to finish before starting another.", title: "JIT request in progress")
+            let message = "A JIT request is already in progress. Wait for it to finish before starting another."
+            if let onFailure {
+                onFailure(message)
+            } else {
+                if presentationController?.viewIfLoaded?.window == nil {
+                    presentationController = controller
+                }
+                show(message, title: "JIT request in progress")
+            }
             return
         }
         isRequestInProgress = true
