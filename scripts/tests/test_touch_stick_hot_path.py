@@ -16,6 +16,7 @@ class TouchStickHotPathTests(unittest.TestCase):
         self.assertIn("movement.normalizedX", update)
         self.assertNotIn("movementRadius", update)
         self.assertNotIn("knob.center.x - touchOrigin.x", update)
+        self.assertNotIn("sqrt(", update)
 
     def test_inverse_radius_is_multiplied_in_the_shared_math_helper(self):
         root = Path(__file__).resolve().parents[2]
