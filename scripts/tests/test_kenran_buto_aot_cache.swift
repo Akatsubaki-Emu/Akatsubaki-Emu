@@ -34,14 +34,13 @@ struct KenranButoAOTCacheTests {
         let statisticsAfterFallback = try cache.statistics()
         precondition(statisticsAfterFallback.entryCount == 2)
 
-
         let budgetOne = try compiler.compile(guest, guestABI: "sysv-linux-x86_64", maximumInstructions: 1)
         precondition(!budgetOne.cacheHit && budgetOne.translation.instructionCount == 1)
         precondition(budgetOne.translation.stopReason == .instructionLimit)
         let budgetOneHit = try compiler.compile(guest, guestABI: "sysv-linux-x86_64", maximumInstructions: 1)
         precondition(budgetOneHit.cacheHit)
 
-        let forged = X86_64AOTTranslation(machineCode: Data([0,0,0,0]),
+        let forged = X86_64AOTTranslation(machineCode: Data([0, 0, 0, 0]),
             guestBytesConsumed: guest.count, instructionCount: 2, stopReason: .endOfInput,
             fallbackOffset: nil, fallbackOpcode: nil)
         let forgedIdentity = TranslationCacheIdentity(
@@ -51,12 +50,13 @@ struct KenranButoAOTCacheTests {
             translatorVersion: X86_64AOTTranslator.translatorVersion,
             hostArchitecture: X86_64AOTTranslator.hostArchitecture,
             cpuFeatures: X86_64AOTTranslator.cpuFeatures,
-            guestABI: KenranButoAOTCompiler.cacheGuestABI("sysv-linux-x86_64", maximumInstructions: 4096)
+            guestABI: "sysv-linux-x86_64"
         )
         try cache.store(try JSONEncoder().encode(forged), for: forgedIdentity)
         let revalidated = try compiler.compile(guest, guestABI: "sysv-linux-x86_64")
         precondition(!revalidated.cacheHit && revalidated.translation == first.translation)
-        precondition(try cache.statistics().entryCount == 3)
-        print("Kenran Butō AOT cache budget isolation, forged-artifact rejection and fallback passed")
+        let statisticsAfterForged = try cache.statistics()
+        precondition(statisticsAfterForged.entryCount == 3)
+        print("Kenran Butō AOT cache budgets, forged-artifact rejection and fallback passed")
     }
 }

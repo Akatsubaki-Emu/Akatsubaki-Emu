@@ -1,7 +1,7 @@
 # Kenran Butō (絢爛舞踏) — Hybrid runtime composition
 
 - **System name:** Kenran Butō (絢爛舞踏).
-- **Status:** composable execution-policy prototype; the translation-cache artifact layer and a bounded x86-64 to AArch64 AOT translation/cache bring-up are implemented, alongside a limited static Linux process-entry stack. No executable AOT dispatcher or full Windows/Linux userspace stack is integrated.
+- **Status:** composable execution-policy prototype; the translation-cache artifact layer and a bounded x86-64 to AArch64 AOT translation/cache bring-up are implemented, alongside a limited static Linux process-entry stack. A limited executable AOT fast path now cooperates with the diagnostic interpreter; a general Windows/Linux userspace stack is not integrated.
 - **Component naming:** Kenran Butō AOT is a bounded static x86-64 → ARM64 translator bring-up; Kenran Butō Cache stores validated translated-code artifacts; Kenran Butō Router selects backends and fallback; Kenran Butō Runtime orchestrates execution; Kenran Butō Graphics owns graphics translation. These names do not imply that missing implementations are complete.
 - **Planner:** `src/Runtime/ExecutionBackendRouter.swift`
 - **Cache:** `src/Performance/TranslationCache.swift`
@@ -83,26 +83,32 @@ The focused regression harness is `scripts/tests/test_kenran_buto_aot_translator
 
 These changes improve decoder safety and regression coverage only. The emitter still produces standalone instruction words rather than a versioned guest-state block ABI; it does not yet save/restore guest registers and flags, allocate executable memory, dispatch translated blocks, or resume the interpreter after side exits. Do not mark `.staticAOT` operational or route real guest processes through it until those execution and differential-correctness layers are implemented and tested on device.
 
-## Kenran Butō AOT execution adapter — ABI v1
 
-The AOT path now has an executable, interpreter-cooperative adapter. ABI v1 passes
-a versioned guest-state structure with the 16 GPRs, RIP/RFLAGS, FS/GS bases, an
-instruction budget and explicit GuestMemory read/write callbacks. Generated blocks
-receive the state pointer, not an unversioned bare register-array pointer.
+## Kenran Butō executable AOT integration — ABI v1
 
-The adapter uses a bounded 64-block cache. Persistent translation-cache hits are
-re-decoded and compared with canonical translator output before being trusted.
-Executable memory is W^X: standard mode seals writable mappings read/execute, while
-StikDebug/TXM mode uses separate executable and writable aliases. Both aliases are
-released on every remap/protection failure path.
+The interpreter now has an optional ARM64 AOT fast path. A versioned guest-state
+ABI carries the x86-64 GPR array, RIP/RFLAGS, FS/GS bases, an instruction budget,
+and explicit bounded GuestMemory callbacks. The adapter executes a translated
+register-only block, validates the returned ABI and exact side-exit RIP, and only
+then commits a temporary register snapshot to the interpreter. Invalid blocks
+fall back without mutating live interpreter registers.
 
-The current translator emits only register-only NOP/MOV instructions. Unsupported,
-truncated and budget-limited blocks return to the interpreter at the exact next guest
-RIP; memory callbacks and explicit fault metadata are ready for subsequent memory-op
-lowering. The diagnostic `GuestMachine` installs this fast path. QEMU remains the
-full-system execution route.
+Executable code is W^X. The provider uses a sealed RX mapping in standard mode
+and a separate StikDebug/TXM write alias where that protocol is active. The
+executor cache is bounded by both 64 blocks and 16 MiB of page-rounded executable
+memory. Persistent cache hits are re-decoded and compared against canonical
+translation output. Generated entries begin with a BTI C landing-pad hint.
 
-**Verification boundary:** the ARM64 native harness executes generated AArch64 blocks
-and compares interpreter state. This does not prove StikDebug/TXM execution on a
-physical iPad. Do not advertise the AOT backend as generally operational until a
-physical iOS ARM64 run is independently recorded.
+The interpreter fetch window is 64 bytes for block translation, while the x86
+decoder continues to enforce the architectural 15-byte maximum for each guest
+instruction. The current AOT instruction set remains deliberately small:
+NOP and register-only MOV immediate/register forms. Arithmetic, memory operands,
+branches, calls, SIMD, atomics, relocations and general cross-block control flow
+still side-exit to the interpreter. This is an integrated bring-up fast path, not
+a general-purpose x86-64 translator or proof of game compatibility.
+
+The native AOT workflow must run on ARM64 and execute generated AArch64 blocks;
+a skipped native execution test is not accepted as a pass. Physical iPad execution,
+StikDebug/TXM entitlement success, ELF page permissions, full Linux ABI, QEMU TCI
+boot, graphics/input and persistent guest-state acceptance tests remain separate
+requirements.

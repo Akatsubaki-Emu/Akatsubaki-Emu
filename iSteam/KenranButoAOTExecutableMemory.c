@@ -85,6 +85,9 @@ bool iSteamAOTExecutableMemoryInvoke(iSteamAOTExecutableRegion *r,KenranButoAOTG
  typedef void(*Entry)(KenranButoAOTGuestState *);if(!r||!r->finalized||!r->execute_address||!iSteamAOTGuestStateIsValid(s))return false;
  s->instructions_executed=0;s->exit_reason=KENRAN_BUTO_AOT_EXIT_NONE;s->exit_address=0;s->exit_rip=s->rip;Entry entry=(Entry)r->execute_address;entry(s);return true;
 }
+size_t iSteamAOTExecutableMemorySize(const iSteamAOTExecutableRegion *r){
+ return r && r->finalized ? r->mapped_size : 0;
+}
 void iSteamAOTExecutableMemoryDestroy(iSteamAOTExecutableRegion *r){
  if(!r)return;
 #if defined(__APPLE__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST

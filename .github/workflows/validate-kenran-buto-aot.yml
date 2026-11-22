@@ -62,6 +62,7 @@ jobs:
             scripts/tests/test_kenran_buto_aot_cache.swift \
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
+
       - name: Compile W^X executable-memory provider
         shell: bash
         run: |
@@ -69,10 +70,11 @@ jobs:
           clang -std=c11 -Wall -Wextra -Werror -I iSteam \
             -c iSteam/KenranButoAOTExecutableMemory.c \
             -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
-      - name: Test AOT ABI, memory callbacks and interpreter side exits
+      - name: Execute ABI, AOT block and interpreter side-exit tests on ARM64
         shell: bash
         run: |
           set -euo pipefail
+          test "$(uname -m)" = "arm64" || { echo "Native AOT execution requires an ARM64 runner." >&2; exit 1; }
           swiftc -parse-as-library -swift-version 5 \
             -import-objc-header iSteam/JIT26Protocol.h \
             src/Core/EmulationLog.swift \

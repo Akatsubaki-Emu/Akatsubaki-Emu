@@ -2,8 +2,8 @@ import CryptoKit
 import Foundation
 
 /// Couples the AOT translator to Kenran Butō's validated artifact cache.
-/// The result is a prepared artifact only; executable-memory allocation and
-/// dispatch remain the responsibility of a platform-verified runtime adapter.
+/// The compiler returns bounded, canonicalized translation artifacts. The
+/// platform executor separately validates guest state and owns W^X dispatch.
 final class KenranButoAOTCompiler {
     struct Compilation {
         let translation: X86_64AOTTranslation
@@ -18,13 +18,20 @@ final class KenranButoAOTCompiler {
         self.translator = translator
     }
 
-    static func cacheGuestABI(_ guestABI: String, maximumInstructions: Int) -> String {
-        "\(guestABI)-i\(maximumInstructions)"
-    }
-
     func compile(_ guestCode: Data, guestABI: String,
-                 maximumInstructions: Int = 4096) throws -> Compilation {
-        let budget = min(maximumInstructions, 4096)
+                  maximumInstructions: Int = X86_64AOTTranslator.maximumInstructionBudget,
+                  maximumOutputBytes: Int = X86_64AOTTranslator.maximumOutputBudget,
+                  maximumGuestBytes: Int = X86_64AOTTranslator.maximumGuestByteBudget) throws -> Compilation {
+        guard maximumInstructions > 0, maximumOutputBytes >= 4,
+              maximumOutputBytes.isMultiple(of: 4), maximumGuestBytes > 0 else {
+            return Compilation(translation: translator.translate(guestCode,
+                maximumInstructions: maximumInstructions, maximumOutputBytes: maximumOutputBytes,
+                maximumGuestBytes: maximumGuestBytes), cacheHit: false)
+        }
+        let instructionBudget = min(maximumInstructions, X86_64AOTTranslator.maximumInstructionBudget)
+        let outputBudget = min(maximumOutputBytes, X86_64AOTTranslator.maximumOutputBudget)
+        let guestByteBudget = min(maximumGuestBytes, X86_64AOTTranslator.maximumGuestByteBudget)
+
         let identity = TranslationCacheIdentity(
             guestCodeSHA256: Self.sha256(guestCode),
             guestArchitecture: "x86_64",
@@ -32,20 +39,29 @@ final class KenranButoAOTCompiler {
             translatorVersion: X86_64AOTTranslator.translatorVersion,
             hostArchitecture: X86_64AOTTranslator.hostArchitecture,
             cpuFeatures: X86_64AOTTranslator.cpuFeatures,
-            guestABI: Self.cacheGuestABI(guestABI, maximumInstructions: budget)
+            guestABI: guestABI,
+            translationInstructionBudget: instructionBudget,
+            translationInputByteBudget: guestByteBudget,
+            translationOutputByteBudget: outputBudget
         )
+
         if let cached = try cache.load(identity) {
             if let translation = try? JSONDecoder().decode(X86_64AOTTranslation.self, from: cached),
-               translation.isCacheable && translation.isValid(for: guestCode) {
-                // Structural validation alone cannot authenticate cached machine code.
-                let canonical = translator.translate(guestCode, maximumInstructions: budget)
-                if translation == canonical {
-                    return Compilation(translation: translation, cacheHit: true)
-                }
+               translation.isCacheable,
+               translation.guestBytesConsumed <= guestByteBudget,
+               translation.instructionCount <= instructionBudget,
+               translation.isValid(for: guestCode, maximumOutputBytes: outputBudget) {
+                let canonical = translator.translate(guestCode,
+                    maximumInstructions: instructionBudget, maximumOutputBytes: outputBudget,
+                    maximumGuestBytes: guestByteBudget)
+                if translation == canonical { return Compilation(translation: translation, cacheHit: true) }
             }
             try cache.invalidate(identity)
         }
-        let translation = translator.translate(guestCode, maximumInstructions: budget)
+
+        let translation = translator.translate(guestCode,
+            maximumInstructions: instructionBudget, maximumOutputBytes: outputBudget,
+            maximumGuestBytes: guestByteBudget)
         if translation.isCacheable {
             try cache.store(try JSONEncoder().encode(translation), for: identity)
         }
