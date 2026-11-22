@@ -332,6 +332,9 @@ required = {
         "second >= 0x40 && second <= 0x4F",
         "second >= 0x90 && second <= 0x9F",
         "second == 0x1F",
+        "guard let decoded = decodeRM(modrm, rex: rex) else {",
+        "guard let _ = decodeRM(modrm, rex: rex) else {",
+        "return .memoryFault(address: rip)",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
@@ -417,6 +420,8 @@ required = {
         "let byteFlagMemory = GuestMemory(size: 64)",
         "let conditionalMoveMemory = GuestMemory(size: 64)",
         "let multiByteNopMemory = GuestMemory(size: 64)",
+        "let truncatedByteIncMemory = GuestMemory(size: 2)",
+        "let truncatedMultiByteNopMemory = GuestMemory(size: 3)",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
@@ -823,6 +828,7 @@ required = {
         "self.assertIn(\"second >= 0x40 && second <= 0x4F\", interpreter)",
         "self.assertIn(\"second >= 0x90 && second <= 0x9F\", interpreter)",
         "self.assertIn(\"second == 0x1F\", interpreter)",
+        "self.assertIn(\"guard let _ = decodeRM(modrm, rex: rex) else {\", interpreter)",
     ],
 }
 failed = False

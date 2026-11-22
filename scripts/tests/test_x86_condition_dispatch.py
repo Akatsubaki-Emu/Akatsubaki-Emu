@@ -13,6 +13,7 @@ class X86ConditionDispatchTests(unittest.TestCase):
         self.assertIn("case 0xA: return paritySet", alu)
         self.assertIn("case 0x70...0x7F:", interpreter)
         self.assertIn("second >= 0x80 && second <= 0x8F", interpreter)
+        self.assertIn("guard let _ = decodeRM(modrm, rex: rex) else {", interpreter)
         self.assertNotIn("guard let takeBranch = X86_64ALU.condition", interpreter)
 
 

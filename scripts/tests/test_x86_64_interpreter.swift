@@ -869,6 +869,20 @@ struct InterpreterTests {
         precondition(wordBoundaryMemory.readUInt16Calls == 1)
         precondition(wordBoundaryMemory.readByteCalls == 0)
 
+        let truncatedByteIncMemory = GuestMemory(size: 2)
+        precondition(truncatedByteIncMemory.write(Data([0xFE, 0x04]), offset: 0))
+        let truncatedByteInc = X86_64Interpreter(memory: truncatedByteIncMemory)
+        try truncatedByteInc.reset(entryPoint: 0)
+        let truncatedByteIncExit = try truncatedByteInc.run(maxInstructions: 1)
+        precondition(truncatedByteIncExit == .memoryFault(address: 2))
+
+        let truncatedMultiByteNopMemory = GuestMemory(size: 3)
+        precondition(truncatedMultiByteNopMemory.write(Data([0x0F, 0x1F, 0x44]), offset: 0))
+        let truncatedMultiByteNop = X86_64Interpreter(memory: truncatedMultiByteNopMemory)
+        try truncatedMultiByteNop.reset(entryPoint: 0)
+        let truncatedMultiByteNopExit = try truncatedMultiByteNop.run(maxInstructions: 1)
+        precondition(truncatedMultiByteNopExit == .memoryFault(address: 3))
+
         let byteFlagMemory = GuestMemory(size: 64)
         precondition(byteFlagMemory.write(Data([
             0xB0, 0x80, 0xF6, 0xC0, 0x80, 0x0F, 0x98, 0xC3,

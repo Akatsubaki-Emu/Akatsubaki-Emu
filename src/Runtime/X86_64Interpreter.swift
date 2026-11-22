@@ -183,10 +183,12 @@ final class X86_64Interpreter: GuestCPUBackend {
             case 0xFE: // INC and DEC r/m8
                 guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
                 let group = (modrm >> 3) & 7
-                guard group == 0 || group == 1,
-                      let decoded = decodeRM(modrm, rex: rex) else {
+                guard group == 0 || group == 1 else {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)
+                }
+                guard let decoded = decodeRM(modrm, rex: rex) else {
+                    return .memoryFault(address: rip)
                 }
                 guard let source = readByteOperand(decoded.operand, modrm: modrm, rex: rex) else {
                     return .memoryFault(address: operandAddress(decoded.operand))
@@ -696,10 +698,13 @@ final class X86_64Interpreter: GuestCPUBackend {
                         return .memoryFault(address: operandAddress(decoded.operand))
                     }
                 } else if second == 0x1F {
-                    guard let modrm = fetchByte(), ((modrm >> 3) & 7) == 0,
-                          decodeRM(modrm, rex: rex) != nil else {
+                    guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
+                    guard ((modrm >> 3) & 7) == 0 else {
                         rip = instructionAddress
                         return .unsupportedInstruction(address: instructionAddress)
+                    }
+                    guard let _ = decodeRM(modrm, rex: rex) else {
+                        return .memoryFault(address: rip)
                     }
                 } else if second >= 0x80 && second <= 0x8F {
                     guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
