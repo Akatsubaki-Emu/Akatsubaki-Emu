@@ -155,7 +155,7 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("requireSuccessfulHTTPResponse", self.anisette)
         self.assertIn("(200...299).contains(httpResponse.statusCode)", self.anisette)
         self.assertIn('finalURL.scheme?.lowercased() == "https"', self.anisette)
-        self.assertIn("formatter.timeZone = .gmt", self.anisette)
+        self.assertIn('formatter.timeZone = TimeZone(identifier: "UTC")', self.anisette)
         self.assertIn('formattedJSON["timeZone"] = TimeZone.current.abbreviation()', self.anisette)
         self.assertIn('startProvisioningURL.scheme?.lowercased() == "https"', self.anisette)
         self.assertIn('endProvisioningURL.scheme?.lowercased() == "https"', self.anisette)
