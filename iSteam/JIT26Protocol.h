@@ -11,4 +11,15 @@ bool iSteamJITIsSupported(void);
 bool iSteamJITIsReady(void);
 void iSteamJITDetach(void);
 void *iSteamJITPrepareRegion(void *address, size_t length);
+
+// Bounded executable storage for Kenran Butō AOT blocks. The implementation
+// enforces the platform's JIT/TXM protocol and never exposes a writable
+// executable mapping to callers.
+typedef struct iSteamAOTExecutableRegion iSteamAOTExecutableRegion;
+bool iSteamAOTExecutableMemoryIsAvailable(void);
+iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate(
+    const void *code, size_t length, char *error, size_t errorCapacity
+);
+void *iSteamAOTExecutableMemoryEntry(iSteamAOTExecutableRegion *region);
+void iSteamAOTExecutableMemoryDestroy(iSteamAOTExecutableRegion *region);
 #endif
