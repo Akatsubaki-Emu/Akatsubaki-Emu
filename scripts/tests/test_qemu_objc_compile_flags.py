@@ -15,7 +15,7 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
         return (
             "project('qemu', 'c')\n"
             "if 'objc' in all_languages\n"
-            "  add_project_arguments(objc.get_supported_arguments(qemu_common_flags + warn_flags),\n"
+            "  add_project_arguments(objc.get_supported_arguments(warn_flags),\n"
             "      native: false, language: 'objc')\n"
             "endif\n"
             "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
@@ -39,15 +39,27 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
         self.assertIn("checked: 'require'", once)
 
     def test_meson_patcher_changes_only_the_objc_compiler_block(self):
-        source = "objc.get_supported_arguments(qemu_common_flags + warn_flags)\n" + self.meson_source()
+        source = "objc.get_supported_arguments(warn_flags)\n" + self.meson_source()
         patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
         self.assertEqual(patched.count("-fno-objc-msgsend-class-selector-stubs"), 1)
-        self.assertTrue(patched.startswith("objc.get_supported_arguments(qemu_common_flags + warn_flags)\n"))
+        self.assertTrue(patched.startswith("objc.get_supported_arguments(warn_flags)\n"))
+
+    def test_meson_patcher_handles_qemu_common_flags_variant(self):
+        source = self.meson_source().replace(
+            "objc.get_supported_arguments(warn_flags)",
+            "objc.get_supported_arguments(qemu_common_flags + warn_flags)",
+        )
+        patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+        self.assertIn(
+            "objc.get_supported_arguments(qemu_common_flags + warn_flags + "
+            "['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')",
+            patched,
+        )
 
     def test_meson_patcher_fails_closed_if_objc_block_changes(self):
         source = self.meson_source().replace(
-            "objc.get_supported_arguments(qemu_common_flags + warn_flags)",
             "objc.get_supported_arguments(warn_flags)",
+            "objc.get_supported_arguments(other_flags)",
         )
         with self.assertRaisesRegex(SystemExit, "Objective-C compiler argument anchor"):
             patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
