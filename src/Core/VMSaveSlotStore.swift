@@ -171,7 +171,8 @@ final class VMSaveSlotStore {
                 bookmarkDataIsStale: &writableBookmarkStale
             )
         }
-        if stale || writableBookmarkStale || (session.writableDiskImageBookmark != nil && writableDiskURL == nil) {
+        let canRefreshWritableBookmark = session.writableDiskImageBookmark == nil || writableDiskURL != nil
+        if (stale || writableBookmarkStale) && canRefreshWritableBookmark {
             try? saveSessionMetadata(
                 configuration: session.configuration,
                 diskImageURL: diskURL,
