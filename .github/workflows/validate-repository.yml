@@ -263,6 +263,7 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
       - name: Compile and run native guest-memory regression tests
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
