@@ -13,6 +13,7 @@ class ImportedOSSelectionTests(unittest.TestCase):
         self.assertIn("restoreImportedOperatingSystem()", source)
         self.assertIn('UserDefaults.standard.string(forKey: "iSteam.customOSPath")', source)
         self.assertIn("selectedDiskURL = url", source)
+        self.assertIn("diskImage: selectedDiskURL", source)
         self.assertIn("values.isRegularFile == true", source)
         self.assertIn("values.fileSize", source)
         self.assertIn("Boot media:", source)
