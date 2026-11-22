@@ -13,7 +13,7 @@ The iOS Settings screen includes an **Entitlements** page based on the Apple Dev
 5. Choose **Enable Increased Memory Limit for Akatsubaki Emu**.
 6. Reinstall the app through SideStore or AltStore using the same Apple account so the installer can obtain and apply a refreshed provisioning profile.
 
-The integration only updates the current build's exact bundle identifier. It does not enumerate or modify unrelated App IDs. It requests the `INCREASED_MEMORY_LIMIT` capability, matching GetMoreRam's upstream implementation. The Anisette device identifier and provisioning data are stored in the iOS Keychain; the Apple account password is held only in memory for authentication and cleared when sign-in finishes.
+The integration only updates the current build's exact bundle identifier. It does not enumerate or modify unrelated App IDs. It requests the `INCREASED_MEMORY_LIMIT` capability, matching GetMoreRam's upstream implementation. The Anisette device identifier and provisioning data are stored in the app's device-local Keychain and are not synchronised through iCloud Keychain; Keychain read/write failures are surfaced rather than silently ignored. Invalid cached device identifiers are discarded and regenerated, and a refresh clears cached provisioning data. The Apple account password is held only in memory for authentication and cleared when sign-in finishes.
 
 ## Important limits
 

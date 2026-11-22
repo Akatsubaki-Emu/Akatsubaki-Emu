@@ -28,8 +28,8 @@ class EntitlementManagementSourceTests(unittest.TestCase):
 
     def test_anisette_helper_is_vendored_and_uses_secure_device_state(self):
         self.assertIn("class AnisetteDataHelper", self.anisette)
-        self.assertIn("EntitlementAnisetteKeychain.shared.identifier", self.anisette)
-        self.assertIn("EntitlementAnisetteKeychain.shared.adiPb", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.loadIdentifier()", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.loadAdiPb()", self.anisette)
         self.assertNotRegex(self.anisette, r"(?<!EntitlementAnisette)Keychain\.shared\.")
         self.assertIn("SecItemCopyMatching", self.keychain)
         self.assertIn("SecItemAdd", self.keychain)
@@ -39,7 +39,9 @@ class EntitlementManagementSourceTests(unittest.TestCase):
     def test_anisette_helper_does_not_log_auth_material_and_uses_safe_load(self):
         self.assertNotIn("loggingFunc", self.anisette)
         self.assertNotIn("print(text!)", self.anisette)
-        self.assertIn("loadUnaligned(as: T.self)", self.anisette)
+        self.assertIn("decoded.count == 16", self.anisette)
+        self.assertIn("UUID(uuid:", self.anisette)
+        self.assertNotIn("decoded.object()", self.anisette)
 
     def test_anisette_server_is_https_and_configurable(self):
         self.assertIn('?? "https://ani.sidestore.io"', self.view)
@@ -84,6 +86,34 @@ class EntitlementManagementSourceTests(unittest.TestCase):
     def test_existing_memory_entitlement_declarations_are_preserved(self):
         self.assertIn("com.apple.developer.kernel.increased-memory-limit", self.entitlements)
         self.assertIn("com.apple.developer.kernel.extended-virtual-addressing", self.entitlements)
+
+
+    def test_anisette_v3_timestamp_uses_utc(self):
+        self.assertIn('formatter.timeZone = TimeZone(identifier: "UTC")', self.anisette)
+
+    def test_anisette_refresh_discards_cached_provisioning_data(self):
+        self.assertIn("if refresh", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.clearAdiPb()", self.anisette)
+
+    def test_anisette_identity_is_device_local_and_keychain_failures_are_reported(self):
+        self.assertIn("kSecAttrSynchronizable as String: kCFBooleanFalse as Any", self.keychain)
+        self.assertIn("kSecAttrSynchronizableAny", self.keychain)
+        self.assertIn("throw KeychainError.deleteFailed(deleteStatus)", self.keychain)
+        self.assertIn("throw KeychainError.storeFailed(addStatus)", self.keychain)
+
+    def test_anisette_helper_avoids_unsafe_force_unwraps(self):
+        for unsafe in ("self.url!", "identifier!", "adiPb!", "clientInfo!", "userAgent!",
+                       "self.mdLu!", "self.deviceId!", "startProvisioningURL!",
+                       "endProvisioningURL!", "try!", "decoded.object()"):
+            with self.subTest(unsafe=unsafe):
+                self.assertNotIn(unsafe, self.anisette)
+
+    def test_cached_anisette_state_is_reloaded_after_identifier_validation(self):
+        self.assertIn("func fetchAnisetteV3() async throws", self.anisette)
+        self.assertNotIn("fetchAnisetteV3(identifier, adiPb)", self.anisette)
+        self.assertIn("try await fetchClientInfo()", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.loadAdiPb()", self.anisette)
+
 
 
 if __name__ == "__main__":
