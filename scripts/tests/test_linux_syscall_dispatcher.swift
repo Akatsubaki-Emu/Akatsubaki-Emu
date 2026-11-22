@@ -42,6 +42,19 @@ final class GuestMemory {
         }
     }
 
+    func readUInt64Pair(offset: UInt64) -> (UInt64, UInt64)? {
+        guard offset <= size, 16 <= size - offset else { return nil }
+        let start = Int(offset)
+        var first: UInt64 = 0
+        var second: UInt64 = 0
+        for index in 0..<8 {
+            first |= UInt64(bytes[start + index]) << (index * 8)
+            second |= UInt64(bytes[start + 8 + index]) << (index * 8)
+        }
+        return (first, second)
+    }
+
+
     func zero(offset: UInt64, length: UInt64) -> Bool {
         guard offset <= size, length <= size - offset, length <= UInt64(Int.max) else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset + length), with: repeatElement(0, count: Int(length)))

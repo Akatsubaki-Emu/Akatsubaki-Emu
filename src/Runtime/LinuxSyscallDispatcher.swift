@@ -146,12 +146,12 @@ final class LinuxSyscallDispatcher {
         var total: UInt64 = 0
         for index in 0..<count {
             let (entryOffset, offsetOverflow) = vectors.addingReportingOverflow(index * 16)
-            let (lengthOffset, lengthOffsetOverflow) = entryOffset.addingReportingOverflow(8)
-            guard !offsetOverflow, !lengthOffsetOverflow,
-                  let base = memory.readUInt64(offset: entryOffset),
-                  let length = memory.readUInt64(offset: lengthOffset) else {
+            guard !offsetOverflow,
+                  let pair = memory.readUInt64Pair(offset: entryOffset) else {
                 return errno(14)
             }
+            let base = pair.0
+            let length = pair.1
             let (nextTotal, lengthOverflow) = total.addingReportingOverflow(length)
             guard !lengthOverflow, nextTotal <= Self.maximumVectorBytes,
                   length <= UInt64(Int.max) else {
