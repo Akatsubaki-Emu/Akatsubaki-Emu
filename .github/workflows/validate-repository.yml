@@ -27,7 +27,7 @@ permissions:
 
 concurrency:
   group: repository-validation-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   validate-configuration:
@@ -36,10 +36,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -86,6 +86,14 @@ jobs:
               print(f"Validated {path}")
           PY
 
+      - name: Check packaging script shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/package-utm-qemu-runtime.sh
+          bash -n scripts/validate-qemu-runtime.sh
+          bash -n scripts/validate-apple-package.sh
+
       - name: Validate GitHub Actions and GitLab CI while preserving sync directions
         shell: bash
         run: |
@@ -105,6 +113,45 @@ jobs:
           fi
           test ! -e .github/workflows/mirror-from-gitlab.yml || { echo "Scheduled GitLab polling workflow is redundant with GitLab's configured push mirror." >&2; exit 1; }
 
+      - name: Enforce Node.js 24-compatible action versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          expected = {
+              "actions/checkout": "v7",
+              "actions/setup-python": "v7",
+              "actions/cache": "v6",
+              "actions/upload-artifact": "v7",
+              "actions/download-artifact": "v8",
+              "softprops/action-gh-release": "v3",
+          }
+          failures = []
+          workflow_paths = sorted(Path(".github/workflows").glob("*.yml"))
+          workflow_paths += sorted(Path(".github/workflows").glob("*.yaml"))
+          for path in workflow_paths:
+              if path.name == "blank.yml":
+                  continue
+              for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                  stripped = line.strip()
+                  if not stripped.startswith("uses: "):
+                      continue
+                  reference = stripped[len("uses: "):].strip()
+                  if reference.startswith("./"):
+                      continue
+                  action, separator, version = reference.partition("@")
+                  required = expected.get(action)
+                  if required and (not separator or version != required):
+                      failures.append(f"{path}:{line_number}: {action} must use {required}, found {version or 'no version'}")
+          if failures:
+              print("\n".join(failures), file=sys.stderr)
+              raise SystemExit(1)
+          print("All non-sync workflows use the approved Node.js 24-compatible action majors.")
+          PY
+
       - name: Validate release and QEMU workflow contract
         shell: bash
         run: |
@@ -121,10 +168,18 @@ jobs:
               "platform: [iOS, tvOS, visionOS]",
               "uses: ./.github/workflows/build-qemu-runtime.yml",
               "needs: qemu-runtime",
-              "actions/download-artifact@v4",
+              "actions/download-artifact@",
               "name: iSteam-qemu-runtime-ios-arm64",
               "if-no-files-found: error",
+              "validate-release-channel:",
+              "target_commitish: " + "$" + "{{ github.sha }}",
+              "EXPECTED_BUNDLE=\"com.xthrx.isteam.visionos.nightly\"",
+              "github.ref != 'refs/heads/main'",
+
           ]
+          qemu_job = release.split("\n  qemu-runtime:\n", 1)[1].split("\n  build:\n", 1)[0]
+          if "validate-release-channel" not in qemu_job:
+              raise SystemExit("QEMU runtime must depend on release-channel validation.")
           missing = [item for item in required_release if item not in release]
           if missing:
               raise SystemExit("Missing release requirements: " + ", ".join(missing))
@@ -138,8 +193,8 @@ jobs:
               raise SystemExit("Release artifacts must not silently ignore missing files.")
           if "workflow_call:" not in qemu or "workflow_dispatch:" not in qemu:
               raise SystemExit("QEMU workflow must support both reusable and manual execution.")
-          if "runs-on: macos-26" not in qemu:
-              raise SystemExit("QEMU/Mesa build requires the macOS 26 runner image.")
+          if "runs-on: xcode-27" not in qemu:
+              raise SystemExit("QEMU/Mesa build requires the Xcode 27 runner image.")
           if "runs-on: macos-15" in release or "runs-on: macos-15" in platform_validation:
               raise SystemExit("Apple builds must not use an unpinned macOS 15 runner.")
           if "runs-on: macos-26" not in release or "runs-on: macos-26" not in platform_validation:
@@ -160,30 +215,25 @@ jobs:
           if push_contract not in platform_validation:
               raise SystemExit("Platform validation should not duplicate release builds on every main push.")
           for token in [
-              'XCODE_APP="/Applications/Xcode_26.2.app"',
+              'XCODE_APP="/Applications/Xcode_27.1.app"',
               'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-              'if [ "$XCODE_VERSION" != "26.2" ]; then',
+              'if [ "$XCODE_VERSION" != "27.1" ]; then',
           ]:
               if token not in qemu:
-                  raise SystemExit("QEMU build must pin and verify Xcode 26.2: " + token)
+                  raise SystemExit("QEMU build must pin and verify Xcode 27.1: " + token)
           if "spirv-tools" not in qemu or "spirv-llvm-translator" not in qemu:
               raise SystemExit("QEMU Mesa dependency build must install SPIRV-Tools and its LLVM translator.")
-          if "utm-ios-arm64-deps-v12-" not in qemu:
+          if "utm-ios-arm64-deps-v14-" not in qemu:
               raise SystemExit("QEMU dependency cache key must be versioned.")
           if "steps.utm-source.outputs.commit" not in qemu:
               raise SystemExit("QEMU cache key must include the checked-out UTM revision.")
-          expected_group = (
-              "group: qemu-runtime-ios-arm64-" + "$" + "{{ github.ref }}" + "-" + "$" + "{{ github.workflow }}"
-          )
-          if expected_group not in qemu:
-              raise SystemExit("QEMU concurrency must isolate workflow/ref executions.")
           for token in [
               "scripts/patch_utm_qemu_ios.py",
               "scripts/patch_qemu_meson_ios.py",
               "scripts/verify_qemu_meson_link.py",
               "ISTEAM_QEMU_LINK_VERIFIER",
               "steps.xcode.outputs.version",
-              "utm-ios-arm64-deps-v12-",
+              "utm-ios-arm64-deps-v14-",
           ]:
               if token not in qemu:
                   raise SystemExit("QEMU build patch contract is missing: " + token)
@@ -222,8 +272,3 @@ jobs:
             -o "$RUNNER_TEMP/test-qemu-native-bridge"
           "$RUNNER_TEMP/test-qemu-native-bridge" "$RUNNER_TEMP/libfakeqemu.so"
 
-      - name: Check shell script syntax
-        run: |
-          set -euo pipefail
-          bash -n scripts/package-utm-qemu-runtime.sh
-          bash -n scripts/validate-apple-package.sh

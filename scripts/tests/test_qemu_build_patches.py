@@ -20,10 +20,6 @@ class QEMUBuildPatchTests(unittest.TestCase):
     def test_qemu_meson_patch_is_idempotent_and_targets_emulator_link_args(self):
         source = (
             "project('qemu', 'c')\n"
-"if 'objc' in all_languages\n"
-"  objc = meson.get_compiler('objc')\n"
-"  objc_args = objc.get_supported_arguments(warn_flags)\n"
-"endif\n"
             "if 'objc' in all_languages\n"
             "  objc.get_supported_arguments(warn_flags)\n"
             "endif\n"
@@ -48,10 +44,6 @@ class QEMUBuildPatchTests(unittest.TestCase):
     def test_qemu_meson_patch_replaces_a_stale_runtime_path(self):
         source = (
             "project('qemu', 'c')\n"
-"if 'objc' in all_languages\n"
-"  objc = meson.get_compiler('objc')\n"
-"  objc_args = objc.get_supported_arguments(warn_flags)\n"
-"endif\n"
             "if 'objc' in all_languages\n"
             "  objc.get_supported_arguments(warn_flags)\n"
             "endif\n"
@@ -76,10 +68,6 @@ class QEMUBuildPatchTests(unittest.TestCase):
     def test_qemu_meson_patch_fails_if_owned_marker_is_detached(self):
         source = (
             "project('qemu', 'c')\n"
-"if 'objc' in all_languages\n"
-"  objc = meson.get_compiler('objc')\n"
-"  objc_args = objc.get_supported_arguments(warn_flags)\n"
-"endif\n"
             "if 'objc' in all_languages\n"
             "  objc.get_supported_arguments(warn_flags)\n"
             "endif\n"
@@ -98,10 +86,6 @@ class QEMUBuildPatchTests(unittest.TestCase):
     def test_qemu_meson_patch_fails_if_emulator_link_anchor_changes(self):
         source = (
             "project('qemu', 'c')\n"
-"if 'objc' in all_languages\n"
-"  objc = meson.get_compiler('objc')\n"
-"  objc_args = objc.get_supported_arguments(warn_flags)\n"
-"endif\n"
             "if 'objc' in all_languages\n"
             "  objc.get_supported_arguments(warn_flags)\n"
             "endif\n"

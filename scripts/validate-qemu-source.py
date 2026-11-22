@@ -91,6 +91,8 @@ required = {
         "host = \"enable-jit\"",
         "script-name",
         "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)",
+        "isJITProtocolKnown",
+        "guard isJITProtocolKnown else",
     ],
     "iSteam/CrashLogger.swift": [
         "queueKey = DispatchSpecificKey<UInt8>()",
@@ -105,7 +107,7 @@ required = {
         "previous-crash.log",
     ],
     "iSteam/ELFValidator.swift": [
-        "guard fileType == 2",
+        "guard fileType == 2 || fileType == 3",
         "unsupportedFileType",
     ],
     "iSteam/LaunchSetupViewController.swift": [
@@ -175,15 +177,24 @@ required = {
 
             ],
     ".github/workflows/build-qemu-runtime.yml": [
-        "group: qemu-runtime-ios-arm64-",
-        "cancel-in-progress: false",
     ],
     "scripts/tests/test_qemu_build_patches.py": [
-        "test_qemu_runtime_does_not_cancel_in_progress_release_build",
-        "cancel-in-progress: false",
+        "test_qemu_stikjit_patcher_exports_required_runtime_symbols",
+        "test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed",
+        "test_qemu_stikjit_patcher_updates_region_and_export_list_together",
+        "test_qemu_workflow_probe_shell_syntax_and_steps_are_unique",
+        "test_qemu_workflow_ios_vm_map_probe_shell_syntax",
+        "test_build_workflows_do_not_serialize_or_cancel_builds",
         "def test_windows_and_steamos_profiles_select_uefi_firmware",
         "test_link_verifier_rejects_missing_objc_stub_generation",
         "test_link_verifier_rejects_missing_libobjc",
+        "test_qemu_runtime_packager_preserves_firmware_bundle_directories",
+        "test_build_freshness_script_ignores_only_non_build_paths",
+        "#include <mach/vm_map.h>",
+        "#define mach_vm_remap vm_remap",
+        "#define mach_vm_protect vm_protect",
+        "#define mach_vm_deallocate vm_deallocate",
+        "test_release_publication_is_serialized_and_skips_stale_main_builds",
     ],
     "scripts/tests/test_jit_coordinator.py": [
         "test_stikdebug_availability_is_limited_to_physical_ios_devices",
@@ -261,10 +272,16 @@ required = {
         "loadable executable segment",
         "case unsupportedFileType(UInt16), unsupportedDynamicImage, programHeadersNotMapped, fileTooLarge",
         "version == 1",
-        "type == 2 || type == 3 || type == 7",
+        "if type == 2",
+        "type == 3 || type == 7",
+        "applyStaticPIERelocations",
+        "relocationType == 8",
+        "relaEntrySize == 24",
         "alignment & (alignment - 1) == 0",
+        "loadBias % alignment == 0",
+        "dynamicSegment.virtualAddress",
         "orderedSegments",
-        "entry - $0.guestAddress < $0.fileSize",
+        "loadedEntryPoint - $0.guestAddress < $0.fileSize",
         "programHeaderAddress",
         "programHeadersNotMapped",
         "fileSize <= UInt64(data.count) - fileOffset",
@@ -334,10 +351,13 @@ required = {
         "case 0xFF:",
         "group == 0 || group == 1",
         "case 0xC9:",
+        "let framePointer = registers[5]",
+        "let (nextStackPointer, overflow) = framePointer.addingReportingOverflow(8)",
         "case 0xC2:",
         "case 0x09, 0x0B:",
         "case 0x29, 0x2B, 0x39, 0x3B:",
-        "case 0x68, 0x6A:",
+        "case 0x68: // PUSH sign-extended imm32",
+        "case 0x6A: // PUSH sign-extended imm8",
         "private func fetchUInt16() -> UInt16?",
         "private func decodeRM(_ modrm: UInt8, rex: UInt8, trailingImmediateBytes: UInt8 = 0, includeSegmentBase: Bool = true)",
         "let addressBase = usesRIPRelative ? rip &+ UInt64(trailingImmediateBytes) : base",
@@ -347,8 +367,10 @@ required = {
         "let segmentedAddress = address &+ (includeSegmentBase ? activeSegmentBase : 0)",
         "let scale = UInt64(1) << ((sib >> 6) & 3)",
         "registers[index] = width64 ? value : UInt64(UInt32(truncatingIfNeeded: value))",
-        "PUSH RSP stores the pre-decrement value.",
-        "POP RSP loads the popped value directly",
+        "let nextStackPointer = registers[4] - 8",
+        "memory.writeUInt64(registers[index], offset: nextStackPointer)",
+        "if index == 4",
+        "registers[4] = value",
         "guard let adjustment = fetchUInt16() else",
         "return .memoryFault(address: operandAddress(decoded.operand))",
         "case 0xC3:",
@@ -390,7 +412,7 @@ required = {
         "registers[11] = flags",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
-        "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
+        "Static ET_EXEC execution and static PIE load-bias/relative-relocation checks passed",
         "hello from static ELF",
         "func writeUInt32(_ value: UInt32, offset: UInt64) -> Bool",
         "interpreter.run(maxInstructions: 64)",
@@ -476,7 +498,15 @@ required = {
         "let truncatedByteIncMemory = GuestMemory(size: 2)",
         "let truncatedMultiByteNopMemory = GuestMemory(size: 3)",
 
-        "let fsSegmentMemory = GuestMemory(size: 4096)",
+        "let fsSegmentMemory = GuestMemory(size: 0x2000)",
+        "let relativeCallFaultMemory = GuestMemory(size: 64)",
+        "precondition(relativeCallFault.registerValue(4) == 72)",
+        "let indirectCallFaultMemory = GuestMemory(size: 64)",
+        "precondition(indirectCallFault.registerValue(4) == 72)",
+        "let indirectPushFaultMemory = GuestMemory(size: 64)",
+        "precondition(indirectPushFault.registerValue(4) == 72)",
+        "let leaveFaultMemory = GuestMemory(size: 64)",
+        "precondition(leaveFault.registerValue(4) == 56)",
         "precondition(fsSegmentMemory.readByte(offset: 0x1020) == 0x5A)",
         "precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)",
         "precondition(syscallInterpreter.registerValue(1) == 21)",
@@ -510,7 +540,7 @@ required = {
         "backend = candidate",
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
-        "QEMURuntimeStatus.locate()",
+        "switch QEMURuntimeStatus.inspect()",
         "isteam_qemu_start",
         "isteam_qemu_request_stop",
         "findUEFIFirmwarePair(in directory: URL)",
@@ -539,13 +569,15 @@ required = {
     "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
         "dlopen(library_path, RTLD_NOW | RTLD_LOCAL)",
-        "malloc(argument_length + 1)",
-        "memcpy(copied_argv[i], argument, argument_length + 1)",
+        "char *argument_storage = malloc(total_argument_bytes);",
+        "copied_argv[i] = argument_storage + argument_offset;",
+        "memcpy(copied_argv[i], argv[i], argument_length + 1u)",
         'dlsym(library, "qemu_init")',
         'dlsym(library, "qemu_main_loop")',
         'dlsym(library, "qemu_cleanup")',
         'dlsym(library, "qemu_system_shutdown_request")',
         'dlsym(library, "isteam_qemu_set_jit_callbacks")',
+        "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
         "static bool g_starting = false;",
         "static _Thread_local char error_copy",
         "ISTEAM_QEMU_MAX_ARGUMENTS 4096",
@@ -560,12 +592,28 @@ required = {
         "vtool -show-build",
         "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
+        'source_dir="$(dirname "$firmware_file")"',
+        '[ "$source_dir" = "$data_dir" ] && continue',
+        'target_dir="$OUT/QEMU/firmware/$relative_dir"',
+        'cp "$firmware_file" "$target_dir/"',
     ],
     "scripts/validate-qemu-runtime.sh": [
+        "for tool in file lipo nm codesign vtool; do",
         "for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request isteam_qemu_set_jit_callbacks; do",
+        "codesign --verify --strict",
         "vtool -show-build",
         "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
+    ],
+    "runtime/qemu/README.md": [
+        "QEMURuntimeStatus.inspect()",
+        "qemu_system_shutdown_request",
+        "isteam_qemu_set_jit_callbacks",
+        "physical iOS 17.4",
+        "Physical-device runtime startup",
+    ],
+    ".github/workflows/validate-repository.yml": [
+        "bash -n scripts/validate-qemu-runtime.sh",
     ],
     "src/QEMU/QEMURuntimeStatus.swift": [
         "bundleRoot = bundle.bundleURL.resolvingSymlinksInPath()",
@@ -647,6 +695,25 @@ required = {
         "case .unsupportedGPU(let gpu)",
         "framebufferBytes <= 64 * 1024 * 1024",
         "fit the 64 MiB framebuffer limit",
+    ],
+    "src/Display/TouchStickMath.swift": [
+        "struct TouchStickMovement",
+        "private let inverseRadius: CGFloat",
+        "inverseRadius = 1 / value",
+        "func transform(dx: CGFloat, dy: CGFloat) -> TouchStickMovement",
+        "offsetX * inverseRadius",
+    ],
+    "scripts/tests/test_touch_stick_math.swift": [
+        "TouchStickMath(radius: radius)",
+        "checked += 1",
+        "Touch stick transform equivalence passed",
+    ],
+    "scripts/tests/test_qemu_native_bridge_jit_validation.py": [
+        "def test_qemu_arguments_use_one_contiguous_allocation(self):",
+        "self.assertIn(\"malloc(total_argument_bytes)\", start)",
+        "def test_jit_callback_export_is_required_during_validation_and_start(self):",
+        "typedef void (*qemu_set_jit_callbacks_fn)",
+        "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
     ],
     "scripts/tests/test_qemu_native_bridge.c": [
         "tooManyArguments[4097]",
@@ -762,7 +829,7 @@ required = {
         "vncClient.onFrame",
         "guest • \\(self.configuration.displayWidth)",
         "vncClient.onStatus",
-        "engine.start(diskImage: diskImage)",
+        "engine.start(diskImage: diskImage, writableDiskImage: writableDiskImage)",
         "MotionInputManager.shared.stop()",
         "motion.onLookDelta =",
         "VRSettings.shared.pointerLockEnabled",
@@ -811,6 +878,10 @@ required = {
     "iSteam/JIT26Protocol.c": [
         "#if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR",
         "iSteamJITIsSupported",
+        "IORegistryEntryFromPath(",
+        '"IODeviceTree:/chosen/memory-map"',
+        "ISTEAM_JIT_PROTOCOL_UNKNOWN",
+        "iSteamJITGetProtocolMode",
     ],
     "src/Core/EmulationLog.swift": [
         "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",
@@ -889,6 +960,49 @@ required = {
         'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
         'if [ "$XCODE_VERSION" != "26.2" ]; then',
     ],
+    "scripts/check-build-freshness.sh": [
+        "git fetch --no-tags --unshallow origin main",
+        "git rev-parse --is-shallow-repository",
+        "git diff --name-only -z",
+        "scripts/tests/*",
+        "scripts/validate-qemu-source.py",
+        "build_relevant_change",
+    ],
+    "scripts/patch_qemu_stikjit_ios.py": [
+        "def patch_exported_symbols(source: str) -> str",
+        "def patch_qemu_sources(region_path: Path) -> None",
+        "qemu_system_shutdown_request;",
+        "isteam_qemu_set_jit_callbacks;",
+        "system/qemu.symbols",
+        "isteam_qemu_set_jit_callbacks",
+        "__attribute__((visibility(\"default\")))",
+        "isteam_jit_prepare_callback",
+        "#if TARGET_OS_IPHONE",
+        "#include <mach/mach_init.h>",
+        "#include <mach/vm_map.h>",
+        "#define mach_vm_address_t vm_address_t",
+        "#define mach_vm_offset_t vm_offset_t",
+        "#define mach_vm_size_t vm_size_t",
+        "#define mach_vm_remap vm_remap",
+        "#define mach_vm_protect vm_protect",
+        "#define mach_vm_deallocate vm_deallocate",
+        "#include <mach/mach_vm.h>",
+        "iSteamJITGetProtocolMode",
+        'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
+        "jit_protocol_mode < 0",
+        "jit_protocol_mode > 0",
+        "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
+    ],
+    "iSteam/JIT26Protocol.h": [
+        "ISTEAM_JIT_PROTOCOL_UNKNOWN",
+        "ISTEAM_JIT_PROTOCOL_STANDARD",
+        "ISTEAM_JIT_PROTOCOL_STIKDEBUG",
+        "iSteamJITGetProtocolMode",
+    ],
+    "project.yml": [
+        "- sdk: IOKit.framework",
+        "-Wl,-exported_symbol,_iSteamJITGetProtocolMode",
+    ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",
@@ -897,16 +1011,52 @@ required = {
     ],
     "scripts/patch_qemu_meson_ios.py": [
         "CONFIG_POSIX_MEMALIGN', true)",
+        "OBJC_BLOCK_MARKER",
+        "checked: 'require'",
+        "-fno-objc-msgsend-class-selector-stubs",
         "emulator_link_args += ['-Wl,-objc_stubs_fast', '-lobjc', '-Wl,-force_load,",
         "A valid IOS_COMPILER_RT path is required",
     ],
     "scripts/verify_qemu_meson_link.py": [
         "build libqemu-x86_64-softmmu.dylib:",
+        "def verify_objc_compile_edge",
+        "spice-display-metal.m.o",
+        "-fno-objc-msgsend-class-selector-stubs",
+        "require_objc_compile=True",
         "LINK_ARGS",
         "emulator-specific link arguments",
         "-Wl,-objc_stubs_fast",
         "-lobjc",
         "-Wl,-force_load,",
+    ],
+    ".github/workflows/blank.yml": [
+        "timeout-minutes: 25",
+        "for attempt in 1 2 3 4 5; do",
+        "grep -Eiq '429|rate limit exceeded|too many requests'",
+        'sleep "$delay"',
+        "git fetch --no-tags gitlab main",
+        'git merge-base --is-ancestor "${GITLAB_SHA}" "${GITHUB_SHA}"',
+        "cancel-in-progress: false",
+    ],
+    "scripts/tests/test_gitlab_sync_workflow.py": [
+        "def test_sync_job_waits_longer_than_gitlab_rate_limit_window",
+        "def test_sync_job_retries_only_rate_limit_responses",
+        "def test_sync_job_rechecks_gitlab_ancestry_before_retry",
+        "def test_sync_job_never_force_pushes",
+        "def test_sync_jobs_are_serialized_without_cancellation",
+    ],
+    "scripts/tests/test_qemu_objc_compile_flags.py": [
+        "def test_meson_patcher_adds_required_objc_flag_and_is_idempotent",
+        "def test_meson_patcher_changes_only_the_objc_compiler_block",
+        "def test_meson_patcher_fails_closed_if_objc_block_changes",
+        "def test_meson_patcher_handles_qemu_common_flags_variant",
+        "def test_meson_patcher_fails_closed_if_objc_block_is_missing",
+        "def test_meson_patcher_rejects_duplicate_objc_blocks",
+        "def test_meson_patcher_rejects_objc_flag_outside_its_block",
+        "def test_meson_patcher_rejects_mixed_patched_and_unpatched_objc_calls",
+        "def test_ninja_verifier_requires_flag_on_actual_metal_compile_edge",
+        "def test_ninja_verifier_rejects_missing_compile_flag_even_when_link_flags_exist",
+        "def test_ninja_verifier_rejects_missing_metal_compile_edge",
     ],
     "scripts/tests/test_x86_condition_dispatch.py": [
         "condition = alu.split(\"static func condition(_ code: UInt8, flags: UInt64) -> Bool {\", 1)[1]",
@@ -961,18 +1111,63 @@ if r"\n" in builder:
 # The QEMU dependency build must patch Meson and verify the actual link edge
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+repository_validation = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
+if "utm-ios-arm64-deps-v14-" not in repository_validation or "utm-ios-arm64-deps-v13-" in repository_validation:
+    print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
+    failed = True
+for step in (
+    "Checkout i-Steam",
+    "Checkout UTM with submodules",
+    "Select Xcode",
+    "Verify Objective-C class-selector stub compatibility",
+    "Verify iOS vm_map compatibility",
+    "scripts/check-build-freshness.sh",
+    "scripts/check-build-freshness.sh",
+    "Install UTM build dependencies",
+    "Cache UTM dependency build and sysroot",
+    "Build UTM dependencies for physical iOS arm64",
+    "Build UTM iOS archive",
+    "Package and verify in-process QEMU runtime",
+    "Upload verified QEMU runtime artifact",
+):
+    marker = "- name: " + step
+    if qemu_workflow.count(marker) != 1:
+        print(f"QEMU workflow: expected exactly one {marker!r} step", file=sys.stderr)
+        failed = True
+if 'SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"' not in qemu_workflow:
+    print("QEMU workflow: Objective-C symbol inspection command is missing", file=sys.stderr)
+    failed = True
+if "if grep -Fq '_objc_msgSendClass' <<<\"$SYMBOLS\"; then" not in qemu_workflow:
+    print("QEMU workflow: Objective-C class-selector stub probe is malformed", file=sys.stderr)
+    failed = True
+if "\n; then\n" in qemu_workflow:
+    print("QEMU workflow: Objective-C class-selector probe contains a stray shell terminator", file=sys.stderr)
+    failed = True
 for token in [
     "scripts/patch_utm_qemu_ios.py",
     "scripts/patch_qemu_meson_ios.py",
     "scripts/verify_qemu_meson_link.py",
-    "utm-ios-arm64-deps-v12-",
+    "Verify Objective-C class-selector stub compatibility",
+    "Verify iOS vm_map compatibility",
+    "ios-vm-map-compat-probe.c",
+    "mach/vm_map.h",
+    "mach_vm_remap",
+    "mach_vm_protect",
+    "mach_vm_deallocate",
+    "-fno-objc-msgsend-class-selector-stubs",
+    "export OBJCFLAGS=",
+    "grep -Fq",
+    "utm-ios-arm64-deps-v14-",
     "spirv-tools",
     "spirv-llvm-translator",
     "steps.xcode.outputs.version",
-    "runs-on: macos-26",
-    'XCODE_APP="/Applications/Xcode_26.2.app"',
+    "runs-on: xcode-27",
+    'XCODE_APP="/Applications/Xcode_27.1.app"',
     'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-    'if [ "$XCODE_VERSION" != "26.2" ]; then',
+    'if [ "$XCODE_VERSION" != "27.1" ]; then',
+    "PROBE_BINARY=",
+    "-Wl,-objc_stubs_fast",
+    "-lobjc -framework Metal",
 ]:
     if token not in qemu_workflow:
         print(f"QEMU workflow: missing build-integrity step {token!r}", file=sys.stderr)
@@ -984,6 +1179,14 @@ if "--extra-ldflags=-Wl,-force_load" in qemu_workflow:
 
 # A release IPA must never be published without its native QEMU runtime.
 release_workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+for token in [
+    'bash scripts/check-build-freshness.sh "$GITHUB_SHA"',
+    "group: isteam-release-publish-${{ matrix.channel }}",
+    "if: steps.freshness.outputs.publish == 'true'",
+]:
+    if token not in release_workflow:
+        print(f"release workflow: build freshness or release serialization contract is missing: {token}", file=sys.stderr)
+        failed = True
 if "- scripts/validate-qemu-source.py" not in release_workflow:
     print("release workflow: source-contract validator changes should not trigger full release builds", file=sys.stderr)
     failed = True
@@ -1018,28 +1221,14 @@ else:
             print(f"release workflow: publishing job missing {token!r}", file=sys.stderr)
             failed = True
 
-release_concurrency_start = release_workflow.find("\nconcurrency:\n")
-release_concurrency_end = release_workflow.find("\njobs:", release_concurrency_start)
-if release_concurrency_start < 0 or release_concurrency_end < 0:
-    print("release workflow: concurrency policy is missing", file=sys.stderr)
-    failed = True
-else:
-    release_concurrency = release_workflow[release_concurrency_start:release_concurrency_end]
-    for token in [
-        "group: isteam-release${{ github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && '-main' || '' }}",
-        "cancel-in-progress: false",
-    ]:
-        if token not in release_concurrency:
-            print(f"release workflow: concurrency policy missing {token!r}", file=sys.stderr)
-            failed = True
 runtime_download_start = release_workflow.find("- name: Download required iOS QEMU runtime artifact")
-runtime_download_end = release_workflow.find("\n      - uses: actions/cache@v4", runtime_download_start)
+runtime_download_end = release_workflow.find("\n      - uses: actions/cache@", runtime_download_start)
 if runtime_download_start < 0 or runtime_download_end < 0:
     print("release workflow: required QEMU runtime download step is missing", file=sys.stderr)
     failed = True
 else:
     runtime_download = release_workflow[runtime_download_start:runtime_download_end]
-    for token in ["uses: actions/download-artifact@v4", "name: iSteam-qemu-runtime-ios-arm64", "path: build/qemu-runtime"]:
+    for token in ["uses: actions/download-artifact@", "name: iSteam-qemu-runtime-ios-arm64", "path: build/qemu-runtime"]:
         if token not in runtime_download:
             print(f"release workflow: required same-run runtime download setting missing: {token}", file=sys.stderr)
             failed = True
