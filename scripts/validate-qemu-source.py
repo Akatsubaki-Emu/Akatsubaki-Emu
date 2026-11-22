@@ -1041,6 +1041,7 @@ required = {
         "__attribute__((visibility(\"default\")))",
         "isteam_jit_prepare_callback",
         "#if TARGET_OS_IPHONE",
+        "#elif TARGET_OS_IOS",
         "#include <mach/mach_init.h>",
         "#include <mach/vm_map.h>",
         "#define mach_vm_address_t vm_address_t",
@@ -1180,7 +1181,7 @@ if r"\n" in builder:
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
 repository_validation = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
-if "utm-ios-arm64-deps-v14-" not in repository_validation or "utm-ios-arm64-deps-v13-" in repository_validation:
+if "utm-ios-arm64-deps-v15-" not in repository_validation or "utm-ios-arm64-deps-v14-" in repository_validation:
     print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
     failed = True
 for step in (
@@ -1240,7 +1241,7 @@ for token in [
     "-fno-objc-msgsend-class-selector-stubs",
     "export OBJCFLAGS=",
     "grep -Fq",
-    "utm-ios-arm64-deps-v14-",
+    "utm-ios-arm64-deps-v15-",
     "spirv-tools",
     "spirv-llvm-translator",
     "steps.xcode.outputs.version",
