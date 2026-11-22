@@ -120,7 +120,7 @@ final class AnisetteDataHelper
                 let jsonData = try JSONEncoder().encode(formattedJSON)
                 let anisette = try JSONDecoder().decode(AnisetteData.self, from: jsonData)
                 
-                self.printOut("Anisette is valid!")
+                self.printOut("Anisette response parsed; sensitive headers redacted")
                 return anisette
             } catch {
                 self.printOut("Anisette is invalid!!!!")

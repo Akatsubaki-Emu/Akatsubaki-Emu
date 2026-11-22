@@ -19,7 +19,8 @@ The integration looks up only the current build's exact bundle identifier and re
 - Apple authentication and App ID capability updates use the pinned StosSign package, following GetMoreRam's API flow.
 - Anisette data is obtained through the SideStore Anisette V3 service. The service URL defaults to `https://ani.sidestore.io`.
 - The Apple ID password is held only while the sign-in request runs; this integration does not persist it in UserDefaults or Keychain.
-- Anisette device identity and provisioning data are stored using the iOS Keychain helper adapted from GetMoreRam.
+- Only the Anisette device identifier and provisioning blob are stored in the iOS Keychain.
+- Sensitive Anisette headers, machine identifiers and one-time passwords are not written to application logs.
 - Apple controls authentication, team permissions, App ID eligibility and capability availability. Errors are displayed as failures; they are not treated as successful updates.
 
 ## Important limits

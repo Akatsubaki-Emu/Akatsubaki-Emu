@@ -29,6 +29,9 @@ class EntitlementManagementSourceTests(unittest.TestCase):
     def test_no_password_is_written_to_user_defaults(self):
         self.assertNotIn("UserDefaults.standard.set(password", self.view)
         self.assertNotIn("appleIDPassword", self.view)
+        keychain = (self.root / "iSteam" / "Keychain.swift").read_text(encoding="utf-8")
+        self.assertNotIn("appleIDPassword", keychain)
+        self.assertNotIn("patreon", keychain.lower())
 
     def test_settings_exposes_entitlement_screen(self):
         self.assertIn("case 6, 7, 8, 9, 10, 11: return 1", self.settings)
@@ -53,6 +56,12 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("class AnisetteDataHelper", anisette)
         self.assertIn("_ = DataManager.shared.model", self.view)
         self.assertLess(self.view.index("_ = DataManager.shared.model"), self.view.index("AnisetteDataHelper.shared.getAnisetteData()"))
+
+    def test_anisette_sensitive_headers_are_not_written_to_logs(self):
+        anisette = (self.root / "iSteam" / "AnisetteDataHelper.swift").read_text(encoding="utf-8")
+        for token in ["Anisette used:", "Original JSON:", "X-Apple-I-MD-LU:", "X-Mme-Device-Id:"]:
+            self.assertNotIn(token, anisette)
+        self.assertIn("sensitive headers redacted", anisette)
 
     def test_existing_memory_entitlement_declarations_are_preserved(self):
         self.assertIn("com.apple.developer.kernel.increased-memory-limit", self.entitlements)
