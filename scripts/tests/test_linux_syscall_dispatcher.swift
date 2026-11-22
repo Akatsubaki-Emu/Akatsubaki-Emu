@@ -111,7 +111,7 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.write(Data([7, 8, 9]), offset: hintedAddress))
         let hintedProtection = dispatcher.dispatch(number: 10, arguments: [hintedAddress, 4096, 1, 0, 0, 0])!
         guard case .returned(let hintedProtectionValue) = hintedProtection else { preconditionFailure() }
-        precondition(hintedProtectionValue == 0)
+        precondition(hintedProtectionValue == UInt64(bitPattern: Int64(-38)))
         let nextHinted = dispatcher.dispatch(number: 9, arguments: [0x47000, 8192, 3, 0x22, UInt64.max, 0])!
         guard case .returned(let nextHintedAddress) = nextHinted else { preconditionFailure() }
         precondition(nextHintedAddress == 0x49000)
@@ -119,7 +119,7 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.write(Data([4, 5, 6]), offset: mapped + 4096))
         let protection = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
         guard case .returned(let protectionValue) = protection else { preconditionFailure() }
-        precondition(protectionValue == 0)
+        precondition(protectionValue == UInt64(bitPattern: Int64(-38)))
         let advice = dispatcher.dispatch(number: 28, arguments: [mapped, 4096, 0, 0, 0, 0])!
         guard case .returned(let adviceValue) = advice else { preconditionFailure() }
         precondition(adviceValue == 0)
@@ -144,7 +144,7 @@ struct LinuxSyscallDispatcherTests {
 
         let protectionAfterUnmap = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
         guard case .returned(let protectionAfterUnmapValue) = protectionAfterUnmap else { preconditionFailure() }
-        precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-12)))
+        precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-38)))
 
         let unmapRemainder = dispatcher.dispatch(number: 11, arguments: [mapped + 4096, 4096, 0, 0, 0, 0])!
         guard case .returned(let unmapRemainderValue) = unmapRemainder else { preconditionFailure() }
@@ -165,7 +165,7 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.read(offset: 0x49000, length: 3) == Data([0x11, 0x22, 0x33]))
         let preservedSuffixProtection = dispatcher.dispatch(number: 10, arguments: [0x49000, 4096, 1, 0, 0, 0])!
         guard case .returned(let preservedSuffixResult) = preservedSuffixProtection else { preconditionFailure() }
-        precondition(preservedSuffixResult == 0)
+        precondition(preservedSuffixResult == UInt64(bitPattern: Int64(-38)))
 
         let outputLog = EmulationLog()
         let outputDispatcher = LinuxSyscallDispatcher(memory: memory, log: outputLog)

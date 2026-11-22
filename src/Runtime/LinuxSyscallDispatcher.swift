@@ -91,7 +91,8 @@ final class LinuxSyscallDispatcher {
             guard arg4 == UInt64.max, arg5 == 0 else { return .returned(errno(22)) }
             return .returned(mapAnonymous(address: arg0, length: arg1, flags: arg3))
         case 10:
-            return .returned(validateRange(address: arg0, length: arg1))
+            // Do not report success until GuestMemory enforces per-page permissions.
+            return .returned(errno(38))
         case 11:
             return .returned(unmap(address: arg0, length: arg1))
         case 12:
