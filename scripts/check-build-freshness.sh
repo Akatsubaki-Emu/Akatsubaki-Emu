@@ -16,7 +16,11 @@ fi
 
 # Checkout jobs may be shallow. Fetch enough history to compare the run commit
 # with the current main tip without relying on GitHub API state.
-git fetch --no-tags --unshallow origin main >/dev/null 2>&1 || git fetch --no-tags origin main >/dev/null
+if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+  git fetch --no-tags --unshallow origin main >/dev/null
+else
+  git fetch --no-tags origin main >/dev/null
+fi
 latest_main="$(git rev-parse refs/remotes/origin/main)"
 
 if [ "$base_sha" = "$latest_main" ]; then
