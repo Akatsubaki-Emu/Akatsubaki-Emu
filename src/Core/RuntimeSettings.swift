@@ -13,7 +13,7 @@ enum VMExecutionMode: String, CaseIterable {
     case linuxVM = "Linux VM"
     var detail: String {
         switch self {
-        case .windowsRuntime: return "LiveExec-style guest process path"
+        case .windowsRuntime: return "Windows PE library route; execution backend is not yet integrated"
         case .windowsVM: return "QEMU full Windows guest"
         case .linuxVM: return "QEMU Linux guest"
         }
@@ -27,10 +27,10 @@ enum VMAccelerationBackend: String, CaseIterable {
     case hypervisor = "Hypervisor.framework"
     var detail: String {
         switch self {
-        case .automatic: return "Best available iOS backend"
-        case .qemuJIT: return "Recommended for iOS"
-        case .qemuInterpreter: return "Slower compatibility fallback"
-        case .hypervisor: return "Unavailable on standard iOS"
+        case .automatic: return "Uses the configured QEMU TCG translation profile"
+        case .qemuJIT: return "TCG with a 128 MiB translation-block cache and split-WX enabled"
+        case .qemuInterpreter: return "TCG with a 64 MiB split-WX translation buffer; still requires JIT executable memory"
+        case .hypervisor: return "Unavailable on standard iOS; stored selections fall back to QEMU TCG"
         }
     }
     static var hypervisorAvailable: Bool { false }
@@ -62,11 +62,11 @@ enum DisplayResolution: String, CaseIterable {
     }
     var detail: String {
         switch self {
-        case .p720: return "Lowest GPU and memory load"
-        case .p1080: return "Full HD"
-        case .p1440: return "QHD"
-        case .p2160: return "4K internal render target; high memory cost"
-        case .custom: return "Choose width and height"
+        case .p720: return "Low-memory target; guest drivers may choose a different size"
+        case .p1080: return "Full HD target; guest drivers may choose a different size"
+        case .p1440: return "QHD target; guest drivers may choose a different size"
+        case .p2160: return "4K target; high memory cost; guest drivers may choose a different size"
+        case .custom: return "Choose target dimensions; guest drivers may choose a different size"
         }
     }
     var renderResolution: RenderResolution {
@@ -113,7 +113,7 @@ final class RuntimeSettings {
     private init() {}
     private let defaults = UserDefaults.standard
     var vmMode: VMExecutionMode {
-        get { VMExecutionMode(rawValue: defaults.string(forKey: "iSteam.vmMode") ?? "") ?? .windowsRuntime }
+        get { VMExecutionMode(rawValue: defaults.string(forKey: "iSteam.vmMode") ?? "") ?? .linuxVM }
         set { defaults.set(newValue.rawValue, forKey: "iSteam.vmMode") }
     }
     var acceleration: VMAccelerationBackend {

@@ -8,7 +8,6 @@ final class SteamLibrary {
     var root: URL {
         let url = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SteamLibrary", isDirectory: true)
-        try? fm.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
 

@@ -51,32 +51,48 @@ struct GameRuntimeProfile: Codable, Equatable, Identifiable {
     }
 
     func validate() throws {
-        guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              displayName.utf8.count <= 256, !displayName.contains("\0"),
+              !compatibilityNotes.contains("\0") else {
             throw ProfileError.invalidName
         }
         guard (320...8192).contains(preferredResolutionWidth),
-              (240...8192).contains(preferredResolutionHeight) else {
+              (240...8192).contains(preferredResolutionHeight),
+              UInt64(preferredResolutionWidth) * UInt64(preferredResolutionHeight) * 4 <= 64 * 1024 * 1024 else {
             throw ProfileError.invalidResolution
         }
         guard (24...120).contains(targetFPS) else { throw ProfileError.invalidFrameRate }
         guard (256...16384).contains(memoryMB) else { throw ProfileError.invalidMemory }
         guard (1...16).contains(cpuCount) else { throw ProfileError.invalidCPUCount }
-        guard environment.keys.allSatisfy({ !$0.isEmpty && !$0.contains("=") && !$0.contains("\0") }),
-              environment.values.allSatisfy({ !$0.contains("\0") }) else {
+        guard launchArguments.count <= 256,
+              launchArguments.allSatisfy({ $0.utf8.count <= 4096 && !$0.contains("\0") }),
+              environment.count <= 128,
+              environment.keys.allSatisfy({ key in
+                  let bytes = Array(key.utf8)
+                  guard let first = bytes.first else { return false }
+                  let validFirst = (UInt8(65)...UInt8(90)).contains(first) || (UInt8(97)...UInt8(122)).contains(first) || first == UInt8(95)
+                  return validFirst && bytes.dropFirst().allSatisfy {
+                      (UInt8(65)...UInt8(90)).contains($0) || (UInt8(97)...UInt8(122)).contains($0)
+                          || (UInt8(48)...UInt8(57)).contains($0) || $0 == UInt8(95)
+                  }
+              }),
+              environment.values.allSatisfy({ $0.utf8.count <= 4096 && !$0.contains("\0") }),
+              compatibilityNotes.utf8.count <= 16_384 else {
             throw ProfileError.invalidEnvironment
         }
     }
 
     enum ProfileError: LocalizedError {
-        case invalidName, invalidResolution, invalidFrameRate, invalidMemory, invalidCPUCount, invalidEnvironment
+        case invalidName, invalidResolution, invalidFrameRate, invalidMemory, invalidCPUCount, invalidEnvironment, corruptStoredProfile
         var errorDescription: String? {
             switch self {
             case .invalidName: return "A game profile needs a name."
-            case .invalidResolution: return "Resolution must be between 320×240 and 8192×8192."
+            case .invalidResolution: return "Resolution must be between 320×240 and 8192×8192 and fit the 64 MiB framebuffer limit."
             case .invalidFrameRate: return "Target FPS must be between 24 and 120."
             case .invalidMemory: return "Profile memory must be between 256 MB and 16384 MB."
             case .invalidCPUCount: return "Profile CPU count must be between 1 and 16."
             case .invalidEnvironment: return "Environment variable names or values contain invalid characters."
+            case .corruptStoredProfile: return "The existing per-game profile is unreadable; it was preserved rather than overwritten."
             }
         }
     }
@@ -109,14 +125,44 @@ final class GameRuntimeProfileStore {
         try profile.validate()
         var value = profile
         value.updatedAt = Date()
-        try encoder.encode(value).write(to: url(for: value.gameID), options: .atomic)
+        let destination = url(for: value.gameID)
+        if fm.fileExists(atPath: destination.path) {
+            let values = try destination.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true,
+                  let existingSize = values.fileSize, existingSize <= 1024 * 1024 else {
+                throw GameRuntimeProfile.ProfileError.corruptStoredProfile
+            }
+            let existingData = try Data(contentsOf: destination)
+            guard existingData.count <= 1024 * 1024,
+                  let existing = try? decoder.decode(GameRuntimeProfile.self, from: existingData),
+                  existing.gameID == value.gameID,
+                  (try? existing.validate()) != nil else {
+                throw GameRuntimeProfile.ProfileError.corruptStoredProfile
+            }
+        }
+        let encoded = try encoder.encode(value)
+        guard encoded.count <= 1024 * 1024 else {
+            throw GameRuntimeProfile.ProfileError.invalidEnvironment
+        }
+        try encoded.write(to: destination, options: .atomic)
         EmulationLog.shared.write("Saved runtime profile for \(value.displayName)")
     }
 
+    private func readProfile(at file: URL) -> GameRuntimeProfile? {
+        guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true,
+              let size = values.fileSize, size <= 1024 * 1024,
+              let data = try? Data(contentsOf: file), data.count <= 1024 * 1024,
+              let profile = try? decoder.decode(GameRuntimeProfile.self, from: data),
+              (try? profile.validate()) != nil,
+              UUID(uuidString: file.deletingPathExtension().lastPathComponent) == profile.gameID else {
+            return nil
+        }
+        return profile
+    }
+
     func profile(for gameID: UUID) -> GameRuntimeProfile? {
-        guard let data = try? Data(contentsOf: url(for: gameID)),
-              let value = try? decoder.decode(GameRuntimeProfile.self, from: data) else { return nil }
-        return value
+        readProfile(at: url(for: gameID))
     }
 
     func removeProfile(for gameID: UUID) throws {
@@ -124,11 +170,25 @@ final class GameRuntimeProfileStore {
         if fm.fileExists(atPath: file.path) { try fm.removeItem(at: file) }
     }
 
+    private func profileFiles() throws -> [URL] {
+        try fm.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ).filter { $0.pathExtension == "json" }
+    }
+
+    var hasUnreadableProfiles: Bool {
+        guard let files = try? profileFiles() else { return true }
+        return files.contains { readProfile(at: $0) == nil }
+    }
+
     var allProfiles: [GameRuntimeProfile] {
-        let files = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        return files.filter { $0.pathExtension == "json" }.compactMap { file in
-            guard let data = try? Data(contentsOf: file) else { return nil }
-            return try? decoder.decode(GameRuntimeProfile.self, from: data)
-        }.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        guard let files = try? profileFiles() else {
+            EmulationLog.shared.write("Game profile directory is unavailable; refusing to export an incomplete library backup")
+            return []
+        }
+        return files.compactMap { readProfile(at: $0) }
+            .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 }

@@ -1,34 +1,67 @@
-name: GitLab Sync
+name: GitHub to GitLab Push Sync
 
+# Every commit pushed to GitHub main is propagated to GitLab main.
+# The reverse mirror remains safe: this job exits when both refs already match.
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-to-gitlab-main
+  cancel-in-progress: false
 
 jobs:
   sync:
-    name: GitHub → GitLab
+    name: Push GitHub main to GitLab main
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout GitHub repository
+      - name: Check out GitHub main with full history
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
-      - name: Sync to GitLab
+      - name: Push commit history to GitLab
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
+          if [ -z "${GITLAB_TOKEN}" ]; then
+            echo "::error::Missing GITLAB_TOKEN. Add a GitLab project access token with write_repository permission to I-Steam/I-steam → Settings → Secrets and variables → Actions."
+            exit 1
+          fi
 
-          git config user.name "Xthrx"
-          git config user.email "Xthrx@users.noreply.github.com"
+          git config user.name "i-Steam GitHub Sync"
+          git config user.email "i-steam-sync[bot]@users.noreply.github.com"
+          git remote add gitlab "https://oauth2:${GITLAB_TOKEN}@gitlab.com/chantinlongxthrx/I-steam.git"
+          git fetch --no-tags gitlab main
 
-          git remote add gitlab "https://oauth2:${GITLAB_TOKEN}@gitlab.com/chantinlongxthrx/i-steam.git"
-          git fetch gitlab main
+          GITHUB_SHA="$(git rev-parse HEAD)"
+          GITLAB_SHA="$(git rev-parse gitlab/main)"
+          echo "GitHub main: ${GITHUB_SHA}"
+          echo "GitLab main: ${GITLAB_SHA}"
 
-          git merge gitlab/main --allow-unrelated-histories -X ours --no-edit
+          if [ "${GITHUB_SHA}" = "${GITLAB_SHA}" ]; then
+            echo "GitLab already contains this exact commit."
+            exit 0
+          fi
 
-          git push gitlab HEAD:main
+          if git merge-base --is-ancestor "${GITLAB_SHA}" "${GITHUB_SHA}"; then
+            echo "GitHub is ahead; pushing the fast-forward update."
+            git push gitlab HEAD:refs/heads/main
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor "${GITHUB_SHA}" "${GITLAB_SHA}"; then
+            echo "::error::GitLab main is ahead of this GitHub commit. Refusing to overwrite newer GitLab history; reconcile the branches first."
+            exit 1
+          fi
+
+          echo "::error::GitHub and GitLab main have diverged. Refusing to auto-merge because conflict resolution could discard work on either remote. Reconcile the histories manually."
+          exit 1

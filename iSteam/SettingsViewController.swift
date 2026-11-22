@@ -1,4 +1,5 @@
 import UIKit
+import SwiftUI
 
 final class SettingsViewController: UITableViewController {
     private let jitMethods = JITMethod.allCases
@@ -15,7 +16,7 @@ final class SettingsViewController: UITableViewController {
         tableView.tableFooterView = UIView()
     }
 
-    override func numberOfSections(in tableView: UITableView) -> Int { 11 }
+    override func numberOfSections(in tableView: UITableView) -> Int { 12 }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch section {
@@ -24,14 +25,14 @@ final class SettingsViewController: UITableViewController {
         case 2: return resolutions.count
         case 3: return frameRates.count
         case 4: return vrModes.count + 2
-        case 5: return jitMethods.count
-        case 6, 7, 8, 9, 10: return 1
+        case 5: return jitMethods.count + 1
+        case 6, 7, 8, 9, 10, 11: return 1
         default: return 0
         }
     }
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        ["Windows Runtime", "VM / Hypervisor", "Resolution", "Display / FPS", "VR / Input", "JIT", "Diagnostics", "Performance", "Android Experiment", "Device Compatibility", "DroidDeck Port"][section]
+        ["Windows Runtime", "VM / Hypervisor", "Resolution", "Display / FPS", "VR / Input", "JIT", "Diagnostics", "Performance", "Android Experiment", "Device Compatibility", "DroidDeck Port", "Entitlements"][section]
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -83,9 +84,18 @@ final class SettingsViewController: UITableViewController {
                 cell.accessoryView = makeSwitch(isOn: VRSettings.shared.touchGamepadEnabled, action: #selector(toggleTouchGamepad(_:)))
             }
         case 5:
-            let method = jitMethods[indexPath.row]
-            c.text = method.rawValue
-            cell.accessoryType = JITCoordinator.shared.selectedMethod == method ? .checkmark : .none
+            if indexPath.row < jitMethods.count {
+                let method = jitMethods[indexPath.row]
+                c.text = method.rawValue
+                c.secondaryText = method == .stikDebug
+                    ? "Automatically start LocalDevVPN, then request JIT for this process with StikDebug."
+                    : "Wait for a compatible debugger to attach."
+                cell.accessoryType = JITCoordinator.shared.selectedMethod == method ? .checkmark : .none
+            } else {
+                c.text = "Request JIT"
+                c.secondaryText = "Open the selected JIT helper for this app."
+                cell.accessoryType = .disclosureIndicator
+            }
         case 6:
             c.text = "Crash Log"; c.secondaryText = "View saved crash information"
             cell.accessoryType = .disclosureIndicator
@@ -100,9 +110,13 @@ final class SettingsViewController: UITableViewController {
             c.text = "\(UIDevice.current.model) · iOS \(UIDevice.current.systemVersion)"
             c.secondaryText = "Hypervisor.framework: unavailable to ordinary iOS apps. QEMU/JIT or interpreter paths are the supported prototype choices. macOS guest boot is disabled on iOS."
             c.secondaryTextProperties.numberOfLines = 0
-        default:
+        case 10:
             c.text = "DroidDeck feature status"
             c.secondaryText = "See which library, controller, storage, XR and guest-runtime features are implemented, partial or unavailable."
+            cell.accessoryType = .disclosureIndicator
+        default:
+            c.text = "Apple Developer account"
+            c.secondaryText = "Enable Increased Memory Limit for this installation's App ID"
             cell.accessoryType = .disclosureIndicator
         }
         cell.contentConfiguration = c
@@ -158,8 +172,12 @@ final class SettingsViewController: UITableViewController {
             VRSettings.shared.mode = vrModes[indexPath.row]
             tableView.reloadSections(IndexSet(integer: 4), with: .automatic)
         case 5:
-            JITCoordinator.shared.selectedMethod = jitMethods[indexPath.row]
-            tableView.reloadSections(IndexSet(integer: 5), with: .automatic)
+            if indexPath.row < jitMethods.count {
+                JITCoordinator.shared.selectedMethod = jitMethods[indexPath.row]
+                tableView.reloadSections(IndexSet(integer: 5), with: .automatic)
+            } else {
+                JITCoordinator.shared.requestJIT(from: self)
+            }
         case 6:
             navigationController?.pushViewController(CrashLogViewController(), animated: true)
         case 7:
@@ -168,6 +186,8 @@ final class SettingsViewController: UITableViewController {
             present(alert, animated: true)
         case 10:
             navigationController?.pushViewController(DroidDeckPortStatusViewController(), animated: true)
+        case 11:
+            navigationController?.pushViewController(UIHostingController(rootView: EntitlementSettingsView()), animated: true)
         default:
             break
         }
@@ -190,14 +210,20 @@ final class SettingsViewController: UITableViewController {
     }
 
     private func showCustomResolutionEditor() {
-        let alert = UIAlertController(title: "Custom Resolution", message: "Width 320–8192; height 240–8192.", preferredStyle: .alert)
+        let framebufferLimit = 64 * 1024 * 1024
+        let alert = UIAlertController(
+            title: "Custom Resolution",
+            message: "Width 320–8192; height 240–8192; framebuffer up to 64 MiB.",
+            preferredStyle: .alert
+        )
         alert.addTextField { $0.placeholder = "Width"; $0.keyboardType = .numberPad; $0.text = "\(RuntimeSettings.shared.customWidth)" }
         alert.addTextField { $0.placeholder = "Height"; $0.keyboardType = .numberPad; $0.text = "\(RuntimeSettings.shared.customHeight)" }
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         alert.addAction(UIAlertAction(title: "Apply", style: .default) { [weak self, weak alert] _ in
             guard let self, let alert,
                   let w = Int(alert.textFields?[0].text ?? ""), let h = Int(alert.textFields?[1].text ?? ""),
-                  (320...8192).contains(w), (240...8192).contains(h) else {
+                  (320...8192).contains(w), (240...8192).contains(h),
+                  UInt64(w) * UInt64(h) * 4 <= UInt64(framebufferLimit) else {
                 self?.showInvalidResolutionAlert(); return
             }
             RuntimeSettings.shared.customWidth = w
@@ -209,7 +235,7 @@ final class SettingsViewController: UITableViewController {
     }
 
     private func showInvalidResolutionAlert() {
-        let alert = UIAlertController(title: "Invalid Resolution", message: "Use width 320–8192 and height 240–8192.", preferredStyle: .alert)
+        let alert = UIAlertController(title: "Invalid Resolution", message: "Use width 320–8192 and height 240–8192, with a framebuffer no larger than 64 MiB.", preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
     }

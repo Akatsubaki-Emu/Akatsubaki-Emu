@@ -26,17 +26,27 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
     var displayHeight: Int
     var displayFPS: Int
     var bootWindows: Bool
+    var bootUEFI: Bool? = nil
+
+    var requiresUEFI: Bool { bootUEFI ?? (bootWindows || name == "SteamOS Gaming Mode") }
+
+    static var defaultAccelerator: Accelerator {
+        switch RuntimeSettings.shared.acceleration {
+        case .automatic, .qemuJIT: return .jit
+        case .qemuInterpreter, .hypervisor: return .tcg
+        }
+    }
 
     static var defaultWindows: VMConfiguration {
         let resolution = RuntimeSettings.shared.renderResolution
         return VMConfiguration(
             id: UUID(), name: "Windows Steam", architecture: .x86_64,
-            memoryMB: 4096, cpuCount: 4, accelerator: .jit,
-            gpu: .virtioRAMFBGL,
+            memoryMB: 4096, cpuCount: 4, accelerator: defaultAccelerator,
+            gpu: .virtioGPU,
             displayWidth: resolution.width,
             displayHeight: resolution.height,
             displayFPS: RuntimeSettings.shared.frameRate.value,
-            bootWindows: true
+            bootWindows: true, bootUEFI: true
         )
     }
 
@@ -44,11 +54,23 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
         let resolution = RuntimeSettings.shared.renderResolution
         return VMConfiguration(
             id: UUID(), name: "Ubuntu", architecture: .x86_64, memoryMB: 4096,
-            cpuCount: 4, accelerator: .jit, gpu: .virtioGPUGL,
+            cpuCount: 4, accelerator: defaultAccelerator, gpu: .virtioGPU,
             displayWidth: resolution.width,
             displayHeight: resolution.height,
             displayFPS: RuntimeSettings.shared.frameRate.value,
-            bootWindows: false
+            bootWindows: false, bootUEFI: false
+        )
+    }
+
+    /// DroidDeck-inspired gaming-oriented Linux guest profile.
+    /// This configures resources and input devices; it does not bundle Valve's
+    /// SteamOS distribution or make unsupported GPU features available.
+    static var defaultSteamOS: VMConfiguration {
+        VMConfiguration(
+            id: UUID(), name: "SteamOS Gaming Mode", architecture: .x86_64,
+            memoryMB: 4096, cpuCount: 4, accelerator: defaultAccelerator, gpu: .virtioGPU,
+            displayWidth: 1280, displayHeight: 800, displayFPS: 60,
+            bootWindows: false, bootUEFI: true
         )
     }
 }

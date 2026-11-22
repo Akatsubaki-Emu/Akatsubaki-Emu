@@ -1,29 +1,32 @@
-# tvOS / Apple TV status
+# tvOS status and roadmap
 
-## What exists
+## Current target
 
-The repository defines a separate tvOS target and a small remote-friendly UI preview in `tvOSApp/AppDelegate.swift`. The screen offers Launch session, Steam Store and Settings actions, which currently display notices rather than starting a guest OS or opening a full tvOS store/settings implementation.
+The XcodeGen target `iSteamTV` is a separate tvOS application using `tvOSApp/` and `iSteam/Info-tvOS.plist`. It is a Siri Remote-friendly interface prototype, not the iOS VM runtime.
 
-The combined release workflow builds the tvOS target separately and packages its app bundle as `iSteam-tvOS.ipa`. A successful archive/package check only means the expected app bundle was produced and its ZIP container passed validation.
+The current `project.yml` declares tvOS 17.0 as its deployment target. The tvOS app does not currently share the iOS VM runtime source set, and its Launch session, Steam Store, and Settings actions present explanatory prototype notices.
 
-## What does not exist yet
+## Current limitations
 
-- The tvOS interface is not connected to the iOS guest-runtime code.
-- Launch session does not boot Linux, Windows or another guest OS.
-- The Steam Store action does not provide an embedded browser.
-- The Settings action is a placeholder.
-- There is no verified physical Apple TV runtime test in CI.
-- The unsigned IPA is not directly installable as-is.
+- No QEMU guest boot is wired into the tvOS target.
+- No Windows/Linux game execution is integrated.
+- The current tvOS UI is not a Steam client and does not authenticate with Valve.
+- iOS signing, JIT, file-provider access, controller APIs, and display behavior cannot be assumed to work identically on tvOS.
+- A tvOS IPA package is not proof of installability on every Apple TV model or installer.
 
-## Signing and testing
+## Build and validation
 
-tvOS deployment requires an appropriate Apple TV development/deployment path, compatible signing/provisioning, and testing on a supported device or simulator. Do not use the iOS installation instructions for the tvOS artifact.
+Generate the project with XcodeGen:
 
-## Suggested next milestones
+```sh
+xcodegen generate --spec project.yml
+```
 
-1. Define a tvOS-specific app architecture using focus/navigation patterns suited to the Siri Remote.
-2. Add accessibility labels, focus-state styling and remote-navigation tests.
-3. Separate shared portable runtime code from iOS-only UI and APIs.
-4. Decide how the guest runtime can be supported on tvOS, including platform/JIT restrictions and memory/performance limits.
-5. Add a tvOS simulator smoke test, then document separate physical-device testing.
-6. Only enable runtime actions after they are connected to working, tested implementations.
+Select the `iSteamTV` target/scheme in Xcode or use the GitHub Actions platform compile workflow. Verify the deployment target and entitlements in the generated project before release.
+
+## Next milestones
+
+1. Keep the tvOS prototype clearly separated from unsupported runtime controls.
+2. Add UI tests for Siri Remote focus and navigation.
+3. Verify app lifecycle, storage and network permission behavior on a physical Apple TV.
+4. Only integrate QEMU after the iOS runtime has a proven boot/display/input/shutdown lifecycle and a separate tvOS feasibility review.

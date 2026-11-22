@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>iSteam</string>
-<key>CFBundleDisplayName</key><string>iSteam</string>
+<key>CFBundleDisplayName</key><string>Akatsubaki Emu</string>
 <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 <key>CFBundleName</key><string>iSteam</string>
 <key>CFBundlePackageType</key><string>APPL</string>
@@ -11,8 +11,9 @@
 <key>LSRequiresIPhoneOS</key><true/>
 <key>UIFileSharingEnabled</key><true/>
 <key>LSSupportsOpeningDocumentsInPlace</key><true/>
-<key>LSApplicationQueriesSchemes</key><array><string>stikdebug</string></array>
-<key>NSMotionUsageDescription</key><string>iSteam uses device motion for head-look input in Cardboard VR mode.</string>
+<key>LSApplicationQueriesSchemes</key><array><string>stikdebug</string><string>localdevvpn</string></array>
+<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleURLSchemes</key><array><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string></array></dict></array>
+<key>NSMotionUsageDescription</key><string>Akatsubaki Emu uses device motion for head-look input in Cardboard VR mode.</string>
 <key>UILaunchScreen</key><dict/>
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 </dict></plist>

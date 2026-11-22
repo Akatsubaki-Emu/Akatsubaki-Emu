@@ -1,0 +1,146 @@
+name: Build UTM iOS QEMU runtime (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      rebuild_dependencies:
+        description: Rebuild UTM dependencies instead of reusing the runner cache
+        type: boolean
+        required: true
+        default: false
+  workflow_call:
+    inputs:
+      rebuild_dependencies:
+        description: Rebuild UTM dependencies instead of reusing the runner cache
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # Separate diagnostic manual runs from calls inside the release workflow.
+  group: qemu-runtime-ios-arm64-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  build-utm-runtime:
+    runs-on: macos-26
+    timeout-minutes: 350
+    steps:
+      - name: Checkout i-Steam
+        uses: actions/checkout@v4
+
+      - name: Checkout UTM with submodules
+        id: utm-source
+        uses: actions/checkout@v4
+        with:
+          repository: utmapp/UTM
+          ref: main
+          path: UTM
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Select Xcode
+        id: xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP="/Applications/Xcode_26.2.app"
+          if [ ! -d "$XCODE_APP" ]; then
+            echo "Xcode 26.2 is required for the QEMU/Mesa Metal 4 headers." >&2
+            exit 1
+          fi
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+          XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          if [ "$XCODE_VERSION" != "26.2" ]; then
+            echo "Expected Xcode 26.2, selected $XCODE_VERSION." >&2
+            exit 1
+          fi
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "version=${XCODE_VERSION}-ios-${IOS_SDK_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Install UTM build dependencies
+        run: |
+          set -euo pipefail
+          brew install bison pkg-config gettext glib libgpg-error nasm meson cmake llvm spirv-llvm-translator spirv-tools libxcb libxrandr
+          python3 -m pip install --break-system-packages six pyparsing pyyaml setuptools distlib mako
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+          # UTM's QEMU link step uses platform-availability checks. Homebrew LLVM
+          # does not ship an iOS compiler-rt, so force-load Apple's iOS runtime
+          # from the active Xcode toolchain when the linker builds QEMU dylibs.
+          CLANG="$(xcrun --sdk iphoneos --find clang)"
+          RESOURCE_DIR="$("$CLANG" -print-resource-dir)"
+          RUNTIME="$RESOURCE_DIR/lib/darwin/libclang_rt.ios.a"
+          if [ ! -f "$RUNTIME" ]; then
+            RUNTIME="$(find "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang" -path '*/lib/darwin/libclang_rt.ios.a' -print -quit)"
+          fi
+          if [ -z "$RUNTIME" ] || [ ! -f "$RUNTIME" ]; then
+            echo "Apple's libclang_rt.ios.a was not found in the selected Xcode toolchain." >&2
+            exit 1
+          fi
+          echo "IOS_COMPILER_RT=$RUNTIME" >> "$GITHUB_ENV"
+          echo "Using iOS compiler runtime: $RUNTIME"
+
+      - name: Cache UTM dependency build and sysroot
+        if: ${{ !inputs.rebuild_dependencies }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            UTM/build-iOS-arm64
+            UTM/sysroot-iOS-arm64
+          # Include the workflow itself: Meson cross-file fixes change build configuration.
+          # A workflow-only fix must not reuse a QEMU build tree configured without it.
+          key: utm-ios-arm64-deps-v12-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
+
+      - name: Build UTM dependencies for physical iOS arm64
+        shell: bash
+        env:
+          NCPU: "2"
+          ISTEAM_QEMU_JIT_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_stikjit_ios.py
+          ISTEAM_QEMU_MESON_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_meson_ios.py
+          ISTEAM_QEMU_LINK_VERIFIER: ${{ github.workspace }}/scripts/verify_qemu_meson_link.py
+        run: |
+          set -euo pipefail
+          cd UTM
+          # Patch QEMU's iOS 26+ TCG JIT allocator and Meson project, then verify the generated
+          # QEMU dylib link edge before its compile/link tasks start.
+          python3 "$GITHUB_WORKSPACE/scripts/patch_utm_qemu_ios.py" scripts/build_dependencies.sh
+          if [ "${{ inputs.rebuild_dependencies }}" = "true" ] || [ ! -f build-iOS-arm64/BUILD_SUCCESS ]; then
+            ./scripts/build_dependencies.sh -p ios -a arm64
+          else
+            echo "Using the cached iOS arm64 dependency build."
+          fi
+          test -f build-iOS-arm64/BUILD_SUCCESS
+          test -d sysroot-iOS-arm64
+
+      - name: Build UTM iOS archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd UTM
+          ./scripts/build_utm.sh -k iphoneos -s iOS -a arm64 -o UTMBuild
+          test -d UTMBuild.xcarchive/Products/Applications/UTM.app
+
+      - name: Package and verify in-process QEMU runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/package-utm-qemu-runtime.sh UTM/UTMBuild.xcarchive build/qemu-runtime
+          cp UTM/UTMBuild.xcarchive/Info.plist build/qemu-runtime/UTM-archive-Info.plist
+          echo "UTM revision: $(git -C UTM rev-parse HEAD)" >> build/qemu-runtime/BUILD-INFO.txt
+          cat build/qemu-runtime/BUILD-INFO.txt
+
+      - name: Upload verified QEMU runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iSteam-qemu-runtime-ios-arm64
+          path: build/qemu-runtime/
+          if-no-files-found: error
+          retention-days: 14

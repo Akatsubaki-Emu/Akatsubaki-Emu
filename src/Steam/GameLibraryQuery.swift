@@ -21,7 +21,10 @@ struct GameLibraryQuery {
         var result = source.filter { game in
             if favoritesOnly && !game.isFavorite { return false }
             if let tag, !tag.isEmpty,
-               !game.tags.contains(where: { $0.localizedCaseInsensitiveCompare(tag) == .orderedSame }) {
+               !game.tags.contains(where: {
+                   $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                       .localizedCaseInsensitiveCompare(tag) == .orderedSame
+               }) {
                 return false
             }
             guard !query.isEmpty else { return true }
@@ -60,9 +63,19 @@ extension GameStore {
     }
 
     var allTags: [String] {
-        Array(Set(games.flatMap(\.tags).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }))
-            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        var seen = Set<String>()
+        var tags: [String] = []
+        for game in games {
+            for rawTag in game.tags {
+                let tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !tag.isEmpty else { continue }
+                let key = tag.folding(options: .caseInsensitive, locale: .current)
+                if seen.insert(key).inserted {
+                    tags.append(tag)
+                }
+            }
+        }
+        return tags.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
     var recentlyPlayed: [GameEntry] {

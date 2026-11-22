@@ -22,4 +22,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         self.window = window
         return true
     }
+
+    func application(_ application: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        JITCoordinator.shared.handleCallback(url)
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        JITCoordinator.shared.applicationDidBecomeActive()
+    }
 }

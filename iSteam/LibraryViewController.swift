@@ -10,7 +10,7 @@ final class LibraryViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "i-Steam"
+        title = "Akatsubaki Emu"
         view.backgroundColor = .black
         stack.axis = .vertical
         stack.alignment = .fill
@@ -25,7 +25,7 @@ final class LibraryViewController: UIViewController {
             stack.heightAnchor.constraint(equalToConstant: 300)
         ])
         let heading = UILabel()
-        heading.text = "i-Steam"
+        heading.text = "Akatsubaki Emu"
         heading.font = .systemFont(ofSize: 44, weight: .bold)
         heading.textAlignment = .center
         stack.addArrangedSubview(heading)
@@ -35,7 +35,7 @@ final class LibraryViewController: UIViewController {
         stack.addArrangedSubview(makeButton("Steam Store") { [weak self] in
             let alert = UIAlertController(
                 title: "Steam Store",
-                message: "Embedded web browsing is not available in the tvOS build. Use the iOS build to browse the Steam Store inside i-Steam.",
+                message: "Embedded web browsing is not available in the tvOS build. Use the iOS build to browse the Steam Store inside Akatsubaki Emu.",
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: "OK", style: .default))
@@ -66,7 +66,7 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "iSteam"
+        title = "Akatsubaki Emu"
         view.backgroundColor = .systemGroupedBackground
         navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Settings", style: .plain, target: self, action: #selector(openSettings))
         buildMenu()
@@ -106,12 +106,15 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
 
         stack.addArrangedSubview(makeButton("Continue from Last Session", detail: "Restore the last saved VM configuration", symbol: "arrow.clockwise", primary: true) { [weak self] in self?.continueLastSession() })
         stack.addArrangedSubview(makeButton("Launch", detail: "Open the full session setup page", symbol: "play.fill", primary: true) { [weak self] in self?.showLaunchFlow() })
+        stack.addArrangedSubview(makeButton("My Games", detail: "Browse imported executables", symbol: "gamecontroller", primary: false) { [weak self] in
+            self?.navigationController?.pushViewController(GameLibraryViewController(), animated: true)
+        })
         stack.addArrangedSubview(makeButton("Steam Store", detail: "Browse the official Steam Store", symbol: "cart", primary: false) { [weak self] in self?.openSteamStore() })
         stack.addArrangedSubview(makeButton("Import Custom OS", detail: "Choose an OS image or disk file", symbol: "externaldrive.badge.plus", primary: false) { [weak self] in self?.importOperatingSystem() })
         stack.addArrangedSubview(makeButton("Browse External Drive", detail: "Open USB, SD card, or Files-provider storage", symbol: "externaldrive", primary: false) { [weak self] in self?.browseExternalDrive() })
         stack.addArrangedSubview(makeButton("Import Game / Executable", detail: "Add a Windows PE or Linux ELF file", symbol: "plus.rectangle.on.folder", primary: false) { [weak self] in self?.importGame() })
         stack.addArrangedSubview(makeButton("Export Library Backup", detail: "Save game metadata and per-game profiles as JSON", symbol: "square.and.arrow.up", primary: false) { [weak self] in self?.exportLibraryBackup() })
-        stack.addArrangedSubview(makeButton("Import Library Backup", detail: "Merge a validated i-Steam JSON backup", symbol: "square.and.arrow.down", primary: false) { [weak self] in self?.importLibraryBackup() })
+        stack.addArrangedSubview(makeButton("Import Library Backup", detail: "Merge a validated Akatsubaki Emu JSON backup", symbol: "square.and.arrow.down", primary: false) { [weak self] in self?.importLibraryBackup() })
         stack.addArrangedSubview(makeButton("Runtime Capability Report", detail: "See which DroidDeck-style engines are actually available", symbol: "checkmark.shield", primary: false) { [weak self] in self?.showRuntimeCapabilities() })
         stack.addArrangedSubview(makeButton("Settings", detail: "Display, VM, input, and diagnostics", symbol: "gearshape", primary: false) { [weak self] in self?.openSettings() })
         statusLabel.textColor = .secondaryLabel
@@ -152,13 +155,21 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
     @objc private func openSettings() { navigationController?.pushViewController(SettingsViewController(), animated: true) }
 
     private func continueLastSession() {
-        guard let config = VMSaveSlotStore.shared.lastSessionConfiguration() else {
-            let alert = UIAlertController(title: "No saved session", message: "Launch a session with Keep session data enabled to save its configuration for next time.", preferredStyle: .alert)
+        guard let session = VMSaveSlotStore.shared.lastSession() else {
+            let alert = UIAlertController(
+                title: "Saved disk unavailable",
+                message: "The last session has no valid disk-image bookmark. Open Launch Setup and choose the guest disk again.",
+                preferredStyle: .alert
+            )
             alert.addAction(UIAlertAction(title: "OK", style: .default))
             alert.addAction(UIAlertAction(title: "Set up a session", style: .default) { [weak self] _ in self?.showLaunchFlow() })
-            present(alert, animated: true); return
+            present(alert, animated: true)
+            return
         }
-        navigationController?.pushViewController(VMDisplayViewController(configuration: config), animated: true)
+        navigationController?.pushViewController(
+            VMDisplayViewController(configuration: session.configuration, diskImage: session.diskImageURL),
+            animated: true
+        )
     }
     private func showLaunchFlow() { navigationController?.pushViewController(LaunchSetupViewController(), animated: true) }
     private func openSteamStore() {
@@ -166,7 +177,7 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
             showMessage("Steam Store", "The Steam Store URL is invalid.")
             return
         }
-        // Use WKWebView so the store stays embedded in i-Steam on iOS and tvOS.
+        // Use WKWebView so the store stays embedded in Akatsubaki Emu on iOS and tvOS.
         let browser = SteamStoreViewController(url: url)
         present(UINavigationController(rootViewController: browser), animated: true)
     }
@@ -264,11 +275,21 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
             return
         }
         do {
-            let formatResult = GuestProcessManager.shared.inspect(source)
-            guard case let .success(format) = formatResult, format == .windowsPE || format == .linuxELF else {
-                throw NSError(domain: "iSteam.Import", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported executable. Import a Windows PE or Linux ELF executable."])
+            _ = try ExternalDriveStore.shared.withAccess(to: source) { readableSource -> GuestExecutableFormat in
+                let formatResult = GuestProcessManager.shared.inspect(readableSource)
+                guard case let .success(format) = formatResult,
+                      format == .windowsPE || format == .linuxELF else {
+                    throw NSError(domain: "iSteam.Import", code: 1, userInfo: [
+                        NSLocalizedDescriptionKey: "Unsupported executable. Import a Windows PE or Linux ELF executable."
+                    ])
+                }
+                if format == .windowsPE {
+                    _ = try WindowsPELoader().load(readableSource)
+                } else {
+                    try ELFValidator.validate(url: readableSource)
+                }
+                return format
             }
-            if format == .windowsPE { _ = try WindowsPELoader().load(source) } else { try ELFValidator.validate(url: source) }
             let fm = FileManager.default
             let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             let dir = support.appendingPathComponent("Games", isDirectory: true)
@@ -291,6 +312,64 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
     }
 }
 
+#endif
+
+#if !os(tvOS)
+private final class GameLibraryViewController: UITableViewController {
+    private var games: [GameEntry] = []
+
+    init() {
+        super.init(style: .insetGrouped)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = "My Games"
+        tableView.rowHeight = 64
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        games = GameStore.shared.search("")
+        tableView.reloadData()
+        if games.isEmpty {
+            let empty = UILabel()
+            empty.text = "No imported games yet. Import a Windows PE or Linux ELF executable first."
+            empty.textAlignment = .center
+            empty.numberOfLines = 0
+            empty.textColor = .secondaryLabel
+            empty.layoutMargins = UIEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
+            tableView.backgroundView = empty
+        } else {
+            tableView.backgroundView = nil
+        }
+    }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        games.count
+    }
+
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "game")
+        let game = games[indexPath.row]
+        cell.textLabel?.text = game.name
+        cell.detailTextLabel?.text = URL(fileURLWithPath: game.executablePath).lastPathComponent
+        cell.accessoryType = .disclosureIndicator
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        navigationController?.pushViewController(
+            ConsoleViewController(game: games[indexPath.row]),
+            animated: true
+        )
+    }
+}
 #endif
 
 #if !os(tvOS)

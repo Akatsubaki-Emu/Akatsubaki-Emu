@@ -34,11 +34,12 @@ final class FramePacer {
         link = nil
         lastTimestamp = 0
         frames = 0
+        currentFPS = 0
     }
 
     @objc private func tick(_ display: CADisplayLink) {
-        frames += 1
         guard lastTimestamp != 0 else { lastTimestamp = display.timestamp; return }
+        frames += 1
         let elapsed = display.timestamp - lastTimestamp
         guard elapsed >= 0.5 else { return }
         currentFPS = Double(frames) / elapsed

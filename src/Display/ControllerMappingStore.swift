@@ -25,7 +25,7 @@ struct ControllerMappingProfile: Codable, Equatable {
         guard (0...0.8).contains(leftDeadzone),
               (0...0.8).contains(rightDeadzone),
               buttonActions.count <= 64,
-              buttonActions.allSatisfy({ !$0.key.isEmpty && !$0.key.contains("\0") && !$0.value.contains("\0") }) else {
+              buttonActions.allSatisfy({ !$0.key.isEmpty && $0.key.utf8.count <= 64 && !$0.value.isEmpty && $0.value.utf8.count <= 64 && !$0.key.contains("\0") && !$0.value.contains("\0") }) else {
             throw MappingError.invalidProfile
         }
     }
@@ -42,24 +42,44 @@ struct ControllerMappingProfile: Codable, Equatable {
 
 final class ControllerMappingStore {
     static let shared = ControllerMappingStore()
+    static let profileDidChangeNotification = Notification.Name("iSteam.controllerMapping.profileDidChange")
     private let defaultsKey = "iSteam.controllerMapping.v1"
+    private let lock = NSLock()
+    private var cachedProfile: ControllerMappingProfile?
     private init() {}
 
     var profile: ControllerMappingProfile {
         get {
-            guard let data = UserDefaults.standard.data(forKey: defaultsKey),
-                  let value = try? JSONDecoder().decode(ControllerMappingProfile.self, from: data),
-                  (try? value.validate()) != nil else { return .standard }
+            lock.lock()
+            defer { lock.unlock() }
+            if let cachedProfile { return cachedProfile }
+            let value = loadProfile()
+            cachedProfile = value
             return value
         }
         set {
             guard (try? newValue.validate()) != nil,
                   let data = try? JSONEncoder().encode(newValue) else { return }
+            lock.lock()
             UserDefaults.standard.set(data, forKey: defaultsKey)
+            cachedProfile = newValue
+            lock.unlock()
+            NotificationCenter.default.post(name: Self.profileDidChangeNotification, object: self)
         }
     }
 
     func reset() {
+        lock.lock()
         UserDefaults.standard.removeObject(forKey: defaultsKey)
+        cachedProfile = .standard
+        lock.unlock()
+        NotificationCenter.default.post(name: Self.profileDidChangeNotification, object: self)
+    }
+
+    private func loadProfile() -> ControllerMappingProfile {
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey), data.count <= 64 * 1024,
+              let value = try? JSONDecoder().decode(ControllerMappingProfile.self, from: data),
+              (try? value.validate()) != nil else { return .standard }
+        return value
     }
 }

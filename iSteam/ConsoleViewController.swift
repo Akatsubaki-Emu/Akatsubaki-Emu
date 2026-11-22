@@ -28,7 +28,7 @@ final class ConsoleViewController: UIViewController {
         fpsLabel.backgroundColor = UIColor.black.withAlphaComponent(0.65)
         fpsLabel.font = .monospacedSystemFont(ofSize: 13, weight: .semibold)
         fpsLabel.textAlignment = .center
-        fpsLabel.text = "FPS: --"
+        fpsLabel.text = "UI FPS: --"
         fpsLabel.layer.cornerRadius = 8
         fpsLabel.clipsToBounds = true
 
@@ -54,11 +54,15 @@ final class ConsoleViewController: UIViewController {
         ])
 
         startFrameMonitor()
-
-        let available = Box64Bridge.isAvailable
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Stop",
+            style: .plain,
+            target: self,
+            action: #selector(stopGuest)
+        )
 
         textView.text = """
-        iSteam
+        Akatsubaki Emu
         ======
 
         Game:
@@ -70,38 +74,52 @@ final class ConsoleViewController: UIViewController {
         Working directory:
         \(game.workingDirectory)
 
-        Box64:
-        \(available ? "Available" : "Not linked")
+        Backend:
+        Runtime router
 
         Display:
-        CADisplayLink active
+        UI frame monitor only; guest rendering is not connected to this console.
 
-        Target:
-        60 FPS UI / 24 FPS minimum target
-
-        Note:
-        The actual game's FPS depends on its renderer and
-        the graphics backend supplied by the runtime.
+        Scope:
+        Linux static ELF bring-up is supported by the diagnostic interpreter.
+        Windows PE still requires a verified compatibility backend.
         """
 
-        if available {
-            DispatchQueue.global(qos: .userInteractive).async { [weak self] in
-                guard let self else { return }
-
-                let executable = URL(fileURLWithPath: self.game.executablePath)
-                let working = URL(fileURLWithPath: self.game.workingDirectory)
-
-                let result = Box64Bridge.run(
-                    executable: executable,
-                    workingDirectory: working,
-                    arguments: []
-                )
-
-                DispatchQueue.main.async {
-                    self.textView.text.append("\n\nProcess exited with code: \(result)")
-                }
+        let executable = URL(fileURLWithPath: game.executablePath)
+        let workingDirectory = URL(fileURLWithPath: game.workingDirectory)
+        let accepted = GameLauncher.shared.launch(
+            executable: executable,
+            workingDirectory: workingDirectory,
+            arguments: game.launchArguments
+        ) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(.halted):
+                self.appendStatus("\n\nGuest process exited.")
+            case .success(.interrupted):
+                self.appendStatus("\n\nGuest process stopped.")
+            case .success(let exit):
+                self.appendStatus("\n\nGuest process stopped: \(exit)")
+            case .failure(let error):
+                self.appendStatus("\n\nGuest launch failed: \(error.localizedDescription)")
             }
         }
+        if accepted {
+            GameStore.shared.recordLaunchAccepted(id: game.id)
+            appendStatus("\n\nGuest launch accepted.")
+        } else {
+            appendStatus("\n\nNo verified runtime accepted this executable. See the emulation log.")
+        }
+    }
+
+    private func appendStatus(_ message: String) {
+        DispatchQueue.main.async { [weak self] in
+            self?.textView.text.append(message)
+        }
+    }
+
+    @objc private func stopGuest() {
+        LinuxELFRuntime.shared.stop()
     }
 
     private func startFrameMonitor() {
@@ -135,7 +153,7 @@ final class ConsoleViewController: UIViewController {
 
         if elapsed >= 0.5 {
             let fps = Double(frameCount) / elapsed
-            fpsLabel.text = String(format: "FPS: %.0f", fps)
+            fpsLabel.text = String(format: "UI FPS: %.0f", fps)
             frameCount = 0
             lastFrameTime = link.timestamp
         }
@@ -145,5 +163,8 @@ final class ConsoleViewController: UIViewController {
         super.viewDidDisappear(animated)
         displayLink?.invalidate()
         displayLink = nil
+        if isMovingFromParent || isBeingDismissed {
+            LinuxELFRuntime.shared.stop()
+        }
     }
 }

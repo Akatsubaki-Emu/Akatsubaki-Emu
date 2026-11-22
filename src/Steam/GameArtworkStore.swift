@@ -34,8 +34,15 @@ final class GameArtworkStore {
         guard let data = imageData, data.count <= maxBytes,
               let image = CGImageSourceCreateWithData(data as CFData, nil),
               CGImageSourceGetCount(image) > 0,
+              CGImageSourceGetCount(image) <= 200,
+              let properties = CGImageSourceCopyPropertiesAtIndex(image, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int,
+              width > 0, height > 0, width <= 8192, height <= 8192,
+              width <= (16 * 1024 * 1024) / height,
+              CGImageSourceCreateImageAtIndex(image, 0, nil) != nil,
               let type = CGImageSourceGetType(image) as String?,
-              ["public.jpeg", "public.png", "public.heic", "public.webp", "com.compuserve.gif"].contains(type) else {
+              ["public.jpeg", "public.png", "public.heic", "public.webp", "org.webmproject.webp", "com.compuserve.gif"].contains(type) else {
             throw ArtworkError.invalidImage
         }
         let ext: String
@@ -43,23 +50,38 @@ final class GameArtworkStore {
         case "public.jpeg": ext = "jpg"
         case "public.png": ext = "png"
         case "public.heic": ext = "heic"
-        case "public.webp": ext = "webp"
+        case "public.webp", "org.webmproject.webp": ext = "webp"
         default: ext = "gif"
         }
         let destination = directory.appendingPathComponent(gameID.uuidString).appendingPathExtension(ext)
         try data.write(to: destination, options: .atomic)
+        // Keep one canonical artwork file per game. Otherwise changing format
+        // (for example PNG to JPEG) leaves an older file that may be selected
+        // unpredictably by artworkURL(for:).
+        let existing = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        for file in existing where file.deletingPathExtension().lastPathComponent == gameID.uuidString
+            && file != destination {
+            try? fm.removeItem(at: file)
+        }
         EmulationLog.shared.write("Cached cover artwork for game \(gameID.uuidString)")
         return destination
     }
 
     func artworkURL(for gameID: UUID) -> URL? {
-        guard let files = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return nil }
-        return files.first { $0.deletingPathExtension().lastPathComponent == gameID.uuidString }
+        guard let files = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
+        return files.filter { $0.deletingPathExtension().lastPathComponent == gameID.uuidString }
+            .sorted {
+                let left = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                let right = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                return left > right
+            }.first
     }
 
     func removeArtwork(for gameID: UUID) throws {
-        guard let url = artworkURL(for: gameID) else { return }
-        try fm.removeItem(at: url)
+        guard fm.fileExists(atPath: directory.path) else { return }
+        let files = try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.deletingPathExtension().lastPathComponent == gameID.uuidString }
+        for file in files { try fm.removeItem(at: file) }
     }
 
     enum ArtworkError: LocalizedError {

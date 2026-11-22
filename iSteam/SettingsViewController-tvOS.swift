@@ -17,7 +17,7 @@ final class SettingsViewController: UIViewController {
             stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -100),
             stack.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
-        addLabel("i-Steam tvOS Nightly", size: 34, weight: .bold)
+        addLabel("Akatsubaki Emu for tvOS", size: 34, weight: .bold)
         addLabel("Display: \(RuntimeSettings.shared.renderResolution.title)", size: 24)
         addLabel("FPS target: \(RuntimeSettings.shared.frameRate.value)", size: 24)
         addLabel("VM acceleration: \(RuntimeSettings.shared.acceleration.rawValue)", size: 24)

@@ -1,8 +1,22 @@
 name: i-Steam Build & Release
 
 on:
+  # Build the runtime in this workflow before any platform app builds.
   push:
     branches: [main]
+    paths-ignore:
+      - .github/workflows/release.yml
+      - .github/workflows/blank.yml
+      - .github/workflows/validate-ios-build.yml
+      - .github/workflows/validate-repository.yml
+      - .gitlab-ci.yml
+      - scripts/tests/**
+      - README.md
+      - CONTRIBUTING.md
+      - INSTALL.md
+      - LICENSE
+      - docs/**
+      - scripts/validate-qemu-source.py
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
@@ -18,15 +32,24 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
-  group: isteam-release
+  group: isteam-release${{ github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && '-main' || '' }}
   cancel-in-progress: false
 
 jobs:
+  # This reusable workflow runs inside this run and uploads the artifact here.
+  # App jobs cannot start until the runtime is successfully compiled and packaged.
+  qemu-runtime:
+    uses: ./.github/workflows/build-qemu-runtime.yml
+    with:
+      rebuild_dependencies: false
+
   build:
+    needs: qemu-runtime
     name: Build ${{ matrix.platform }} (${{ matrix.channel }})
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -35,12 +58,30 @@ jobs:
         channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
     env:
       RELEASE_CHANNEL: ${{ matrix.channel }}
-      VERSION: 0.1.${{ format('{0}', github.run_number) }}
-      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Select and verify Xcode 26.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP="/Applications/Xcode_26.2.app"
+          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+          XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
+          if [ "$XCODE_VERSION" != "26.2" ]; then
+            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+            exit 1
+          fi
+
+      - name: Download required iOS QEMU runtime artifact from this run
+        if: matrix.platform == 'iOS'
+        uses: actions/download-artifact@v4
+        with:
+          name: iSteam-qemu-runtime-ios-arm64
+          path: build/qemu-runtime
 
       - uses: actions/cache@v4
         with:
@@ -70,6 +111,33 @@ jobs:
           APP="build/iSteam.xcarchive/Products/Applications/iSteam.app"
           test -d "$APP"
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          RUNTIME_DIR="build/qemu-runtime"
+          test -d "$RUNTIME_DIR/Frameworks" || { echo "Required QEMU Frameworks directory is missing." >&2; exit 1; }
+          test -d "$RUNTIME_DIR/QEMU" || { echo "Required QEMU data directory is missing." >&2; exit 1; }
+          test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt" || { echo "Runtime library manifest is missing." >&2; exit 1; }
+          test -s "$RUNTIME_DIR/exports.txt" || { echo "QEMU export manifest is missing." >&2; exit 1; }
+          RUNTIME_REL="$(head -n 1 "$RUNTIME_DIR/QEMU/runtime-library-path.txt")"
+          case "$RUNTIME_REL" in
+            Frameworks/*) ;;
+            *) echo "Unexpected QEMU runtime path: $RUNTIME_REL" >&2; exit 1 ;;
+          esac
+          test -s "$RUNTIME_DIR/$RUNTIME_REL" || { echo "Manifest points to a missing QEMU library: $RUNTIME_REL" >&2; exit 1; }
+          grep -Eq ' _?qemu_init$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU init export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_main_loop$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU main-loop export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_cleanup$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU cleanup export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_system_shutdown_request$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU graceful-shutdown export is missing." >&2; exit 1; }
+          grep -Eq ' _?isteam_qemu_set_jit_callbacks$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU StikDebug JIT callback export is missing." >&2; exit 1; }
+
+          # The IPA must contain the runtime, not just validate an artifact
+          # that is left behind in the runner workspace.
+          mkdir -p "$APP/Frameworks" "$APP/QEMU"
+          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
+          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
+          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
+          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
+          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
+          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
+
           mkdir -p build/Payload
           cp -R "$APP" build/Payload/iSteam.app
           ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
@@ -129,7 +197,7 @@ jobs:
   release:
     name: Publish combined ${{ matrix.channel }} release
     needs: build
-    runs-on: macos-15
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -137,8 +205,6 @@ jobs:
         channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
     env:
       RELEASE_CHANNEL: ${{ matrix.channel }}
-      VERSION: 0.1.${{ format('{0}', github.run_number) }}
-      PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -169,7 +235,7 @@ jobs:
             test -s "build/$asset.ipa"
             test -s "build/$asset.ipa.sha256"
             unzip -t "build/$asset.ipa" >/dev/null
-            shasum -a 256 -c "build/$asset.ipa.sha256"
+            sha256sum -c "build/$asset.ipa.sha256"
           done
 
       - name: Set release metadata
@@ -181,9 +247,9 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"
           if [ "$RELEASE_CHANNEL" = "main" ]; then
-            echo "title=$VERSION Main (iOS + tvOS)" >> "$GITHUB_OUTPUT"
+            echo "title=$VERSION Main (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
           else
-            echo "title=$VERSION Nightly (iOS + tvOS)" >> "$GITHUB_OUTPUT"
+            echo "title=$VERSION Nightly (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Publish combined release
@@ -211,108 +277,5 @@ jobs:
 
             These are unsigned prototype builds. Sign them with a compatible signer before installing.
 
-      - name: Checkout AltStore website
-        if: (matrix.channel == 'nightly' || github.event_name == 'workflow_dispatch') && env.PAGES_TOKEN != ''
-        uses: actions/checkout@v4
-        with:
-          repository: I-Steam/I-steam.github.io
-          ref: main
-          token: ${{ secrets.PAGES_TOKEN }}
-          path: website
-
-      - name: Update legacy AltStore source and publish iOS IPA
-        if: (matrix.channel == 'nightly' || github.event_name == 'workflow_dispatch') && env.PAGES_TOKEN != ''
-        env:
-          PAGES_TOKEN: ${{ secrets.PAGES_TOKEN }}
-          BUILD_NUMBER: ${{ github.run_number }}
-          CHANNEL: ${{ matrix.channel }}
-          VERSION: ${{ steps.meta.outputs.version }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$PAGES_TOKEN" || { echo "PAGES_TOKEN must have Contents write access to I-Steam/I-steam.github.io"; exit 1; }
-          python3 - <<'PY'
-          import datetime, hashlib, json, os, shutil
-          from pathlib import Path
-
-          website = Path("website")
-          downloads = website / "downloads"
-          downloads.mkdir(parents=True, exist_ok=True)
-          channel = os.environ["CHANNEL"]
-          build_number = os.environ["BUILD_NUMBER"]
-          current_version = os.environ["VERSION"]
-          channels = [
-              (channel, "ios", Path("build/iSteam-ios.ipa"), current_version),
-              (channel, "tvos", Path("build/iSteam-tvOS.ipa"), current_version),
-          ]
-
-          manifest_path = website / "AltSource.json"
-          manifest = json.loads(manifest_path.read_text())
-          for item_channel, platform, ipa_path, version in channels:
-              if not ipa_path.is_file():
-                  raise SystemExit(f"Missing {platform} IPA for {item_channel}: {ipa_path}")
-              data = ipa_path.read_bytes()
-              digest = hashlib.sha256(data).hexdigest()
-              now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-              nightly = item_channel == "nightly"
-              tvos = platform == "tvos"
-              if tvos:
-                  bundle_id = "com.xthrx.isteam.tvos.nightly" if nightly else "com.xthrx.isteam.tvos"
-                  app_name = "i-Steam tvOS Nightly" if nightly else "i-Steam tvOS Main"
-                  stable_name = "iSteam-tvOS-nightly.ipa" if nightly else "iSteam-tvOS-main.ipa"
-              else:
-                  bundle_id = "com.xthrx.isteam.nightly" if nightly else "com.xthrx.isteam"
-                  app_name = "i-Steam Nightly" if nightly else "i-Steam Release"
-                  stable_name = "iSteam-nightly.ipa" if nightly else "iSteam-release.ipa"
-              versioned_name = f"iSteam-{platform}-{item_channel}-{version}.ipa"
-              shutil.copy2(ipa_path, downloads / versioned_name)
-              shutil.copy2(ipa_path, downloads / stable_name)
-              (downloads / (stable_name + ".sha256")).write_text(f"{digest}  {stable_name}\\n")
-              platform_label = "tvOS / Apple TV" if tvos else "iOS"
-              entry = {
-                  "version": version,
-                  "buildVersion": str(build_number),
-                  "date": now,
-                  "size": len(data),
-                  "sha256": digest,
-                  "downloadURL": f"https://i-steam.github.io/downloads/{versioned_name}",
-                  "localizedDescription": f"{item_channel.upper()} {platform_label} build {version}. SHA-256: {digest}. Unsigned prototype; use a compatible signing method before installing.",
-                  "minOSVersion": "16.0"
-              }
-              found = False
-              for app in manifest.get("apps", []):
-                  if app.get("name") == app_name:
-                      app["bundleIdentifier"] = bundle_id
-                      versions = app.setdefault("versions", [])
-                      versions = [v for v in versions if not (v.get("version") == version and str(v.get("buildVersion", "")) == str(build_number))]
-                      app["versions"] = ([entry] + versions)[:10]
-                      found = True
-              if not found:
-                  raise SystemExit(f"Could not find AltStore app entry: {app_name}")
-
-          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-          alt_path = website / "alt" / "source.json"
-          if alt_path.exists():
-              alt = json.loads(alt_path.read_text())
-              stable_apps = {
-                  "i-steam release": ("com.xthrx.isteam", "https://i-steam.github.io/downloads/iSteam-release.ipa"),
-                  "i-steam nightly": ("com.xthrx.isteam.nightly", "https://i-steam.github.io/downloads/iSteam-nightly.ipa"),
-                  "i-steam tvos main": ("com.xthrx.isteam.tvos", "https://i-steam.github.io/downloads/iSteam-tvOS-main.ipa"),
-                  "i-steam tvos nightly": ("com.xthrx.isteam.tvos.nightly", "https://i-steam.github.io/downloads/iSteam-tvOS-nightly.ipa"),
-              }
-              for app in alt.get("apps", []):
-                  config = stable_apps.get(app.get("name", "").lower())
-                  if config:
-                      app["bundleIdentifier"], app["downloadURL"] = config
-              alt_path.write_text(json.dumps(alt, indent=2) + "\n")
-          PY
-          git -C website config user.name "i-Steam Release Bot"
-          git -C website config user.email "release-bot@users.noreply.github.com"
-          git -C website add AltSource.json alt/source.json downloads
-          if git -C website diff --cached --quiet; then
-            echo "AltStore source already up to date."
-          else
-            git -C website commit -m "Publish iOS ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}"
-            git -C website push origin HEAD:main
-          fi
-
+      # Official AltStore/PAL feeds are refreshed from published GitHub releases
+      # by the website repository's update-xthrx-alt-source.yml workflow.

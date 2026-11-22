@@ -21,7 +21,7 @@ private final class TVHomeViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "i-Steam"
+        title = "Akatsubaki Emu"
         view.backgroundColor = .black
 
         stack.axis = .vertical
@@ -32,7 +32,7 @@ private final class TVHomeViewController: UIViewController {
         view.addSubview(stack)
 
         let titleLabel = UILabel()
-        titleLabel.text = "i-Steam for Apple TV"
+        titleLabel.text = "Akatsubaki Emu for Apple TV"
         titleLabel.font = .systemFont(ofSize: 48, weight: .bold)
         titleLabel.textAlignment = .center
         titleLabel.textColor = .white

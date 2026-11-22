@@ -5,6 +5,9 @@ final class VMDisplayViewController: UIViewController {
     private let gpu: MetalGPUBackend
     private let virtioGPU: VirtIOGPU
     private let engine: VMEngine
+    private let configuration: VMConfiguration
+    private let vncClient = QEMUVNCClient()
+    private let diskImage: URL
     private let status = UILabel()
     private var gamepad: TouchGamepadView?
     private let vrSettings = VRSettings.shared
@@ -12,10 +15,16 @@ final class VMDisplayViewController: UIViewController {
     private let keyboardToggle = UIButton(type: .system)
     private let functionKeyBar = UIStackView()
     private var keyboardObservers: [NSObjectProtocol] = []
+    private var lastMotionStatusUpdate: TimeInterval = 0
+    private var lastReportedGuestFrameWidth = 0
+    private var lastReportedGuestFrameHeight = 0
+    private var engineStartRequested = false
+    private var startupFlowStarted = false
 
-    init(configuration: VMConfiguration) {
-        let size = RuntimeSettings.shared.renderResolution
-        let backend = MetalGPUBackend(width: size.width, height: size.height, frameRate: RuntimeSettings.shared.frameRate.value)
+    init(configuration: VMConfiguration, diskImage: URL) {
+        self.configuration = configuration
+        self.diskImage = diskImage
+        let backend = MetalGPUBackend(width: configuration.displayWidth, height: configuration.displayHeight, frameRate: configuration.displayFPS)
         self.gpu = backend
         self.virtioGPU = VirtIOGPU(backend: backend)
         self.engine = VMEngine(configuration: configuration)
@@ -36,7 +45,7 @@ final class VMDisplayViewController: UIViewController {
         status.textColor = .white
         status.backgroundColor = UIColor.black.withAlphaComponent(0.7)
         status.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
-        status.text = "\(RuntimeSettings.shared.renderResolution.title) • \(RuntimeSettings.shared.frameRate.value) FPS target • Metal"
+        status.text = "\(configuration.displayWidth) × \(configuration.displayHeight) • \(configuration.displayFPS) FPS target • Metal"
         status.textAlignment = .center
         status.layer.cornerRadius = 8
         status.clipsToBounds = true
@@ -51,14 +60,95 @@ final class VMDisplayViewController: UIViewController {
             status.heightAnchor.constraint(equalToConstant: 30)
         ])
         if vrSettings.mode == .cardboard { applyCardboardLayout() }
-        addTouchGamepad() // Show the on-screen gamepad by default; settings can be wired to hide it later.
+        if vrSettings.touchGamepadEnabled { addTouchGamepad() }
         addKeyboardControls()
         configureControllerInput()
         configureMotionInput()
+        engine.onStateChange = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .starting:
+                self.status.text = "Starting QEMU • waiting for guest display"
+            case .running:
+                if !self.vncClient.isConnected {
+                    self.status.text = "QEMU active • waiting for guest display"
+                }
+            case .stopping:
+                self.status.text = "Stopping virtual machine…"
+                self.releaseGuestInputs()
+                self.vncClient.stop()
+            case .stopped:
+                self.status.text = "Guest stopped. Relaunch Akatsubaki Emu before starting another QEMU session."
+                self.releaseGuestInputs()
+                self.vncClient.stop()
+            case .failed(let message):
+                self.status.text = "VM failed • \(message)"
+                self.releaseGuestInputs()
+                self.vncClient.stop()
+            }
+        }
         registerKeyboardNotifications()
         refreshHardwareKeyboardState()
         virtioGPU.start()
-        engine.start()
+        vncClient.onFrame = { [weak self] data, width, height, dirtyRegion in
+            guard let self else { return }
+            self.virtioGPU.submit(.updateFramebuffer(data, width: width, height: height, dirtyRegion: dirtyRegion))
+            guard self.lastReportedGuestFrameWidth != width
+                || self.lastReportedGuestFrameHeight != height else { return }
+            self.lastReportedGuestFrameWidth = width
+            self.lastReportedGuestFrameHeight = height
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if case .failed = self.engine.state { return }
+                self.status.text = "\(width) × \(height) guest • \(self.configuration.displayWidth) × \(self.configuration.displayHeight) target • Metal"
+            }
+        }
+        vncClient.onStatus = { [weak self] message in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // Preserve the actual engine failure instead of replacing it with
+                // the VNC client's expected connection-retry message.
+                if case .failed = self.engine.state { return }
+                self.status.text = message
+                if message.contains("unavailable") {
+                    EmulationLog.shared.write(message)
+                }
+            }
+        }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !startupFlowStarted else { return }
+        startupFlowStarted = true
+        #if os(iOS)
+        if #available(iOS 17.4, *), JITCoordinator.shared.isStikDebugAvailable,
+           !JITCoordinator.shared.isJITReady {
+            status.text = "Waiting for JIT • preparing LocalDevVPN and StikDebug"
+            JITCoordinator.shared.requestJIT(from: self, onFailure: { [weak self] message in
+                self?.status.text = "JIT failed • \(message)"
+            }) { [weak self] in
+                self?.startEngine()
+            }
+        } else {
+            startEngine()
+        }
+        #else
+        startEngine()
+        #endif
+    }
+
+    private func startEngine() {
+        guard !engineStartRequested else { return }
+        engineStartRequested = true
+        status.text = "Starting QEMU • waiting for guest display"
+        engine.start(diskImage: diskImage)
+        if case .failed(let message) = engine.state {
+            status.text = "VM failed • \(message)"
+            EmulationLog.shared.write("Display launch failed: \(message)")
+        } else {
+            vncClient.start()
+        }
     }
 
     private func applyCardboardLayout() {
@@ -73,11 +163,17 @@ final class VMDisplayViewController: UIViewController {
     private func addKeyboardControls() {
         keyboardToggle.translatesAutoresizingMaskIntoConstraints = false
         keyboardToggle.setTitle("⌨ Keyboard", for: .normal)
-        keyboardToggle.setTitleColor(.white, for: .normal)
-        keyboardToggle.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
-        keyboardToggle.backgroundColor = UIColor.black.withAlphaComponent(0.78)
-        keyboardToggle.layer.cornerRadius = 9
-        keyboardToggle.contentEdgeInsets = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+        var keyboardConfiguration = UIButton.Configuration.filled()
+        keyboardConfiguration.baseBackgroundColor = UIColor.black.withAlphaComponent(0.78)
+        keyboardConfiguration.baseForegroundColor = .white
+        keyboardConfiguration.cornerStyle = .medium
+        keyboardConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12)
+        keyboardConfiguration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .systemFont(ofSize: 13, weight: .semibold)
+            return outgoing
+        }
+        keyboardToggle.configuration = keyboardConfiguration
         keyboardToggle.addTarget(self, action: #selector(toggleTouchKeyboard), for: .touchUpInside)
         view.addSubview(keyboardToggle)
 
@@ -102,6 +198,7 @@ final class VMDisplayViewController: UIViewController {
         functionKeyBar.isHidden = true
 
         let panel = KeyboardOverlayView { [weak self] key in self?.emitKeyboardKey(key) }
+        panel.onKeyEvent = { [weak self] key, down in self?.vncClient.sendButton(key, down: down, source: "keyboard") }
         panel.translatesAutoresizingMaskIntoConstraints = false
         panel.isHidden = true
         view.addSubview(panel)
@@ -124,15 +221,21 @@ final class VMDisplayViewController: UIViewController {
     @objc private func toggleTouchKeyboard() {
         guard let panel = keyboardPanel else { return }
         panel.isHidden.toggle()
+        if panel.isHidden { panel.releaseAllKeys() }
         keyboardToggle.setTitle(panel.isHidden ? "⌨ Keyboard" : "⌨ Hide keyboard", for: .normal)
         if !panel.isHidden { functionKeyBar.isHidden = true }
         else { refreshHardwareKeyboardState() }
     }
 
     private func emitKeyboardKey(_ key: String) {
-        // The UI emits normalized key names; guest injection needs a connected
-        // runtime input backend, which is not implemented in this scaffold yet.
-        EmulationLog.shared.write("Keyboard input: \(key)")
+        vncClient.tapKey(key)
+    }
+
+    private func releaseGuestInputs() {
+        keyboardPanel?.releaseAllKeys()
+        gamepad?.releaseAllButtons()
+        MotionInputManager.shared.stop()
+        ControllerInputManager.shared.stop()
     }
 
     private func registerKeyboardNotifications() {
@@ -158,13 +261,12 @@ final class VMDisplayViewController: UIViewController {
     private func addTouchGamepad() {
         let pad = TouchGamepadView()
         pad.translatesAutoresizingMaskIntoConstraints = false
-        pad.onMove = { point in EmulationLog.shared.write(String(format: "Touch stick x=%.2f y=%.2f", point.x, point.y)) }
+        pad.onMove = { [weak self] point in self?.vncClient.setMovement(x: Float(point.x), y: Float(point.y), source: "touchgamepad") }
         pad.onLook = { [weak self] delta in
             guard VRSettings.shared.pointerLockEnabled else { return }
-            self?.view.isMultipleTouchEnabled = true
-            EmulationLog.shared.write(String(format: "Pointer-look delta %.1f, %.1f", delta.x, delta.y))
+            self?.vncClient.movePointer(dx: Float(delta.x), dy: -Float(delta.y))
         }
-        pad.onButton = { key, down in EmulationLog.shared.write("Touch gamepad " + key + ": " + (down ? "down" : "up")) }
+        pad.onButton = { [weak self] key, down in self?.vncClient.sendButton(key, down: down, source: "touchgamepad") }
         view.addSubview(pad)
         NSLayoutConstraint.activate([
             pad.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -177,25 +279,30 @@ final class VMDisplayViewController: UIViewController {
 
     private func configureControllerInput() {
         let input = ControllerInputManager.shared
-        input.onMove = { x, y in EmulationLog.shared.write(String(format: "Controller move %.2f, %.2f", x, y)) }
-        input.onLook = { x, y in
+        input.onMove = { [weak self] x, y, source in self?.vncClient.setMovement(x: x, y: -y, source: source) }
+        input.onLook = { [weak self] x, y in
             guard VRSettings.shared.pointerLockEnabled else { return }
-            EmulationLog.shared.write(String(format: "Controller look %.2f, %.2f", x, y))
+            self?.vncClient.movePointer(dx: x, dy: y)
         }
-        input.onButton = { key, down in EmulationLog.shared.write("Controller " + key + ": " + (down ? "down" : "up")) }
+        input.onButton = { [weak self] key, down, source in self?.vncClient.sendButton(key, down: down, source: source) }
         input.start()
     }
 
     private func configureMotionInput() {
         let motion = MotionInputManager.shared
         motion.onOrientation = { [weak self] yaw, pitch, roll in
+            guard let self else { return }
+            let now = ProcessInfo.processInfo.systemUptime
+            guard now - self.lastMotionStatusUpdate >= 0.25 else { return }
+            self.lastMotionStatusUpdate = now
+            let summary = String(format: "MOTION • Y %.2f P %.2f R %.2f", yaw, pitch, roll)
             DispatchQueue.main.async {
-                self?.status.text = String(format: "MOTION • Y %.2f P %.2f R %.2f", yaw, pitch, roll)
+                self.status.text = summary
             }
         }
-        motion.onLookDelta = { yaw, pitch in
+        motion.onLookDelta = { [weak self] yaw, pitch in
             guard VRSettings.shared.pointerLockEnabled else { return }
-            EmulationLog.shared.write(String(format: "Motion look Δx=%.4f Δy=%.4f", yaw, pitch))
+            self?.vncClient.movePointer(dx: Float(yaw), dy: Float(pitch))
         }
         if vrSettings.mode == .cardboard { motion.start() }
     }
@@ -204,8 +311,8 @@ final class VMDisplayViewController: UIViewController {
         super.viewDidDisappear(animated)
         keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
         keyboardObservers.removeAll()
-        MotionInputManager.shared.stop()
-        ControllerInputManager.shared.stop()
+        releaseGuestInputs()
+        vncClient.stop()
         engine.stop()
         virtioGPU.stop()
     }

@@ -11,6 +11,11 @@ The build script `scripts/package-utm-qemu-runtime.sh` selects a loadable UTM/QE
 The release workflow embeds the complete `Frameworks/` and `QEMU/` directories into the iOS app. Do not assume a fixed QEMU library filename: the manifest is authoritative, and UTM may change its internal library name or layout.
 
 The library is an **iOS device arm64** binary that runs an **x86_64 system guest**. It must not be replaced with a macOS or simulator build.
+The build script `scripts/package-utm-qemu-runtime.sh` selects a loadable UTM/QEMU Mach-O binary by its exported lifecycle symbols. It writes the selected path to `QEMU/runtime-library-path.txt`.
+
+The release workflow embeds the complete `Frameworks/` and `QEMU/` directories into the iOS app. Do not assume a fixed QEMU library filename: the manifest is authoritative, and UTM may change its internal library name or layout.
+
+The library is an **iOS device arm64** binary that runs an **x86_64 system guest**. Packaging and standalone validation inspect the Mach-O build-version platform and require `IOS`; an arm64 slice alone is insufficient, and macOS, Catalyst or simulator builds are rejected.
 
 ## Native bridge contract
 
@@ -21,6 +26,14 @@ The native bridge in `iSteam/QEMUNativeBridge.c` requires these exported symbols
 - `qemu_cleanup`
 
 `qemu_system_shutdown_request` is optional. If it is absent, the bridge can start QEMU but cannot request graceful guest shutdown.
+- `qemu_system_shutdown_request`
+- `isteam_qemu_set_jit_callbacks`
+
+Both graceful shutdown and the StikDebug JIT callback registration export are required. The bridge rejects a runtime missing either contract; actual shutdown and JIT behavior still require physical-device validation.
+
+The writable per-VM variable store is confined to the resolved Application Support directory. Existing symlinks and non-regular destination objects are not reused; a directory or escaped parent path is rejected.
+
+UEFI code and variable-store templates are selected as matching pairs: `OVMF_CODE.fd` with `OVMF_VARS.fd`, `OVMF_CODE_4M.fd` with `OVMF_VARS_4M.fd`, or `edk2-x86_64-code.fd` with `edk2-x86_64-vars.fd`. Custom code images must match one of these supported names so the runtime cannot pair unrelated firmware generations.
 
 The Swift runtime locator is `src/QEMU/QEMURuntimeStatus.swift`; the lifecycle owner is `src/QEMU/QEMUNativeRuntime.swift`. The locator reads the generated manifest and resolves the library inside the app bundle. The native bridge then loads it with `dlopen` and resolves the lifecycle symbols with `dlsym`.
 
@@ -33,6 +46,7 @@ bash scripts/validate-qemu-runtime.sh /path/to/the/manifest-selected-QEMU-librar
 ```
 
 The validator requires Apple tooling and checks that the file is Mach-O, contains the device `arm64` architecture, exports all three required symbols as defined external symbols, and passes strict code-signature verification. It reports the optional shutdown symbol separately.
+The validator requires Apple tooling and checks that the file is Mach-O, contains the device `arm64` architecture, exports all five required lifecycle/shutdown/JIT symbols as defined external symbols, and passes strict code-signature verification.
 
 This is a packaging check only. It does not prove that the library's dependencies load, that QEMU initializes, or that a guest boots.
 
@@ -41,6 +55,7 @@ This is a packaging check only. It does not prove that the library's dependencie
 - Native bridge and Swift manifest-based runtime locator: present in source.
 - UTM/QEMU runtime binary: must be produced by the runtime workflow and embedded by the release workflow.
 - Physical-device runtime startup, guest boot, display, input, graceful shutdown, and disk persistence: not verified by this validator.
+- Physical-device runtime startup, guest boot, display, input, graceful shutdown, and disk persistence: not verified by this validator. The native bridge is one-shot per app process; relaunch Akatsubaki Emu before starting another QEMU session.
 - The current app runtime configuration is for x86_64 guests; this artifact is not an ARM64 guest runtime.
 - tvOS and visionOS need separately built and validated platform runtimes; the iOS binary must not be reused blindly.
 

@@ -7,6 +7,13 @@ import MetalKit
 /// Until a guest framebuffer is connected, the view clears to a stable dark screen
 /// instead of drawing a synthetic test pattern that can look like corrupted guest output.
 final class MetalGPUBackend: NSObject, GPUBackend {
+    private final class FramebufferSlot {
+        let texture: MTLTexture
+        var readers = 0
+        var isUploading = false
+        init(texture: MTLTexture) { self.texture = texture }
+    }
+
     let name = "VirtIO GPU • Metal"
     let isHardwareAccelerated = MTLCreateSystemDefaultDevice() != nil
     let width: Int
@@ -16,21 +23,38 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     private let device: MTLDevice?
     private let queue: MTLCommandQueue?
     private let textureLock = NSLock()
-    /// Submitted textures are immutable after publication, so an in-flight GPU blit
-    /// cannot race a CPU write to the same texture.
-    private var framebuffer: MTLTexture?
+    private var displayUpdateScheduled = false
+    private var framebufferSlots: [FramebufferSlot] = []
+    private var framebuffer: FramebufferSlot?
+    private var drawableWidth: Int
+    private var drawableHeight: Int
+    private var framebufferWidth: Int
+    private var framebufferHeight: Int
+    private var framebufferGeneration: UInt64 = 0
+    private var nextFrameSequence: UInt64 = 0
+    private var publishedFrameSequence: UInt64 = 0
     private let targetFrameRate: Int
+    private let maxFramebufferBytes = 64 * 1024 * 1024
+    private let maxFramebufferPoolBytes = 128 * 1024 * 1024
+    private let maxFramebufferSlots = 3
 
     init(width: Int, height: Int, frameRate: Int) {
         self.width = max(1, width)
         self.height = max(1, height)
+        self.drawableWidth = max(1, width)
+        self.drawableHeight = max(1, height)
+        self.framebufferWidth = max(1, width)
+        self.framebufferHeight = max(1, height)
         self.targetFrameRate = max(1, frameRate)
         device = MTLCreateSystemDefaultDevice()
         queue = device?.makeCommandQueue()
         view = MTKView(frame: .zero, device: device)
         super.init()
         view.colorPixelFormat = .bgra8Unorm
-        view.framebufferOnly = true
+        view.framebufferOnly = false
+        view.autoResizeDrawable = false
+        view.drawableSize = CGSize(width: self.width, height: self.height)
+        view.contentMode = .scaleAspectFit
         view.enableSetNeedsDisplay = true
         view.isPaused = true
         view.clearColor = MTLClearColor(red: 0.025, green: 0.03, blue: 0.045, alpha: 1)
@@ -39,64 +63,148 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     }
 
     func start() {
-        // Do not synthesize a large CPU-generated test frame on the UI thread.
-        // The display stays clean until a real framebuffer is submitted.
-        DispatchQueue.main.async { [weak self] in
-            self?.view.setNeedsDisplay()
-        }
+        scheduleDisplayUpdate()
     }
 
     func stop() {
         textureLock.lock()
+        framebufferGeneration &+= 1
         framebuffer = nil
+        framebufferSlots.removeAll(keepingCapacity: false)
         textureLock.unlock()
+        scheduleDisplayUpdate()
+    }
+
+    private func scheduleDisplayUpdate() {
+        textureLock.lock()
+        let shouldSchedule = !displayUpdateScheduled
+        if shouldSchedule { displayUpdateScheduled = true }
+        textureLock.unlock()
+        guard shouldSchedule else { return }
+        enqueueDisplayUpdate()
+    }
+
+    private func enqueueDisplayUpdate() {
         DispatchQueue.main.async { [weak self] in
-            self?.view.setNeedsDisplay()
+            guard let self else { return }
+            self.textureLock.lock()
+            let width = self.drawableWidth
+            let height = self.drawableHeight
+            self.displayUpdateScheduled = false
+            self.textureLock.unlock()
+
+            let drawableSize = CGSize(width: width, height: height)
+            if self.view.drawableSize != drawableSize { self.view.drawableSize = drawableSize }
+            self.view.setNeedsDisplay()
         }
     }
 
-    func submit(frame: Data, width frameWidth: Int, height frameHeight: Int) {
+    func submit(frame: Data, width frameWidth: Int, height frameHeight: Int,
+                dirtyRegion: GPUFrameRegion?) {
         guard frameWidth > 0, frameHeight > 0,
               frameWidth <= 8192, frameHeight <= 8192,
-              frameWidth <= Int.max / frameHeight / 4,
+              frameWidth <= maxFramebufferBytes / frameHeight / 4,
               frame.count >= frameWidth * frameHeight * 4,
-              let device,
-              let queue,
-              let commandTexture = makeTexture(device: device, width: frameWidth, height: frameHeight)
+              let device
         else {
             EmulationLog.shared.write("Metal framebuffer ignored: invalid dimensions or byte count")
             return
         }
 
-        // Upload into a fresh texture, then publish it. Never mutate a texture that
-        // a previously submitted GPU command might still be reading.
+        let fullRegion = GPUFrameRegion(x: 0, y: 0, width: frameWidth, height: frameHeight)
+        let requestedRegion: GPUFrameRegion
+        if let dirtyRegion,
+           dirtyRegion.x >= 0, dirtyRegion.y >= 0,
+           dirtyRegion.width > 0, dirtyRegion.height > 0,
+           dirtyRegion.width <= frameWidth, dirtyRegion.height <= frameHeight,
+           dirtyRegion.x <= frameWidth - dirtyRegion.width,
+           dirtyRegion.y <= frameHeight - dirtyRegion.height {
+            requestedRegion = dirtyRegion
+        } else {
+            requestedRegion = fullRegion
+        }
+
+        textureLock.lock()
+        if framebufferWidth != frameWidth || framebufferHeight != frameHeight {
+            framebufferGeneration &+= 1
+            framebufferSlots.removeAll(keepingCapacity: true)
+            framebuffer = nil
+            nextFrameSequence = 0
+            publishedFrameSequence = 0
+            framebufferWidth = frameWidth
+            framebufferHeight = frameHeight
+        }
+
+        let frameByteCount = frameWidth * frameHeight * 4
+        let slotLimit = max(2, min(maxFramebufferSlots, maxFramebufferPoolBytes / frameByteCount))
+        let slot: FramebufferSlot
+        let updatesPublishedSlot: Bool
+        if let current = framebuffer, current.readers == 0, !current.isUploading {
+            slot = current
+            updatesPublishedSlot = true
+        } else if let reusable = framebufferSlots.first(where: {
+            $0 !== framebuffer && $0.readers == 0 && !$0.isUploading
+        }) {
+            slot = reusable
+            updatesPublishedSlot = false
+        } else if framebufferSlots.count < slotLimit,
+                  let texture = makeTexture(device: device, width: frameWidth, height: frameHeight) {
+            slot = FramebufferSlot(texture: texture)
+            framebufferSlots.append(slot)
+            updatesPublishedSlot = false
+        } else {
+            textureLock.unlock()
+            return
+        }
+        slot.isUploading = true
+        nextFrameSequence &+= 1
+        let sequence = nextFrameSequence
+        let generation = framebufferGeneration
+        textureLock.unlock()
+
+        // Spare slots can contain older frames; only the published slot may
+        // receive a partial upload. All other slots are synchronised in full.
+        let uploadRegion = updatesPublishedSlot ? requestedRegion : fullRegion
         frame.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return }
-            commandTexture.replace(
-                region: MTLRegionMake2D(0, 0, frameWidth, frameHeight),
+            let byteOffset = uploadRegion.y * frameWidth * 4 + uploadRegion.x * 4
+            slot.texture.replace(
+                region: MTLRegionMake2D(uploadRegion.x, uploadRegion.y,
+                                        uploadRegion.width, uploadRegion.height),
                 mipmapLevel: 0,
-                withBytes: base,
+                withBytes: base.advanced(by: byteOffset),
                 bytesPerRow: frameWidth * 4
             )
         }
 
         textureLock.lock()
-        framebuffer = commandTexture
+        slot.isUploading = false
+        let publish = generation == framebufferGeneration
+            && sequence >= publishedFrameSequence
+            && framebufferSlots.contains(where: { $0 === slot })
+        if publish {
+            framebuffer = slot
+            publishedFrameSequence = sequence
+            drawableWidth = frameWidth
+            drawableHeight = frameHeight
+        }
+        let shouldSchedule = publish && !displayUpdateScheduled
+        if shouldSchedule { displayUpdateScheduled = true }
         textureLock.unlock()
 
-        DispatchQueue.main.async { [weak self] in
-            self?.view.setNeedsDisplay()
-        }
-        _ = queue // The queue is used by the view delegate for presentation.
+        guard publish else { return }
+        if shouldSchedule { enqueueDisplayUpdate() }
+    }
+
+    private func release(_ slot: FramebufferSlot) {
+        textureLock.lock()
+        slot.readers = max(0, slot.readers - 1)
+        textureLock.unlock()
     }
 
     private func makeTexture(device: MTLDevice, width: Int, height: Int) -> MTLTexture? {
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm,
-            width: width,
-            height: height,
-            mipmapped: false
-        )
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
+            width: width, height: height, mipmapped: false)
         descriptor.storageMode = .shared
         descriptor.usage = [.shaderRead]
         return device.makeTexture(descriptor: descriptor)
@@ -112,31 +220,36 @@ extension MetalGPUBackend: MTKViewDelegate {
               let pass = view.currentRenderPassDescriptor else { return }
 
         textureLock.lock()
-        let source = framebuffer
+        let source: FramebufferSlot?
+        let isUploading = framebuffer?.isUploading ?? false
+        if let current = framebuffer, !isUploading {
+            current.readers += 1
+            source = current
+        } else {
+            source = nil
+        }
         textureLock.unlock()
+        if isUploading { return }
 
         if let source {
-            guard let blit = commandBuffer.makeBlitCommandEncoder() else { return }
-            let copyWidth = min(source.width, drawable.texture.width)
-            let copyHeight = min(source.height, drawable.texture.height)
-            guard copyWidth > 0, copyHeight > 0 else {
-                blit.endEncoding()
+            guard let blit = commandBuffer.makeBlitCommandEncoder() else {
+                release(source)
                 return
             }
-            blit.copy(
-                from: source,
-                sourceSlice: 0,
-                sourceLevel: 0,
+            guard source.texture.width == drawable.texture.width,
+                  source.texture.height == drawable.texture.height else {
+                blit.endEncoding()
+                release(source)
+                return
+            }
+            blit.copy(from: source.texture, sourceSlice: 0, sourceLevel: 0,
                 sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
-                sourceSize: MTLSize(width: copyWidth, height: copyHeight, depth: 1),
-                to: drawable.texture,
-                destinationSlice: 0,
-                destinationLevel: 0,
-                destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0)
-            )
+                sourceSize: MTLSize(width: source.texture.width, height: source.texture.height, depth: 1),
+                to: drawable.texture, destinationSlice: 0, destinationLevel: 0,
+                destinationOrigin: MTLOrigin(x: 0, y: 0, z: 0))
             blit.endEncoding()
+            commandBuffer.addCompletedHandler { [weak self, source] _ in self?.release(source) }
         } else {
-            // A clear-only render pass produces a stable placeholder, not fake VM output.
             pass.colorAttachments[0].loadAction = .clear
             pass.colorAttachments[0].storeAction = .store
             pass.colorAttachments[0].clearColor = MTLClearColor(red: 0.025, green: 0.03, blue: 0.045, alpha: 1)

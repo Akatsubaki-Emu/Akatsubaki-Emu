@@ -67,9 +67,20 @@ final class ExternalDriveStore {
         return result
     }
 
-    func readDocument(at url: URL) throws -> Data {
+    func readDocument(at url: URL, maximumBytes: Int? = 64 * 1024 * 1024) throws -> Data {
         try withAccess(to: url) { coordinatedURL in
-            try Data(contentsOf: coordinatedURL, options: [.mappedIfSafe])
+            let values = try coordinatedURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true, let fileSize = values.fileSize else {
+                throw CocoaError(.fileReadUnknown)
+            }
+            if let maximumBytes, fileSize > maximumBytes {
+                throw CocoaError(.fileReadTooLarge)
+            }
+            let data = try Data(contentsOf: coordinatedURL, options: [.mappedIfSafe])
+            if let maximumBytes, data.count > maximumBytes {
+                throw CocoaError(.fileReadTooLarge)
+            }
+            return data
         }
     }
 
@@ -87,15 +98,24 @@ final class ExternalDriveStore {
             error: &coordinationError
         ) { coordinatedURL in
             do {
+                let values = try coordinatedURL.resourceValues(forKeys: [.isRegularFileKey])
+                guard values.isRegularFile == true else {
+                    throw CocoaError(.fileReadUnknown)
+                }
                 let fm = FileManager.default
                 try fm.createDirectory(
                     at: destination.deletingLastPathComponent(),
                     withIntermediateDirectories: true
                 )
+                let temporary = destination.deletingLastPathComponent()
+                    .appendingPathComponent(".\(UUID().uuidString).import")
+                defer { try? fm.removeItem(at: temporary) }
+                try fm.copyItem(at: coordinatedURL, to: temporary)
                 if fm.fileExists(atPath: destination.path) {
-                    try fm.removeItem(at: destination)
+                    _ = try fm.replaceItemAt(destination, withItemAt: temporary)
+                } else {
+                    try fm.moveItem(at: temporary, to: destination)
                 }
-                try fm.copyItem(at: coordinatedURL, to: destination)
             } catch { copyError = error }
         }
         if let coordinationError { throw coordinationError }

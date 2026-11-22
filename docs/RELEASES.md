@@ -1,52 +1,47 @@
-# Build and release workflow
+# Releases and build channels
 
-The project uses one combined workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml). It builds iOS and tvOS as separate jobs, then publishes both platform artifacts together in a single GitHub release.
+## Source of truth
 
-## Trigger behavior
+- Canonical source: [Akatsubaki-Emu/Akatsubaki-Emu](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu), branch `main`.
+- GitLab mirror: [chantinlongxthrx/I-steam](https://gitlab.com/chantinlongxthrx/I-steam).
+- CI/CD runs in GitHub Actions. See [Git sync policy](GIT_SYNC.md).
 
-| Trigger | Channel behavior |
-| --- | --- |
-| Push to `main` | Nightly only |
-| Scheduled run | Nightly only, daily at 02:00 UTC |
-| Manual GitHub Actions run | Requires a choice: `Nightly` or `Main` |
-| Manual GitLab pipeline | Offers the same channel choice and dispatches the GitHub workflow |
+Do not treat a GitLab mirror commit as proof that GitHub Actions has tested the same revision. Compare commit SHAs before interpreting CI.
 
-Automatic events must not publish Main. Use the manual workflow input to publish Main intentionally.
+## Workflow layout
 
-## Release assets
+- `.github/workflows/validate-repository.yml`: workflow/YAML contracts, QEMU source contracts, Python regression tests, native guest-memory tests, native QEMU bridge lifecycle tests, and shell syntax.
+- `.github/workflows/validate-ios-build.yml`: simulator compile validation for supported Apple platform targets.
+- `.github/workflows/build-qemu-runtime.yml`: reusable/manual UTM/QEMU iOS arm64 runtime build.
+- `.github/workflows/release.yml`: builds the QEMU runtime first, then app platform packages, checksums, and combined GitHub releases.
+- `.github/workflows/blank.yml`: GitHub-to-GitLab synchronization. Preserve it unless the owner explicitly approves a change.
 
-A successful release is expected to contain:
+## Release channels
 
-- `iSteam-ios.ipa`
-- `iSteam-ios.ipa.sha256`
-- `iSteam-tvOS.ipa`
-- `iSteam-tvOS.ipa.sha256`
+The release workflow supports Main and Nightly channels. Pushes to `main` are configured to produce the nightly channel; manual dispatch selects the requested channel. Nightly pushes, schedules, and manual Nightly runs share one concurrency group and queue behind an active Nightly build. Manual Main runs use a separate group, so they do not block or cancel Nightly builds. Active releases are allowed to finish before the next same-channel run starts.
 
-The iOS app bundle identifiers are `com.xthrx.isteam` for Main and `com.xthrx.isteam.nightly` for Nightly. The tvOS identifiers are `com.xthrx.isteam.tvos` for Main and `com.xthrx.isteam.tvos.nightly` for Nightly. Versions follow `0.1.xxx`, with the build number derived from the workflow run.
+The iOS app package must consume the QEMU runtime artifact produced in the same workflow run. Missing runtime artifacts, required lifecycle exports, or package contents must fail the release rather than silently producing an incomplete IPA.
 
-The workflow verifies that the expected app bundle exists, checks bundle identifiers, validates IPA ZIP containers, and verifies SHA-256 files before publication. This verifies packaging integrity, not that the unsigned app can be installed or that its runtime works.
+## AltStore/PAL feed refresh
 
-## Signing and installation
+The official website repository owns the AltStore and PAL manifests. Its [`update-xthrx-alt-source.yml`](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu.github.io/blob/main/.github/workflows/update-xthrx-alt-source.yml) workflow reads published app releases and refreshes the official manifests and Xthrx catalogue on its schedule. The app release workflow deliberately does not write to the website repository, avoiding duplicate manifest writers and a separate cross-repository token. Feed refresh may therefore lag a newly published release until the website workflow runs.
 
-The produced IPAs are unsigned. The iOS IPA needs a compatible signing path before installation. The tvOS IPA is a separate prototype artifact and requires a compatible tvOS signing/provisioning and deployment path. Do not assume that an iOS sideloading tool can install the tvOS artifact.
+## Required configuration
 
-## AltStore website publishing
+- `GITLAB_TOKEN`: used by the retained GitHub-to-GitLab sync workflow.
+- GitLab-to-GitHub mirror credentials are configured in GitLab project settings and must never be committed.
 
-The release workflow can update the [i-Steam website/source repository](https://github.com/I-Steam/I-steam.github.io) when the `PAGES_TOKEN` GitHub secret is present and has write access to that repository. If the secret is absent, release assets may still be published while website manifest updates are skipped. Inspect the workflow log to confirm website publishing.
+## What a successful build proves
 
-The workflow's website step updates versioned download assets, stable download names and source-manifest entries. Keep the manifest bundle IDs and URLs consistent with the app's actual identifiers. Do not manually advertise the tvOS artifact as installable through an iOS AltStore client.
+A successful YAML/source-validation job proves only the checks it runs. Simulator compilation does not prove physical-device installation. IPA packaging and checksums do not prove QEMU starts, a guest OS boots, guest input works, storage persists, or a game is compatible.
 
-## Retention and old releases
+Before calling a release device-verified, record:
+1. Device model and OS version.
+2. Signing/install method and app version.
+3. QEMU runtime revision and package checksum.
+4. Known-good guest image and firmware.
+5. Boot/display/keyboard/pointer/controller results.
+6. Graceful stop and relaunch behavior.
+7. Disk persistence after app restart.
 
-The workflow does not include an automatic cleanup step for older GitHub releases. Do not add release deletion or asset-pruning behavior without an explicit project decision.
-
-## Diagnosing a failure
-
-1. Open [GitHub Actions](https://github.com/I-Steam/I-steam/actions/workflows/release.yml).
-2. Open the failed run and inspect the first failing build step.
-3. If both platform builds succeed but release publication fails, inspect artifact names, checksum verification, release permissions and any optional website publishing step.
-4. Fix the root cause, rerun, and confirm the release contains both IPAs and both checksums.
-
-## GitLab mirror and dispatch
-
-The GitLab CI file pushes the current main branch to the GitHub repository using `GITHUB_SYNC_TOKEN`. A manual GitLab web pipeline also calls the GitHub Actions workflow-dispatch API. The token needs the repository contents/workflow permissions required for those actions. Never commit tokens into source files or logs.
+See [QEMU build workflow](QEMU_BUILD_WORKFLOW.md) for dependency patching and link diagnostics.

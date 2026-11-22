@@ -18,7 +18,6 @@ final class QEMUNativeRuntime {
 
     func start(configuration: VMConfiguration, diskImage: URL, firmware: URL? = nil) throws {
         guard !started else { return }
-
         try configuration.validateForStart()
         guard configuration.architecture == .x86_64 else {
             throw RuntimeError.runtimeUnavailable(
@@ -26,9 +25,18 @@ final class QEMUNativeRuntime {
             )
         }
 
+        #if os(iOS)
+        if #available(iOS 17.4, *), JITCoordinator.shared.isStikDebugAvailable,
+           !JITCoordinator.shared.isJITReady {
+            throw RuntimeError.runtimeUnavailable(
+                "QEMU TCG needs executable memory. Enable JIT for Akatsubaki Emu with StikDebug, return to the app, and try again."
+            )
+        }
+        #endif
+
         let libraryURL: URL
         let dataDirectory: URL
-        switch QEMURuntimeStatus.inspect() {
+        switch QEMURuntimeStatus.locate() {
         case .unavailable(let reason):
             throw RuntimeError.runtimeUnavailable(reason)
         case .ready(let library, let data):
@@ -36,11 +44,38 @@ final class QEMUNativeRuntime {
             dataDirectory = data
         }
 
-        // A disk/firmware selected from Files may be outside the app container.
-        // Keep access active until QEMU has stopped because QEMU opens these
-        // files asynchronously and may continue reading them for the whole run.
+        let selectedFirmware: URL?
+        let variablesTemplate: URL?
+        if let firmware {
+            selectedFirmware = firmware
+            variablesTemplate = Self.findUEFIVariables(matching: firmware, in: dataDirectory)
+        } else if configuration.requiresUEFI {
+            guard let pair = Self.findUEFIFirmwarePair(in: dataDirectory) else {
+                throw RuntimeError.runtimeUnavailable(
+                    "This VM profile requires a matching UEFI code/variable-store pair: OVMF_CODE.fd + OVMF_VARS.fd, OVMF_CODE_4M.fd + OVMF_VARS_4M.fd, or edk2-x86_64-code.fd + edk2-x86_64-vars.fd."
+                )
+            }
+            selectedFirmware = pair.code
+            variablesTemplate = pair.variables
+        } else {
+            selectedFirmware = nil
+            variablesTemplate = nil
+        }
+
+        let selectedFirmwareVariables: URL?
+        if let selectedFirmware {
+            guard let variablesTemplate else {
+                throw RuntimeError.runtimeUnavailable(
+                    "The selected UEFI code image \(selectedFirmware.lastPathComponent) has no matching bundled variable-store template."
+                )
+            }
+            selectedFirmwareVariables = try Self.makeWritableUEFIVariables(from: variablesTemplate, for: configuration.id)
+        } else {
+            selectedFirmwareVariables = nil
+        }
+
         var newlyScoped: [URL] = []
-        for url in [diskImage, firmware].compactMap({ $0 }) {
+        for url in [diskImage, selectedFirmware].compactMap({ $0 }) {
             let granted = url.startAccessingSecurityScopedResource()
             if granted { newlyScoped.append(url) }
             do {
@@ -56,9 +91,9 @@ final class QEMUNativeRuntime {
             }
         }
 
-        var args = QEMUCommandBuilder(configuration: configuration)
-            .arguments(diskImage: diskImage, firmware: firmware)
-        args += ["-L", dataDirectory.path]
+        let args = QEMUCommandBuilder(configuration: configuration)
+            .arguments(diskImage: diskImage, firmware: selectedFirmware,
+                       firmwareVariables: selectedFirmwareVariables) + ["-L", dataDirectory.path]
         let arguments = ["qemu-system-\(configuration.architecture.rawValue)"] + args
         let strings: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) }
         defer { strings.forEach { if let value = $0 { free(value) } } }
@@ -93,31 +128,142 @@ final class QEMUNativeRuntime {
 
         scopedURLs = newlyScoped
         started = true
-        EmulationLog.shared.write(
-            "QEMU runtime start requested with disk \(diskImage.lastPathComponent)"
-        )
+        EmulationLog.shared.write("QEMU launch requested with disk \(diskImage.lastPathComponent)")
+    }
+
+    private static func containedRegularFile(named names: [String], in directory: URL) -> URL? {
+        let root = directory.resolvingSymlinksInPath().standardizedFileURL
+        let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        func validated(_ candidate: URL) -> URL? {
+            let resolved = candidate.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+            let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey])
+            guard resolved.path.hasPrefix(prefix),
+                  values?.isRegularFile == true else { return nil }
+            return resolved
+        }
+
+        for name in names {
+            if let candidate = validated(directory.appendingPathComponent(name)) {
+                return candidate
+            }
+        }
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+        for case let url as URL in enumerator where names.contains(url.lastPathComponent) {
+            if let candidate = validated(url) { return candidate }
+        }
+        return nil
+    }
+
+    private static func findUEFIFirmwarePair(in directory: URL) -> (code: URL, variables: URL)? {
+        let pairs = [
+            ("OVMF_CODE.fd", "OVMF_VARS.fd"),
+            ("OVMF_CODE_4M.fd", "OVMF_VARS_4M.fd"),
+            ("edk2-x86_64-code.fd", "edk2-x86_64-vars.fd"),
+            ("edk2-x86_64-code.secboot.fd", "edk2-x86_64-vars.fd"),
+        ]
+        for (codeName, variablesName) in pairs {
+            guard let code = containedRegularFile(named: [codeName], in: directory),
+                  let variables = containedRegularFile(named: [variablesName], in: directory) else { continue }
+            return (code: code, variables: variables)
+        }
+        return nil
+    }
+
+    private static func findUEFIVariables(matching firmware: URL, in directory: URL) -> URL? {
+        let variablesName: String
+        switch firmware.lastPathComponent {
+        case "OVMF_CODE.fd":
+            variablesName = "OVMF_VARS.fd"
+        case "OVMF_CODE_4M.fd":
+            variablesName = "OVMF_VARS_4M.fd"
+        case "edk2-x86_64-code.fd", "edk2-x86_64-code.secboot.fd":
+            variablesName = "edk2-x86_64-vars.fd"
+        default:
+            return nil
+        }
+        return containedRegularFile(named: [variablesName], in: directory)
+    }
+
+    /// UEFI variable stores are writable guest state. Keep one persistent copy
+    /// per VM configuration in Application Support so QEMU never writes into
+    /// the signed app bundle or shares NVRAM between different guests.
+    private static func makeWritableUEFIVariables(from template: URL, for configurationID: UUID) throws -> URL {
+        let values = try template.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        let size = values.fileSize ?? 0
+        guard size > 0 else { throw RuntimeError.runtimeUnavailable("The bundled UEFI variable-store template is empty.") }
+        let modified = Int(values.contentModificationDate?.timeIntervalSince1970 ?? 0)
+        let fileManager = FileManager.default
+        let supportRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let directory = supportRoot.appendingPathComponent("AkatsubakiEmu/QEMU/firmware", isDirectory: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let resolvedDirectory = directory.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let directoryValues = try resolvedDirectory.resourceValues(forKeys: [.isDirectoryKey])
+        guard directory.standardizedFileURL.path == resolvedDirectory.path,
+              resolvedDirectory.path.hasPrefix(supportRoot.path + "/"),
+              directoryValues.isDirectory == true else {
+            throw RuntimeError.runtimeUnavailable("The UEFI variable-store directory must remain inside Application Support.")
+        }
+        let stem = template.deletingPathExtension().lastPathComponent
+        let destination = resolvedDirectory.appendingPathComponent("\(stem)-\(configurationID.uuidString)-\(size)-\(modified).fd")
+        let destinationValues = try? destination.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey])
+        let destinationIsSymbolicLink = (try? fileManager.destinationOfSymbolicLink(atPath: destination.path)) != nil
+        let destinationExists = fileManager.fileExists(atPath: destination.path) || destinationIsSymbolicLink
+        if destinationValues?.isDirectory == true && !destinationIsSymbolicLink {
+            throw RuntimeError.runtimeUnavailable("The UEFI variable-store destination is a directory, not a regular file.")
+        }
+        let existingFileIsSafe = !destinationIsSymbolicLink
+            && destinationValues?.isRegularFile == true
+            && destinationValues?.fileSize == size
+        if !existingFileIsSafe {
+            let temporary = resolvedDirectory.appendingPathComponent("\(UUID().uuidString).tmp")
+            defer { try? fileManager.removeItem(at: temporary) }
+            try fileManager.copyItem(at: template, to: temporary)
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+            if destinationIsSymbolicLink || (destinationExists && destinationValues?.isRegularFile != true) {
+                try fileManager.removeItem(at: destination)
+                try fileManager.moveItem(at: temporary, to: destination)
+            } else if destinationExists {
+                _ = try fileManager.replaceItemAt(destination, withItemAt: temporary)
+            } else {
+                try fileManager.moveItem(at: temporary, to: destination)
+            }
+        }
+        // Bundle templates are read-only; the private copy must be writable
+        // or QEMU cannot persist the guest's UEFI boot variables.
+        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
+        return destination
     }
 
     func stop() {
         guard started else { return }
         isteam_qemu_request_stop()
-        // The C bridge's stop request is asynchronous. Do not release the
-        // security scopes here; QEMU may still be unwinding its main loop.
-        // Polling is handled by VMEngine, which observes isRunning becoming false.
         started = false
         releaseScopesWhenStopped()
     }
 
     private func releaseScopesWhenStopped() {
-        guard !isteam_qemu_is_running() else {
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(250)) { [weak self] in
-                self?.releaseScopesWhenStopped()
-            }
+        guard isteam_qemu_is_active() else {
+            scopedURLs.forEach { $0.stopAccessingSecurityScopedResource() }
+            scopedURLs.removeAll()
             return
         }
-        scopedURLs.forEach { $0.stopAccessingSecurityScopedResource() }
-        scopedURLs.removeAll()
+        // Capture strongly until the native thread exits, even if VMEngine drops
+        // its backend after a startup timeout.
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(250)) {
+            self.releaseScopesWhenStopped()
+        }
     }
 
     var isRunning: Bool { isteam_qemu_is_running() }
+    var isActive: Bool { isteam_qemu_is_active() }
+
+    var lastError: String? {
+        let message = String(cString: isteam_qemu_last_error())
+        return message.isEmpty ? nil : message
+    }
 }

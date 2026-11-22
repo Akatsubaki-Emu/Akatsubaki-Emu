@@ -31,17 +31,42 @@ final class GameLibraryTransferStore {
     }
 
     func export(to destination: URL) throws {
-        let backup = GameLibraryBackup(
-            games: GameStore.shared.games,
-            profiles: GameRuntimeProfileStore.shared.allProfiles
-        )
-        try encoder.encode(backup).write(to: destination, options: .atomic)
+        guard GameStore.shared.isReadable else { throw TransferError.libraryUnreadable }
+        guard !GameRuntimeProfileStore.shared.hasUnreadableProfiles else {
+            throw TransferError.profileStoreUnreadable
+        }
+        let games = GameStore.shared.games
+        let gameIDs = Set(games.map(\.id))
+        let profiles = GameRuntimeProfileStore.shared.allProfiles.filter {
+            gameIDs.contains($0.gameID)
+        }
+        let backup = GameLibraryBackup(games: games, profiles: profiles)
+        let data = try encoder.encode(backup)
+        guard data.count <= 20 * 1024 * 1024 else { throw TransferError.backupTooLarge }
+        let scoped = destination.startAccessingSecurityScopedResource()
+        defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
+
+        let coordinator = NSFileCoordinator()
+        let writeOptions: NSFileCoordinator.WritingOptions =
+            FileManager.default.fileExists(atPath: destination.path) ? .forReplacing : []
+        var coordinationError: NSError?
+        var writeError: Error?
+        coordinator.coordinate(writingItemAt: destination, options: writeOptions,
+                               error: &coordinationError) { writableURL in
+            do {
+                try data.write(to: writableURL, options: .atomic)
+            } catch {
+                writeError = error
+            }
+        }
+        if let coordinationError { throw coordinationError }
+        if let writeError { throw writeError }
         EmulationLog.shared.write("Exported game library backup (\(backup.games.count) entries)")
     }
 
     @discardableResult
     func importBackup(from source: URL) throws -> Int {
-        let data = try ExternalDriveStore.shared.readDocument(at: source)
+        let data = try ExternalDriveStore.shared.readDocument(at: source, maximumBytes: 20 * 1024 * 1024)
         guard data.count <= 20 * 1024 * 1024 else {
             throw TransferError.backupTooLarge
         }
@@ -55,11 +80,7 @@ final class GameLibraryTransferStore {
 
         var seen = Set<UUID>()
         for game in backup.games {
-            guard !game.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  !game.name.contains("\0"),
-                  !game.executablePath.contains("\0"),
-                  !game.workingDirectory.contains("\0"),
-                  seen.insert(game.id).inserted else {
+            guard game.validate(), seen.insert(game.id).inserted else {
                 throw TransferError.invalidEntry
             }
         }
@@ -83,11 +104,29 @@ final class GameLibraryTransferStore {
         let existingIDs = Set(current.map(\.id))
         let incoming = backup.games.filter { !existingIDs.contains($0.id) }
         current.append(contentsOf: incoming)
-        GameStore.shared.save(current)
 
-        for profile in backup.profiles where GameRuntimeProfileStore.shared.profile(for: profile.gameID) == nil {
-            try GameRuntimeProfileStore.shared.save(profile)
+        // Persist new profiles first, then publish the merged library. If any
+        // profile or the library write fails, roll back the newly created
+        // profile files so the import does not leave a half-applied backup.
+        let profilesToSave = backup.profiles.filter {
+            GameRuntimeProfileStore.shared.profile(for: $0.gameID) == nil
         }
+        var savedProfileIDs: [UUID] = []
+        do {
+            for profile in profilesToSave {
+                try GameRuntimeProfileStore.shared.save(profile)
+                savedProfileIDs.append(profile.gameID)
+            }
+            guard GameStore.shared.save(current) else {
+                throw TransferError.librarySaveFailed
+            }
+        } catch {
+            for gameID in savedProfileIDs {
+                try? GameRuntimeProfileStore.shared.removeProfile(for: gameID)
+            }
+            throw error
+        }
+
         EmulationLog.shared.write("Imported \(incoming.count) new game entries; executable paths remain untrusted metadata")
         return incoming.count
     }
@@ -98,6 +137,9 @@ final class GameLibraryTransferStore {
         case tooManyEntries
         case invalidEntry
         case invalidProfile
+        case librarySaveFailed
+        case libraryUnreadable
+        case profileStoreUnreadable
 
         var errorDescription: String? {
             switch self {
@@ -111,6 +153,12 @@ final class GameLibraryTransferStore {
                 return "The backup contains an invalid or duplicate game entry."
             case .invalidProfile:
                 return "The backup contains an invalid, duplicate, or orphaned game profile."
+            case .librarySaveFailed:
+                return "The game library could not be saved. Existing data was preserved and the imported profiles were rolled back."
+            case .libraryUnreadable:
+                return "The existing game library is unreadable; export was stopped to avoid creating an incomplete backup."
+            case .profileStoreUnreadable:
+                return "One or more per-game profiles are unreadable; export was stopped to avoid creating an incomplete backup."
             }
         }
     }
@@ -157,6 +205,7 @@ enum DroidDeckPortFeature: String, CaseIterable {
     case glassesPoseTracking
     case rawUSBBlockDevices
     case fullSystemQEMU
+    case steamOSGamingMode
 
     enum Readiness: String {
         case implemented
@@ -174,6 +223,8 @@ enum DroidDeckPortFeature: String, CaseIterable {
              .turnipVulkan, .frameGeneration, .steamVR, .glassesPoseTracking,
              .rawUSBBlockDevices, .fullSystemQEMU:
             return .unavailable
+        case .steamOSGamingMode:
+            return .partial
         }
     }
 
@@ -215,6 +266,8 @@ enum DroidDeckPortFeature: String, CaseIterable {
             return "iOS Files access cannot expose a physical USB disk as a guest block device."
         case .fullSystemQEMU:
             return QEMURuntimeStatus.diagnostic
+        case .steamOSGamingMode:
+            return "A game-focused Linux VM profile is available; no SteamOS image is bundled, and boot still requires a working QEMU runtime plus compatible UEFI firmware."
         }
     }
 }

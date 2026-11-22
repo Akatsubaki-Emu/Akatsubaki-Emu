@@ -22,6 +22,8 @@ final class GuestProcessManager {
     private init() {}
 
     func inspect(_ url: URL) -> GuestProcessFormatResult {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
               values.isRegularFile == true, let size = values.fileSize, size >= 2,
               let handle = try? FileHandle(forReadingFrom: url) else {

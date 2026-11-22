@@ -4,8 +4,12 @@ import UIKit
 /// onKey so the runtime input bridge can consume them.
 final class KeyboardOverlayView: UIView {
     var onKey: ((String) -> Void)?
+    var onKeyEvent: ((String, Bool) -> Void)?
 
     private let column = UIStackView()
+    private let modifierKeys: Set<String> = ["SHIFT", "CTRL", "ALT"]
+    private var activeModifiers = Set<String>()
+    private var modifierButtons: [String: UIButton] = [:]
 
     init(onKey: @escaping (String) -> Void) {
         self.onKey = onKey
@@ -42,6 +46,14 @@ final class KeyboardOverlayView: UIView {
         addRow(["ESC","TAB","CTRL","ALT","SPACE","←","↑","↓","→","ENTER"])
     }
 
+    func releaseAllKeys() {
+        for key in activeModifiers {
+            onKeyEvent?(key, false)
+            modifierButtons[key]?.backgroundColor = UIColor(white: 0.24, alpha: 1)
+        }
+        activeModifiers.removeAll()
+    }
+
     private func addRow(_ keys: [String]) {
         let row = UIStackView()
         row.axis = .horizontal
@@ -56,8 +68,28 @@ final class KeyboardOverlayView: UIView {
             button.backgroundColor = UIColor(white: 0.24, alpha: 1)
             button.layer.cornerRadius = 5
             button.accessibilityLabel = key
-            button.addAction(UIAction { [weak self] _ in
-                self?.onKey?(key == "⌫" ? "BACKSPACE" : key)
+            if modifierKeys.contains(key) {
+                modifierButtons[key] = button
+            }
+            button.addAction(UIAction { [weak self, weak button] _ in
+                guard let self else { return }
+                if self.modifierKeys.contains(key), let onKeyEvent = self.onKeyEvent {
+                    if self.activeModifiers.contains(key) {
+                        self.activeModifiers.remove(key)
+                        onKeyEvent(key, false)
+                        button?.backgroundColor = UIColor(white: 0.24, alpha: 1)
+                    } else {
+                        self.activeModifiers.insert(key)
+                        onKeyEvent(key, true)
+                        button?.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.9)
+                    }
+                } else if let onKeyEvent = self.onKeyEvent {
+                    let outputKey = key == "⌫" ? "BACKSPACE" : key
+                    onKeyEvent(outputKey, true)
+                    onKeyEvent(outputKey, false)
+                } else {
+                    self.onKey?(key == "⌫" ? "BACKSPACE" : key)
+                }
             }, for: .touchUpInside)
             row.addArrangedSubview(button)
         }

@@ -1,0 +1,163 @@
+name: i-Steam platform compile validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/validate-ios-build.yml
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-compile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-platform-simulators:
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scheme: iSteam
+            sdk: iphonesimulator
+            destination: generic/platform=iOS Simulator
+          - scheme: iSteamTV
+            sdk: appletvsimulator
+            destination: generic/platform=tvOS Simulator
+          - scheme: iSteamVision
+            sdk: xrsimulator
+            destination: generic/platform=visionOS Simulator
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select and verify Xcode 26.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP="/Applications/Xcode_26.2.app"
+          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+          XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
+          if [ "$XCODE_VERSION" != "26.2" ]; then
+            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+            exit 1
+          fi
+      - name: Test translation cache integrity and invalidation
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Core/EmulationLog.swift \
+            src/Performance/TranslationCache.swift \
+            scripts/tests/test_translation_cache.swift \
+            -o "$RUNNER_TEMP/test-translation-cache"
+          "$RUNNER_TEMP/test-translation-cache"
+      - name: Test ELF program-header table mapping
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 src/Runtime/ELF64Loader.swift scripts/tests/test_elf_loader_program_headers.swift -o "$RUNNER_TEMP/test-elf-phdr"
+          "$RUNNER_TEMP/test-elf-phdr"
+
+      - name: Test static ELF load, process entry and syscall execution
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/ELF64Loader.swift \
+            src/Runtime/X86_64ALU.swift \
+            src/Runtime/LinuxProcessStackBuilder.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            src/Runtime/X86_64Interpreter.swift \
+            scripts/tests/test_static_elf_execution.swift \
+            -o "$RUNNER_TEMP/test-static-elf"
+          "$RUNNER_TEMP/test-static-elf"
+      - name: Test Linux x86-64 syscall memory model
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            scripts/tests/test_linux_syscall_dispatcher.swift \
+            -o "$RUNNER_TEMP/test-linux-syscalls"
+          "$RUNNER_TEMP/test-linux-syscalls"
+      - name: Test Linux x86-64 process stack and auxiliary vector
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/LinuxProcessStackBuilder.swift \
+            scripts/tests/test_linux_process_stack.swift \
+            -o "$RUNNER_TEMP/test-linux-process-stack"
+          "$RUNNER_TEMP/test-linux-process-stack"
+      - name: Test hybrid runtime backend routing
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/ExecutionBackendRouter.swift \
+            scripts/tests/test_execution_backend_router.swift \
+            -o "$RUNNER_TEMP/test-backend-router"
+          "$RUNNER_TEMP/test-backend-router"
+      - name: Test x86-64 interpreter ALU, memory, stack and syscall path
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/X86_64ALU.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            src/Runtime/X86_64Interpreter.swift \
+            scripts/tests/test_x86_64_interpreter.swift \
+            -o "$RUNNER_TEMP/test-x86-64-interpreter"
+          "$RUNNER_TEMP/test-x86-64-interpreter"
+      - name: Test game library filtering, ordering, and tag collection
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Steam/GameLibraryQuery.swift \
+            scripts/tests/test_game_library_query.swift \
+            -o "$RUNNER_TEMP/test-game-library-query"
+          "$RUNNER_TEMP/test-game-library-query"
+
+      - name: Test bounded Windows PE import directory parsing
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/WindowsPEImage.swift \
+            scripts/tests/test_windows_pe_image.swift \
+            -o "$RUNNER_TEMP/test-windows-pe-image"
+          "$RUNNER_TEMP/test-windows-pe-image"
+
+      - name: Test VNC key-state source arbitration
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/QEMU/VNCKeyState.swift \
+            scripts/tests/test_vnc_key_state.swift \
+            -o "$RUNNER_TEMP/test-vnc-key-state"
+          "$RUNNER_TEMP/test-vnc-key-state"
+      - name: Validate runtime bridge and packaging contracts
+        if: matrix.scheme == 'iSteam'
+        run: python3 scripts/validate-qemu-source.py
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+      - name: Compile ${{ matrix.scheme }} for ${{ matrix.destination }}
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project iSteam.xcodeproj \
+            -scheme "${{ matrix.scheme }}" \
+            -configuration Debug \
+            -sdk "${{ matrix.sdk }}" \
+            -destination '${{ matrix.destination }}' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
