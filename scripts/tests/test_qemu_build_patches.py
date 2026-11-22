@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import subprocess
 import sys
 import unittest
@@ -341,6 +342,72 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn('if grep -Fq \'_objc_msgSendClass\' <<<"$SYMBOLS"; then', source)
         self.assertNotIn('nm -u "$PROBE_OBJECT" | grep', source)
         self.assertNotIn("\n; then\n", source)
+
+    def test_build_freshness_script_ignores_only_non_build_paths(self):
+        root = Path(__file__).resolve().parents[2]
+        script_source = root / "scripts/check-build-freshness.sh"
+        with TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            origin = workspace / "origin.git"
+            repository = workspace / "repo"
+            subprocess.run(["git", "init", "--bare", str(origin)], check=True, capture_output=True, text=True)
+            subprocess.run(["git", "init", str(repository)], check=True, capture_output=True, text=True)
+
+            def git(*args):
+                return subprocess.run(
+                    ["git", "-C", str(repository), *args],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+
+            git("config", "user.name", "Build freshness test")
+            git("config", "user.email", "build-freshness@example.invalid")
+            (repository / "src").mkdir()
+            (repository / "scripts").mkdir()
+            (repository / "src/Runtime.swift").write_text("let runtime = 1\\n", encoding="utf-8")
+            (repository / "scripts/check-build-freshness.sh").write_text(
+                script_source.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            git("add", ".")
+            git("commit", "-m", "base build revision")
+            git("branch", "-M", "main")
+            git("remote", "add", "origin", str(origin))
+            git("push", "-u", "origin", "main")
+            base_sha = git("rev-parse", "HEAD")
+
+            (repository / "scripts/tests").mkdir()
+            (repository / "scripts/tests/test_only.py").write_text("value = 2\\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-m", "test-only change")
+            git("push", "origin", "main")
+            environment = os.environ.copy()
+            environment["GITHUB_REF"] = "refs/heads/main"
+            environment["GITHUB_SHA"] = base_sha
+            result = subprocess.run(
+                ["bash", str(repository / "scripts/check-build-freshness.sh"), base_sha],
+                cwd=repository,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.stdout.strip(), "true", result.stderr)
+
+            (repository / "src/Runtime.swift").write_text("let runtime = 3\\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-m", "build-relevant source change")
+            git("push", "origin", "main")
+            result = subprocess.run(
+                ["bash", str(repository / "scripts/check-build-freshness.sh"), base_sha],
+                cwd=repository,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.stdout.strip(), "false", result.stderr)
+
 
     def test_qemu_runtime_packager_preserves_firmware_bundle_directories(self):
         script = (Path(__file__).resolve().parents[2] / "scripts/package-utm-qemu-runtime.sh").read_text()
