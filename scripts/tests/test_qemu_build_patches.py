@@ -202,13 +202,15 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("spirv-tools", source)
         self.assertIn("spirv-llvm-translator", source)
 
-    def test_qemu_workflow_disables_unsupported_objc_class_selector_stubs(self):
+    def test_qemu_workflow_uses_meson_objc_link_fix_without_global_flag_workaround(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
         source = workflow.read_text(encoding="utf-8")
-        self.assertIn("Verify Objective-C class-selector stub compatibility", source)
-        self.assertIn("-fno-objc-msgsend-class-selector-stubs", source)
-        self.assertIn("export OBJCFLAGS=", source)
-        self.assertIn("grep -Fq", source)
+        self.assertIn("scripts/patch_qemu_meson_ios.py", source)
+        self.assertIn("scripts/verify_qemu_meson_link.py", source)
+        self.assertIn("utm-ios-arm64-deps-v12-", source)
+        self.assertNotIn("Verify Objective-C class-selector stub compatibility", source)
+        self.assertNotIn("-fno-objc-msgsend-class-selector-stubs", source)
+        self.assertNotIn("export OBJCFLAGS=", source)
         self.assertNotIn("\n; then\n", source)
 
     def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
