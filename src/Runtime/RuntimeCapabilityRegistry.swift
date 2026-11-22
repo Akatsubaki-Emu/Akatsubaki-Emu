@@ -8,6 +8,7 @@ enum RuntimeCapabilityLevel: String, CaseIterable {
     case missing
     case artifactPresent
     case loadable
+    case validatedSubset
     case operational
 }
 
@@ -39,6 +40,11 @@ struct RuntimeCapabilityRegistry {
             )
         }
 
+        records[.x86Interpreter] = RuntimeCapabilityRecord(
+            level: .validatedSubset,
+            detail: "The bounded static-ELF diagnostic interpreter has a synthetic end-to-end smoke test; it is not a general Linux execution backend."
+        )
+
         if probeQEMU {
             switch QEMURuntimeStatus.inspect(bundle: bundle) {
             case .ready:
@@ -69,12 +75,16 @@ struct RuntimeCapabilityRegistry {
         )
     }
 
-    /// Only operationally tested backends are exposed to the planner.
+    /// Operational backends and the explicitly subset-validated diagnostic
+    /// interpreter are exposed with distinct routing semantics.
     var backendAvailability: RuntimeBackendAvailability {
-        let operational = Set(RuntimeBackend.allCases.filter {
-            record(for: $0).level == .operational
+        let installed = Set(RuntimeBackend.allCases.filter {
+            let level = record(for: $0).level
+            return level == .operational
+                || ($0 == .x86Interpreter && level == .validatedSubset)
         })
-        return RuntimeBackendAvailability(installed: operational)
+        // The syscall shim is only a subset; never advertise the full Linux ABI.
+        return RuntimeBackendAvailability(installed: installed)
     }
 
     var diagnostics: [String] {
