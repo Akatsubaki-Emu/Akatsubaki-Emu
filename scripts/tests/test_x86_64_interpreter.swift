@@ -978,8 +978,8 @@ struct InterpreterTests {
 
         let accumulatorExchange32Memory = GuestMemory(size: 64)
         let accumulatorExchange32Program: [UInt8] = [
-            0xB8, 0x44, 0x33, 0x22, 0x11,
-            0x41, 0xB8, 0x88, 0x77, 0x66, 0x55,
+            0x48, 0xB8, 0x44, 0x33, 0x22, 0x11, 0xDD, 0xCC, 0xBB, 0xAA,
+            0x49, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x55, 0x66, 0x77, 0x88,
             0x41, 0x90,
             0x0F, 0x0B
         ]
@@ -987,7 +987,7 @@ struct InterpreterTests {
         let accumulatorExchange32 = X86_64Interpreter(memory: accumulatorExchange32Memory)
         try accumulatorExchange32.reset(entryPoint: 0)
         let accumulatorExchange32Exit = try accumulatorExchange32.run(maxInstructions: 4)
-        precondition(accumulatorExchange32Exit == .unsupportedInstruction(address: 13))
+        precondition(accumulatorExchange32Exit == .unsupportedInstruction(address: 22))
         precondition(accumulatorExchange32.registerValue(0) == 0x55667788)
         precondition(accumulatorExchange32.registerValue(8) == 0x11223344)
 
