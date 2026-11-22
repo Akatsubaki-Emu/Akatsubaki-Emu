@@ -1,4 +1,4 @@
-name: i-Steam Build & Release
+name: Akatsubaki Emu Build & Release
 
 on:
   # Build the runtime in this workflow before any platform app builds.
@@ -144,7 +144,7 @@ jobs:
         if: matrix.platform == 'iOS'
         uses: actions/download-artifact@v8
         with:
-          name: iSteam-qemu-runtime-ios-arm64
+          name: AkatsubakiEmu-qemu-runtime-ios-arm64
           path: build/qemu-runtime
 
       - uses: actions/cache@v6
@@ -256,7 +256,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: iSteam-${{ matrix.platform }}-${{ matrix.channel }}
+          name: AkatsubakiEmu-${{ matrix.platform }}-${{ matrix.channel }}
           path: |
             build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa
             build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa.sha256
@@ -298,21 +298,21 @@ jobs:
         if: steps.freshness.outputs.publish == 'true'
         uses: actions/download-artifact@v8
         with:
-          name: iSteam-iOS-${{ matrix.channel }}
+          name: AkatsubakiEmu-iOS-${{ matrix.channel }}
           path: build
 
       - name: Download tvOS build
         if: steps.freshness.outputs.publish == 'true'
         uses: actions/download-artifact@v8
         with:
-          name: iSteam-tvOS-${{ matrix.channel }}
+          name: AkatsubakiEmu-tvOS-${{ matrix.channel }}
           path: build
 
       - name: Download visionOS build
         if: steps.freshness.outputs.publish == 'true'
         uses: actions/download-artifact@v8
         with:
-          name: iSteam-visionOS-${{ matrix.channel }}
+          name: AkatsubakiEmu-visionOS-${{ matrix.channel }}
           path: build
 
       - name: Verify combined release assets
@@ -373,7 +373,7 @@ jobs:
             build/iSteam-visionOS.ipa
             build/iSteam-visionOS.ipa.sha256
           body: |
-            i-Steam ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
+            Akatsubaki Emu ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
 
             Includes unsigned prototype builds:
             - **iOS:** `iSteam-ios.ipa`

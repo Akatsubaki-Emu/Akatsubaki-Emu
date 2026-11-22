@@ -21,7 +21,7 @@ final class HostDeviceBridge {
         var errorDescription: String? {
             switch self {
             case .invalidPath: return "The requested host path is invalid."
-            case .outsideSharedDirectory: return "The requested file is outside the i-Steam shared directory."
+            case .outsideSharedDirectory: return "The requested file is outside the Akatsubaki Emu shared directory."
             case .unavailableDeviceInformation: return "Host device information is unavailable."
             case .fileTooLarge: return "The shared file exceeds the 64 MiB transfer limit."
             case .fileChangedDuringTransfer: return "The shared file changed while it was being transferred."
@@ -57,7 +57,7 @@ final class HostDeviceBridge {
         )
     }
 
-    /// Copies a guest-exported file into the host's i-Steam shared directory.
+    /// Copies a guest-exported file into the host's Akatsubaki Emu shared directory.
     /// The relative path is validated to prevent directory traversal.
     @discardableResult
     func receiveFile(from source: URL, relativePath: String) throws -> URL {

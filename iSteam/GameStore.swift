@@ -60,7 +60,7 @@ struct GameEntry: Codable, Identifiable, Equatable {
         case coverArtPath, isFavorite, tags, lastPlayedAt, addedAt, notes
     }
 
-    /// Backward-compatible decoding for entries created by older i-Steam builds.
+    /// Backward-compatible decoding for entries created by earlier Akatsubaki Emu versions.
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decode(UUID.self, forKey: .id)

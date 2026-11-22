@@ -2,7 +2,7 @@
  * UTM QEMU lifecycle integration reference:
  * https://github.com/utmapp/UTM/blob/main/Services/UTMQemuSystem.m
  *
- * Adapted for i-Steam. Copyright (c) 2026 i-Steam contributors.
+ * Adapted for Akatsubaki Emu. Copyright (c) 2026 Akatsubaki Emu contributors.
  * UTM reference implementation is licensed under Apache-2.0.
  * See THIRD_PARTY_NOTICES.md for attribution and license information.
  */
@@ -171,7 +171,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
         pthread_mutex_unlock(&g_lock);
         if (error_buffer && error_capacity > 0) {
             snprintf(error_buffer, (size_t)error_capacity,
-                     "UTM's iOS QEMU runtime cannot safely restart in the same app process. Force-quit and reopen i-Steam before starting another VM.");
+                     "UTM's iOS QEMU runtime cannot safely restart in the same app process. Force-quit and reopen Akatsubaki Emu before starting another VM.");
         }
         return false;
     }

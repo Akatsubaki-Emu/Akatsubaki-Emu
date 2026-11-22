@@ -76,7 +76,7 @@ final class VMEngine {
             monitor = nil
             backend = nil
             setState(.stopped)
-            EmulationLog.shared.write("QEMU session stopped; restart requires relaunching i-Steam.")
+            EmulationLog.shared.write("QEMU session stopped; restart requires relaunching Akatsubaki Emu.")
             return
         }
 

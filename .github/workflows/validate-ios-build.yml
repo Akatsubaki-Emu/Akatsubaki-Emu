@@ -1,4 +1,4 @@
-name: i-Steam platform compile validation
+name: Akatsubaki Emu platform compile validation
 
 on:
   push:

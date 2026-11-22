@@ -117,7 +117,7 @@ brew install xcodegen
 xcodegen generate --spec project.yml
 ```
 
-Open `iSteam.xcodeproj` in Xcode and choose a scheme:
+Open `iSteam.xcodeproj` in Xcode and choose a scheme. The legacy Xcode project, scheme, executable and IPA filenames are retained for compatibility; the installed app is branded **Akatsubaki Emu**:
 
 - `iSteam` — iOS main build.
 - `iSteamNightly` — iOS nightly build.

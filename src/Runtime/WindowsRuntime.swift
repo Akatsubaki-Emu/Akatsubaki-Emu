@@ -28,7 +28,7 @@ final class WindowsRuntime {
             return false
         }
 
-        EmulationLog.shared.write("Cannot launch \(process.executable.lastPathComponent): i-Steam currently validates/imports PE files but has no integrated Windows guest execution engine")
+        EmulationLog.shared.write("Cannot launch \(process.executable.lastPathComponent): Akatsubaki Emu currently validates/imports PE files but has no integrated Windows guest execution engine")
         return false
     }
 }

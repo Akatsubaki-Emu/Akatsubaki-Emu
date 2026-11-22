@@ -171,7 +171,7 @@ jobs:
               "uses: ./.github/workflows/build-qemu-runtime.yml",
               "needs: [qemu-runtime, check-platform-build-freshness]",
               "actions/download-artifact@",
-              "name: iSteam-qemu-runtime-ios-arm64",
+              "name: AkatsubakiEmu-qemu-runtime-ios-arm64",
               "if-no-files-found: error",
               "validate-release-channel:",
               "target_commitish: " + "$" + "{{ github.sha }}",

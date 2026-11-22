@@ -25,7 +25,7 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 350
     steps:
-      - name: Checkout i-Steam
+      - name: Checkout Akatsubaki Emu
         uses: actions/checkout@v7
 
       # Recheck after this job obtains an Xcode runner. A queued job can become
@@ -274,7 +274,7 @@ jobs:
         if: steps.freshness.outputs.build == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: iSteam-qemu-runtime-ios-arm64
+          name: AkatsubakiEmu-qemu-runtime-ios-arm64
           path: build/qemu-runtime/
           if-no-files-found: error
           retention-days: 14
