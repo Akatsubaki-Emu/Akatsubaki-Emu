@@ -28,7 +28,10 @@ def make_package(root: Path, mode: str, *, revision: str = "utm-revision-1", cal
     if include_callback:
         symbols.append("isteam_qemu_set_jit_callbacks")
     (root / "exports.txt").write_text("\n".join(symbols) + "\n", encoding="utf-8")
-    (root / "BUILD-INFO.txt").write_text(mode + " build\n", encoding="utf-8")
+    build_info = "BUILD-INFO-jit.txt" if mode == "jit" else "BUILD-INFO.txt"
+    dependency_report = "dependency-report-jit.txt" if mode == "jit" else "dependency-report.txt"
+    (root / build_info).write_text(mode + " build\n", encoding="utf-8")
+    (root / dependency_report).write_text(mode + " dependencies\n", encoding="utf-8")
     (root / "QEMU" / "bios.bin").write_text(mode + " bios\n", encoding="utf-8")
     return root
 
@@ -82,6 +85,49 @@ class MergeQEMURuntimeVariantsTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertTrue((jit / "QEMU/bios.bin").is_file())
         self.assertTrue((tci / "QEMU/bios.bin").is_file())
+
+    def test_rejects_output_equal_to_jit_input_without_deleting_it(self):
+        result = self.run_merge("build/jit")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.jit / "QEMU/bios.bin").read_text(encoding="utf-8"), "jit bios\n")
+        self.assertEqual((self.tci / "QEMU/bios.bin").read_text(encoding="utf-8"), "tci bios\n")
+
+    def test_rejects_output_equal_to_tci_input_without_deleting_it(self):
+        result = self.run_merge("build/tci")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.jit / "QEMU/bios.bin").read_text(encoding="utf-8"), "jit bios\n")
+        self.assertEqual((self.tci / "QEMU/bios.bin").read_text(encoding="utf-8"), "tci bios\n")
+
+    def test_rejects_output_equal_to_jit_input_without_deleting_it(self):
+        result = self.run_merge("build/jit")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.jit / "QEMU/bios.bin").is_file())
+
+    def test_rejects_output_equal_to_tci_input_without_deleting_it(self):
+        result = self.run_merge("build/tci")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.tci / "QEMU/bios.bin").is_file())
+
+    def test_preserves_mode_specific_build_and_dependency_reports(self):
+        result = self.run_merge()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = self.build / "merged"
+        build_info = (output / "BUILD-INFO.txt").read_text(encoding="utf-8")
+        dependency_report = (output / "dependency-report.txt").read_text(encoding="utf-8")
+        self.assertIn("jit build", build_info)
+        self.assertIn("tci build", build_info)
+        self.assertIn("jit dependencies", dependency_report)
+        self.assertIn("tci dependencies", dependency_report)
+
+    def test_rejects_regular_file_over_symlinked_framework_destination(self):
+        other = self.jit / "Frameworks" / "Shared.framework" / "Other"
+        other.write_text("shared dependency", encoding="utf-8")
+        shared = self.jit / "Frameworks" / "Shared.framework" / "Shared"
+        shared.unlink()
+        shared.symlink_to("Other")
+        result = self.run_merge()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("symlinked framework destination", result.stderr)
 
     def test_rejects_missing_lifecycle_export_from_tci(self):
         tci = make_package(self.build / "bad-tci", "tci", missing_symbol="qemu_system_shutdown_request")
