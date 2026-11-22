@@ -447,13 +447,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("group: isteam-release-publish-${{ matrix.channel }}", release_job)
         self.assertIn("cancel-in-progress: false", release_job)
 
-    def test_qemu_runtime_pins_xcode_27_1_on_supported_runner(self):
+    def test_qemu_runtime_uses_the_xcode_27_runner_toolchain(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
         self.assertIn("runs-on: xcode-27", workflow)
-        self.assertIn('XCODE_APP="/Applications/Xcode_27.1.app"', workflow)
-        self.assertIn('sudo xcode-select --switch "$XCODE_APP/Contents/Developer"', workflow)
-        self.assertIn('if [ "$XCODE_VERSION" != "27.1" ]; then', workflow)
+        self.assertIn('XCODE_DEVELOPER_DIR="$(xcode-select -p)"', workflow)
+        self.assertIn('case "$XCODE_VERSION" in', workflow)
+        self.assertIn("27.*) ;;", workflow)
+        self.assertIn("Expected Xcode 27.x on the xcode-27 runner", workflow)
 
 
     def test_release_and_platform_validation_pin_xcode_26_2(self):
