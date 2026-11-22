@@ -13,12 +13,14 @@
 #endif
 
 #if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR
-__attribute__((noinline, optnone, naked))
+/*
+ * TXM executable mappings can lose RX permission when StikDebug detaches.
+ * Keep the debugger session attached while generated code may still execute.
+ * This exported hook remains a no-op for compatibility with existing QEMU
+ * runtimes; process exit releases the debugger session.
+ */
+__attribute__((noinline))
 void iSteamJITDetach(void) {
-    __asm__ volatile("mov x16, #0\n"
-                     "brk #0xf00d\n"
-                     "ret\n");
-}
 __attribute__((noinline, optnone, naked))
 void *iSteamJITPrepareRegion(void *address, size_t length) {
     __asm__ volatile("mov x16, #1\n"
