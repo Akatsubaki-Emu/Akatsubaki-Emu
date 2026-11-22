@@ -93,6 +93,45 @@ final class X86_64Interpreter: GuestCPUBackend {
             }
 
             switch opcode {
+            case 0x50...0x57: // PUSH r64
+                let index = Int(opcode - 0x50) | (rex & 0x01 != 0 ? 8 : 0)
+                guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
+                let nextStackPointer = registers[4] - 8
+                guard memory.writeUInt64(registers[index], offset: nextStackPointer) else {
+                    return .memoryFault(address: nextStackPointer)
+                }
+                registers[4] = nextStackPointer
+            case 0x58...0x5F: // POP r64
+                let index = Int(opcode - 0x58) | (rex & 0x01 != 0 ? 8 : 0)
+                guard let value = readUInt64(at: registers[4]) else {
+                    return .memoryFault(address: registers[4])
+                }
+                let (nextStackPointer, overflow) = registers[4].addingReportingOverflow(8)
+                guard !overflow else { return .memoryFault(address: registers[4]) }
+                if index == 4 {
+                    registers[4] = value
+                } else {
+                    registers[4] = nextStackPointer
+                    registers[index] = value
+                }
+            case 0x68: // PUSH sign-extended imm32
+                guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
+                let value = UInt64(bitPattern: Int64(Int32(bitPattern: raw)))
+                guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
+                let nextStackPointer = registers[4] - 8
+                guard memory.writeUInt64(value, offset: nextStackPointer) else {
+                    return .memoryFault(address: nextStackPointer)
+                }
+                registers[4] = nextStackPointer
+            case 0x6A: // PUSH sign-extended imm8
+                guard let raw = fetchByte() else { return .memoryFault(address: rip) }
+                let value = UInt64(bitPattern: Int64(Int8(bitPattern: raw)))
+                guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
+                let nextStackPointer = registers[4] - 8
+                guard memory.writeUInt64(value, offset: nextStackPointer) else {
+                    return .memoryFault(address: nextStackPointer)
+                }
+                registers[4] = nextStackPointer
             case 0x90...0x97: // XCHG EAX/RAX, r32/r64
                 let index = Int(opcode - 0x90) | (rex & 0x01 != 0 ? 8 : 0)
                 if index != 0 {
