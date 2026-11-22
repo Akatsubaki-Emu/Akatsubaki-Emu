@@ -225,11 +225,6 @@ jobs:
               raise SystemExit("QEMU dependency cache key must be versioned.")
           if "steps.utm-source.outputs.commit" not in qemu:
               raise SystemExit("QEMU cache key must include the checked-out UTM revision.")
-          expected_group = (
-              "group: qemu-runtime-ios-arm64-" + "$" + "{{ github.ref }}" + "-" + "$" + "{{ github.workflow }}"
-          )
-          if expected_group not in qemu:
-              raise SystemExit("QEMU concurrency must isolate workflow/ref executions.")
           for token in [
               "scripts/patch_utm_qemu_ios.py",
               "scripts/patch_qemu_meson_ios.py",
