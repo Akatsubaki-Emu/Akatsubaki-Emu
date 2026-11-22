@@ -397,7 +397,7 @@ required = {
         "registers[11] = flags",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
-        "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
+        "Static ET_EXEC execution and static PIE load-bias/relative-relocation checks passed",
         "hello from static ELF",
         "func writeUInt32(_ value: UInt32, offset: UInt64) -> Bool",
         "interpreter.run(maxInstructions: 64)",
@@ -769,7 +769,7 @@ required = {
         "vncClient.onFrame",
         "guest • \\(self.configuration.displayWidth)",
         "vncClient.onStatus",
-        "engine.start(diskImage: diskImage)",
+        "engine.start(diskImage: diskImage, writableDiskImage: writableDiskImage)",
         "MotionInputManager.shared.stop()",
         "motion.onLookDelta =",
         "VRSettings.shared.pointerLockEnabled",
