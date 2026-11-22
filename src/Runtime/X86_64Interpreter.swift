@@ -197,10 +197,11 @@ final class X86_64Interpreter: GuestCPUBackend {
                 guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
                 let target = addSigned(Int32(bitPattern: raw), to: rip)
                 guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
-                registers[4] -= 8
-                guard memory.writeUInt64(rip, offset: registers[4]) else {
-                    return .memoryFault(address: registers[4])
+                let nextStackPointer = registers[4] - 8
+                guard memory.writeUInt64(rip, offset: nextStackPointer) else {
+                    return .memoryFault(address: nextStackPointer)
                 }
+                registers[4] = nextStackPointer
                 rip = target
             case 0xC2: // RET imm16
                 guard let adjustment = fetchUInt16() else {
