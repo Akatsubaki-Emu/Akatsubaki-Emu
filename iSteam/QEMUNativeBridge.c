@@ -41,6 +41,7 @@ static bool g_has_started = false;
 static char g_error[512] = {0};
 static int g_argc = 0;
 static char **g_argv = NULL;
+static char *g_argument_storage = NULL;
 static qemu_init_fn g_qemu_init = NULL;
 static qemu_main_loop_fn g_qemu_main_loop = NULL;
 static qemu_cleanup_fn g_qemu_cleanup = NULL;
@@ -59,9 +60,9 @@ static void clear_starting(void) {
 }
 
 static void release_arguments(void) {
-    if (!g_argv) return;
-    for (int i = 0; i < g_argc; ++i) free(g_argv[i]);
+    free(g_argument_storage);
     free(g_argv);
+    g_argument_storage = NULL;
     g_argv = NULL;
     g_argc = 0;
 }
@@ -218,25 +219,31 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);
 
     char **copied_argv = calloc((size_t)argc + 1, sizeof(char *));
-    if (!copied_argv) {
+    char *argument_storage = malloc(total_argument_bytes);
+    if (!copied_argv || !argument_storage) {
+        free(copied_argv);
+        free(argument_storage);
         dlclose(library);
         if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "Out of memory preparing QEMU arguments");
         clear_starting();
         return false;
     }
+    size_t argument_offset = 0;
     for (int i = 0; i < argc; ++i) {
-        const char *argument = argv[i] ? argv[i] : "";
-        size_t argument_length = strlen(argument);
-        copied_argv[i] = malloc(argument_length + 1);
-        if (!copied_argv[i]) {
-            for (int j = 0; j < i; ++j) free(copied_argv[j]);
+        const size_t argument_length = strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u);
+        if (argument_length > ISTEAM_QEMU_MAX_ARGUMENT_BYTES
+            || argument_offset > total_argument_bytes
+            || argument_length + 1u > total_argument_bytes - argument_offset) {
+            free(argument_storage);
             free(copied_argv);
             dlclose(library);
-            if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "Out of memory copying QEMU arguments");
+            if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "QEMU arguments changed while preparing the launch");
             clear_starting();
             return false;
         }
-        memcpy(copied_argv[i], argument, argument_length + 1);
+        copied_argv[i] = argument_storage + argument_offset;
+        memcpy(copied_argv[i], argv[i], argument_length + 1u);
+        argument_offset += argument_length + 1u;
     }
 
     pthread_mutex_lock(&g_lock);
@@ -247,6 +254,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     g_qemu_shutdown = shutdown_fn;
     g_argc = argc;
     g_argv = copied_argv;
+    g_argument_storage = argument_storage;
     g_thread_created = true;
     int result = pthread_create(&g_thread, NULL, qemu_thread_main, NULL);
     if (result != 0) {
@@ -259,8 +267,9 @@ bool isteam_qemu_start(int argc, const char * const *argv,
         g_qemu_shutdown = NULL;
         g_argc = 0;
         g_argv = NULL;
+        g_argument_storage = NULL;
         pthread_mutex_unlock(&g_lock);
-        for (int i = 0; i < argc; ++i) free(copied_argv[i]);
+        free(argument_storage);
         free(copied_argv);
         dlclose(library);
         if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "Could not create QEMU worker thread");
