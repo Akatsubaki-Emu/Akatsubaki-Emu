@@ -83,16 +83,12 @@ struct LinuxProcessStackBuilder {
         let stackBase = alignedTop - UInt64(Self.stackSize)
         guard maximumImageAddress <= stackBase - Self.pageSize else { throw BuildError.imageOverlapsStack }
         let random = randomBytes ?? Self.makeRandomBytes()
-        var buffer = Data(count: Self.stackSize)
         var cursor = Self.stackSize
 
-        func pushString(_ value: String) throws -> UInt64 {
-            let bytes = value.utf8
-            let required = bytes.count + 1
-            guard required <= cursor else { throw BuildError.insufficientSpace }
+        func reserveString(_ value: String) throws -> UInt64 {
+            let (required, overflow) = value.utf8.count.addingReportingOverflow(1)
+            guard !overflow, required <= cursor else { throw BuildError.insufficientSpace }
             cursor -= required
-            if !bytes.isEmpty { buffer.replaceSubrange(cursor..<(cursor + bytes.count), with: bytes) }
-            buffer[cursor + bytes.count] = 0
             return stackBase + UInt64(cursor)
         }
 
@@ -110,10 +106,10 @@ struct LinuxProcessStackBuilder {
         argumentPointers.append(try pushString(executablePath))
         argumentPointers.reverse()
 
+        guard cursor >= 16 else { throw BuildError.insufficientSpace }
         cursor -= 16
-        buffer.replaceSubrange(cursor..<(cursor + 16), with: random)
         let randomAddress = stackBase + UInt64(cursor)
-        let platformAddress = try pushString("x86_64")
+        let platformAddress = try reserveString("x86_64")
 
         let auxv: [(UInt64, UInt64)] = [
             (3, programHeaders.address),
@@ -140,6 +136,33 @@ struct LinuxProcessStackBuilder {
         let (vectorBytes, vectorBytesOverflow) = vectorWordCount.multipliedReportingOverflow(by: 8)
         guard !vectorBytesOverflow, vectorBytes <= cursor else { throw BuildError.insufficientSpace }
         let vectorStart = (cursor - vectorBytes) & ~15
+        var buffer = Data(count: Self.stackSize - vectorStart)
+        var writeCursor = Self.stackSize
+        func writeString(_ value: String) throws {
+            let bytes = value.utf8
+            let (required, overflow) = bytes.count.addingReportingOverflow(1)
+            guard !overflow, required <= writeCursor else { throw BuildError.insufficientSpace }
+            writeCursor -= required
+            let offset = writeCursor - vectorStart
+            if !bytes.isEmpty { buffer.replaceSubrange(offset..<(offset + bytes.count), with: bytes) }
+            buffer[offset + bytes.count] = 0
+        }
+        for key in environmentKeys.reversed() {
+            try writeString("\(key)=\(environment[key] ?? "")")
+        }
+        for value in arguments.reversed() { try writeString(value) }
+        try writeString(executablePath)
+        guard writeCursor >= 16 else { throw BuildError.insufficientSpace }
+        writeCursor -= 16
+        let randomOffset = writeCursor - vectorStart
+        buffer.replaceSubrange(randomOffset..<(randomOffset + 16), with: random)
+        try writeString("x86_64")
+        guard writeCursor == cursor,
+              stackBase + UInt64(randomOffset) == randomAddress,
+              stackBase + UInt64(writeCursor) == platformAddress else {
+            throw BuildError.stackUnavailable
+        }
+
         let vectorWritten = buffer.withUnsafeMutableBytes { destination -> Bool in
             guard let base = destination.baseAddress else { return false }
             var wordIndex = 0
@@ -147,7 +170,7 @@ struct LinuxProcessStackBuilder {
                 var littleEndian = word.littleEndian
                 withUnsafeBytes(of: &littleEndian) { bytes in
                     if let source = bytes.baseAddress {
-                        base.advanced(by: vectorStart + wordIndex * 8)
+                        base.advanced(by: wordIndex * 8)
                             .copyMemory(from: source, byteCount: 8)
                     }
                 }
@@ -165,7 +188,7 @@ struct LinuxProcessStackBuilder {
 
         let stackPointer = stackBase + UInt64(vectorStart)
         guard stackPointer & 0xF == 0,
-              memory.write(buffer, sourceRange: vectorStart..<Self.stackSize, offset: stackPointer) else {
+              memory.write(buffer, sourceRange: 0..<buffer.count, offset: stackPointer) else {
             throw BuildError.stackUnavailable
         }
         let argumentVectorAddress = stackPointer + 8

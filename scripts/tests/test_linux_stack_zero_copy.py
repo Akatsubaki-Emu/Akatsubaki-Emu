@@ -8,15 +8,25 @@ class LinuxStackCopyTests(unittest.TestCase):
         source = (root / "src" / "Runtime" / "LinuxProcessStackBuilder.swift").read_text(encoding="utf-8")
         test = (root / "scripts" / "tests" / "test_linux_process_stack.swift").read_text(encoding="utf-8")
         vector = source.split("let vectorWordCount", 1)[1].split("let stackPointer = stackBase", 1)[0]
+        word_writer = vector.split("let vectorWritten", 1)[1]
         final_write = source.split("let stackPointer = stackBase", 1)[1].split("let argumentVectorAddress", 1)[0]
-        self.assertIn("buffer.withUnsafeMutableBytes", vector)
-        self.assertIn("copyMemory(from: source, byteCount: 8)", vector)
+        self.assertIn("buffer.withUnsafeMutableBytes", word_writer)
+        self.assertIn("copyMemory(from: source, byteCount: 8)", word_writer)
         self.assertNotIn("Data($0)", vector)
-        self.assertNotIn("replaceSubrange", vector)
-        self.assertIn("memory.write(buffer, sourceRange: vectorStart..<Self.stackSize", final_write)
+        self.assertNotIn("replaceSubrange", word_writer)
+        self.assertIn("memory.write(buffer, sourceRange: 0..<buffer.count", final_write)
         self.assertNotIn("subdata(in:", final_write)
         self.assertIn("func write(_ data: Data, sourceRange: Range<Int>", test)
 
+
+    def test_stack_builder_allocates_only_the_used_stack_range(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "LinuxProcessStackBuilder.swift").read_text(encoding="utf-8")
+        self.assertIn("var buffer = Data(count: Self.stackSize - vectorStart)", source)
+        self.assertIn("let offset = writeCursor - vectorStart", source)
+        self.assertIn("let randomOffset = writeCursor - vectorStart", source)
+        self.assertNotIn("Data(count: Self.stackSize)", source)
+        self.assertIn("writeCursor == cursor", source)
 
     def test_stack_builder_avoids_temporary_argument_environment_and_word_arrays(self):
         root = Path(__file__).resolve().parents[2]
