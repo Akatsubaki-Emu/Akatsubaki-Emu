@@ -127,7 +127,7 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
     private func updateOSStatus() {
         let osStatus: String
         if let os = UserDefaults.standard.string(forKey: "iSteam.customOSPath") {
-            osStatus = "Imported OS image: " + URL(fileURLWithPath: os).lastPathComponent + "\nSaved locally; OS boot integration is not yet implemented."
+            osStatus = "Imported OS image: " + URL(fileURLWithPath: os).lastPathComponent + "\nSaved locally; Launch Setup automatically preselects it as boot media."
         } else { osStatus = "No custom OS image imported." }
         let driveName = ExternalDriveStore.shared.rememberedName
         statusLabel.text = osStatus + (driveName.map { "\nRemembered Files location: " + $0 + "\nProvider access is revalidated when the location is used." } ?? "\nExternal storage is accessed through the iOS Files picker.")
