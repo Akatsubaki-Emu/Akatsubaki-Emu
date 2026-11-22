@@ -105,16 +105,16 @@ final class GameRuntimeProfileStore {
     private let fm = FileManager.default
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
-
-    private var directory: URL {
-        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let url = base.appendingPathComponent("GameProfiles", isDirectory: true)
-        try? fm.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
-    }
+    private let directory: URL
 
     private init() {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        directory = base.appendingPathComponent("GameProfiles", isDirectory: true)
+    }
+
+    private func ensureDirectory() throws {
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
     private func url(for id: UUID) -> URL {
@@ -123,6 +123,7 @@ final class GameRuntimeProfileStore {
 
     func save(_ profile: GameRuntimeProfile) throws {
         try profile.validate()
+        try ensureDirectory()
         var value = profile
         value.updatedAt = Date()
         let destination = url(for: value.gameID)
@@ -171,7 +172,8 @@ final class GameRuntimeProfileStore {
     }
 
     private func profileFiles() throws -> [URL] {
-        try fm.contentsOfDirectory(
+        try ensureDirectory()
+        return try fm.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
