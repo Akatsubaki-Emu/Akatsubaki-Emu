@@ -476,7 +476,7 @@ required = {
         "let truncatedByteIncMemory = GuestMemory(size: 2)",
         "let truncatedMultiByteNopMemory = GuestMemory(size: 3)",
 
-        "let fsSegmentMemory = GuestMemory(size: 4096)",
+        "let fsSegmentMemory = GuestMemory(size: 0x2000)",
         "precondition(fsSegmentMemory.readByte(offset: 0x1020) == 0x5A)",
         "precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)",
         "precondition(syscallInterpreter.registerValue(1) == 21)",

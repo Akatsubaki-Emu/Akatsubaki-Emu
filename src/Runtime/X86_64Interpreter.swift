@@ -455,40 +455,6 @@ final class X86_64Interpreter: GuestCPUBackend {
                 registers[decoded.reg] = width64
                     ? result.value
                     : UInt64(UInt32(truncatingIfNeeded: result.value))
-            case 0x68, 0x6A:
-                let value: UInt64
-                if opcode == 0x68 {
-                    guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
-                    value = UInt64(bitPattern: Int64(Int32(bitPattern: raw)))
-                } else {
-                    guard let raw = fetchByte() else { return .memoryFault(address: rip) }
-                    value = UInt64(bitPattern: Int64(Int8(bitPattern: raw)))
-                }
-                guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
-                registers[4] -= 8
-                guard memory.writeUInt64(value, offset: registers[4]) else {
-                    return .memoryFault(address: registers[4])
-                }
-            case 0x50...0x57: // PUSH r64
-                let index = Int(opcode - 0x50) | (rex & 0x01 != 0 ? 8 : 0)
-                let value = registers[index] // PUSH RSP stores the pre-decrement value.
-                guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
-                registers[4] -= 8
-                guard memory.writeUInt64(value, offset: registers[4]) else {
-                    return .memoryFault(address: registers[4])
-                }
-            case 0x58...0x5F: // POP r64
-                let index = Int(opcode - 0x58) | (rex & 0x01 != 0 ? 8 : 0)
-                guard let value = readUInt64(at: registers[4]) else {
-                    return .memoryFault(address: registers[4])
-                }
-                if index == 4 {
-                    // POP RSP loads the popped value directly; it does not add 8.
-                    registers[4] = value
-                } else {
-                    registers[index] = value
-                    registers[4] &+= 8
-                }
             case 0x80: // ADD/OR/AND/SUB/XOR/CMP r/m8, imm8
                 guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
                 let group = (modrm >> 3) & 7

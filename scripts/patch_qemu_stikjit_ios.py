@@ -91,6 +91,7 @@ def patch_source(source: str) -> str:
             "__builtin_available(iOS 26.0, *)",
             "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
             "tcg_splitwx_diff = buf_rx - buf_rw",
+            "#include <mach/mach_vm.h>",
         ]
         missing = [item for item in required if item not in source]
         if missing:
@@ -101,7 +102,7 @@ def patch_source(source: str) -> str:
         raise SystemExit("QEMU tcg/region.c changed: Darwin Mach include anchor not found")
     source = source.replace(
         INCLUDE_ANCHOR,
-        "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <dlfcn.h>\n#include <mach/mach.h>",
+        " #ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <dlfcn.h>\n#include <mach/mach.h>\n#include <mach/mach_vm.h>",
         1,
     )
     if FUNCTION_ANCHOR not in source:
@@ -137,6 +138,7 @@ def patch_source(source: str) -> str:
         "mach_vm_remap(mach_task_self(), &buf_rw",
         "mach_vm_protect(mach_task_self(), buf_rw",
         "tcg_splitwx_diff = buf_rx - buf_rw",
+        "#include <mach/mach_vm.h>",
     ]
     missing = [item for item in required if item not in source]
     if missing:
