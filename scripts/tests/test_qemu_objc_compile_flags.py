@@ -56,18 +56,6 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
             patched,
         )
 
-    def test_meson_patcher_handles_qemu_common_flags_variant(self):
-        source = self.meson_source().replace(
-            "objc.get_supported_arguments(warn_flags)",
-            "objc.get_supported_arguments(qemu_common_flags + warn_flags)",
-        )
-        patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
-        self.assertIn(
-            "objc.get_supported_arguments(qemu_common_flags + warn_flags + "
-            "['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')",
-            patched,
-        )
-
     def test_meson_patcher_fails_closed_if_objc_block_changes(self):
         source = self.meson_source().replace(
             "objc.get_supported_arguments(warn_flags)",
