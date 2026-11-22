@@ -100,6 +100,8 @@ targets:
           - LaunchSetupViewController-tvOS.swift
           - SettingsViewController-tvOS.swift
           - EntitlementSettingsView.swift
+          - EntitlementAnisetteKeychain.swift
+          - AnisetteDataHelper.swift
       - path: src
         excludes:
           - Display/VMDisplayViewController-tvOS.swift

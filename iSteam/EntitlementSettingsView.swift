@@ -8,14 +8,20 @@ final class EntitlementViewModel: ObservableObject {
     @Published var appleID = ""
     @Published var password = ""
     @Published var verificationCode = ""
+    @Published var anisetteServerURL: String
     @Published private(set) var needsVerificationCode = false
     @Published private(set) var isBusy = false
     @Published private(set) var accountEmail: String?
     @Published private(set) var availableTeams: [Team] = []
     @Published private(set) var selectedTeam: Team?
-    @Published var status = "Sign in with the Apple account used to install this build."
+    @Published var status = "Sign in with the Apple account that owns this installation's App ID."
 
+    private var session: AppleAPISession?
     private var verificationCodeHandler: ((String?) -> Void)?
+
+    init() {
+        anisetteServerURL = UserDefaults.standard.string(forKey: "iSteam.anisetteServerURL") ?? "https://ani.sidestore.io"
+    }
 
     var bundleIdentifier: String {
         Bundle.main.bundleIdentifier ?? "Unknown bundle identifier"
@@ -23,6 +29,15 @@ final class EntitlementViewModel: ObservableObject {
 
     func signIn() async {
         guard !isBusy else { return }
+
+        let configuredURL = anisetteServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let anisetteURL = URL(string: configuredURL),
+              anisetteURL.scheme?.lowercased() == "https",
+              anisetteURL.host != nil else {
+            status = "Enter a valid HTTPS Anisette server URL."
+            return
+        }
+
         isBusy = true
         status = "Connecting to Apple Developer Services…"
         defer {
@@ -31,8 +46,10 @@ final class EntitlementViewModel: ObservableObject {
         }
 
         do {
+            UserDefaults.standard.set(configuredURL, forKey: "iSteam.anisetteServerURL")
+            AnisetteDataHelper.shared.url = anisetteURL
             let anisetteData = try await AnisetteDataHelper.shared.getAnisetteData()
-            let (account, session) = try await AppleAPI.shared.authenticate(
+            let (account, authenticatedSession) = try await AppleAPI.shared.authenticate(
                 appleID: appleID,
                 password: password,
                 anisetteData: anisetteData
@@ -41,16 +58,17 @@ final class EntitlementViewModel: ObservableObject {
                     completionHandler(nil)
                     return
                 }
-                self.prepareForVerification(using: completionHandler)
+                await self.prepareForVerification(using: completionHandler)
             }
 
-            DataManager.shared.model.account = account
-            DataManager.shared.model.session = session
-            let teams = try await AppleAPI.shared.fetchTeamsForAccount(account: account, session: session)
+            session = authenticatedSession
             accountEmail = account.appleID
-            availableTeams = teams
-            if teams.count == 1, let team = teams.first {
-                selectTeam(team)
+            availableTeams = try await AppleAPI.shared.fetchTeamsForAccount(
+                account: account,
+                session: authenticatedSession
+            )
+            if availableTeams.count == 1, let team = availableTeams.first {
+                selectedTeam = team
             }
             status = "Signed in. Select the team that owns this App ID."
         } catch is CancellationError {
@@ -71,13 +89,11 @@ final class EntitlementViewModel: ObservableObject {
 
     func selectTeam(_ team: Team) {
         selectedTeam = team
-        DataManager.shared.model.team = team
     }
 
     func enableIncreasedMemoryLimit() async {
         guard !isBusy else { return }
-        guard let team = selectedTeam,
-              let session = DataManager.shared.model.session else {
+        guard let team = selectedTeam, let session else {
             status = "Sign in and select your Apple Developer team first."
             return
         }
@@ -89,7 +105,7 @@ final class EntitlementViewModel: ObservableObject {
         do {
             let appIDs = try await AppleAPI.shared.fetchAppIDsForTeam(team: team, session: session)
             guard let appID = appIDs.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
-                status = "No App ID for \(bundleIdentifier) was found in this team. Install this build with the same Apple account first, then refresh and try again."
+                status = "No App ID for \(bundleIdentifier) was found in this team. Install this build with the same Apple account first, then try again."
                 return
             }
 
@@ -106,9 +122,7 @@ final class EntitlementViewModel: ObservableObject {
     }
 
     func signOut() {
-        DataManager.shared.model.session = nil
-        DataManager.shared.model.account = nil
-        DataManager.shared.model.team = nil
+        session = nil
         accountEmail = nil
         appleID = ""
         availableTeams = []
@@ -135,7 +149,17 @@ struct EntitlementSettingsView: View {
         Form {
             Section("This installation") {
                 LabeledContent("Bundle ID", value: model.bundleIdentifier)
-                Text("The request is restricted to this exact bundle identifier. Akatsubaki Emu will not modify other App IDs in your account.")
+                Text("Only this exact App ID will be updated. Akatsubaki Emu will not modify other App IDs in your account.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Anisette server") {
+                TextField("HTTPS server URL", text: $model.anisetteServerURL)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Text("Defaults to https://ani.sidestore.io. Use another compatible HTTPS Anisette server if your signing setup requires it.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -143,27 +167,25 @@ struct EntitlementSettingsView: View {
             Section("Apple Developer account") {
                 if let email = model.accountEmail {
                     LabeledContent("Account", value: email)
-                    if !model.availableTeams.isEmpty {
-                        ForEach(model.availableTeams, id: \.identifier) { team in
-                            Button {
-                                model.selectTeam(team)
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(team.name)
-                                        Text(team.identifier)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    if model.selectedTeam?.identifier == team.identifier {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(.tint)
-                                    }
+                    ForEach(model.availableTeams, id: \.identifier) { team in
+                        Button {
+                            model.selectTeam(team)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(team.name)
+                                    Text(team.identifier)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if model.selectedTeam?.identifier == team.identifier {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.tint)
                                 }
                             }
-                            .disabled(model.isBusy)
                         }
+                        .disabled(model.isBusy)
                     }
                     Button("Sign Out", role: .destructive) {
                         model.signOut()
@@ -208,7 +230,7 @@ struct EntitlementSettingsView: View {
                     }
                 }
                 .disabled(model.isBusy || model.selectedTeam == nil)
-                Text("This uses the GetMoreRam/StosSign Apple Developer Services flow. Apple account access and an existing App ID are required.")
+                Text("This requests Apple's INCREASED_MEMORY_LIMIT capability for the current bundle ID through the GetMoreRam/StosSign API.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -216,7 +238,7 @@ struct EntitlementSettingsView: View {
             Section("Status and next step") {
                 Text(model.status)
                     .textSelection(.enabled)
-                Text("After Apple accepts the change, reinstall this app with SideStore or AltStore. Apple invalidates profiles when App ID capabilities change; the app cannot grant entitlements to its already-running signature.")
+                Text("After Apple accepts the change, reinstall this app with SideStore or AltStore. Apple must issue a refreshed provisioning profile; this running app cannot change its own signature.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
