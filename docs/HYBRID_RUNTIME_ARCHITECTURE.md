@@ -93,8 +93,12 @@ register-only block, validates the returned ABI and exact side-exit RIP, and onl
 then commits a temporary register snapshot to the interpreter. Invalid blocks
 fall back without mutating live interpreter registers.
 
-Executable code is W^X. The provider uses a sealed RX mapping in standard mode
-and a separate StikDebug/TXM write alias where that protocol is active. The
+Executable code is W^X. Physical iOS standard-JIT mode uses a Darwin `vm_remap`
+split-W^X pair (RW write alias and RX execute alias); StikDebug/TXM mode obtains
+its RX mapping through the prepare-region protocol and remaps a separate RW alias.
+The provider records the allocation type and releases both mappings through the
+matching Mach or `munmap` API. The macOS ARM64 validation path seals a single
+mapping RX before invocation. The
 executor cache is bounded by both 64 blocks and 16 MiB of page-rounded executable
 memory. Persistent cache hits are re-decoded and compared against canonical
 translation output. Generated entries begin with a BTI C landing-pad hint.

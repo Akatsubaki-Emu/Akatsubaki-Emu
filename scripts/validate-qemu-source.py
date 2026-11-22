@@ -1425,6 +1425,13 @@ for token in ("_Static_assert(offsetof(KenranButoAOTGuestState,gpr)==8",
     if token not in aot_memory:
         print(f"AOT memory provider missing {token!r}", file=sys.stderr)
         failed = True
+for token in ("create_standard_split_mapping", "vm_remap(mach_task_self(), &execute_address",
+              "mprotect((void *)execute_address, mapped, PROT_READ | PROT_EXEC)",
+              "region->mach_deallocate = false", "if(r->mach_deallocate)",
+              "munmap(r->write_address,r->mapped_size)"):
+    if token not in aot_memory:
+        print(f"AOT standard iOS split-W^X provider missing {token!r}", file=sys.stderr)
+        failed = True
 guard = aot_memory.find("if(status!=KERN_SUCCESS||(maximum&VM_PROT_WRITE)==0)")
 if guard < 0 or "deallocate_mach_address(write,mapped)" not in aot_memory[guard:aot_memory.find("return NULL;", guard)]:
     print("AOT TXM remap failure path does not release writable alias", file=sys.stderr)

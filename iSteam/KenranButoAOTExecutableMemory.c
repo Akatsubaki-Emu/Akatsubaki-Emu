@@ -17,7 +17,7 @@
 #define MAP_ANON MAP_ANONYMOUS
 #endif
 #define AOT_MAX_CODE_BYTES (1024u * 1024u)
-struct iSteamAOTExecutableRegion { void *execute_address; void *write_address; size_t mapped_size; bool split_mapping; bool finalized; };
+struct iSteamAOTExecutableRegion { void *execute_address; void *write_address; size_t mapped_size; bool split_mapping; bool mach_deallocate; bool finalized; };
 _Static_assert(offsetof(KenranButoAOTGuestState,gpr)==8,"AOT ABI v1 gpr offset changed");
 _Static_assert(sizeof(KenranButoAOTGuestState)==96,"AOT ABI v1 state size changed");
 _Static_assert(sizeof(KenranButoAOTMemoryCallbacks)==32,"AOT ABI v1 callback size changed");
@@ -57,13 +57,59 @@ bool iSteamAOTGuestMemoryWrite(KenranButoAOTGuestState *s,uint64_t a,const void 
  if(!s->memory->write_memory(s->memory->context,a,p,n)){s->exit_reason=KENRAN_BUTO_AOT_EXIT_MEMORY_WRITE_FAULT;s->exit_address=a;s->exit_rip=s->rip;return false;}
  return true;
 }
+#if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
+/*
+ * Standard (non-TXM) iOS JIT uses Darwin split-W^X: write through the
+ * original anonymous mapping and execute through a vm_remap alias.
+ */
+static bool create_standard_split_mapping(iSteamAOTExecutableRegion *region,
+                                          size_t mapped, char *error,
+                                          size_t capacity) {
+    void *write_address = mmap(NULL, mapped, PROT_READ | PROT_WRITE,
+                               MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (write_address == MAP_FAILED) {
+        set_error(error, capacity, "AOT writable mapping failed.");
+        return false;
+    }
+
+    vm_address_t execute_address = 0;
+    vm_prot_t current = VM_PROT_READ | VM_PROT_WRITE;
+    vm_prot_t maximum = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
+    kern_return_t status = vm_remap(mach_task_self(), &execute_address,
+                                    (vm_size_t)mapped, 0, VM_FLAGS_ANYWHERE,
+                                    mach_task_self(), (vm_address_t)write_address,
+                                    FALSE, &current, &maximum, VM_INHERIT_NONE);
+    if (status != KERN_SUCCESS || execute_address == 0 ||
+        (maximum & VM_PROT_EXECUTE) == 0) {
+        if (execute_address != 0) (void)munmap((void *)execute_address, mapped);
+        (void)munmap(write_address, mapped);
+        set_error(error, capacity, "AOT executable alias remap failed.");
+        return false;
+    }
+
+    if (mprotect((void *)execute_address, mapped, PROT_READ | PROT_EXEC) != 0) {
+        (void)munmap((void *)execute_address, mapped);
+        (void)munmap(write_address, mapped);
+        set_error(error, capacity, "AOT executable alias could not be sealed RX.");
+        return false;
+    }
+
+    region->execute_address = (void *)execute_address;
+    region->write_address = write_address;
+    region->split_mapping = true;
+    region->mach_deallocate = false;
+    return true;
+}
+#endif
+
 iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate(const void *code,size_t length,char *error,size_t capacity){
  if(!iSteamAOTExecutableMemoryIsAvailable()){set_error(error,capacity,"AOT executable memory unavailable; enable supported JIT.");return NULL;}
  if(!code||!length||(length%4u)||length>AOT_MAX_CODE_BYTES){set_error(error,capacity,"AOT block size/alignment invalid.");return NULL;}
  size_t mapped=mapped_size_for(length);if(!mapped){set_error(error,capacity,"AOT page-size overflow.");return NULL;}
  iSteamAOTExecutableRegion *r=calloc(1,sizeof(*r));if(!r){set_error(error,capacity,"AOT region allocation failed.");return NULL;}r->mapped_size=mapped;
 #if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
- if(iSteamJITGetProtocolMode()==1){
+ int protocol_mode=iSteamJITGetProtocolMode();
+ if(protocol_mode==1){
   void *exec=iSteamJITPrepareRegion(NULL,mapped);vm_address_t write=0;vm_prot_t current=VM_PROT_READ;vm_prot_t maximum=VM_PROT_READ|VM_PROT_WRITE;
   if(!exec){free(r);set_error(error,capacity,"StikDebug executable region unavailable.");return NULL;}
   kern_return_t status=vm_remap(mach_task_self(),&write,(vm_size_t)mapped,0,VM_FLAGS_ANYWHERE,mach_task_self(),(vm_address_t)exec,FALSE,&current,&maximum,VM_INHERIT_NONE);
@@ -74,7 +120,11 @@ iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate(const void *code,size
   }
   status=vm_protect(mach_task_self(),write,(vm_size_t)mapped,FALSE,VM_PROT_READ|VM_PROT_WRITE);
   if(status!=KERN_SUCCESS){deallocate_mach_address(write,mapped);deallocate_mach_address((vm_address_t)exec,mapped);free(r);set_error(error,capacity,"StikDebug writable alias could not be protected.");return NULL;}
-  r->execute_address=exec;r->write_address=(void *)write;r->split_mapping=true;
+  r->execute_address=exec;r->write_address=(void *)write;r->split_mapping=true;r->mach_deallocate=true;
+ }else if(protocol_mode==0){
+  if(!create_standard_split_mapping(r,mapped,error,capacity)){free(r);return NULL;}
+ }else{
+  free(r);set_error(error,capacity,"Unsupported iOS JIT protocol mode.");return NULL;
  }
 #endif
  if(!r->split_mapping){void *p=mmap(NULL,mapped,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANON,-1,0);if(p==MAP_FAILED){free(r);set_error(error,capacity,"AOT writable mapping failed.");return NULL;}r->execute_address=p;r->write_address=p;}
@@ -97,10 +147,12 @@ size_t iSteamAOTExecutableMemorySize(const iSteamAOTExecutableRegion *r){
 void iSteamAOTExecutableMemoryDestroy(iSteamAOTExecutableRegion *r){
  if(!r)return;
 #if defined(__APPLE__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
- if(r->split_mapping){if(r->write_address)(void)vm_deallocate(mach_task_self(),(vm_address_t)r->write_address,(vm_size_t)r->mapped_size);if(r->execute_address)(void)vm_deallocate(mach_task_self(),(vm_address_t)r->execute_address,(vm_size_t)r->mapped_size);}
+ if(r->mach_deallocate){if(r->write_address)(void)vm_deallocate(mach_task_self(),(vm_address_t)r->write_address,(vm_size_t)r->mapped_size);if(r->execute_address)(void)vm_deallocate(mach_task_self(),(vm_address_t)r->execute_address,(vm_size_t)r->mapped_size);}
+ else if(r->split_mapping){if(r->execute_address)(void)munmap(r->execute_address,r->mapped_size);if(r->write_address)(void)munmap(r->write_address,r->mapped_size);}
  else if(r->execute_address)(void)munmap(r->execute_address,r->mapped_size);
 #else
- if(r->execute_address)(void)munmap(r->execute_address,r->mapped_size);
+ if(r->split_mapping){if(r->execute_address)(void)munmap(r->execute_address,r->mapped_size);if(r->write_address)(void)munmap(r->write_address,r->mapped_size);}
+ else if(r->execute_address)(void)munmap(r->execute_address,r->mapped_size);
 #endif
  free(r);
 }

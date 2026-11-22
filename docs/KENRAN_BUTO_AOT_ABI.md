@@ -39,9 +39,12 @@ Unsupported instructions resume at `blockStartRIP + guestBytesConsumed`.
 
 ## Executable memory and cache safety
 
-Standard JIT mode maps writable pages and seals them read/execute before invocation.
-StikDebug/TXM mode uses an executable mapping plus a separate writable alias. Both
-mappings are released on remap/protection failure. The executable block cache is
+Physical iOS standard-JIT mode uses Darwin split-W^X: an anonymous writable
+mapping plus a separate `vm_remap` executable alias sealed RX. StikDebug/TXM
+mode obtains its RX mapping through the prepare-region protocol and remaps a
+separate writable alias. The provider tracks the allocation type and releases
+both aliases with the matching `munmap` or `vm_deallocate` path. The macOS
+ARM64 validation path uses a writable mapping sealed RX before invocation. The executable block cache is
 bounded to 64 entries and keyed by exact guest bytes, translator version, ABI and
 instruction budget. Persistent translation artifacts are re-decoded and compared
 with canonical output before a cache hit is trusted.
