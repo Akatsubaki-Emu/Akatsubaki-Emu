@@ -202,6 +202,14 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("spirv-tools", source)
         self.assertIn("spirv-llvm-translator", source)
 
+    def test_qemu_workflow_disables_unsupported_objc_class_selector_stubs(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("Verify Objective-C class-selector stub compatibility", source)
+        self.assertIn("-fno-objc-msgsend-class-selector-stubs", source)
+        self.assertIn("export OBJCFLAGS=", source)
+        self.assertIn("grep -Fq", source)
+
     def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
   LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a
