@@ -808,6 +808,8 @@ required = {
         "kIORegistryEntryPropertyKeysKey",
         'CFSTR("TXM")',
         "iSteamJITHardwareTXMPresence() != 0",
+        "#include <sys/sysctl.h>",
+        "P_TRACED",
     ],
     "src/Core/EmulationLog.swift": [
         "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",

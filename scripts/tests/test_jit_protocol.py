@@ -19,6 +19,8 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn('dlsym(RTLD_DEFAULT, "csops")', source)
         self.assertIn("queryStatus(getpid(), 0, &status, sizeof(status)) == 0", source)
         self.assertIn("status & UINT32_C(0x10000000)", source)
+        self.assertIn("#include <sys/sysctl.h>", source)
+        self.assertIn("(info.kp_proc.p_flag & P_TRACED) != 0", source)
         self.assertIn("bool iSteamJITIsReady(void) { return false; }", source)
 
     def test_txm_detection_uses_stikjit_ioregistry_query(self):

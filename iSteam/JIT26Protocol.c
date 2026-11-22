@@ -5,6 +5,7 @@
 #include <dlfcn.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <sys/sysctl.h>
 #include <unistd.h>
 #if TARGET_OS_IOS
 #include <IOKit/IOKitLib.h>
