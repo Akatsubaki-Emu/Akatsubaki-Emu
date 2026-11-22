@@ -38,6 +38,30 @@ class WindowsPESectionIndexTests(unittest.TestCase):
         self.assertIn("UInt64(rva) <= end", lookup)
         self.assertIn("Zero-length PE boundary mapping changed", SWIFT_TEST)
 
+    def test_file_backed_range_is_shared(self):
+        mapping = section("private func fileBackedRange(forRVA rva: UInt32, allowEnd: Bool = false)", "private struct RVAFileCursor")
+        self.assertIn("section(forRVA: rva, allowEnd: allowEnd)", mapping)
+        self.assertIn("section.rawSize", mapping)
+        self.assertIn("fileBackedRange(forRVA: rva", section("func fileOffset(forRVA rva: UInt32, length: Int = 1)", "private func section(forRVA"))
+        self.assertIn("fileBackedRange(forRVA: rva)", section("private func contiguousFileLength", "private func readCString"))
+
+    def test_rva_cursor_reuses_only_contiguous_file_backed_bytes(self):
+        cursor = section("private struct RVAFileCursor", "private func readImports()")
+        self.assertIn("UInt64(rva) == nextRVA", cursor)
+        self.assertIn("length <= remainingBytes", cursor)
+        self.assertIn("remainingBytes = mapping.length - length", cursor)
+        self.assertIn("image.fileBackedRange(forRVA: rva", cursor)
+
+    def test_import_and_relocation_streams_use_independent_cursors(self):
+        imports = section("private func readImports()", "private func readRelocations()")
+        relocations = section("private func readRelocations()", "private func contiguousFileLength")
+        self.assertIn("var descriptorCursor = RVAFileCursor(image: self)", imports)
+        self.assertIn("descriptorCursor.offset(forRVA:", imports)
+        self.assertIn("var thunkCursor = RVAFileCursor(image: self)", imports)
+        self.assertIn("thunkCursor.offset(forRVA:", imports)
+        self.assertIn("var relocationCursor = RVAFileCursor(image: self)", relocations)
+        self.assertIn("relocationCursor.offset(forRVA:", relocations)
+
     def test_section_names_avoid_temporary_subdata_copy(self):
         self.assertIn("String(bytes: data[offset..<(offset + 8)].prefix { $0 != 0 }, encoding: .ascii)", SOURCE)
         self.assertNotIn("data.subdata(in: offset..<(offset + 8))", SOURCE)
@@ -46,6 +70,9 @@ class WindowsPESectionIndexTests(unittest.TestCase):
         self.assertIn("Deliberately store sections in a different order from their RVAs", SWIFT_TEST)
         self.assertIn("32 sections exercise the binary-search path", SWIFT_TEST)
         self.assertIn("32-section PE binary lookup returned an incorrect file offset", SWIFT_TEST)
+        self.assertIn("Sequential import thunk cursor returned incorrect ordinals", SWIFT_TEST)
+        self.assertIn("Cross-section import thunk cursor failed to remap", SWIFT_TEST)
+        self.assertIn("Cross-section relocation cursor failed to remap", SWIFT_TEST)
         self.assertIn("Raw zero-fill tail was incorrectly treated as file-backed", SWIFT_TEST)
 
 if __name__ == "__main__":

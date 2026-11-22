@@ -170,27 +170,65 @@ struct WindowsPEImage {
         guard length >= 0 else { throw ParseError.malformed("negative RVA length") }
         let end = UInt64(rva) + UInt64(length)
         guard end <= UInt64(sizeOfImage) else { throw ParseError.unmappedRVA(rva) }
+        let mapping = try fileBackedRange(forRVA: rva, allowEnd: length == 0)
+        guard length <= mapping.length else { throw ParseError.unmappedRVA(rva) }
+        return mapping.offset
+    }
+
+    private func fileBackedRange(forRVA rva: UInt32, allowEnd: Bool = false) throws -> (offset: Int, length: Int) {
         if rva < sizeOfHeaders {
-            guard end <= UInt64(sizeOfHeaders), end <= UInt64(file.count) else {
+            let offset = Int(rva)
+            let length = Int(sizeOfHeaders - rva)
+            guard offset <= file.count, length <= file.count - offset else {
                 throw ParseError.unmappedRVA(rva)
             }
-            return Int(rva)
+            return (offset, length)
         }
-        guard let section = section(forRVA: rva, allowEnd: length == 0) else {
+        guard let section = section(forRVA: rva, allowEnd: allowEnd) else {
             throw ParseError.unmappedRVA(rva)
         }
-        let start = UInt64(section.virtualAddress)
-        let span = UInt64(max(section.virtualSize, section.rawSize))
-        guard end <= start + span else { throw ParseError.unmappedRVA(rva) }
-        let delta = UInt64(rva) - start
-        guard delta + UInt64(length) <= UInt64(section.rawSize) else {
-            throw ParseError.unmappedRVA(rva)
+        let delta = UInt64(rva) - UInt64(section.virtualAddress)
+        if allowEnd {
+            guard delta <= UInt64(section.rawSize) else { throw ParseError.unmappedRVA(rva) }
+        } else {
+            guard delta < UInt64(section.rawSize) else { throw ParseError.unmappedRVA(rva) }
         }
-        let offset = UInt64(section.rawOffset) + delta
-        guard offset + UInt64(length) <= UInt64(file.count) else {
-            throw ParseError.unmappedRVA(rva)
+        let rawOffset = UInt64(section.rawOffset) + delta
+        guard rawOffset <= UInt64(file.count) else { throw ParseError.unmappedRVA(rva) }
+        let available = min(UInt64(section.rawSize) - delta, UInt64(file.count) - rawOffset)
+        return (Int(rawOffset), Int(available))
+    }
+
+    private struct RVAFileCursor {
+        let image: WindowsPEImage
+        private var nextRVA: UInt64?
+        private var nextOffset: Int?
+        private var remainingBytes = 0
+
+        mutating func offset(forRVA rva: UInt32, length: Int) throws -> Int {
+            guard length >= 0 else {
+                throw WindowsPEImage.ParseError.malformed("negative RVA length")
+            }
+            let end = UInt64(rva) + UInt64(length)
+            guard end <= UInt64(image.sizeOfImage) else {
+                throw WindowsPEImage.ParseError.unmappedRVA(rva)
+            }
+            if let nextRVA, let nextOffset,
+               UInt64(rva) == nextRVA, length <= remainingBytes {
+                self.nextRVA = end
+                self.nextOffset = nextOffset + length
+                remainingBytes -= length
+                return nextOffset
+            }
+            let mapping = try image.fileBackedRange(forRVA: rva, allowEnd: length == 0)
+            guard length <= mapping.length else {
+                throw WindowsPEImage.ParseError.unmappedRVA(rva)
+            }
+            nextRVA = end
+            nextOffset = mapping.offset + length
+            remainingBytes = mapping.length - length
+            return mapping.offset
         }
-        return Int(offset)
     }
 
     private func section(forRVA rva: UInt32, allowEnd: Bool = false) -> Section? {
@@ -253,15 +291,15 @@ struct WindowsPEImage {
             throw ParseError.malformed("import directory exceeds image")
         }
         var result: [Import] = []
+        var descriptorCursor = RVAFileCursor(image: self)
         for index in 0..<min(Int(directory.size) / 20, 4096) {
             let descriptorRVA = UInt64(directory.rva) + UInt64(index) * 20
             guard descriptorRVA <= UInt64(UInt32.max) else {
                 throw ParseError.malformed("import descriptor RVA overflow")
             }
-            // Map each descriptor independently. Advancing a file offset can
-            // cross a section's raw-data boundary and parse unrelated bytes as
-            // a valid descriptor from the following file region.
-            let cursor = try fileOffset(forRVA: UInt32(descriptorRVA), length: 20)
+            // Reuse a mapping only while the complete descriptor stays inside
+            // the current raw-backed range; a boundary forces a fresh RVA map.
+            let cursor = try descriptorCursor.offset(forRVA: UInt32(descriptorRVA), length: 20)
             let originalThunk = try Self.u32(file, cursor)
             let nameRVA = try Self.u32(file, cursor + 12)
             let firstThunk = try Self.u32(file, cursor + 16)
@@ -269,11 +307,13 @@ struct WindowsPEImage {
             guard nameRVA != 0, firstThunk != 0 else { throw ParseError.malformed("incomplete import descriptor") }
             let library = try readCString(atRVA: nameRVA, limit: 512)
             let thunkRVA = originalThunk == 0 ? firstThunk : originalThunk
+            var thunkCursor = RVAFileCursor(image: self)
             var terminated = false
             for index in 0..<100_000 {
                 let delta = UInt64(index) * 8
                 guard UInt64(thunkRVA) + delta <= UInt64(UInt32.max) else { throw ParseError.malformed("thunk RVA overflow") }
-                let value = try Self.u64(file, fileOffset(forRVA: thunkRVA + UInt32(delta), length: 8))
+                let thunkOffset = try thunkCursor.offset(forRVA: thunkRVA + UInt32(delta), length: 8)
+                let value = try Self.u64(file, thunkOffset)
                 if value == 0 { terminated = true; break }
                 if value & 0x8000_0000_0000_0000 != 0 {
                     result.append(Import(library: library, name: nil, ordinal: UInt16(value & 0xFFFF), hint: nil))
@@ -304,8 +344,9 @@ struct WindowsPEImage {
         guard end <= UInt64(sizeOfImage) else { throw ParseError.malformed("relocation directory exceeds image") }
         var cursor = UInt64(directory.rva)
         var result: [Relocation] = []
+        var relocationCursor = RVAFileCursor(image: self)
         while cursor + 8 <= end {
-            let offset = try fileOffset(forRVA: UInt32(cursor), length: 8)
+            let offset = try relocationCursor.offset(forRVA: UInt32(cursor), length: 8)
             let pageRVA = try Self.u32(file, offset)
             let blockSize = Int(try Self.u32(file, offset + 4))
             guard blockSize >= 8, blockSize % 2 == 0, UInt64(blockSize) <= end - cursor else {
@@ -313,7 +354,8 @@ struct WindowsPEImage {
             }
             for index in 0..<((blockSize - 8) / 2) {
                 let entryRVA = UInt32(cursor) + UInt32(8 + index * 2)
-                let raw = try Self.u16(file, fileOffset(forRVA: entryRVA, length: 2))
+                let entryOffset = try relocationCursor.offset(forRVA: entryRVA, length: 2)
+                let raw = try Self.u16(file, entryOffset)
                 let type = raw >> 12
                 if type == 0 { continue } // ABSOLUTE padding
                 guard type == 10 else { throw ParseError.malformed("unsupported x64 relocation type \(type)") }
@@ -331,18 +373,14 @@ struct WindowsPEImage {
     }
 
     private func contiguousFileLength(forRVA rva: UInt32) throws -> Int {
-        if rva < sizeOfHeaders { return Int(sizeOfHeaders - rva) }
-        guard let section = section(forRVA: rva) else { throw ParseError.unmappedRVA(rva) }
-        let delta = UInt64(rva) - UInt64(section.virtualAddress)
-        guard delta < UInt64(section.rawSize) else { throw ParseError.unmappedRVA(rva) }
-        return Int(UInt64(section.rawSize) - delta)
+        try fileBackedRange(forRVA: rva).length
     }
 
     private func readCString(atRVA rva: UInt32, limit: Int) throws -> String {
         guard limit > 0 else { throw ParseError.malformed("invalid PE string limit") }
-        let offset = try fileOffset(forRVA: rva)
-        let available = try contiguousFileLength(forRVA: rva)
-        let scanLength = min(limit, available)
+        let mapping = try fileBackedRange(forRVA: rva)
+        let offset = mapping.offset
+        let scanLength = min(limit, mapping.length)
         guard scanLength > 0 else { throw ParseError.unmappedRVA(rva) }
         let range = offset..<(offset + scanLength)
         guard let terminator = file[range].firstIndex(of: 0) else {

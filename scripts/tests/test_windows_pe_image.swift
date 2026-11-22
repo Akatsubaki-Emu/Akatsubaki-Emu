@@ -77,6 +77,15 @@ struct WindowsPEImageTests {
         return Data(bytes)
     }
 
+    static func makeManyOrdinalThunkImage(count: Int) -> Data {
+        var bytes = Array(makeImage(importDirectoryRVA: 0x1000, importDirectorySize: 40))
+        for index in 0..<count {
+            put64(0x8000_0000_0000_0000 | UInt64(index + 1), at: 0x240 + index * 8, in: &bytes)
+        }
+        put64(0, at: 0x240 + count * 8, in: &bytes)
+        return Data(bytes)
+    }
+
     static func makeMultiSectionImage() -> Data {
         var bytes = [UInt8](repeating: 0, count: 0x700)
         bytes[0] = 0x4d
@@ -151,6 +160,75 @@ struct WindowsPEImageTests {
         return Data(bytes)
     }
 
+    static func makeTwoSectionImage(
+        importDirectoryRVA: UInt32,
+        importDirectorySize: UInt32,
+        relocationDirectoryRVA: UInt32 = 0,
+        relocationDirectorySize: UInt32 = 0
+    ) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: 0x2200)
+        bytes[0] = 0x4d
+        bytes[1] = 0x5a
+        put32(0x80, at: 0x3c, in: &bytes)
+        bytes[0x80] = 0x50
+        bytes[0x81] = 0x45
+        put16(0x8664, at: 0x84, in: &bytes)
+        put16(2, at: 0x86, in: &bytes)
+        put16(0xF0, at: 0x94, in: &bytes)
+        let optional = 0x98
+        put16(0x20B, at: optional, in: &bytes)
+        put32(0x1000, at: optional + 16, in: &bytes)
+        put64(0x140000000, at: optional + 24, in: &bytes)
+        put32(0x3000, at: optional + 56, in: &bytes)
+        put32(0x200, at: optional + 60, in: &bytes)
+        put32(16, at: optional + 108, in: &bytes)
+        put32(importDirectoryRVA, at: optional + 120, in: &bytes)
+        put32(importDirectorySize, at: optional + 124, in: &bytes)
+        put32(relocationDirectoryRVA, at: optional + 152, in: &bytes)
+        put32(relocationDirectorySize, at: optional + 156, in: &bytes)
+        let table = optional + 0xF0
+        for (index, name) in [".text", ".rdata"].enumerated() {
+            let offset = table + index * 40
+            for (nameIndex, byte) in Array(name.utf8).enumerated() {
+                bytes[offset + nameIndex] = byte
+            }
+            put32(0x1000, at: offset + 8, in: &bytes)
+            put32(UInt32(0x1000 + index * 0x1000), at: offset + 12, in: &bytes)
+            put32(0x1000, at: offset + 16, in: &bytes)
+            put32(UInt32(0x200 + index * 0x1000), at: offset + 20, in: &bytes)
+            put32(index == 0 ? 0x60000020 : 0x40000040, at: offset + 36, in: &bytes)
+        }
+        return bytes
+    }
+
+    static func makeCrossSectionThunkImage() -> Data {
+        var bytes = makeTwoSectionImage(importDirectoryRVA: 0x1000, importDirectorySize: 40)
+        put32(0x1FF8, at: 0x200, in: &bytes)
+        put32(0x1030, at: 0x20C, in: &bytes)
+        put32(0x1FF8, at: 0x210, in: &bytes)
+        for (index, byte) in (Array("KERNEL32.dll".utf8) + [0]).enumerated() {
+            bytes[0x230 + index] = byte
+        }
+        put64(0x8000_0000_0000_0001, at: 0x11F8, in: &bytes)
+        put64(0x8000_0000_0000_0002, at: 0x1200, in: &bytes)
+        put64(0, at: 0x1208, in: &bytes)
+        return Data(bytes)
+    }
+
+    static func makeCrossSectionRelocationImage() -> Data {
+        var bytes = makeTwoSectionImage(
+            importDirectoryRVA: 0,
+            importDirectorySize: 0,
+            relocationDirectoryRVA: 0x1FF8,
+            relocationDirectorySize: 12
+        )
+        put32(0x1000, at: 0x11F8, in: &bytes)
+        put32(12, at: 0x11FC, in: &bytes)
+        put16(0xA010, at: 0x1200, in: &bytes)
+        put16(0xA020, at: 0x1202, in: &bytes)
+        return Data(bytes)
+    }
+
     static func main() throws {
         let valid = try WindowsPEImage.parse(
             makeImage(importDirectoryRVA: 0x1000, importDirectorySize: 40)
@@ -198,6 +276,30 @@ struct WindowsPEImageTests {
             throw NSError(domain: "WindowsPEImageTests", code: 11,
                           userInfo: [NSLocalizedDescriptionKey: "32-section PE zero-fill tail was incorrectly mapped"])
         } catch WindowsPEImage.ParseError.unmappedRVA(_) {
+        }
+
+        let manyThunks = try WindowsPEImage.parse(makeManyOrdinalThunkImage(count: 32))
+        guard manyThunks.imports.count == 32,
+              manyThunks.imports.first?.ordinal == 1,
+              manyThunks.imports.last?.ordinal == 32 else {
+            throw NSError(domain: "WindowsPEImageTests", code: 12,
+                          userInfo: [NSLocalizedDescriptionKey: "Sequential import thunk cursor returned incorrect ordinals"])
+        }
+
+        let crossSectionThunks = try WindowsPEImage.parse(makeCrossSectionThunkImage())
+        guard crossSectionThunks.imports.count == 2,
+              crossSectionThunks.imports[0].ordinal == 1,
+              crossSectionThunks.imports[1].ordinal == 2 else {
+            throw NSError(domain: "WindowsPEImageTests", code: 13,
+                          userInfo: [NSLocalizedDescriptionKey: "Cross-section import thunk cursor failed to remap at the raw-data boundary"])
+        }
+
+        let crossSectionRelocations = try WindowsPEImage.parse(makeCrossSectionRelocationImage())
+        guard crossSectionRelocations.relocations.count == 2,
+              crossSectionRelocations.relocations[0].rva == 0x1010,
+              crossSectionRelocations.relocations[1].rva == 0x1020 else {
+            throw NSError(domain: "WindowsPEImageTests", code: 14,
+                          userInfo: [NSLocalizedDescriptionKey: "Cross-section relocation cursor failed to remap at the raw-data boundary"])
         }
 
         do {
