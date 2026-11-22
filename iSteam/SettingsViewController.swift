@@ -57,14 +57,13 @@ final class SettingsViewController: UITableViewController {
         case 1:
             let mode = accelerators[indexPath.row]
             c.text = mode.rawValue
-            if mode == .hypervisor {
-                c.secondaryText = "Unavailable in iOS apps on every iPhone and iPad; Apple does not expose Hypervisor.framework to ordinary iOS apps."
+            c.secondaryText = mode.detail
+            if mode.isAvailable {
+                cell.accessoryType = RuntimeSettings.shared.acceleration == mode ? .checkmark : .none
+            } else {
                 c.textProperties.color = .secondaryLabel
                 c.secondaryTextProperties.color = .tertiaryLabel
                 cell.isUserInteractionEnabled = false
-            } else {
-                c.secondaryText = mode.detail
-                cell.accessoryType = RuntimeSettings.shared.acceleration == mode ? .checkmark : .none
             }
         case 2:
             let mode = resolutions[indexPath.row]
@@ -114,7 +113,7 @@ final class SettingsViewController: UITableViewController {
             cell.accessoryView = makeSwitch(isOn: UserDefaults.standard.bool(forKey: "iSteam.androidExperiment"), action: #selector(toggleAndroidExperiment(_:)))
         case 9:
             c.text = "\(UIDevice.current.model) · iOS \(UIDevice.current.systemVersion)"
-            c.secondaryText = "Hypervisor.framework: unavailable to ordinary iOS apps. QEMU/JIT or interpreter paths are the supported prototype choices. macOS guest boot is disabled on iOS."
+            c.secondaryText = "Hypervisor.framework is unavailable to ordinary iOS apps. The packaged QEMU path requires physical iOS 26+ and a supported StikDebug JIT session; the no-JIT TCI runtime is not packaged yet. macOS guest boot is disabled on iOS."
             c.secondaryTextProperties.numberOfLines = 0
         case 10:
             c.text = "DroidDeck feature status"
@@ -168,7 +167,7 @@ final class SettingsViewController: UITableViewController {
             tableView.reloadSections(IndexSet(integer: 0), with: .automatic)
         case 1:
             let mode = accelerators[indexPath.row]
-            guard mode != .hypervisor else { return }
+            guard mode.isAvailable else { return }
             RuntimeSettings.shared.acceleration = mode
             tableView.reloadSections(IndexSet(integer: 1), with: .automatic)
         case 2:
