@@ -368,5 +368,16 @@ jobs:
 
             These are unsigned prototype builds. Sign them with a compatible signer before installing.
 
+      # softprops/action-gh-release creates a tag at target_commitish only
+      # when the tag is new. Move the rolling channel ref after the assets publish
+      # so existing main/nightly tags always resolve to this exact build commit.
+      - name: Update rolling channel tag
+        if: steps.freshness.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$RELEASE_CHANNEL"
+
       # Official AltStore/PAL feeds are refreshed from published GitHub releases
       # by the website repository's update-xthrx-alt-source.yml workflow.
