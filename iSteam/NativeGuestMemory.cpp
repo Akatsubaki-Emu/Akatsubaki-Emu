@@ -361,7 +361,9 @@ size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory) {
     if (!memory) return 0;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
-        
+        return memory->usesDensePages
+            ? memory->denseAllocatedPageIndices.size()
+            : memory->pages.size();
     } catch (...) {
         return 0;
     }
