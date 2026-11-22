@@ -273,7 +273,9 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
         load = source.split("func loadELFImage", 1)[1].split("func reset", 1)[0]
+        self.assertLess(load.index("memory.clear()"), load.index("ELF64Loader().load"))
         self.assertLess(load.index("try cpu.reset(entryPoint: 0)"), load.index("ELF64Loader().load"))
+        self.assertIn("memory.clear()", load.split("} catch {", 1)[1])
 
 
     def test_linux_syscall_write_splits_large_utf8_output_without_truncation(self):
