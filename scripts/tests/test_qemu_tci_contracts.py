@@ -48,5 +48,15 @@ class QEMUTCIContractTests(unittest.TestCase):
         )
 
 
+
+    def test_qemu_runtime_swift_source_parses(self):
+        runtime_path = Path(__file__).resolve().parents[2] / "src/QEMU/QEMUNativeRuntime.swift"
+        result = subprocess.run(
+            ["swiftc", "-frontend", "-parse", str(runtime_path)],
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 if __name__ == "__main__":
     unittest.main()
