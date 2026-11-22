@@ -20,7 +20,16 @@ The runtime library must be built for **physical iOS arm64** and runs an **x86_6
 - `qemu_system_shutdown_request`
 - `isteam_qemu_set_jit_callbacks`
 
-Graceful shutdown and StikDebug JIT callback registration are mandatory. A library missing either export is rejected by the packager, preflight loader, and native bridge.
+Graceful shutdown and StikDebug JIT callback registration are mandatory for the current JIT runtime. A library missing either export is rejected by the packager, preflight loader, and native bridge.
+
+The bridge must match the pinned UTM QEMU 10.0.12 lifecycle ABI exactly:
+
+- `void qemu_init(int argc, char **argv)`
+- `int qemu_main_loop(void)` — its exit status is retained.
+- `void qemu_cleanup(int status)` — receives the exact main-loop exit status.
+- `void qemu_system_shutdown_request(int cause)` — the host-UI shutdown cause is value **5**.
+
+Do not declare the main loop or cleanup as `void(void)`: doing so discards the return value and invokes cleanup with the wrong calling convention/arguments on ARM64. The native fake-runtime regression deliberately returns status 37 and checks that cleanup receives 37 and host-UI shutdown receives 5.
 
 ## Startup and validation
 
@@ -37,6 +46,12 @@ The standalone validator requires Apple tooling (`file`, `lipo`, `nm`, `vtool`, 
 ## JIT requirements
 
 On physical iOS 17.4 and later, QEMU TCG startup requires an active StikDebug debugger/JIT session and the app's `get-task-allow` entitlement. On supported iOS 26+ TXM devices, the patched TCG allocator uses the StikDebug executable-region protocol. Simulator, tvOS, and visionOS builds do not use this physical-iOS JIT path.
+
+## No-JIT fallback status
+
+The currently packaged Akatsubaki QEMU runtime is JIT-dependent. A smaller TCG translation-block cache is still JIT and is **not** a no-JIT fallback. UTM upstream provides a separate `ios-tci` dependency target (`--enable-tcg-threaded-interpreter`) and an `iOS-SE` application scheme. Its documented arm64 dependency target is `ios-tci-arm64`. This is the preferred candidate for a stock-iOS fallback, but Akatsubaki has not yet built, packaged, mode-selected, or device-tested that runtime. Do not claim no-JIT guest execution until the TCI library and its complete transitive dependencies are embedded and a physical iPad boots a guest without requesting JIT.
+
+Reference: [UTM iOS development and iOS SE build instructions](https://github.com/utmapp/UTM/blob/main/Documentation/iOSDevelopment.md).
 
 ## Firmware and writable disks
 
