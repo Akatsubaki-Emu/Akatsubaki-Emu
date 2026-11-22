@@ -36,7 +36,7 @@ The standalone validator requires Apple tooling (`file`, `lipo`, `nm`, `vtool`, 
 
 ## JIT requirements
 
-On physical iOS 17.4 and later, QEMU TCG startup requires an active StikDebug debugger/JIT session and the app's `get-task-allow` entitlement. On supported iOS 26+ TXM devices, the patched TCG allocator uses the StikDebug executable-region protocol. Simulator, tvOS, and visionOS builds do not use this physical-iOS JIT path.
+General StikDebug JIT activation may be available on physical iOS 17.4 and later, but QEMU TCG startup is currently supported only on physical iOS 26+ with an active StikDebug debugger/JIT session, a recognised standard split-WX or TXM protocol, and the app's `get-task-allow` entitlement. On supported iOS 26+ TXM devices, the patched TCG allocator uses the StikDebug executable-region protocol. The debugger must remain attached while the QEMU RX code mapping may execute; the exported `iSteamJITDetach` compatibility hook is a no-op. Simulator, tvOS, and visionOS builds do not use this physical-iOS JIT path.
 
 ## Firmware and writable disks
 
