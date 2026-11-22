@@ -113,6 +113,50 @@ jobs:
             -Wl,-objc_stubs_fast -lobjc -framework Metal "$PROBE_OBJECT" -o "$PROBE_BINARY"
           echo "Verified the Objective-C class-selector compiler and linker flags on the iOS toolchain."
 
+      - name: Verify iOS vm_map compatibility
+        if: steps.freshness.outputs.build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLANG="$(xcrun --sdk iphoneos --find clang)"
+          SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
+          PROBE_SOURCE="$RUNNER_TEMP/ios-vm-map-compat-probe.c"
+          cat > "$PROBE_SOURCE" <<'EOF'
+          #include <TargetConditionals.h>
+          #include <mach/mach_init.h>
+          #include <mach/vm_map.h>
+          #define mach_vm_address_t vm_address_t
+          #define mach_vm_offset_t vm_offset_t
+          #define mach_vm_size_t vm_size_t
+          #define mach_vm_remap vm_remap
+          #define mach_vm_protect vm_protect
+          #define mach_vm_deallocate vm_deallocate
+          extern kern_return_t mach_vm_remap(vm_map_t target_task,
+              mach_vm_address_t *target_address, mach_vm_size_t size,
+              mach_vm_offset_t mask, int flags, vm_map_t source_task,
+              mach_vm_address_t source_address, boolean_t copy,
+              vm_prot_t *cur_protection, vm_prot_t *max_protection,
+              vm_inherit_t inheritance);
+          extern kern_return_t mach_vm_protect(vm_map_t target_task,
+              mach_vm_address_t address, mach_vm_size_t size,
+              boolean_t set_maximum, vm_prot_t new_protection);
+          extern kern_return_t mach_vm_deallocate(vm_map_t target_task,
+              mach_vm_address_t address, mach_vm_size_t size);
+          int main(void) {
+              vm_address_t target = 0;
+              vm_prot_t current = VM_PROT_READ;
+              vm_prot_t maximum = VM_PROT_READ | VM_PROT_WRITE;
+              (void)mach_vm_remap(mach_task_self(), &target, 4096, 0,
+                  VM_FLAGS_ANYWHERE, mach_task_self(), 0, FALSE, &current,
+                  &maximum, VM_INHERIT_NONE);
+              (void)mach_vm_protect(mach_task_self(), target, 4096, FALSE,
+                  VM_PROT_READ);
+              (void)mach_vm_deallocate(mach_task_self(), target, 4096);
+              return 0;
+          }
+          EOF
+          "$CLANG" -target arm64-apple-ios16.0 -isysroot "$SDKROOT" -fsyntax-only "$PROBE_SOURCE"
+
       - name: Install UTM build dependencies
         if: steps.freshness.outputs.build == 'true'
         run: |
