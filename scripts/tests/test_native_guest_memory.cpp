@@ -129,8 +129,17 @@ int main() {
     assert(isteam_guest_memory_write(protectedMemory, pageSize * 2, instruction.data(), instruction.size()));
     assert(isteam_guest_memory_read_execute(protectedMemory, pageSize * 2, protectedBytes.data(), protectedBytes.size()));
     assert(isteam_guest_memory_unmap(protectedMemory, pageSize * 2, pageSize));
+    assert(isteam_guest_memory_allocated_pages(protectedMemory) == 2);
     assert(!isteam_guest_memory_protect(protectedMemory, pageSize * 2, pageSize, 5));
     assert(!isteam_guest_memory_read_execute(protectedMemory, pageSize * 2, protectedBytes.data(), protectedBytes.size()));
+    assert(isteam_guest_memory_map(protectedMemory, pageSize * 2, pageSize, 3, false));
+    protectedBytes.fill(0xA5);
+    assert(isteam_guest_memory_read(protectedMemory, pageSize * 2, protectedBytes.data(), protectedBytes.size()));
+    for (uint8_t value : protectedBytes) assert(value == 0);
+    // A range containing mapped pages and holes is safely unmapped in one pass.
+    assert(isteam_guest_memory_unmap(protectedMemory, 0, pageSize * 3));
+    assert(isteam_guest_memory_allocated_pages(protectedMemory) == 0);
+    assert(isteam_guest_memory_unmap(protectedMemory, 0, pageSize * 3));
     assert(!isteam_guest_memory_map(protectedMemory, UINT64_MAX, 2, 3, false));
     isteam_guest_memory_clear(protectedMemory);
     assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
@@ -233,6 +242,15 @@ int main() {
     fallbackValue[0] = 0;
     assert(isteam_guest_memory_read(huge, UINT64_MAX - 1, fallbackValue.data(), 1));
     assert(fallbackValue[0] == fallbackMarker);
+    assert(isteam_guest_memory_begin_mapping(huge));
+    const uint64_t finalPage = UINT64_MAX & ~uint64_t(4095);
+    const uint64_t finalPageLength = UINT64_MAX - finalPage;
+    assert(isteam_guest_memory_map(huge, finalPage, finalPageLength, 3, false));
+    assert(isteam_guest_memory_write(huge, finalPage, &fallbackMarker, 1));
+    // A huge sparse unmap must visit allocated pages, not every virtual page.
+    assert(isteam_guest_memory_unmap(huge, 0, UINT64_MAX));
+    assert(isteam_guest_memory_allocated_pages(huge) == 0);
+    assert(!isteam_guest_memory_read(huge, finalPage, fallbackValue.data(), 1));
     assert(isteam_guest_memory_zero(huge, 0, UINT64_MAX));
     assert(isteam_guest_memory_allocated_pages(huge) == 0);
     isteam_guest_memory_destroy(huge);
