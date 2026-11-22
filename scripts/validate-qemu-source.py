@@ -551,7 +551,7 @@ required = {
         "bootFromISO ? \"order=d,menu=on,strict=off\" : \"order=c,menu=on,strict=off\"",
         "QEMUDiskImageFormat.detect(at: diskImage)",
         "Self.escapeDriveValue(diskImage.path)",
-        "replacingOccurrences(of: \",\", with: \",\")",
+        "replacingOccurrences(of: \",\", with: \",,\")",
         "tcg,tb-size=128,split-wx=on",
         "configuration.accelerator == .jit ? \"tcg,tb-size=128,split-wx=on\" : \"tcg\"",
     ],
