@@ -47,7 +47,8 @@ final class EntitlementAnisetteKeychain {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key
+            kSecAttrAccount as String: key,
+            kSecAttrSynchronizable as String: kCFBooleanTrue as Any
         ]
     }
 }
