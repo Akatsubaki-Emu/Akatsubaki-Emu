@@ -54,7 +54,7 @@ The helper apps are not embedded in Akatsubaki. They remain external dependencie
 
 - **Source readback:** completed for all changed implementation, project, settings and test files.
 - **Static contract checks:** passed for the physical-device guards, entitlement lookup, LocalDevVPN and StikDebug URL construction, iOS 26 script gate, callback registration, Security linker flags, VM launch gate and source-validator contract.
-- **Hosted tests/build:** blocked. GitLab pipeline `3099547557` failed before runner startup with `failure_reason=ci_quota_exceeded`; its `python-source-contracts` job had `started_at=null` and no runner assigned. Manual pipeline creation is rejected by the repository's workflow rules.
+- **Historical, pre-migration:** GitLab pipeline `3099547557` failed before runner startup with `failure_reason=ci_quota_exceeded`; its `python-source-contracts` job had `started_at=null` and no runner assigned. GitLab CI has since been retired. Current Python source-contract and regression tests run through [GitHub Actions validation](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions/workflows/validate-repository.yml), while Apple-platform compilation runs through [platform validation](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions/workflows/validate-ios-build.yml).
 - **Not tested:** Python unittest execution, Xcode compilation, IPA packaging, installation, JIT activation on hardware, QEMU guest boot or persistent guest state.
 
 Do not treat source-level integration as proof of a working JIT session until a physical-device build and VM launch have been tested.

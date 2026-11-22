@@ -28,7 +28,7 @@ Please include as much of the following as you can:
 - What actually happened, including any error message.
 - Device model, iOS/iPadOS or tvOS version, and whether you used a simulator or physical device.
 - The app version, commit, release tag, or workflow run involved.
-- Relevant build logs, crash logs, screenshots, or a link to the failing [GitHub Actions run](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions) or [GitLab pipeline](https://gitlab.com/chantinlongxthrx/I-steam/-/pipelines).
+- Relevant build logs, crash logs, screenshots, or a link to the failing [GitHub Actions run](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions).
 
 Remove Apple IDs, signing credentials, access tokens, private URLs, and other sensitive information from logs before sharing them. Never publish certificates, provisioning profiles, private keys, or account credentials.
 
@@ -92,7 +92,7 @@ Before opening a pull request, please check the following:
 - [ ] No secrets, signing assets, personal data, or private credentials are included.
 - [ ] Third-party code and assets have appropriate licenses and attribution.
 
-In the pull request description, explain **what changed**, **why it changed**, **how it was tested**, and any known limitations. If a hosted build fails, include the workflow or pipeline link and the relevant log excerpt.
+In the pull request description, explain **what changed**, **why it changed**, **how it was tested**, and any known limitations. If a hosted build fails, include the GitHub Actions workflow-run link and the relevant log excerpt.
 
 ## Code of conduct
 
