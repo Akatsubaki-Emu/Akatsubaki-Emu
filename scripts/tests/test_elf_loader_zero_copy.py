@@ -30,7 +30,7 @@ class ELFLoaderCopyTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         loader = (root / "src" / "Runtime" / "ELF64Loader.swift").read_text(encoding="utf-8")
         relocations = loader.split("let relocationCount = Int(relaSize / 24)", 1)[1].split("private func u16", 1)[0]
-        self.assertIn("loadSegments.sorted { $0.virtualAddress < $1.virtualAddress }", relocations)
+        self.assertIn("let orderedLoadSegments = loadSegments.sorted { $0.virtualAddress < $1.virtualAddress }", loader)
         self.assertIn("forVirtualAddress: relaAddress", relocations)
         self.assertIn("containsGuestRange(target, byteCount: 8", relocations)
         self.assertIn("while lowerBound < upperBound", relocations)
