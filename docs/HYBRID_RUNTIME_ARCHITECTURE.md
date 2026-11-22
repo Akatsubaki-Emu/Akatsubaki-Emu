@@ -65,3 +65,11 @@ The planner's availability set must be populated only by concrete runtime probes
 - A Windows kernel and kernel-mode anti-cheat cannot be replaced by user-mode CPU translation. Anti-cheat support requires publisher approval for the exact environment.
 - Do not disable, bypass, spoof or tamper with anti-cheat.
 - A planned composition is not a working runtime. Verify physical-device boot, process launch, graphics, input/audio, shutdown and persistence before claiming compatibility.
+
+## Kenran Butō AOT translator bring-up
+
+`src/Runtime/X86_64AOTTranslator.swift` now contains a bounded x86-64 to AArch64 block translator. Its initial supported subset is intentionally narrow: NOP, exact ENDBR64-as-no-op, MOV register-immediate (32/64-bit), and register-only MOV (32/64-bit). These instructions do not modify x86 arithmetic flags, so their emitted AArch64 instructions preserve the supported guest-visible register semantics without inventing flag state.
+
+The translator stops before the first unsupported or truncated instruction and returns the exact guest-byte offset for interpreter fallback. Instruction count and output size are bounded, and no partially decoded instruction is emitted. `KenranButoAOTCompiler` keys artifacts by guest-code SHA-256, guest ABI, translator version, AArch64 target and baseline CPU feature set, then stores the validated translation result through `TranslationCache`.
+
+**This is an AOT translation foundation, not yet an executable AOT runtime.** The emitted ARM64 bytes are not allocated as executable memory or dispatched. Arithmetic/flags, memory operands, branches, calls/returns, syscalls, SIMD, atomics, exception behavior, relocation/linking and cross-block control flow remain unsupported by this translator. The router must not advertise `.staticAOT` as operational until an execution adapter safely maps/dispatches artifacts, validates guest state and resumes the dynamic backend at the recorded fallback offset. QEMU remains the independent full-system path.
