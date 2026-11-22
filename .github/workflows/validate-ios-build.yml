@@ -85,6 +85,24 @@ jobs:
             scripts/tests/test_kenran_buto_aot_cache.swift \
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
+      - name: Test Kenran Buto ARM64 executable blocks and register ABI
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          clang -std=c11 -Wall -Wextra -Werror -I iSteam \
+            -c iSteam/KenranButoAOTExecutableMemory.c \
+            -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
+          swiftc -parse-as-library -swift-version 5 \
+            -import-objc-header iSteam/JIT26Protocol.h \
+            src/Core/EmulationLog.swift \
+            src/Performance/TranslationCache.swift \
+            src/Runtime/X86_64AOTTranslator.swift \
+            src/Runtime/KenranButoAOTCompiler.swift \
+            src/Runtime/KenranButoAOTExecution.swift \
+            scripts/tests/test_kenran_buto_aot_execution.swift \
+            "$RUNNER_TEMP/kenran-buto-aot-memory.o" \
+            -o "$RUNNER_TEMP/test-kenran-buto-aot-execution"
+          "$RUNNER_TEMP/test-kenran-buto-aot-execution"
       - name: Test ELF program-header table mapping
         if: matrix.scheme == 'iSteam'
         run: |
