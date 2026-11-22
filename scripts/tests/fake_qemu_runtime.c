@@ -3,7 +3,29 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
+
+
+static void record_lifecycle_event(const char *event) {
+    const char *path = getenv("FAKE_QEMU_LIFECYCLE_FILE");
+    if (!path || !path[0]) return;
+    FILE *file = fopen(path, "a");
+    if (!file) return;
+    fprintf(file, "%s\\n", event);
+    fclose(file);
+}
+
+__attribute__((constructor))
+static void fake_qemu_library_loaded(void) {
+    record_lifecycle_event("load");
+}
+
+__attribute__((destructor))
+static void fake_qemu_library_unloaded(void) {
+    record_lifecycle_event("unload");
+}
 
 static atomic_int init_count = 0;
 static atomic_int loop_count = 0;

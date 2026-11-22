@@ -24,7 +24,7 @@ Graceful shutdown and StikDebug JIT callback registration are mandatory. A libra
 
 ## Startup and validation
 
-`src/QEMU/QEMURuntimeStatus.swift` resolves the library path from the generated manifest. `QEMURuntimeStatus.inspect()` then asks the native bridge to load the library with `RTLD_NOW` and resolve the required exports. `QEMUNativeRuntime` performs this preflight before starting QEMU, so missing dependent libraries and missing exports are reported before guest startup.
+`src/QEMU/QEMURuntimeStatus.swift` resolves the library path from the generated manifest. `QEMURuntimeStatus.inspect()` asks the native bridge to load the library with `RTLD_NOW` and resolve the required exports. The bridge retains that exact validated handle, and `isteam_qemu_start` transfers it to the one-shot worker instead of unloading and loading QEMU a second time. `QEMUNativeRuntime` performs this preflight before guest startup, so missing dependencies and exports are reported early.
 
 The package script validates the artifact's Mach-O type, physical iOS platform, arm64 architecture, and required exports. For a signed library, the standalone validator can additionally verify the code signature:
 

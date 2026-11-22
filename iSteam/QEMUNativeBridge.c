@@ -30,6 +30,8 @@ typedef void (*qemu_set_jit_callbacks_fn)(bool (*)(void), void *(*)(void *, size
 
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static void *g_library = NULL;
+static void *g_preflight_library = NULL;
+static char *g_preflight_path = NULL;
 static pthread_t g_thread;
 static bool g_thread_created = false;
 static bool g_starting = false;
@@ -117,7 +119,24 @@ bool isteam_qemu_validate_library(const char *library_path,
         return false;
     }
 
-    /* RTLD_NOW validates transitive load dependencies as well as the image. */
+    pthread_mutex_lock(&g_lock);
+    if (g_preflight_library && g_preflight_path
+        && strcmp(g_preflight_path, library_path) == 0) {
+        pthread_mutex_unlock(&g_lock);
+        if (error_buffer && error_capacity > 0) error_buffer[0] = '\0';
+        return true;
+    }
+    if (g_starting) {
+        pthread_mutex_unlock(&g_lock);
+        if (error_buffer && error_capacity > 0)
+            snprintf(error_buffer, (size_t)error_capacity,
+                     "QEMU startup began while the runtime was being validated");
+        return false;
+    }
+    const bool already_started = g_has_started;
+    pthread_mutex_unlock(&g_lock);
+
+    /* Keep the validated image loaded until start transfers this exact handle. */
     void *library = dlopen(library_path, RTLD_NOW | RTLD_LOCAL);
     if (!library) {
         const char *reason = dlerror();
@@ -133,9 +152,8 @@ bool isteam_qemu_validate_library(const char *library_path,
     bool has_cleanup = dlsym(library, "qemu_cleanup") != NULL;
     bool has_shutdown = dlsym(library, "qemu_system_shutdown_request") != NULL;
     bool has_jit_callbacks = dlsym(library, "isteam_qemu_set_jit_callbacks") != NULL;
-    dlclose(library);
-
     if (!has_init || !has_main_loop || !has_cleanup || !has_shutdown || !has_jit_callbacks) {
+        dlclose(library);
         if (error_buffer && error_capacity > 0) {
             snprintf(error_buffer, (size_t)error_capacity,
                      "QEMU library is missing required lifecycle/JIT exports: %s%s%s%s%s",
@@ -148,6 +166,49 @@ bool isteam_qemu_validate_library(const char *library_path,
         return false;
     }
 
+    /* Diagnostics may inspect the runtime after the one-shot session has started. */
+    if (already_started) {
+        dlclose(library);
+        if (error_buffer && error_capacity > 0) error_buffer[0] = '\0';
+        return true;
+    }
+
+    char *path_copy = strdup(library_path);
+    if (!path_copy) {
+        dlclose(library);
+        if (error_buffer && error_capacity > 0)
+            snprintf(error_buffer, (size_t)error_capacity,
+                     "Could not retain the validated QEMU library path");
+        return false;
+    }
+
+    pthread_mutex_lock(&g_lock);
+    if (g_starting || g_has_started) {
+        pthread_mutex_unlock(&g_lock);
+        free(path_copy);
+        dlclose(library);
+        if (error_buffer && error_capacity > 0)
+            snprintf(error_buffer, (size_t)error_capacity,
+                     "QEMU startup began while the runtime was being validated");
+        return false;
+    }
+    if (g_preflight_library && g_preflight_path
+        && strcmp(g_preflight_path, library_path) == 0) {
+        pthread_mutex_unlock(&g_lock);
+        free(path_copy);
+        dlclose(library);
+        if (error_buffer && error_capacity > 0) error_buffer[0] = '\0';
+        return true;
+    }
+
+    void *previous_library = g_preflight_library;
+    char *previous_path = g_preflight_path;
+    g_preflight_library = library;
+    g_preflight_path = path_copy;
+    pthread_mutex_unlock(&g_lock);
+
+    if (previous_library) dlclose(previous_library);
+    free(previous_path);
     if (error_buffer && error_capacity > 0) error_buffer[0] = '\0';
     return true;
 }
@@ -196,12 +257,35 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     g_stop_requested = false;
     pthread_mutex_unlock(&g_lock);
 
-    void *library = dlopen(library_path, RTLD_NOW | RTLD_LOCAL);
+    void *library = NULL;
+    void *stale_preflight_library = NULL;
+    char *stale_preflight_path = NULL;
+    if (g_preflight_library && g_preflight_path
+        && strcmp(g_preflight_path, library_path) == 0) {
+        library = g_preflight_library;
+        g_preflight_library = NULL;
+        free(g_preflight_path);
+        g_preflight_path = NULL;
+    } else if (g_preflight_library || g_preflight_path) {
+        stale_preflight_library = g_preflight_library;
+        stale_preflight_path = g_preflight_path;
+        g_preflight_library = NULL;
+        g_preflight_path = NULL;
+    }
+    pthread_mutex_unlock(&g_lock);
+
+    if (stale_preflight_library) dlclose(stale_preflight_library);
+    free(stale_preflight_path);
     if (!library) {
-        const char *reason = dlerror();
-        if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "Could not load bundled QEMU: %s", reason ? reason : "unknown loader error");
-        clear_starting();
-        return false;
+        library = dlopen(library_path, RTLD_NOW | RTLD_LOCAL);
+        if (!library) {
+            const char *reason = dlerror();
+            if (error_buffer && error_capacity > 0)
+                snprintf(error_buffer, (size_t)error_capacity, "Could not load bundled QEMU: %s",
+                         reason ? reason : "unknown loader error");
+            clear_starting();
+            return false;
+        }
     }
 
     qemu_init_fn init_fn = (qemu_init_fn)dlsym(library, "qemu_init");

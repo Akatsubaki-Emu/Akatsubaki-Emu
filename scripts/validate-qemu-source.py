@@ -562,6 +562,12 @@ required = {
         "ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES",
         "strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u)",
         "error_buffer && error_capacity > 0",
+        "static void *g_preflight_library = NULL;",
+        "static char *g_preflight_path = NULL;",
+        "g_preflight_library = library;",
+        "library = g_preflight_library;",
+        "strcmp(g_preflight_path, library_path)",
+
     ],
     "scripts/package-utm-qemu-runtime.sh": [
         " _?isteam_qemu_set_jit_callbacks$",
