@@ -1,5 +1,17 @@
 import Foundation
 
+struct X86_64AOTExecutionResult {
+    let guestBytesConsumed: Int
+    let instructionCount: Int
+}
+
+protocol X86_64AOTExecuting {
+    var isAvailable: Bool { get }
+    func execute(guestCode: Data,
+                 registers: inout [UInt64],
+                 maximumInstructions: Int) -> X86_64AOTExecutionResult?
+}
+
 /// Small, dependency-free x86-64 interpreter for bring-up and instruction tests.
 /// This is not a Linux userspace runtime: syscalls, paging, exceptions, and most
 /// x86-64 instructions are intentionally unsupported and report a visible exit.
@@ -8,6 +20,7 @@ final class X86_64Interpreter: GuestCPUBackend {
     private(set) var instructionCount: UInt64 = 0
     private let memory: GuestMemory
     private let syscallDispatcher: LinuxSyscallDispatcher
+    private let aotExecutor: X86_64AOTExecuting?
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
     private var instructionWindow = [UInt8](repeating: 0, count: 15)
@@ -22,8 +35,9 @@ final class X86_64Interpreter: GuestCPUBackend {
     private let stopLock = NSLock()
     private var stopRequested = false
 
-    init(memory: GuestMemory) {
+    init(memory: GuestMemory, aotExecutor: X86_64AOTExecuting? = nil) {
         self.memory = memory
+        self.aotExecutor = aotExecutor
         syscallDispatcher = LinuxSyscallDispatcher(memory: memory)
     }
 
@@ -92,6 +106,36 @@ final class X86_64Interpreter: GuestCPUBackend {
             let instructionAddress = rip
             instructionLengthExceeded = false
             prepareInstructionWindow(at: instructionAddress)
+            activeSegmentBase = 0
+
+            // AOT blocks are an optional fast path. The executor is platform-
+            // gated and returns nil for unsupported instructions or when JIT
+            // memory is unavailable, leaving the interpreter as the fallback.
+            if let aotExecutor,
+               aotExecutor.isAvailable,
+               instructionWindowLength > 0 {
+                let remaining = maxInstructions - executed
+                let code = Data(instructionWindow.prefix(instructionWindowLength))
+                if let result = aotExecutor.execute(
+                    guestCode: code,
+                    registers: &registers,
+                    maximumInstructions: Int(min(remaining, UInt64(Int.max)))
+                ) {
+                    guard result.guestBytesConsumed > 0,
+                          result.guestBytesConsumed <= instructionWindowLength,
+                          result.instructionCount > 0,
+                          UInt64(result.instructionCount) <= remaining else {
+                        rip = instructionAddress
+                        return .backendUnavailable("Kenran Butō AOT returned an invalid block boundary or instruction count.")
+                    }
+                    rip = instructionAddress &+ UInt64(result.guestBytesConsumed)
+                    let count = UInt64(result.instructionCount)
+                    executed &+= count
+                    instructionCount &+= count
+                    continue
+                }
+            }
+
             guard var opcode = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
             var rex: UInt8 = 0
             activeSegmentBase = 0
