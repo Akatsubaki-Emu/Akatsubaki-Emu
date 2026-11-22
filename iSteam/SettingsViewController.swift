@@ -203,15 +203,21 @@ final class SettingsViewController: UITableViewController {
     }
 
     private func showCustomResolutionEditor() {
-        let alert = UIAlertController(title: "Custom Resolution", message: "Width 320–8192; height 240–8192.", preferredStyle: .alert)
+        let framebufferLimit = 64 * 1024 * 1024
+        let alert = UIAlertController(
+            title: "Custom Resolution",
+            message: "Width 320–8192; height 240–8192; framebuffer up to 64 MiB.",
+            preferredStyle: .alert
+        )
         alert.addTextField { $0.placeholder = "Width"; $0.keyboardType = .numberPad; $0.text = "\(RuntimeSettings.shared.customWidth)" }
         alert.addTextField { $0.placeholder = "Height"; $0.keyboardType = .numberPad; $0.text = "\(RuntimeSettings.shared.customHeight)" }
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         alert.addAction(UIAlertAction(title: "Apply", style: .default) { [weak self, weak alert] _ in
             guard let self, let alert,
                   let w = Int(alert.textFields?[0].text ?? ""), let h = Int(alert.textFields?[1].text ?? ""),
-                  (320...8192).contains(w), (240...8192).contains(h) else {
-                self?.showInvalidResolutionAlert(); return
+                  (320...8192).contains(w), (240...8192).contains(h),
+                  UInt64(w) * UInt64(h) * 4 <= UInt64(framebufferLimit) else {
+                self.showInvalidResolutionAlert(); return
             }
             RuntimeSettings.shared.customWidth = w
             RuntimeSettings.shared.customHeight = h
@@ -222,7 +228,7 @@ final class SettingsViewController: UITableViewController {
     }
 
     private func showInvalidResolutionAlert() {
-        let alert = UIAlertController(title: "Invalid Resolution", message: "Use width 320–8192 and height 240–8192.", preferredStyle: .alert)
+        let alert = UIAlertController(title: "Invalid Resolution", message: "Use width 320–8192 and height 240–8192, with a framebuffer no larger than 64 MiB.", preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
     }

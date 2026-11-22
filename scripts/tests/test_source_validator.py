@@ -448,6 +448,12 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertNotIn("self.runNextBatch(machine: machine, token: token)", runtime)
         self.assertIn("machine.stop()", runtime)
 
+    def test_custom_resolution_editor_enforces_the_64_mib_framebuffer_budget(self):
+        settings = (Path(__file__).resolve().parents[2] / "iSteam/SettingsViewController.swift").read_text()
+        self.assertIn("UInt64(w) * UInt64(h) * 4 <= UInt64(framebufferLimit)", settings)
+        self.assertIn("framebuffer up to 64 MiB", settings)
+        self.assertIn("framebuffer no larger than 64 MiB", settings)
+
     def test_console_uses_the_runtime_router_instead_of_direct_box64(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "ConsoleViewController.swift").read_text(encoding="utf-8")
