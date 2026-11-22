@@ -32,9 +32,12 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn('sscanf(hardwareIdentifier, "iPad%d,%d"', source)
         self.assertIn("minor >= 2", source)
         self.assertIn("minor >= 5", source)
-        hardware_check = source.split("static bool iSteamJITHardwareSupportsTXM", 1)[1].split("bool iSteamJITIsSupported", 1)[0]
-        self.assertIn("return true;", hardware_check)
-        self.assertIn("if (uname(&systemInfo) != 0) {\n            return true;", source)
+        self.assertIn("static int iSteamJITHardwareTXMMode", source)
+        self.assertIn("iSteamJITGetProtocolMode(void)", source)
+        self.assertIn("ISTEAM_JIT_PROTOCOL_UNKNOWN", source)
+        self.assertIn("ISTEAM_JIT_PROTOCOL_STANDARD", source)
+        self.assertIn("ISTEAM_JIT_PROTOCOL_STIKDEBUG", source)
+        self.assertIn("return ISTEAM_JIT_PROTOCOL_UNKNOWN;", source)
         self.assertIn("if (__builtin_available(iOS 27.0, *))", source)
         self.assertIn("if (__builtin_available(iOS 26.0, *))", source)
 
@@ -42,15 +45,18 @@ class JITProtocolSourceTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
         readiness = source.split("bool iSteamJITIsReady(void) {", 1)[1].split("\n}\n", 1)[0]
-        self.assertIn("if (__builtin_available(iOS 26.0, *) && iSteamJITIsSupported())", readiness)
+        self.assertIn("int protocolMode = iSteamJITGetProtocolMode();", readiness)
+        self.assertIn("if (protocolMode == ISTEAM_JIT_PROTOCOL_UNKNOWN)", readiness)
+        self.assertIn("if (protocolMode == ISTEAM_JIT_PROTOCOL_STIKDEBUG)", readiness)
         self.assertIn("return iSteamJITDebuggerIsAttached();", readiness)
         self.assertTrue(readiness.rstrip().endswith("return true;"))
 
     def test_qemu_uses_breakpoint_allocator_only_when_txm_is_present(self):
         root = Path(__file__).resolve().parents[2]
         patcher = (root / "scripts" / "patch_qemu_stikjit_ios.py").read_text(encoding="utf-8")
-        self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")', patcher)
-        self.assertIn("if (jit_protocol_supported())", patcher)
+        self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")', patcher)
+        self.assertIn("if (jit_protocol_mode < 0)", patcher)
+        self.assertIn("if (jit_protocol_mode > 0)", patcher)
         self.assertIn("return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);", patcher)
 
     def test_qemu_can_resolve_host_jit_callbacks_from_main_and_nightly_apps(self):
@@ -60,7 +66,7 @@ class JITProtocolSourceTests(unittest.TestCase):
             start = project.index("PRODUCT_BUNDLE_IDENTIFIER: " + bundle)
             end = project.index("  iSteamTV:", start)
             block = project[start:end]
-            for symbol in ("iSteamJITIsSupported", "iSteamJITIsReady", "iSteamJITPrepareRegion", "iSteamJITDetach"):
+            for symbol in ("iSteamJITGetProtocolMode", "iSteamJITIsSupported", "iSteamJITIsReady", "iSteamJITPrepareRegion", "iSteamJITDetach"):
                 self.assertIn("-Wl,-exported_symbol,_" + symbol, block)
 
 

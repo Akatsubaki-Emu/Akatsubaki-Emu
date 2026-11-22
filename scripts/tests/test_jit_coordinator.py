@@ -16,6 +16,14 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         physical_guard = "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)"
         self.assertGreaterEqual(source.count(physical_guard), 4)
 
+    def test_unknown_ios_26_jit_protocol_blocks_helper_and_vm_start(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("var isJITProtocolKnown: Bool", source)
+        self.assertIn("return iSteamJITGetProtocolMode() >= 0", source)
+        self.assertIn("guard isJITProtocolKnown else", source)
+        self.assertIn("JIT compatibility unknown", source)
+
     def test_jit_ready_uses_the_attached_debugger_status(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")

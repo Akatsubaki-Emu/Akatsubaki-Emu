@@ -33,12 +33,12 @@ The **Increased Memory Limit** capability is separate from `get-task-allow`. Req
 - Missing LocalDevVPN, missing StikDebug, an unavailable callback, or a missing `get-task-allow` entitlement prevents QEMU startup.
 - LocalDevVPN's callback confirms that the tunnel-start request was submitted; it does **not** confirm that the VPN is connected. The readiness check is separate. If acquisition fails, verify the VPN is connected, StikDebug pairing is valid, Developer Mode is enabled, and the signing entitlement is present.
 - The entitlement query uses Security task SPI. This is a sideload/developer workflow and is not suitable for App Store submission.
-- The coordinator owns one foreground readiness poll and reports completion through callbacks; Launch Setup does not run a second polling loop. Every supported JIT path requires `CS_DEBUGGED`. On iOS 26+ TXM/SPTM devices, readiness additionally requires a live `P_TRACED` debugger because QEMU must complete the universal breakpoint protocol before detaching. Known non-TXM devices use the normal split-W^X allocator and do not require a live debugger after JIT is enabled. Unknown hardware identifiers or a failed hardware query conservatively select the TXM path and fail closed if StikDebug cannot service the breakpoint protocol. A successful helper handoff alone is not treated as proof of a usable VM session.
+- The coordinator owns one foreground readiness poll and reports completion through callbacks; Launch Setup does not run a second polling loop. Every supported JIT path requires `CS_DEBUGGED`. On iOS 26+ TXM/SPTM devices, readiness additionally requires a live `P_TRACED` debugger because QEMU must complete the universal breakpoint protocol before detaching. Known non-TXM devices use the normal split-W^X allocator and do not require a live debugger after JIT is enabled. Unknown hardware identifiers or a failed hardware query produce an explicit unknown protocol mode. Akatsubaki blocks the JIT request before opening either helper, and QEMU independently refuses startup if the mode callback is missing or unknown; it never guesses between the two allocators. A successful helper handoff alone is not treated as proof of a usable VM session.
 
 ## Build integration
 
 - `iSteam/JITCoordinator.swift` — helper orchestration, entitlement gate, callback handling and readiness polling.
-- `iSteam/JIT26Protocol.c` / `.h` — runtime signing-entitlement inspection, StikDebug TXM hardware detection, version-aware readiness, and iOS 26 breakpoint protocol entry points.
+- `iSteam/JIT26Protocol.c` / `.h` — runtime signing-entitlement inspection, tri-state TXM hardware detection, version-aware readiness, and iOS 26 breakpoint protocol entry points.
 - `iSteam/Info.plist` — LocalDevVPN query permission and per-bundle callback URL scheme.
 - `iSteam/AppDelegate.swift` — callback dispatch and app-activation readiness polling.
 - `iSteam/LaunchSetupViewController.swift` — waits for the coordinator's success/failure callback before presenting the VM.
@@ -46,8 +46,8 @@ The **Increased Memory Limit** capability is separate from `get-task-allow`. Req
 - `iSteam/SettingsViewController.swift` — describes the automatic helper sequence.
 - `project.yml` — links Security for the stable and nightly iOS targets.
 - `scripts/patch_qemu_stikjit_ios.py` — selects the breakpoint allocator only on TXM devices; non-TXM iOS 26 devices retain the upstream split-W^X allocator.
-- `scripts/tests/test_jit_protocol.py` — source-contract regression coverage for TXM model detection, live-debugger gating, and QEMU allocator routing.
-- `scripts/tests/test_jit_coordinator.py` — source-contract regression coverage.
+- `scripts/tests/test_jit_protocol.py` — source-contract regression coverage for known/unknown TXM modes, live-debugger gating, exported mode callbacks, and QEMU allocator routing.
+- `scripts/tests/test_jit_coordinator.py` — verifies that an unknown iOS 26 protocol blocks helper handoff and VM startup.
 
 ## Validation status
 

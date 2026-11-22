@@ -57,6 +57,15 @@ final class JITCoordinator {
         return false
     }
 
+    var isJITProtocolKnown: Bool {
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        if #available(iOS 26.0, *) {
+            return iSteamJITGetProtocolMode() >= 0
+        }
+        #endif
+        return true
+    }
+
     var isJITReady: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if #available(iOS 17.4, *) {
@@ -76,6 +85,10 @@ final class JITCoordinator {
         }
         guard hasGetTaskAllow else {
             failRequest("This installation does not have the get-task-allow entitlement. Reinstall Akatsubaki Emu with a signing method that preserves this entitlement, then try again.", title: "JIT signing required")
+            return
+        }
+        guard isJITProtocolKnown else {
+            failRequest("Akatsubaki Emu cannot identify this device's iOS 26 JIT protocol. Update the app before starting a VM.", title: "JIT compatibility unknown")
             return
         }
         guard !isJITReady else {

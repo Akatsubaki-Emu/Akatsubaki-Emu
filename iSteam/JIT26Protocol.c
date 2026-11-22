@@ -44,42 +44,52 @@ bool iSteamJITHasGetTaskAllow(void) {
     return allowed;
 }
 
-static bool iSteamJITHardwareSupportsTXM(const char *hardwareIdentifier, bool isIOS27OrNewer) {
+static int iSteamJITHardwareTXMMode(const char *hardwareIdentifier, bool isIOS27OrNewer) {
     if (hardwareIdentifier == NULL || hardwareIdentifier[0] == '\0') {
-        return true;
+        return ISTEAM_JIT_PROTOCOL_UNKNOWN;
     }
 
     if (isIOS27OrNewer) {
-        return strcmp(hardwareIdentifier, "iPad8,11") != 0
-            && strcmp(hardwareIdentifier, "iPad8,12") != 0;
+        return strcmp(hardwareIdentifier, "iPad8,11") == 0
+            || strcmp(hardwareIdentifier, "iPad8,12") == 0
+            ? ISTEAM_JIT_PROTOCOL_STANDARD
+            : ISTEAM_JIT_PROTOCOL_STIKDEBUG;
     }
 
     int major = 0;
     int minor = 0;
     if (sscanf(hardwareIdentifier, "iPhone%d,%d", &major, &minor) == 2) {
-        return major > 14 || (major == 14 && minor >= 2);
+        return major > 14 || (major == 14 && minor >= 2)
+            ? ISTEAM_JIT_PROTOCOL_STIKDEBUG
+            : ISTEAM_JIT_PROTOCOL_STANDARD;
     }
     if (sscanf(hardwareIdentifier, "iPad%d,%d", &major, &minor) == 2) {
-        return major > 14 || (major == 14 && minor >= 5);
+        return major > 14 || (major == 14 && minor >= 5)
+            ? ISTEAM_JIT_PROTOCOL_STIKDEBUG
+            : ISTEAM_JIT_PROTOCOL_STANDARD;
     }
-    return true;
+    return ISTEAM_JIT_PROTOCOL_UNKNOWN;
 }
 
-bool iSteamJITIsSupported(void) {
+int iSteamJITGetProtocolMode(void) {
     struct utsname systemInfo;
     if (__builtin_available(iOS 27.0, *)) {
         if (uname(&systemInfo) != 0) {
-            return true;
+            return ISTEAM_JIT_PROTOCOL_UNKNOWN;
         }
-        return iSteamJITHardwareSupportsTXM(systemInfo.machine, true);
+        return iSteamJITHardwareTXMMode(systemInfo.machine, true);
     }
     if (__builtin_available(iOS 26.0, *)) {
         if (uname(&systemInfo) != 0) {
-            return true;
+            return ISTEAM_JIT_PROTOCOL_UNKNOWN;
         }
-        return iSteamJITHardwareSupportsTXM(systemInfo.machine, false);
+        return iSteamJITHardwareTXMMode(systemInfo.machine, false);
     }
-    return false;
+    return ISTEAM_JIT_PROTOCOL_STANDARD;
+}
+
+bool iSteamJITIsSupported(void) {
+    return iSteamJITGetProtocolMode() == ISTEAM_JIT_PROTOCOL_STIKDEBUG;
 }
 
 static bool iSteamJITDebuggerIsAttached(void) {
@@ -103,8 +113,14 @@ bool iSteamJITIsReady(void) {
         return false;
     }
 
-    if (__builtin_available(iOS 26.0, *) && iSteamJITIsSupported()) {
-        return iSteamJITDebuggerIsAttached();
+    if (__builtin_available(iOS 26.0, *)) {
+        int protocolMode = iSteamJITGetProtocolMode();
+        if (protocolMode == ISTEAM_JIT_PROTOCOL_UNKNOWN) {
+            return false;
+        }
+        if (protocolMode == ISTEAM_JIT_PROTOCOL_STIKDEBUG) {
+            return iSteamJITDebuggerIsAttached();
+        }
     }
     return true;
 }
@@ -117,5 +133,6 @@ void *iSteamJITPrepareRegion(void *address, size_t length) {
     return NULL;
 }
 bool iSteamJITIsSupported(void) { return false; }
+int iSteamJITGetProtocolMode(void) { return ISTEAM_JIT_PROTOCOL_UNKNOWN; }
 bool iSteamJITIsReady(void) { return false; }
 #endif

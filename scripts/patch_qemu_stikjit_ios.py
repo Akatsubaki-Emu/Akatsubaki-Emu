@@ -83,11 +83,13 @@ static int alloc_code_gen_buffer_splitwx_stikdebug(size_t size, Error **errp)
 def patch_source(source: str) -> str:
     if MARKER in source:
         required = [
+            "iSteamJITGetProtocolMode",
             "iSteamJITIsSupported",
             "iSteamJITIsReady",
             "iSteamJITPrepareRegion",
             "iSteamJITDetach",
-            "jit_protocol_supported()",
+            "jit_protocol_mode < 0",
+            "jit_protocol_mode > 0",
             "__builtin_available(iOS 26.0, *)",
             "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
             "tcg_splitwx_diff = buf_rx - buf_rw",
@@ -109,14 +111,15 @@ def patch_source(source: str) -> str:
     replacement = HELPER + FUNCTION_ANCHOR + (
         "#if TARGET_OS_IOS\n"
         "    if (__builtin_available(iOS 26.0, *)) {\n"
-        "        typedef bool (*JITProtocolSupportedFunction)(void);\n"
-        "        JITProtocolSupportedFunction jit_protocol_supported =\n"
-        "            (JITProtocolSupportedFunction)dlsym(RTLD_DEFAULT, \"iSteamJITIsSupported\");\n"
-        "        if (jit_protocol_supported == NULL) {\n"
-        "            error_setg(errp, \"Could not determine whether this iOS device requires the StikDebug JIT breakpoint protocol.\");\n"
+        "        typedef int (*JITProtocolModeFunction)(void);\n"
+        "        JITProtocolModeFunction get_jit_protocol_mode =\n"
+        "            (JITProtocolModeFunction)dlsym(RTLD_DEFAULT, \"iSteamJITGetProtocolMode\");\n"
+        "        int jit_protocol_mode = get_jit_protocol_mode ? get_jit_protocol_mode() : -1;\n"
+        "        if (jit_protocol_mode < 0) {\n"
+        "            error_setg(errp, \"Could not determine this iOS device's JIT protocol; refusing QEMU startup.\");\n"
         "            return -1;\n"
         "        }\n"
-        "        if (jit_protocol_supported()) {\n"
+        "        if (jit_protocol_mode > 0) {\n"
         "            return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);\n"
         "        }\n"
         "    }\n"
@@ -126,12 +129,13 @@ def patch_source(source: str) -> str:
     required = [
         "#include <TargetConditionals.h>",
         "#include <dlfcn.h>",
+        "iSteamJITGetProtocolMode",
         "iSteamJITIsSupported",
         "iSteamJITIsReady",
         "iSteamJITPrepareRegion",
         "iSteamJITDetach",
-        "jit_protocol_supported()",
-        "if (jit_protocol_supported())",
+        "jit_protocol_mode < 0",
+        "jit_protocol_mode > 0",
         "__builtin_available(iOS 26.0, *)",
         "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
         "mach_vm_remap(mach_task_self(), &buf_rw",
