@@ -67,7 +67,8 @@ while IFS= read -r file; do
        printf '%s\n' "$candidate_exports" | grep -qE ' _?qemu_main_loop$' &&
        printf '%s\n' "$candidate_exports" | grep -qE ' _?qemu_cleanup$' &&
        printf '%s\n' "$candidate_exports" | grep -qE ' _?qemu_system_shutdown_request$' &&
-       { [ "$MODE" = "tci" ] || [ "$has_jit_callbacks" = true ]; }; then
+       { { [ "$MODE" = "jit" ] && [ "$has_jit_callbacks" = true ]; } ||
+         { [ "$MODE" = "tci" ] && [ "$has_jit_callbacks" = false ]; }; }; then
       candidate="$file"
       exports="$candidate_exports"
       break
