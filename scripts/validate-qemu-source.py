@@ -1464,6 +1464,19 @@ for token in ("KenranButoAOTExecutableMemory.c", "KenranButoAOTExecution.swift",
         failed = True
 
 
+# The automatic VM profile must fall back to the packaged no-JIT TCI runtime.
+vm_configuration = Path("src/Core/VMConfiguration.swift").read_text(encoding="utf-8")
+qemu_runtime = Path("src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+if "automaticAccelerator(jitReady: JITCoordinator.shared.isQEMUJITReady)" not in vm_configuration:
+    print("Automatic VM accelerator does not select TCI when QEMU JIT is unavailable", file=sys.stderr)
+    failed = True
+if "The no-JIT TCI runtime is not packaged yet" in qemu_runtime:
+    print("QEMU JIT failure message still incorrectly claims TCI is unavailable", file=sys.stderr)
+    failed = True
+if "QEMU-TCI runtime" not in qemu_runtime:
+    print("QEMU JIT fallback guidance does not mention the packaged TCI runtime", file=sys.stderr)
+    failed = True
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")

@@ -30,10 +30,22 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
 
     var requiresUEFI: Bool { bootUEFI ?? (bootWindows || name == "SteamOS Gaming Mode") }
 
+    static func automaticAccelerator(jitReady: Bool) -> Accelerator {
+        jitReady ? .jit : .tcg
+    }
+
     static var defaultAccelerator: Accelerator {
         switch RuntimeSettings.shared.acceleration {
-        case .automatic, .qemuJIT: return .jit
-        case .qemuInterpreter, .hypervisor: return .tcg
+        case .automatic:
+            #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+            return automaticAccelerator(jitReady: JITCoordinator.shared.isQEMUJITReady)
+            #else
+            return .tcg
+            #endif
+        case .qemuJIT:
+            return .jit
+        case .qemuInterpreter, .hypervisor:
+            return .tcg
         }
     }
 
