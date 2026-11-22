@@ -187,6 +187,8 @@ required = {
         "test_link_verifier_rejects_missing_libobjc",
         "test_qemu_runtime_packager_preserves_firmware_bundle_directories",
         "test_release_publication_is_serialized_and_skips_stale_main_builds",
+        "test_qemu_runtime_packager_preserves_firmware_bundle_directories",
+        "test_release_publication_is_serialized_and_skips_stale_main_builds",
     ],
     "scripts/tests/test_jit_coordinator.py": [
         "test_stikdebug_availability_is_limited_to_physical_ios_devices",
@@ -986,6 +988,7 @@ required = {
         "def test_meson_patcher_adds_required_objc_flag_and_is_idempotent",
         "def test_meson_patcher_changes_only_the_objc_compiler_block",
         "def test_meson_patcher_fails_closed_if_objc_block_changes",
+        "def test_meson_patcher_handles_qemu_common_flags_variant",
         "def test_meson_patcher_handles_qemu_common_flags_variant",
         "def test_ninja_verifier_requires_flag_on_actual_metal_compile_edge",
         "def test_ninja_verifier_rejects_missing_compile_flag_even_when_link_flags_exist",
