@@ -76,6 +76,11 @@ class JITCoordinatorSourceTests(unittest.TestCase):
     def test_vm_launch_waits_for_jit_before_starting_qemu(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("guard JITCoordinator.shared.isJITProtocolSupported else", source)
+        self.assertLess(
+            source.index("guard JITCoordinator.shared.isJITProtocolSupported else"),
+            source.index("JITCoordinator.shared.requestJIT(from: self, onFailure:"),
+        )
         self.assertIn("JITCoordinator.shared.requestJIT(from: self, onFailure:", source)
         self.assertIn("override func viewDidAppear", source)
         self.assertIn("guard !startupFlowStarted else { return }", source)
