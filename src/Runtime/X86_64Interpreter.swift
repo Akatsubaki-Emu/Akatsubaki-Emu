@@ -1,5 +1,15 @@
 import Foundation
 
+struct X86_64AOTExecutionResult {
+    let guestBytesConsumed: Int
+    let instructionCount: Int
+}
+
+protocol X86_64AOTExecuting {
+    var isAvailable: Bool { get }
+    func execute(guestCode: Data, registers: inout [UInt64], maximumInstructions: Int) -> X86_64AOTExecutionResult?
+}
+
 /// Small, dependency-free x86-64 interpreter for bring-up and instruction tests.
 /// This is not a Linux userspace runtime: syscalls, paging, exceptions, and most
 /// x86-64 instructions are intentionally unsupported and report a visible exit.
@@ -8,6 +18,7 @@ final class X86_64Interpreter: GuestCPUBackend {
     private(set) var instructionCount: UInt64 = 0
     private let memory: GuestMemory
     private let syscallDispatcher: LinuxSyscallDispatcher
+    private let aotExecutor: X86_64AOTExecuting?
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
     private var instructionWindow = [UInt8](repeating: 0, count: 15)
@@ -22,8 +33,9 @@ final class X86_64Interpreter: GuestCPUBackend {
     private let stopLock = NSLock()
     private var stopRequested = false
 
-    init(memory: GuestMemory) {
+    init(memory: GuestMemory, aotExecutor: X86_64AOTExecuting? = nil) {
         self.memory = memory
+        self.aotExecutor = aotExecutor
         syscallDispatcher = LinuxSyscallDispatcher(memory: memory)
     }
 
@@ -81,8 +93,10 @@ final class X86_64Interpreter: GuestCPUBackend {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         if halted { return .halted }
         var executed: UInt64 = 0
+        let aotEnabled = aotExecutor?.isAvailable == true
+        let stopCheckMask: UInt64 = aotEnabled ? 0x0f : 0xff
         while executed < maxInstructions {
-            if executed & 0xff == 0 {
+            if executed & stopCheckMask == 0 {
                 stopLock.lock()
                 let shouldStop = stopRequested
                 stopLock.unlock()
@@ -92,6 +106,33 @@ final class X86_64Interpreter: GuestCPUBackend {
             let instructionAddress = rip
             instructionLengthExceeded = false
             prepareInstructionWindow(at: instructionAddress)
+            activeSegmentBase = 0
+
+            // Execute only a fully validated, flag-neutral translated prefix.
+            // Stage registers so a failed or malformed block cannot corrupt the
+            // interpreter state; resume unsupported instructions at their exact RIP.
+            if aotEnabled, isAOTCandidate(), let aotExecutor {
+                let remaining = maxInstructions - executed
+                let batchBudget = Int(min(remaining, 16))
+                var stagedRegisters = registers
+                let code = Data(instructionWindow.prefix(instructionWindowLength))
+                if let result = aotExecutor.execute(
+                    guestCode: code,
+                    registers: &stagedRegisters,
+                    maximumInstructions: batchBudget
+                ), result.guestBytesConsumed > 0,
+                   result.guestBytesConsumed <= instructionWindowLength,
+                   result.instructionCount > 0,
+                   result.instructionCount <= batchBudget {
+                    registers = stagedRegisters
+                    rip = instructionAddress &+ UInt64(result.guestBytesConsumed)
+                    let count = UInt64(result.instructionCount)
+                    executed &+= count
+                    instructionCount &+= count
+                    continue
+                }
+            }
+
             guard var opcode = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
             var rex: UInt8 = 0
             activeSegmentBase = 0
@@ -942,6 +983,28 @@ final class X86_64Interpreter: GuestCPUBackend {
     private func operandAddress(_ operand: Operand) -> UInt64 {
         if case .memory(let address) = operand { return address }
         return rip
+    }
+
+    private func isAOTCandidate() -> Bool {
+        var cursor = 0
+        var rex: UInt8 = 0
+        while cursor < instructionWindowLength,
+              (0x40...0x4F).contains(instructionWindow[cursor]) {
+            rex = instructionWindow[cursor]
+            cursor += 1
+        }
+        guard cursor < instructionWindowLength else { return false }
+        switch instructionWindow[cursor] {
+        case 0x90:
+            return rex & 0x01 == 0
+        case 0xB8...0xBF:
+            return true
+        case 0x89, 0x8B:
+            guard cursor + 1 < instructionWindowLength else { return false }
+            return instructionWindow[cursor + 1] & 0xC0 == 0xC0
+        default:
+            return false
+        }
     }
 
     private func prepareInstructionWindow(at address: UInt64) {
