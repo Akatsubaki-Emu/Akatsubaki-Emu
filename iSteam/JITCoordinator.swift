@@ -78,19 +78,10 @@ final class JITCoordinator {
         return false
     }
 
-    /// QEMU TCG requires a confirmed physical-device executable-memory handshake.
+    /// QEMU TCG requires the supported physical-device executable-memory handshake.
     var isQEMUJITReady: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
-        return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady
-        #else
-        return false
-        #endif
-    }
-
-    /// QEMU TCG on physical iOS requires a confirmed executable-memory handshake.
-    var isQEMUJITReady: Bool {
-        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
-        return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady
+        return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolSupported && isJITProtocolKnown && isJITReady
         #else
         return false
         #endif
