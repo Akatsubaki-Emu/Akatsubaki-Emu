@@ -200,30 +200,55 @@ REQUIRED_EXPORTS = (
 
 
 def patch_export_symbols(source: str) -> str:
-    lines = [line.strip() for line in source.splitlines()]
-    missing_anchors = [symbol for symbol in REQUIRED_EXPORT_ANCHORS if symbol not in lines]
+    lines = source.splitlines()
+    positions = {
+        symbol: [index for index, line in enumerate(lines) if line.strip() == symbol]
+        for symbol in REQUIRED_EXPORT_ANCHORS + REQUIRED_EXPORTS
+    }
+
+    missing_anchors = [symbol for symbol in REQUIRED_EXPORT_ANCHORS if not positions[symbol]]
     if missing_anchors:
         raise SystemExit(
             "QEMU system/qemu.symbols changed; missing expected anchors: "
             + ", ".join(missing_anchors)
         )
 
-    duplicates = [symbol for symbol in REQUIRED_EXPORTS if lines.count(symbol) > 1]
+    duplicate_anchors = [symbol for symbol in REQUIRED_EXPORT_ANCHORS if len(positions[symbol]) > 1]
+    if duplicate_anchors:
+        raise SystemExit(
+            "QEMU system/qemu.symbols contains duplicate required anchors: "
+            + ", ".join(duplicate_anchors)
+        )
+
+    duplicates = [symbol for symbol in REQUIRED_EXPORTS if len(positions[symbol]) > 1]
     if duplicates:
         raise SystemExit(
             "QEMU system/qemu.symbols contains duplicate required exports: "
             + ", ".join(duplicates)
         )
 
-    missing = [symbol for symbol in REQUIRED_EXPORTS if symbol not in lines]
-    if not missing:
-        return source
+    opening = [index for index, line in enumerate(lines) if line.strip() == "{"]
+    closing = [index for index, line in enumerate(lines) if line.strip() == "};"]
+    if len(opening) != 1 or len(closing) != 1 or closing[0] <= opening[0]:
+        raise SystemExit("QEMU system/qemu.symbols must contain exactly one valid braced symbol block")
 
-    patched = source
-    if patched and not patched.endswith("\n"):
-        patched += "\n"
-    patched += "".join(symbol + "\n" for symbol in missing)
-    return patched
+    opening_index = opening[0]
+    closing_index = closing[0]
+    for symbol in REQUIRED_EXPORT_ANCHORS:
+        if not opening_index < positions[symbol][0] < closing_index:
+            raise SystemExit(f"required QEMU symbol anchor is outside the braced symbol block: {symbol}")
+
+    for symbol in REQUIRED_EXPORTS:
+        if positions[symbol] and not opening_index < positions[symbol][0] < closing_index:
+            raise SystemExit(f"required QEMU export is outside the braced symbol block: {symbol}")
+
+    missing = [symbol for symbol in REQUIRED_EXPORTS if not positions[symbol]]
+    for symbol in missing:
+        lines.insert(closing_index, "  " + symbol)
+        closing_index += 1
+
+    patched = "\n".join(lines)
+    return patched + ("\n" if source.endswith("\n") else "")
 
 
 def patch_file(path: Path) -> None:

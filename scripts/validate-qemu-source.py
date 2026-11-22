@@ -917,6 +917,7 @@ required = {
         "qemu_system_shutdown_request;",
         "isteam_qemu_set_jit_callbacks;",
         "REQUIRED_EXPORT_ANCHORS",
+        'line.strip() == "};"',
         "__attribute__((visibility(\"default\")))",
         "isteam_jit_prepare_callback",
         "#include <mach/mach_vm.h>",

@@ -6,15 +6,17 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
-QEMU_SYMBOLS = """qemu_init;
-qemu_main_loop;
-qemu_cleanup;
-bql_lock_impl;
-bql_unlock;
-g_assertion_message_expr;
-qemu_thread_create;
-replay_mutex_lock;
-replay_mutex_unlock;
+QEMU_SYMBOLS = """{
+  qemu_init;
+  qemu_main_loop;
+  qemu_cleanup;
+  bql_lock_impl;
+  bql_unlock;
+  g_assertion_message_expr;
+  qemu_thread_create;
+  replay_mutex_lock;
+  replay_mutex_unlock;
+};
 """
 QEMU_EXPORTS = """_qemu_init
 _qemu_main_loop
@@ -235,11 +237,21 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("qemu_init;", once)
         self.assertIn("qemu_main_loop;", once)
         self.assertIn("qemu_cleanup;", once)
+        export_lines = once.splitlines()
+        closing_index = export_lines.index("};")
+        for symbol in ("qemu_system_shutdown_request;", "isteam_qemu_set_jit_callbacks;"):
+            positions = [index for index, line in enumerate(export_lines) if line.strip() == symbol]
+            self.assertEqual(len(positions), 1)
+            self.assertLess(positions[0], closing_index)
         with self.assertRaisesRegex(SystemExit, "missing expected anchors"):
             patch_qemu_stikjit_ios.patch_export_symbols("qemu_init;\n")
+        with self.assertRaisesRegex(SystemExit, "outside the braced symbol block"):
+            patch_qemu_stikjit_ios.patch_export_symbols(
+                QEMU_SYMBOLS + "  qemu_system_shutdown_request;\n"
+            )
         with self.assertRaisesRegex(SystemExit, "duplicate required exports"):
             patch_qemu_stikjit_ios.patch_export_symbols(
-                QEMU_SYMBOLS + "qemu_system_shutdown_request;\n"
+                QEMU_SYMBOLS + "  qemu_system_shutdown_request;\n  qemu_system_shutdown_request;\n"
             )
 
     def test_qemu_patch_file_updates_region_and_export_list_together(self):
