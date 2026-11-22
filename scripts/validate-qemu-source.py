@@ -657,9 +657,6 @@ required = {
         "physical iOS 17.4",
         "Physical-device runtime startup",
     ],
-    ".github/workflows/validate-repository.yml": [
-        "bash -n scripts/validate-qemu-runtime.sh",
-    ],
     "src/QEMU/QEMURuntimeStatus.swift": [
         "bundleRoot = bundle.bundleURL.resolvingSymlinksInPath()",
         "bundlePrefix",
@@ -1016,6 +1013,7 @@ required = {
         "static_cast<uint64_t>(amount) == pageLength",
     ],
     ".github/workflows/validate-repository.yml": [
+        "bash -n scripts/validate-qemu-runtime.sh",
         "test_execution_backend_router.swift",
         "test_elf_loader_program_headers.swift",
         "test_static_elf_execution.swift",
@@ -1205,7 +1203,7 @@ if "utm-ios-arm64-deps-v15-" not in repository_validation or "utm-ios-arm64-deps
     print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
     failed = True
 for step in (
-    "Checkout i-Steam",
+    "Checkout Akatsubaki Emu",
     "Checkout UTM with submodules",
     "Select Xcode",
     "Verify Objective-C class-selector stub compatibility",
@@ -1332,7 +1330,7 @@ if runtime_download_start < 0 or runtime_download_end < 0:
     failed = True
 else:
     runtime_download = release_workflow[runtime_download_start:runtime_download_end]
-    for token in ["uses: actions/download-artifact@", "name: iSteam-qemu-runtime-ios-arm64", "path: build/qemu-runtime"]:
+    for token in ["uses: actions/download-artifact@", "name: AkatsubakiEmu-qemu-runtime-ios-arm64", "path: build/qemu-runtime"]:
         if token not in runtime_download:
             print(f"release workflow: required same-run runtime download setting missing: {token}", file=sys.stderr)
             failed = True

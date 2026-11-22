@@ -7,7 +7,7 @@
 
 The repository now has an integrated, bounded x86-64-to-ARM64 AOT fast path inside the x86-64 interpreter, a validated guest-state ABI, W^X executable-memory management, persistent translation-cache validation, and interpreter side exits. The AOT path is deliberately conservative: unsupported instructions return to the interpreter rather than being executed speculatively.
 
-The full-system QEMU path has both JIT and no-JIT TCI build/package routes. The current PR also changes the automatic VM accelerator policy to choose TCI when QEMU JIT is not ready, so a free-signing/no-JIT installation has a viable boot path.
+The full-system QEMU path has JIT and no-JIT TCI build/package workflows, and this PR changes Automatic to choose TCI when QEMU JIT is not ready. However, the current canonical release workflow still expects the old flat runtime manifest while the dual-mode merger emits separate `QEMU/JIT` and `QEMU/TCI` manifests; the current packager also runs strict code-signature verification against UTM archives built with code signing disabled. Therefore the TCI/IPA pipeline is not yet verified end-to-end and must not be described as a working installable build.
 
 **This is not yet a verified playable iPad build.** The ARM64 CI and static-ELF guest tests are pending. No physical iPad boot, guest interaction, repeat VM launch, or persistent-state test has been recorded.
 
@@ -79,3 +79,16 @@ The full-system QEMU path has both JIT and no-JIT TCI build/package routes. The 
 ## Scope carried forward from earlier project discussions
 
 Preserve the full-Windows-guest direction (not a PE-only pretend runtime), Linux guest support, Steam library/launch integration, external drives and persistent VM storage, save/session handling, controller and touchscreen input, keyboard function-key controls, and future graphics/VR experiments. These are product requirements, not evidence that the corresponding execution backends already exist.
+
+## Additional iOS packaging and shared-branch findings
+
+These were confirmed against the current canonical `main` and the live related review branches during the cross-chat audit:
+
+- **Release manifest mismatch:** the runtime merger emits `QEMU/JIT/runtime-library-path.txt`, `QEMU/TCI/runtime-library-path.txt`, and per-mode exports. Current `.github/workflows/release.yml` still reads `QEMU/runtime-library-path.txt` and a root `exports.txt`, and requires the JIT callback unconditionally. The release step therefore cannot correctly embed/validate the merged dual-mode artifact yet.
+- **Unsigned runtime validation:** UTM archives are created with `CODE_SIGNING_ALLOWED=NO`, but `scripts/validate-qemu-runtime.sh` unconditionally calls `codesign --verify --strict`. Structural Mach-O/platform/export validation must be separate from optional final signature validation; the intermediate unsigned runtime must be accepted.
+- **Toolchain mismatch:** the QEMU runtime workflow requires Xcode 27.x on `xcode-27`, while the current release app-archive job selects Xcode 26.2 on `macos-26`. Align the toolchain before claiming a reproducible combined IPA.
+- **Runtime-build CI gap:** `.github/workflows/build-qemu-runtime.yml` is reusable/manual; a normal PR does not build the UTM JIT/TCI runtime. A fresh hosted build and artifact inspection are still required. PR #234 is actively reconciling the TCI packaging and release contract; its latest branch uses separate clean UTM checkouts for JIT and TCI, which should be preserved.
+- **Guest-memory permissions:** current `main` has no active page-permission map in `NativeGuestMemory`; the syscall `mprotect` path validates bounds rather than enforcing R/W/X permissions. PR #235 is exploring a native permission model, but its current branch has unresolved source-integrity, lifecycle, and loader/syscall integration findings. Do not rely on that branch until its native harness passes and ELF PT_LOAD, stack, heap, mmap, mprotect and munmap call sites are wired.
+- **Shared JIT protocol branch:** the duplicate `iSteamJITDetach` definition reported in PR #218 is branch-specific; current `main` has one physical-iOS implementation and one non-iOS fallback. Do not treat the stale PR branch finding as a current-main compile failure.
+
+The packaging and memory findings are not duplicated in PR #228 code because other shared PRs (#234 and #235) are actively addressing those subsystems. They remain release/first-playable blockers until merged and validated.
