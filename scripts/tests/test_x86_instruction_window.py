@@ -9,9 +9,14 @@ class X86InstructionWindowTests(unittest.TestCase):
         memory = (root / "src" / "Runtime" / "GuestMemory.swift").read_text(encoding="utf-8")
         self.assertIn("prepareInstructionWindow(at: instructionAddress)", interpreter)
         self.assertIn("memory.readPrefix(offset: address, into: &instructionWindow)", interpreter)
-        self.assertIn("instructionWindowOffset(for: rip, length: 4)", interpreter)
-        self.assertIn("instructionWindowOffset(for: rip, length: 8)", interpreter)
+        fetch32 = interpreter.split("private func fetchUInt32()", 1)[1].split("private func fetchUInt64()", 1)[0]
+        fetch64 = interpreter.split("private func fetchUInt64()", 1)[1].split("private func decodeRM", 1)[0]
+        self.assertIn("instructionWindowLength - instructionWindowCursor >= 4", fetch32)
+        self.assertIn("memory.readUInt32(offset: rip)", fetch32)
+        self.assertIn("instructionWindowLength - instructionWindowCursor >= 8", fetch64)
+        self.assertIn("memory.readUInt64(offset: rip)", fetch64)
         self.assertIn("func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int?", memory)
+        self.assertNotIn("instructionWindowOffset", interpreter)
         self.assertNotIn("Data(count: 15)", interpreter)
 
 
