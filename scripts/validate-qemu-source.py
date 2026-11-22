@@ -815,9 +815,24 @@ required = {
         "g_box64_working_directory_lock",
         "fchdir(originalDirectory)",
     ],
+    "project.yml": [
+        '"Security", "-framework", "IOKit"',
+    ],
     "iSteam/JIT26Protocol.c": [
         "#if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR",
-        "iSteamJITIsSupported",
+        "#include <IOKit/IOKitLib.h>",
+        "IORegistryEntryFromPath(",
+        '"IODeviceTree:/chosen/memory-map"',
+        "kIORegistryEntryPropertyKeysKey",
+        'CFSTR("TXM")',
+        "CFGetTypeID(keysValue) != CFArrayGetTypeID()",
+        "return -1;",
+        "iSteamJITHardwareTXMPresence() != 0",
+    ],
+    "scripts/patch_qemu_stikjit_ios.py": [
+        "#include <mach/mach_vm.h>",
+        "mach_vm_remap(mach_task_self(), &buf_rw",
+        "mach_vm_protect(mach_task_self(), buf_rw",
     ],
     "src/Core/EmulationLog.swift": [
         "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",

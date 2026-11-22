@@ -88,5 +88,13 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("JITCoordinator.shared.applicationDidBecomeActive()", app)
 
 
+    def test_wait_for_debugger_starts_readiness_polling_immediately(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        wait_branch = source.split("case .waitForDebugger:", 1)[1].split("case .stikDebug:", 1)[0]
+        self.assertIn("readinessChecksRemaining = 30", wait_branch)
+        self.assertIn("checkReadiness()", wait_branch)
+
+
 if __name__ == "__main__":
     unittest.main()

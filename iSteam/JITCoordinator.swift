@@ -88,6 +88,7 @@ final class JITCoordinator {
             waitingForStikDebugReturn = true
             readinessChecksRemaining = 30
             show("Waiting for a compatible debugger to attach. Return to Akatsubaki Emu after enabling JIT.", title: "Waiting for debugger")
+            checkReadiness()
         case .stikDebug:
             enableLocalDevVPN()
         }
