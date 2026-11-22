@@ -36,8 +36,9 @@ class JITCoordinatorSourceTests(unittest.TestCase):
 
     def test_all_qemu_launch_paths_use_the_full_jit_readiness_gate(self):
         root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        self.assertIn("JITCoordinator.shared.isQEMUJITReady", runtime)
         for relative_path in (
-            Path("src/QEMU/QEMUNativeRuntime.swift"),
             Path("iSteam/LaunchSetupViewController.swift"),
             Path("src/Display/VMDisplayViewController.swift"),
         ):
