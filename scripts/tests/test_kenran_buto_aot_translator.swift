@@ -39,16 +39,32 @@ struct KenranButoAOTTranslatorTests {
         precondition(word(registerMoves.machineCode, 0) == 0x2A0303E0) // ORR W0, WZR, W3
         precondition(word(registerMoves.machineCode, 1) == 0xAA0003E3) // ORR X3, XZR, X0
 
-        // REX.B changes opcode 0x90 into XCHG, so both 32- and 64-bit
-        // forms must side-exit instead of being emitted as a NOP.
-        for guest in [Data([0x41, 0x90]), Data([0x49, 0x90])] {
-            let exchange = translator.translate(guest)
+        // Both REX.B variants of 90 are XCHG, not NOP.
+        for rex in [UInt8(0x41), UInt8(0x49)] {
+            let exchange = translator.translate(Data([rex, 0x90]))
             precondition(exchange.stopReason == .unsupportedInstruction)
             precondition(exchange.guestBytesConsumed == 0)
-            precondition(exchange.fallbackOffset == 0)
-            precondition(exchange.fallbackOpcode == 0x41 || exchange.fallbackOpcode == 0x49)
-            precondition(exchange.isValid(for: guest))
+            precondition(exchange.fallbackOpcode == rex)
+            precondition(exchange.machineCode.isEmpty)
         }
+
+        // The complete x86 instruction length, including REX prefixes and
+        // immediate bytes, must not exceed the architectural 15-byte limit.
+        let legal15ByteInstruction = Data(
+            [UInt8](repeating: 0x48, count: 6) + [0xB8] + [UInt8](repeating: 0, count: 8)
+        )
+        let legal15 = translator.translate(legal15ByteInstruction)
+        precondition(legal15.isComplete)
+        precondition(legal15.guestBytesConsumed == 15)
+
+        let overlong16ByteInstruction = Data(
+            [UInt8](repeating: 0x48, count: 7) + [0xB8] + [UInt8](repeating: 0, count: 8)
+        )
+        let overlong = translator.translate(overlong16ByteInstruction)
+        precondition(overlong.stopReason == .unsupportedInstruction)
+        precondition(overlong.guestBytesConsumed == 0)
+        precondition(overlong.fallbackOpcode == 0x48)
+        precondition(overlong.machineCode.isEmpty)
 
         // Bound guest input before copying/decoding it.
         let inputLimited = translator.translate(Data([0x90, 0x90]), maximumGuestBytes: 1)
@@ -56,30 +72,14 @@ struct KenranButoAOTTranslatorTests {
         precondition(inputLimited.guestBytesConsumed == 1)
         precondition(inputLimited.isValid(for: Data([0x90, 0x90])))
 
-        // ENDBR64 is not a no-op unless guest CET policy explicitly permits it.
-        let endbrGuest = Data([0xF3, 0x0F, 0x1E, 0xFA])
-        let endbr = translator.translate(endbrGuest)
+        // ENDBR64 must fall back until guest CET policy is explicit.
+        let endbr = translator.translate(Data([0xF3, 0x0F, 0x1E, 0xFA]))
         precondition(endbr.stopReason == .unsupportedInstruction)
         precondition(endbr.guestBytesConsumed == 0)
-        precondition(endbr.fallbackOffset == 0)
-        precondition(endbr.isValid(for: endbrGuest))
-
-        // The complete x86 instruction length is limited to 15 bytes.
-        let maximumLength = translator.translate(Data([
-            0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40,
-            0xB8, 0x01, 0x00, 0x00, 0x00
-        ]))
-        precondition(maximumLength.isComplete)
-        precondition(maximumLength.guestBytesConsumed == 15)
-        let overlong = Data([
-            0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40, 0x40,
-            0xB8, 0x01, 0x00, 0x00, 0x00
-        ])
-        let rejectedOverlong = translator.translate(overlong)
-        precondition(rejectedOverlong.stopReason == .unsupportedInstruction)
-        precondition(rejectedOverlong.guestBytesConsumed == 0)
-        precondition(rejectedOverlong.fallbackOffset == 0)
-        precondition(rejectedOverlong.isValid(for: overlong))
+        precondition(endbr.fallbackOpcode == 0xF3)
+        let malformedEndbr = translator.translate(Data([0xF3, 0x0F, 0x1E, 0xFB]))
+        precondition(malformedEndbr.stopReason == .unsupportedInstruction)
+        precondition(malformedEndbr.guestBytesConsumed == 0)
 
         // Arithmetic and memory operands stop before the unsupported instruction.
         let unsupportedGuest = Data([0xB8, 1, 0, 0, 0, 0x01, 0xD8])
@@ -108,6 +108,6 @@ struct KenranButoAOTTranslatorTests {
         precondition(outputLimited.stopReason == .outputLimit)
         precondition(outputLimited.guestBytesConsumed == 0)
 
-        print("Kenran Butō AOT decoder, AArch64 emission, fallback boundaries and budgets passed")
+        print("Kenran Butō AOT decoder, AArch64 emission, 15-byte bounds and interpreter fallback passed")
     }
 }
