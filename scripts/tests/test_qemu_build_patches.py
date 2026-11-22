@@ -425,10 +425,8 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("group: isteam-release-publish-${{ matrix.channel }}", release_job)
         self.assertIn("cancel-in-progress: false", release_job)
         self.assertIn("id: freshness", release_job)
-        self.assertIn('if [ "$GITHUB_REF" = "refs/heads/main" ]; then', release_job)
-        self.assertIn('latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk', release_job)
-        self.assertIn('echo "publish=false" >> "$GITHUB_OUTPUT"', release_job)
-        self.assertIn('echo "publish=true" >> "$GITHUB_OUTPUT"', release_job)
+        self.assertIn('publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"', release_job)
+        self.assertIn('echo "publish=$publish_current" >> "$GITHUB_OUTPUT"', release_job)
         for name in (
             "Download iOS build",
             "Download tvOS build",
