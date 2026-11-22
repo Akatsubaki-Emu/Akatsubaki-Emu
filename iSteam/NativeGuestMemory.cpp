@@ -1,6 +1,7 @@
 #include "NativeGuestMemory.h"
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cstring>
 #include <memory>
@@ -13,6 +14,23 @@ namespace {
 constexpr uint64_t pageSize = 4096;
 constexpr uint64_t densePageLimit = (1ULL << 30) / pageSize;
 
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+std::atomic<int64_t> allocationFailureCountdown{-1};
+bool shouldFailPageAllocation() {
+    int64_t remaining = allocationFailureCountdown.load(std::memory_order_relaxed);
+    while (remaining >= 0) {
+        if (remaining == 0) return true;
+        if (allocationFailureCountdown.compare_exchange_weak(
+                remaining, remaining - 1, std::memory_order_relaxed)) {
+            return false;
+        }
+    }
+    return false;
+}
+#else
+bool shouldFailPageAllocation() { return false; }
+#endif
+
 struct Page {
     std::array<uint8_t, pageSize> bytes{};
     size_t allocatedIndex = 0;
@@ -23,6 +41,7 @@ struct ISteamGuestMemory {
     explicit ISteamGuestMemory(uint64_t byteCount) : size(byteCount) {}
 
     uint64_t size;
+    std::atomic<uint64_t> mutationGeneration{0};
     bool usesDensePages = false;
     std::vector<std::unique_ptr<Page>> densePages;
     std::vector<uint64_t> denseAllocatedPageIndices;
@@ -32,6 +51,7 @@ struct ISteamGuestMemory {
 
 namespace {
 Page *allocateDensePage(ISteamGuestMemory *memory, uint64_t pageIndex) {
+    if (shouldFailPageAllocation()) return nullptr;
     auto page = std::unique_ptr<Page>(new (std::nothrow) Page{});
     if (!page) return nullptr;
     page->allocatedIndex = memory->denseAllocatedPageIndices.size();
@@ -61,6 +81,12 @@ void removeDensePage(ISteamGuestMemory *memory, uint64_t pageIndex) {
 
 extern "C" {
 
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+void isteam_guest_memory_test_fail_page_allocation_after(int64_t successfulAllocations) {
+    allocationFailureCountdown.store(successfulAllocations, std::memory_order_relaxed);
+}
+#endif
+
 ISteamGuestMemory *isteam_guest_memory_create(uint64_t size) {
     try {
         auto memory = std::make_unique<ISteamGuestMemory>(size);
@@ -81,6 +107,10 @@ void isteam_guest_memory_destroy(ISteamGuestMemory *memory) {
 
 uint64_t isteam_guest_memory_size(const ISteamGuestMemory *memory) {
     return memory ? memory->size : 0;
+}
+
+uint64_t isteam_guest_memory_generation(const ISteamGuestMemory *memory) {
+    return memory ? memory->mutationGeneration.load(std::memory_order_acquire) : 0;
 }
 
 bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
@@ -159,71 +189,104 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
 
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        const uint64_t firstPage = offset / pageSize;
         const uint64_t lastAddress = offset + length - 1;
-        if (memory->usesDensePages) {
-            if (offset / pageSize == lastAddress / pageSize) {
-                const uint64_t pageIndex = offset / pageSize;
-                const size_t pageOffset = static_cast<size_t>(offset % pageSize);
-                Page *page = memory->densePages[static_cast<size_t>(pageIndex)].get();
-                if (!page) page = allocateDensePage(memory, pageIndex);
-                if (!page) return false;
-                std::memcpy(page->bytes.data() + pageOffset, source, length);
-                return true;
+        const uint64_t lastPage = lastAddress / pageSize;
+
+        auto pageAt = [&](uint64_t pageIndex) -> Page * {
+            if (memory->usesDensePages) {
+                return memory->densePages[static_cast<size_t>(pageIndex)].get();
             }
-            size_t completed = 0;
-            while (completed < length) {
-                const uint64_t address = offset + completed;
-                const uint64_t pageIndex = address / pageSize;
-                const size_t pageOffset = static_cast<size_t>(address % pageSize);
-                const size_t amount = std::min(length - completed,
-                                               static_cast<size_t>(pageSize) - pageOffset);
-                Page *page = memory->densePages[static_cast<size_t>(pageIndex)].get();
-                if (!page) page = allocateDensePage(memory, pageIndex);
-                if (!page) return false;
-                std::memcpy(page->bytes.data() + pageOffset, source + completed, amount);
-                completed += amount;
+            const auto found = memory->pages.find(pageIndex);
+            return found == memory->pages.end() ? nullptr : found->second.get();
+        };
+
+        auto allocatePage = [&](uint64_t pageIndex) -> Page * {
+            if (Page *existing = pageAt(pageIndex)) return existing;
+            if (memory->usesDensePages) {
+                return allocateDensePage(memory, pageIndex);
             }
-            return true;
-        }
-        if (offset / pageSize == lastAddress / pageSize) {
-            const uint64_t pageIndex = offset / pageSize;
+            if (shouldFailPageAllocation()) return nullptr;
+            auto page = std::unique_ptr<Page>(new (std::nothrow) Page{});
+            if (!page) return nullptr;
+            const auto inserted = memory->pages.emplace(pageIndex, std::move(page));
+            return inserted.first->second.get();
+        };
+
+        auto removePage = [&](uint64_t pageIndex) {
+            if (memory->usesDensePages) removeDensePage(memory, pageIndex);
+            else memory->pages.erase(pageIndex);
+        };
+
+        // Preserve the single-page fast path: allocation completes before
+        // the generation changes or any guest bytes are overwritten.
+        if (firstPage == lastPage) {
+            Page *page = allocatePage(firstPage);
+            if (!page) return false;
+            memory->mutationGeneration.fetch_add(1, std::memory_order_release);
             const size_t pageOffset = static_cast<size_t>(offset % pageSize);
-            auto found = memory->pages.find(pageIndex);
-            if (found == memory->pages.end()) {
-                auto page = std::unique_ptr<Page>(new (std::nothrow) Page{});
-                if (!page) return false;
-                found = memory->pages.emplace(pageIndex, std::move(page)).first;
-            }
-            if (!found->second) return false;
-            std::memcpy(found->second->bytes.data() + pageOffset, source, length);
+            std::memcpy(page->bytes.data() + pageOffset, source, length);
             return true;
         }
+
+        // Multi-page writes are all-or-nothing on allocation failure. Allocate
+        // every missing page first, rolling back only pages created by this
+        // attempt if any allocation fails. No existing guest bytes are touched
+        // until the complete backing range is available.
+        const uint64_t pageCount = lastPage - firstPage + 1;
+        const size_t reserveCount = static_cast<size_t>(pageCount);
+        if (static_cast<uint64_t>(reserveCount) != pageCount) return false;
+        std::vector<uint64_t> newlyAllocated;
+        std::vector<Page *> pagesToWrite;
+        newlyAllocated.reserve(reserveCount);
+        pagesToWrite.reserve(reserveCount);
+
+        auto rollback = [&] {
+            for (uint64_t pageIndex : newlyAllocated) removePage(pageIndex);
+        };
+
+        try {
+            for (uint64_t pageIndex = firstPage; pageIndex <= lastPage; ++pageIndex) {
+                Page *page = pageAt(pageIndex);
+                if (!page) {
+                    page = allocatePage(pageIndex);
+                    if (!page) {
+                        rollback();
+                        return false;
+                    }
+                    try {
+                        newlyAllocated.push_back(pageIndex);
+                    } catch (...) {
+                        removePage(pageIndex);
+                        rollback();
+                        return false;
+                    }
+                }
+                try {
+                    pagesToWrite.push_back(page);
+                } catch (...) {
+                    rollback();
+                    return false;
+                }
+            }
+        } catch (...) {
+            rollback();
+            return false;
+        }
+
+        // All page pointers are now stable under the held memory lock.
+        // From here onward the write cannot fail due to allocation.
+        memory->mutationGeneration.fetch_add(1, std::memory_order_release);
         size_t completed = 0;
-        while (completed < length) {
-            const uint64_t address = offset + completed;
-            const uint64_t pageIndex = address / pageSize;
-            const size_t pageOffset = static_cast<size_t>(address % pageSize);
+        for (Page *page : pagesToWrite) {
+            const size_t pageOffset = static_cast<size_t>((offset + completed) % pageSize);
             const size_t amount = std::min(length - completed,
                                            static_cast<size_t>(pageSize) - pageOffset);
-
-            auto found = memory->pages.find(pageIndex);
-            if (found == memory->pages.end()) {
-                // Allocate before inserting. The old operator[] path left a
-                // null map entry on allocation failure and could throw from
-                // unordered_map growth across this C ABI boundary.
-                auto page = std::unique_ptr<Page>(new (std::nothrow) Page{});
-                if (!page) return false;
-                found = memory->pages.emplace(pageIndex, std::move(page)).first;
-            }
-            if (!found->second) return false;
-
-            std::memcpy(found->second->bytes.data() + pageOffset,
-                        source + completed, amount);
+            std::memcpy(page->bytes.data() + pageOffset, source + completed, amount);
             completed += amount;
         }
         return true;
     } catch (...) {
-        // No C++ allocation/locking exception may escape into Swift/C callers.
         return false;
     }
 }
@@ -237,6 +300,7 @@ bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
 
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        memory->mutationGeneration.fetch_add(1, std::memory_order_release);
         const uint64_t end = offset + length;
         const uint64_t firstPage = offset / pageSize;
         const uint64_t lastPage = (end - 1) / pageSize;
@@ -344,6 +408,7 @@ void isteam_guest_memory_clear(ISteamGuestMemory *memory) {
     if (!memory) return;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        memory->mutationGeneration.fetch_add(1, std::memory_order_release);
         if (memory->usesDensePages) {
             for (uint64_t pageIndex : memory->denseAllocatedPageIndices) {
                 memory->densePages[static_cast<size_t>(pageIndex)].reset();

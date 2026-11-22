@@ -10,11 +10,15 @@ typedef struct ISteamGuestMemory ISteamGuestMemory;
 ISteamGuestMemory *isteam_guest_memory_create(uint64_t size);
 void isteam_guest_memory_destroy(ISteamGuestMemory *memory);
 uint64_t isteam_guest_memory_size(const ISteamGuestMemory *memory);
+uint64_t isteam_guest_memory_generation(const ISteamGuestMemory *memory);
 bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset, uint8_t *destination, size_t length);
 bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset, const uint8_t *source, size_t length);
 bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset, uint64_t length);
 void isteam_guest_memory_clear(ISteamGuestMemory *memory);
 size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory);
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+void isteam_guest_memory_test_fail_page_allocation_after(int64_t successfulAllocations);
+#endif
 #ifdef __cplusplus
 }
 #endif

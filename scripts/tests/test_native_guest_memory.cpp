@@ -13,6 +13,39 @@ int main() {
     assert(memory != nullptr);
     assert(isteam_guest_memory_size(memory) == pageSize * 3);
     assert(isteam_guest_memory_allocated_pages(memory) == 0);
+    assert(isteam_guest_memory_generation(memory) == 0);
+
+    // Allocation failure must not partially modify existing pages or leave
+    // newly allocated pages behind. Failed writes do not advance the version.
+    ISteamGuestMemory *atomicWrite = isteam_guest_memory_create(pageSize * 3);
+    assert(atomicWrite != nullptr);
+    std::vector<uint8_t> originalPage(pageSize, 0x11);
+    assert(isteam_guest_memory_write(atomicWrite, 0, originalPage.data(), originalPage.size()));
+    const uint64_t beforeExistingPageFailure = isteam_guest_memory_generation(atomicWrite);
+    std::vector<uint8_t> replacementAcrossPages(pageSize * 2, 0xA5);
+    isteam_guest_memory_test_fail_page_allocation_after(0);
+    assert(!isteam_guest_memory_write(atomicWrite, 0, replacementAcrossPages.data(),
+                                      replacementAcrossPages.size()));
+    isteam_guest_memory_test_fail_page_allocation_after(-1);
+    assert(isteam_guest_memory_generation(atomicWrite) == beforeExistingPageFailure);
+    assert(isteam_guest_memory_allocated_pages(atomicWrite) == 1);
+    std::vector<uint8_t> originalReadback(pageSize);
+    assert(isteam_guest_memory_read(atomicWrite, 0, originalReadback.data(), originalReadback.size()));
+    assert(originalReadback == originalPage);
+
+    const uint64_t beforeRollbackFailure = isteam_guest_memory_generation(atomicWrite);
+    isteam_guest_memory_test_fail_page_allocation_after(1);
+    assert(!isteam_guest_memory_write(atomicWrite, pageSize, replacementAcrossPages.data(),
+                                      replacementAcrossPages.size()));
+    isteam_guest_memory_test_fail_page_allocation_after(-1);
+    assert(isteam_guest_memory_generation(atomicWrite) == beforeRollbackFailure);
+    assert(isteam_guest_memory_allocated_pages(atomicWrite) == 1);
+    std::vector<uint8_t> untouchedPages(pageSize * 2, 0xA5);
+    assert(isteam_guest_memory_read(atomicWrite, pageSize, untouchedPages.data(),
+                                    untouchedPages.size()));
+    assert(std::all_of(untouchedPages.begin(), untouchedPages.end(),
+                       [](uint8_t value) { return value == 0; }));
+    isteam_guest_memory_destroy(atomicWrite);
 
     // Sparse reads must return zero without allocating backing pages.
     std::array<uint8_t, 16> zeros{};
@@ -29,14 +62,17 @@ int main() {
     assert(isteam_guest_memory_write(memory, pageSize - 10,
                                     payload.data(), payload.size()));
     assert(isteam_guest_memory_allocated_pages(memory) == 2);
+    assert(isteam_guest_memory_generation(memory) == 1);
 
     std::array<uint8_t, 20> roundTrip{};
     assert(isteam_guest_memory_read(memory, pageSize - 10,
                                     roundTrip.data(), roundTrip.size()));
     assert(roundTrip == payload);
+    assert(isteam_guest_memory_generation(memory) == 1); // Reads do not invalidate cached code.
 
     // Zeroing a range preserves sparse allocation and clears only that range.
     assert(isteam_guest_memory_zero(memory, pageSize - 10, payload.size()));
+    assert(isteam_guest_memory_generation(memory) == 2);
     roundTrip.fill(0xA5);
     assert(isteam_guest_memory_read(memory, pageSize - 10,
                                     roundTrip.data(), roundTrip.size()));
@@ -55,8 +91,10 @@ int main() {
 
     // Range validation must reject overflow/out-of-bounds without mutation.
     assert(!isteam_guest_memory_read(memory, pageSize * 3, roundTrip.data(), 1));
+    const uint64_t beforeInvalidWrite = isteam_guest_memory_generation(memory);
     assert(!isteam_guest_memory_write(memory, pageSize * 3, payload.data(), 1));
     assert(!isteam_guest_memory_zero(memory, pageSize * 3, 1));
+    assert(isteam_guest_memory_generation(memory) == beforeInvalidWrite);
     assert(!isteam_guest_memory_read(memory, UINT64_MAX, roundTrip.data(), 2));
 
     std::vector<uint8_t> reference(pageSize * 3, 0);
@@ -128,7 +166,9 @@ int main() {
     assert(isteam_guest_memory_allocated_pages(huge) == 0);
     isteam_guest_memory_destroy(huge);
 
+    const uint64_t beforeClear = isteam_guest_memory_generation(memory);
     isteam_guest_memory_clear(memory);
+    assert(isteam_guest_memory_generation(memory) == beforeClear + 1);
     assert(isteam_guest_memory_allocated_pages(memory) == 0);
     isteam_guest_memory_destroy(memory);
     assert(isteam_guest_memory_read(nullptr, 0, nullptr, 0) == false);
