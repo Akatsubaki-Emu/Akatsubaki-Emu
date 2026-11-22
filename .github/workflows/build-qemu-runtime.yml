@@ -216,7 +216,7 @@ jobs:
         if: steps.freshness.outputs.build == 'true'
         shell: bash
         env:
-          NCPU: "2"
+          NCPU: "1"
           ISTEAM_QEMU_MESON_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_meson_ios.py
           ISTEAM_QEMU_LINK_VERIFIER: ${{ github.workspace }}/scripts/verify_qemu_meson_link.py
         run: |
@@ -248,8 +248,8 @@ jobs:
         run: |
           set -euo pipefail
           cd UTM
-          ./scripts/build_utm.sh -k iphoneos -s iOS-TCI -a arm64 -o UTMBuildTCI
-          test -d UTMBuildTCI.xcarchive/Products/Applications/UTM.app
+          ./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI
+          test -d UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app
 
       - name: Package and verify in-process QEMU runtime
         if: steps.freshness.outputs.build == 'true'
