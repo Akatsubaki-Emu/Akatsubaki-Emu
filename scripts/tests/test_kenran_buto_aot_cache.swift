@@ -51,12 +51,25 @@ struct KenranButoAOTCacheTests {
             translatorVersion: X86_64AOTTranslator.translatorVersion,
             hostArchitecture: X86_64AOTTranslator.hostArchitecture,
             cpuFeatures: X86_64AOTTranslator.cpuFeatures,
-            guestABI: KenranButoAOTCompiler.cacheGuestABI("sysv-linux-x86_64", maximumInstructions: 4096)
+            guestABI: KenranButoAOTCompiler.cacheGuestABI(
+                "sysv-linux-x86_64", maximumInstructions: 4096,
+                maximumGuestBytes: 65_536, maximumOutputBytes: 1_048_576
+            )
         )
         try cache.store(try JSONEncoder().encode(forged), for: forgedIdentity)
         let revalidated = try compiler.compile(guest, guestABI: "sysv-linux-x86_64")
         precondition(!revalidated.cacheHit && revalidated.translation == first.translation)
         precondition(try cache.statistics().entryCount == 3)
-        print("Kenran Butō AOT cache budget isolation, forged-artifact rejection and fallback passed")
+        // An unavailable persistent cache must behave like a cache miss.
+        let blockedDirectory = directory.appendingPathComponent("not-a-directory")
+        try Data([0x01]).write(to: blockedDirectory)
+        let unavailableCache = TranslationCache(directory: blockedDirectory)
+        let unavailableCompiler = KenranButoAOTCompiler(cache: unavailableCache)
+        let uncached = try unavailableCompiler.compile(guest, guestABI: "sysv-linux-x86_64")
+        precondition(!uncached.cacheHit && uncached.translation == first.translation)
+        let uncachedAgain = try unavailableCompiler.compile(guest, guestABI: "sysv-linux-x86_64")
+        precondition(!uncachedAgain.cacheHit && uncachedAgain.translation == first.translation)
+
+        print("Kenran Butō AOT cache budget isolation, forged-artifact rejection and unavailable-cache fallback passed")
     }
 }

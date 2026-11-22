@@ -41,7 +41,8 @@ final class KenranButoAOTCompiler {
                                         maximumGuestBytes: guestByteBudget,
                                         maximumOutputBytes: outputByteBudget)
         )
-        if let cached = try cache.load(identity) {
+        // Cache I/O is an optimization; failure must not disable fresh translation.
+        if let cached = try? cache.load(identity) {
             if let translation = try? JSONDecoder().decode(X86_64AOTTranslation.self, from: cached),
                translation.isCacheable && translation.isValid(for: guestCode, maximumOutputBytes: outputByteBudget) {
                 // Structural validation alone cannot authenticate cached machine code.
@@ -52,13 +53,13 @@ final class KenranButoAOTCompiler {
                     return Compilation(translation: translation, cacheHit: true)
                 }
             }
-            try cache.invalidate(identity)
+            try? cache.invalidate(identity)
         }
         let translation = translator.translate(guestCode, maximumInstructions: budget,
                                                     maximumOutputBytes: outputByteBudget,
                                                     maximumGuestBytes: guestByteBudget)
         if translation.isCacheable {
-            try cache.store(try JSONEncoder().encode(translation), for: identity)
+            try? cache.store(try JSONEncoder().encode(translation), for: identity)
         }
         return Compilation(translation: translation, cacheHit: false)
     }

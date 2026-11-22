@@ -17,8 +17,11 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
     var cachedExecutableBytes:UInt64{lock.lock();defer{lock.unlock()};return cachedExecutableBytesStorage}
     var isAvailable: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        let coordinator=JITCoordinator.shared
         let mode=iSteamJITGetProtocolMode()
-        let ready=mode==1 ? JITCoordinator.shared.isQEMUJITReady : JITCoordinator.shared.isJITReady
+        guard mode == ISTEAM_JIT_PROTOCOL_STANDARD || mode == ISTEAM_JIT_PROTOCOL_STIKDEBUG,
+              coordinator.hasGetTaskAllow else { return false }
+        let ready=mode == ISTEAM_JIT_PROTOCOL_STIKDEBUG ? coordinator.isQEMUJITReady : coordinator.isJITReady
         return ready && iSteamAOTExecutableMemoryIsAvailable()
         #else
         return iSteamAOTExecutableMemoryIsAvailable()
@@ -43,7 +46,8 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
         return memory.write(Data(bytes:source,count:length),offset:address)
     }
     func execute(guestCode:Data,registers:inout [UInt64],rip:UInt64,rflags:UInt64,fsBase:UInt64,gsBase:UInt64,memory:GuestMemory,maximumInstructions:Int)->KenranButoAOTExecutionResult?{
-        guard isAvailable,registers.count==16,!guestCode.isEmpty,maximumInstructions>0 else{return nil}
+        guard registers.count==16,!guestCode.isEmpty,maximumInstructions>0 else{return nil}
+        guard isAvailable else{invalidateAll();return nil}
         let budget=min(maximumInstructions,4096)
         let key=BlockKey(code:guestCode,budget:budget,guestByteBudget:4096,outputByteBudget:1_048_576,translatorVersion:X86_64AOTTranslator.translatorVersion,abiVersion:1)
         guard let block=executableBlock(for:key) else{return nil}

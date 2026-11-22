@@ -39,13 +39,18 @@ Unsupported instructions resume at `blockStartRIP + guestBytesConsumed`.
 
 ## Executable memory and cache safety
 
-Standard JIT mode maps writable pages and seals them read/execute before invocation.
-StikDebug/TXM mode uses an executable mapping plus a separate writable alias. Both
-mappings are released on remap/protection failure. The executable block cache is
+Standard physical-iOS JIT mode uses a separate writable mapping and a Mach-remapped
+executable alias; the executable alias is sealed RX while the write alias remains RW.
+StikDebug/TXM mode uses its debugger-provided executable mapping plus a separate
+writable alias. Both aliases are released on remap/protection failure. Swift and C
+admission require a known protocol, the `get-task-allow` entitlement and live
+debugger/JIT readiness; the TXM path additionally verifies the StikDebug debugger
+attachment. The native invoke boundary rechecks readiness. The executable block cache is
 bounded to 64 entries and 16 MiB of actual OS-mapped executable memory (page-rounded
 by the native allocator), and keyed by exact guest bytes, translator version, ABI and
 instruction budget. Persistent translation artifacts are re-decoded and compared
-with canonical output before a cache hit is trusted.
+with canonical output before a cache hit is trusted. Cache I/O is best-effort:
+an unavailable cache falls back to fresh translation rather than disabling AOT.
 
 ## Limits
 
