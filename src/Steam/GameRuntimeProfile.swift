@@ -166,6 +166,36 @@ final class GameRuntimeProfileStore {
         readProfile(at: url(for: gameID))
     }
 
+    func existingProfileIDs(for gameIDs: Set<UUID>) throws -> Set<UUID> {
+        guard !gameIDs.isEmpty else { return [] }
+        if gameIDs.count <= 64 {
+            var existing = Set<UUID>()
+            existing.reserveCapacity(gameIDs.count)
+            for gameID in gameIDs {
+                let file = url(for: gameID)
+                if let profile = readProfile(at: file) {
+                    existing.insert(profile.gameID)
+                } else if fm.fileExists(atPath: file.path) {
+                    throw GameRuntimeProfile.ProfileError.corruptStoredProfile
+                }
+            }
+            return existing
+        }
+
+        let files = try profileFiles()
+        var existing = Set<UUID>()
+        existing.reserveCapacity(min(files.count, gameIDs.count))
+        for file in files {
+            guard let gameID = UUID(uuidString: file.deletingPathExtension().lastPathComponent),
+                  gameIDs.contains(gameID) else { continue }
+            guard let profile = readProfile(at: file), profile.gameID == gameID else {
+                throw GameRuntimeProfile.ProfileError.corruptStoredProfile
+            }
+            existing.insert(gameID)
+        }
+        return existing
+    }
+
     func removeProfile(for gameID: UUID) throws {
         let file = url(for: gameID)
         if fm.fileExists(atPath: file.path) { try fm.removeItem(at: file) }

@@ -37,7 +37,7 @@ final class GameLibraryTransferStore {
         guard let allProfiles = GameRuntimeProfileStore.shared.validatedProfiles() else {
             throw TransferError.profileStoreUnreadable
         }
-        let gameIDs = Set(games.map(\.id))
+        let gameIDs = Set(games.lazy.map(\.id))
         let profiles = allProfiles.filter { gameIDs.contains($0.gameID) }
         let backup = GameLibraryBackup(games: games, profiles: profiles)
         let data = try encoder.encode(backup)
@@ -86,7 +86,7 @@ final class GameLibraryTransferStore {
         guard let currentSnapshot = GameStore.shared.validatedSnapshot() else {
             throw TransferError.libraryUnreadable
         }
-        let existingIDs = Set(currentSnapshot.map(\.id))
+        let existingIDs = Set(currentSnapshot.lazy.map(\.id))
         let validGameIDs = existingIDs.union(seen)
         var profileGameIDs = Set<UUID>()
         for profile in backup.profiles {
@@ -110,8 +110,10 @@ final class GameLibraryTransferStore {
         // Persist new profiles first, then publish the merged library. If any
         // profile or the library write fails, roll back the newly created
         // profile files so the import does not leave a half-applied backup.
+        let incomingProfileIDs = Set(backup.profiles.lazy.map(\.gameID))
+        let existingProfileIDs = try GameRuntimeProfileStore.shared.existingProfileIDs(for: incomingProfileIDs)
         let profilesToSave = backup.profiles.filter {
-            GameRuntimeProfileStore.shared.profile(for: $0.gameID) == nil
+            !existingProfileIDs.contains($0.gameID)
         }
         var savedProfileIDs: [UUID] = []
         do {
