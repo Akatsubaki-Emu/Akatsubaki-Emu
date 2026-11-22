@@ -144,6 +144,7 @@ Bug reports, documentation improvements, and focused pull requests are welcome. 
 - [QEMU runtime build and failure diagnostics](docs/QEMU_BUILD_WORKFLOW.md)
 - [DroidDeck feature-port plan](docs/DROIDDECK_PORT_PLAN.md)
 - [DroidDeck port status](docs/DROIDDECK_PORT_STATUS.md)
+- [iOS memory entitlements](docs/IOS_ENTITLEMENTS.md)
 - Portable library transfer, per-game profile defaults, and feature readiness services: `src/Steam/DroidDeckFeatureServices.swift`
 - Artwork cache: `src/Steam/GameArtworkStore.swift`
 - Compatibility records: `src/Windows/GameCompatibilityDatabase.swift`
