@@ -793,6 +793,8 @@ struct InterpreterTests {
         let syscallExit = try syscallInterpreter.run(maxInstructions: 12)
         precondition(syscallExit == .unsupportedInstruction(address: 21))
         precondition(syscallInterpreter.registerValue(0) == 0x2000)
+        precondition(syscallInterpreter.registerValue(1) == 21)
+        precondition(syscallInterpreter.registerValue(11) == 0x46)
 
         let fsSegmentMemory = GuestMemory(size: 4096)
         let fsSegmentProgram: [UInt8] = [
