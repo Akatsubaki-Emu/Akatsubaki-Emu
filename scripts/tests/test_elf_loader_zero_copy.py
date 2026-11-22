@@ -29,14 +29,15 @@ class ELFLoaderCopyTests(unittest.TestCase):
     def test_static_pie_relocation_segment_lookup_uses_binary_search(self):
         root = Path(__file__).resolve().parents[2]
         loader = (root / "src" / "Runtime" / "ELF64Loader.swift").read_text(encoding="utf-8")
-        relocations = loader.split("let relocationCount = Int(relaSize / 24)", 1)[1].split("private func u16", 1)[0]
         self.assertIn("let orderedLoadSegments = loadSegments.sorted { $0.virtualAddress < $1.virtualAddress }", loader)
-        self.assertIn("forVirtualAddress: relaAddress", relocations)
-        self.assertIn("containsGuestRange(target, byteCount: 8", relocations)
-        segment_lookup = loader.split("private func loadSegment(containing", 1)[1].split("private func containsGuestRange", 1)[0]
-        self.assertIn("while lowerBound < upperBound", segment_lookup)
-        self.assertIn("loadSegment(containing: address, in: segments)", segment_lookup)
-        self.assertNotIn("loadSegments.contains(where:", relocations)
+        # Include the file-offset lookup before relocationCount as well as the
+        # relocation loop and binary-search helper in the inspected range.
+        indexed_lookup = loader.split("let orderedLoadSegments = loadSegments.sorted", 1)[1].split("private func u16", 1)[0]
+        self.assertIn("forVirtualAddress: relaAddress", indexed_lookup)
+        self.assertIn("containsGuestRange(target, byteCount: 8", indexed_lookup)
+        self.assertIn("while lowerBound < upperBound", indexed_lookup)
+        self.assertIn("loadSegment(containing: address, in: segments)", indexed_lookup)
+        self.assertNotIn("loadSegments.contains(where:", indexed_lookup)
 
 
 if __name__ == "__main__":
