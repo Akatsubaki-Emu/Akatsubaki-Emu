@@ -30,7 +30,7 @@ jobs:
 
       # Recheck after this job obtains an Xcode runner. A queued job can become
       # stale after the parent workflow's lightweight freshness check.
-      - name: Check push freshness before expensive QEMU build
+      - name: scripts/check-build-freshness.sh
         id: freshness
         shell: bash
         run: |
