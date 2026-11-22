@@ -196,7 +196,7 @@ final class KenranButoAOTExecutor: X86_64AOTExecuting {
 
         let instructionBudget = min(maximumInstructions, X86_64AOTTranslator.maximumInstructionBudget)
         let translation: X86_64AOTTranslation
-        if let cached = try? compiler.compile(guestCode, guestABI: guestABI) {
+        if let cached = try? compiler.compile(guestCode, guestABI: guestABI, maximumInstructions: instructionBudget) {
             translation = cached.translation
         } else {
             translation = translator.translate(guestCode)
