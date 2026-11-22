@@ -12,6 +12,7 @@ void isteam_guest_memory_destroy(ISteamGuestMemory *memory);
 uint64_t isteam_guest_memory_size(const ISteamGuestMemory *memory);
 bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset, uint8_t *destination, size_t length);
 bool isteam_guest_memory_read_execute(ISteamGuestMemory *memory, uint64_t offset, uint8_t *destination, size_t length);
+size_t isteam_guest_memory_read_execute_prefix(ISteamGuestMemory *memory, uint64_t offset, uint8_t *destination, size_t maximum_length);
 bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset, const uint8_t *source, size_t length);
 bool isteam_guest_memory_begin_mapping(ISteamGuestMemory *memory);
 bool isteam_guest_memory_map(ISteamGuestMemory *memory, uint64_t offset, uint64_t length, uint8_t permissions, bool merge);

@@ -176,6 +176,37 @@ bool isteam_guest_memory_read_execute(ISteamGuestMemory *memory, uint64_t offset
     }
 }
 
+size_t isteam_guest_memory_read_execute_prefix(ISteamGuestMemory *memory,
+                                           uint64_t offset, uint8_t *destination,
+                                           size_t maximumLength) {
+    if (!memory || (maximumLength && !destination) || offset > memory->size || !maximumLength) {
+        return 0;
+    }
+    const size_t length = static_cast<size_t>(
+        std::min<uint64_t>(static_cast<uint64_t>(maximumLength), memory->size - offset));
+    if (!length) return 0;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!memory->permissionsEnabled) {
+            return copyReadLocked(memory, offset, destination, length) ? length : 0;
+        }
+        size_t completed = 0;
+        while (completed < length) {
+            const uint64_t address = offset + completed;
+            const size_t pageRemaining = static_cast<size_t>(
+                pageSize - (address % pageSize));
+            const size_t amount = std::min(length - completed, pageRemaining);
+            if (!hasPermissionLocked(memory, address, amount,
+                                     permissionRead | permissionExecute)) break;
+            if (!copyReadLocked(memory, address, destination + completed, amount)) break;
+            completed += amount;
+        }
+        return completed;
+    } catch (...) {
+        return 0;
+    }
+}
+
 bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
                                const uint8_t *source, size_t length) {
     if (!memory || (length && !source)

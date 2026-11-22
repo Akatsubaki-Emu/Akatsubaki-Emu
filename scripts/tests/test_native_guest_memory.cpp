@@ -106,13 +106,29 @@ int main() {
     ISteamGuestMemory *protectedMemory = isteam_guest_memory_create(pageSize * 3);
     assert(protectedMemory != nullptr);
     const std::array<uint8_t, 4> instruction{0x90, 0x90, 0x90, 0xC3};
+    const std::array<uint8_t, 4> boundaryInstruction{0x48, 0xB8, 0x11, 0x22};
     assert(isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
+    assert(isteam_guest_memory_write(protectedMemory, pageSize - 2,
+                                    boundaryInstruction.data(), boundaryInstruction.size()));
     assert(isteam_guest_memory_begin_mapping(protectedMemory));
     assert(isteam_guest_memory_map(protectedMemory, 0, pageSize, 5, false)); // read + execute
     assert(isteam_guest_memory_map(protectedMemory, pageSize, pageSize, 3, false)); // read + write
     std::array<uint8_t, 4> protectedBytes{};
     assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
     assert(isteam_guest_memory_read_execute(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    std::array<uint8_t, 4> prefixBytes{};
+    prefixBytes.fill(0xA5);
+    assert(isteam_guest_memory_read_execute_prefix(
+        protectedMemory, pageSize - 2, prefixBytes.data(), prefixBytes.size()) == 2);
+    assert(prefixBytes[0] == boundaryInstruction[0]
+           && prefixBytes[1] == boundaryInstruction[1]
+           && prefixBytes[2] == 0xA5 && prefixBytes[3] == 0xA5);
+    assert(isteam_guest_memory_protect(protectedMemory, pageSize, pageSize, 5));
+    prefixBytes.fill(0xA5);
+    assert(isteam_guest_memory_read_execute_prefix(
+        protectedMemory, pageSize - 2, prefixBytes.data(), prefixBytes.size()) == 4);
+    assert(std::equal(prefixBytes.begin(), prefixBytes.end(), boundaryInstruction.begin()));
+    assert(isteam_guest_memory_protect(protectedMemory, pageSize, pageSize, 3));
     assert(!isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
     assert(!isteam_guest_memory_read_execute(protectedMemory, pageSize, protectedBytes.data(), protectedBytes.size()));
     assert(isteam_guest_memory_write(protectedMemory, pageSize, instruction.data(), instruction.size()));
