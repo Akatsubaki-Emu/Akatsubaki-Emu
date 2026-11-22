@@ -99,6 +99,11 @@ jobs:
             scripts/tests/test_linux_syscall_dispatcher.swift \
             -o "$RUNNER_TEMP/test-linux-syscall-dispatcher"
           "$RUNNER_TEMP/test-linux-syscall-dispatcher"
+      - name: Run QEMU and runtime source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/validate-qemu-source.py
       - name: Compile and test x86-64 to AArch64 decoder
         shell: bash
         run: |

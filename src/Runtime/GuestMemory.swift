@@ -137,7 +137,7 @@ final class GuestMemory {
     }
 
     func hasMappedPages(offset: UInt64, length: UInt64) -> Bool {
-        guard length > 0, offset <= size, length <= size - offset else { return false }
+        guard let native, length > 0, offset <= size, length <= size - offset else { return false }
         return isteam_guest_memory_has_mapped_pages(native, offset, length)
     }
 
