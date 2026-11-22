@@ -71,20 +71,74 @@ final class GuestMemory {
         }
     }
 
-    func readPrefix(
-        offset: UInt64,
-        maximumLength: Int? = nil,
-        into buffer: inout [UInt8]
-    ) -> Int? {
+    func readPrefix(offset: UInt64, maximumLength: Int? = nil, into buffer: inout [UInt8]) -> Int? {
         guard let native, offset <= size else { return nil }
-        let requestedLength = min(buffer.count, max(0, maximumLength ?? buffer.count))
-        let count = Int(min(UInt64(requestedLength), size - offset))
-        guard count > 0 else { return 0 }
-        let success = buffer.withUnsafeMutableBytes { bytes -> Bool in
-            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
-            return isteam_guest_memory_read(native, offset, base, count)
+        let limit = min(buffer.count, max(0, maximumLength ?? buffer.count))
+        guard limit > 0 else { return 0 }
+        return buffer.withUnsafeMutableBytes { bytes -> Int in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return 0 }
+            return Int(isteam_guest_memory_read_execute_prefix(native, offset, base, limit))
         }
-        return success ? count : nil
+    }
+
+    func readExecuteByte(offset: UInt64) -> UInt8? {
+        guard let native, offset < size else { return nil }
+        var value: UInt8 = 0
+        let success = withUnsafeMutablePointer(to: &value) { pointer in
+            isteam_guest_memory_read_execute(native, offset, pointer, 1)
+        }
+        return success ? value : nil
+    }
+
+    func readExecuteUInt32(offset: UInt64) -> UInt32? {
+        guard let native, offset <= size, 4 <= size - offset else { return nil }
+        var value: UInt32 = 0
+        let success = withUnsafeMutableBytes(of: &value) { bytes -> Bool in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_read_execute(native, offset, base, 4)
+        }
+        return success ? UInt32(littleEndian: value) : nil
+    }
+
+    func readExecuteUInt64(offset: UInt64) -> UInt64? {
+        guard let native, offset <= size, 8 <= size - offset else { return nil }
+        var value: UInt64 = 0
+        let success = withUnsafeMutableBytes(of: &value) { bytes -> Bool in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_read_execute(native, offset, base, 8)
+        }
+        return success ? UInt64(littleEndian: value) : nil
+    }
+
+    @discardableResult
+    func beginMapping() -> Bool {
+        guard let native else { return false }
+        return isteam_guest_memory_begin_mapping(native)
+    }
+
+    @discardableResult
+    func map(offset: UInt64, length: UInt64, permissions: UInt8, merge: Bool = false) -> Bool {
+        guard let native, offset <= size, length > 0, length <= size - offset else { return false }
+        return isteam_guest_memory_map(native, offset, length, permissions, merge)
+    }
+
+    @discardableResult
+    func protect(offset: UInt64, length: UInt64, permissions: UInt8) -> Bool {
+        guard let native, offset % Self.pageSize == 0,
+              offset <= size, length > 0, length <= size - offset else { return false }
+        return isteam_guest_memory_protect(native, offset, length, permissions)
+    }
+
+    @discardableResult
+    func unmap(offset: UInt64, length: UInt64) -> Bool {
+        guard let native, offset % Self.pageSize == 0,
+              offset <= size, length > 0, length <= size - offset else { return false }
+        return isteam_guest_memory_unmap(native, offset, length)
+    }
+
+    func hasMappedPages(offset: UInt64, length: UInt64) -> Bool {
+        guard length > 0, offset <= size, length <= size - offset else { return false }
+        return isteam_guest_memory_has_mapped_pages(native, offset, length)
     }
 
     func readUInt32(offset: UInt64) -> UInt32? {

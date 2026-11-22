@@ -10,6 +10,10 @@ on:
       - "src/Runtime/LinuxSyscallDispatcher.swift"
       - "src/Runtime/X86_64ALU.swift"
       - "iSteam/JIT26Protocol.c"
+      - "iSteam/NativeGuestMemory.cpp"
+      - "iSteam/NativeGuestMemory.h"
+      - "scripts/tests/test_native_guest_memory.cpp"
+      - "scripts/tests/test_linux_syscall_dispatcher.swift"
       - "iSteam/KenranButoAOTExecutableMemory.h"
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
@@ -38,6 +42,10 @@ on:
       - "src/Runtime/LinuxSyscallDispatcher.swift"
       - "src/Runtime/X86_64ALU.swift"
       - "iSteam/JIT26Protocol.c"
+      - "iSteam/NativeGuestMemory.cpp"
+      - "iSteam/NativeGuestMemory.h"
+      - "scripts/tests/test_native_guest_memory.cpp"
+      - "scripts/tests/test_linux_syscall_dispatcher.swift"
       - "iSteam/KenranButoAOTExecutableMemory.h"
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
@@ -74,6 +82,23 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - name: Run native guest-memory permission and race tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ -std=c++17 -Wall -Wextra -Werror -pthread -D ISTEAM_GUEST_MEMORY_TESTING -I iSteam \
+            iSteam/NativeGuestMemory.cpp scripts/tests/test_native_guest_memory.cpp \
+            -o "$RUNNER_TEMP/test-native-guest-memory"
+          "$RUNNER_TEMP/test-native-guest-memory"
+      - name: Run Linux mmap, mprotect and munmap permission tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            scripts/tests/test_linux_syscall_dispatcher.swift \
+            -o "$RUNNER_TEMP/test-linux-syscall-dispatcher"
+          "$RUNNER_TEMP/test-linux-syscall-dispatcher"
       - name: Compile and test x86-64 to AArch64 decoder
         shell: bash
         run: |

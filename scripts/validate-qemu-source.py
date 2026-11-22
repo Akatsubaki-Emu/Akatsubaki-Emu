@@ -1541,6 +1541,56 @@ else:
     if "vncClient.start()" in vnc_engine_block:
         print("VNC retry budget starts before QEMU initialization", file=sys.stderr)
 
+
+# Native guest-memory page permissions must protect interpreter and AOT fetches.
+native_memory_cpp = Path("iSteam/NativeGuestMemory.cpp").read_text(encoding="utf-8")
+native_memory_h = Path("iSteam/NativeGuestMemory.h").read_text(encoding="utf-8")
+guest_memory_swift = Path("src/Runtime/GuestMemory.swift").read_text(encoding="utf-8")
+elf_loader_swift = Path("src/Runtime/ELF64Loader.swift").read_text(encoding="utf-8")
+stack_builder_swift = Path("src/Runtime/LinuxProcessStackBuilder.swift").read_text(encoding="utf-8")
+syscall_swift = Path("src/Runtime/LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
+interpreter_swift = Path("src/Runtime/X86_64Interpreter.swift").read_text(encoding="utf-8")
+native_memory_test = Path("scripts/tests/test_native_guest_memory.cpp").read_text(encoding="utf-8")
+permission_contracts = {
+    "iSteam/NativeGuestMemory.cpp": (native_memory_cpp, (
+        "isteam_guest_memory_create", "isteam_guest_memory_destroy", "isteam_guest_memory_size",
+        "readExecuteTestHook", "isteam_guest_memory_set_read_execute_test_hook",
+        "isteam_guest_memory_has_mapped_pages", "if (!merge)", "permissionExecute",
+    )),
+    "iSteam/NativeGuestMemory.h": (native_memory_h, (
+        "isteam_guest_memory_has_mapped_pages", "isteam_guest_memory_set_read_execute_test_hook",
+    )),
+    "src/Runtime/GuestMemory.swift": (guest_memory_swift, (
+        "readExecuteByte", "readExecuteUInt32", "readExecuteUInt64",
+        "isteam_guest_memory_read_execute_prefix", "hasMappedPages",
+    )),
+    "src/Runtime/ELF64Loader.swift": (elf_loader_swift, ("beginMapping", "memory.map", "merge: true")),
+    "src/Runtime/LinuxProcessStackBuilder.swift": (stack_builder_swift, ("memory.map", "permissions: 3")),
+    "src/Runtime/LinuxSyscallDispatcher.swift": (syscall_swift, (
+        "memory.hasMappedPages", "memory.protect", "memory.unmap(offset: address, length: size)",
+        "0x10", "0x100000",
+    )),
+    "src/Runtime/X86_64Interpreter.swift": (interpreter_swift, (
+        "readExecuteByte(offset: rip)", "readExecuteUInt32(offset: rip)",
+        "readExecuteUInt64(offset: rip)", "maximumLength: aotMaximumLength",
+    )),
+    "scripts/tests/test_native_guest_memory.cpp": (native_memory_test, (
+        "testMappedPageQueryAndNonMergeOverlap", "isteam_guest_memory_has_mapped_pages",
+        "isteam_guest_memory_set_read_execute_test_hook",
+    )),
+}
+for source_name, (source_text, tokens) in permission_contracts.items():
+    for token in tokens:
+        if token not in source_text:
+            print(f"{source_name} missing guest-memory permission contract {token!r}", file=sys.stderr)
+            failed = True
+if "Instruction fetch stops at the first page without read+execute permission." not in Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8"):
+    print("Interpreter execute-permission regression test is missing", file=sys.stderr)
+    failed = True
+if "test-native-guest-memory" not in Path(".github/workflows/validate-kenran-buto-aot.yml").read_text(encoding="utf-8"):
+    print("AOT workflow does not execute native guest-memory permission tests", file=sys.stderr)
+    failed = True
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")

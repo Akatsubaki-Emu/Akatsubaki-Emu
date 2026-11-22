@@ -18,12 +18,15 @@ class X86InstructionWindowTests(unittest.TestCase):
         fetch32 = interpreter.split("private func fetchUInt32()", 1)[1].split("private func fetchUInt64()", 1)[0]
         fetch64 = interpreter.split("private func fetchUInt64()", 1)[1].split("private func decodeRM", 1)[0]
         self.assertIn("instructionWindowLength - instructionWindowCursor >= 4", fetch32)
-        self.assertIn("memory.readUInt32(offset: rip)", fetch32)
+        fetchByte = interpreter.split("private func fetchByte()", 1)[1].split("private func fetchUInt16()", 1)[0]
+        self.assertIn("memory.readExecuteByte(offset: rip)", fetchByte)
+        self.assertIn("memory.readExecuteUInt32(offset: rip)", fetch32)
         self.assertIn("instructionWindowLength - instructionWindowCursor >= 8", fetch64)
-        self.assertIn("memory.readUInt64(offset: rip)", fetch64)
+        self.assertIn("memory.readExecuteUInt64(offset: rip)", fetch64)
         self.assertIn("UInt64(instructionWindow[offset + 7]) << 56", fetch64)
         self.assertNotIn("for shift in 0..<8", fetch64)
         self.assertIn("maximumLength: Int? = nil", memory)
+        self.assertIn("readExecutePrefix", memory)
         self.assertNotIn("instructionWindowOffset", interpreter)
         self.assertNotIn("Data(count: 15)", interpreter)
 
