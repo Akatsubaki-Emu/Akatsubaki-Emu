@@ -952,6 +952,7 @@ required = {
     ],
     "scripts/check-build-freshness.sh": [
         "git fetch --no-tags --unshallow origin main",
+        "git rev-parse --is-shallow-repository",
         "git diff --name-only -z",
         "scripts/tests/*",
         "scripts/validate-qemu-source.py",
