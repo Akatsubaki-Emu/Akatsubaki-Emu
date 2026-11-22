@@ -1,4 +1,4 @@
-name: i-Steam Build & Release
+name: Akatsubaki Emu Build & Release
 
 on:
   # Build the runtime in this workflow before any platform app builds.
@@ -113,7 +113,7 @@ jobs:
     needs: [qemu-runtime, check-platform-build-freshness]
     if: needs.check-platform-build-freshness.outputs.build == 'true'
     name: Build ${{ matrix.platform }} (${{ matrix.channel }})
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -127,24 +127,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select and verify Xcode 26.2
+      - name: Select and verify Xcode 27.1+
         shell: bash
         run: |
           set -euo pipefail
-          XCODE_APP="/Applications/Xcode_26.2.app"
-          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
-          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
-          XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
-          if [ "$XCODE_VERSION" != "26.2" ]; then
-            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+          XCODE_DEVELOPER_DIR="$(xcode-select -p)"
+          if [ ! -d "$XCODE_DEVELOPER_DIR" ]; then
+            echo "The xcode-27 runner has no active Xcode developer directory." >&2
             exit 1
           fi
-
+          XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          case "$XCODE_VERSION" in
+            27.1*|27.[2-9]*) ;;
+            *)
+              echo "Expected Xcode 27.1 or later on the xcode-27 runner, found $XCODE_VERSION." >&2
+              exit 1
+              ;;
+          esac
+          echo "Using Xcode $XCODE_VERSION at $XCODE_DEVELOPER_DIR"
+          xcodebuild -version
       - name: Download required iOS QEMU runtime artifact from this run
         if: matrix.platform == 'iOS'
         uses: actions/download-artifact@v8
         with:
-          name: iSteam-qemu-runtime-ios-arm64
+          name: AkatsubakiEmu-qemu-runtime-ios-arm64
           path: build/qemu-runtime
 
       - uses: actions/cache@v6
@@ -256,7 +262,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: iSteam-${{ matrix.platform }}-${{ matrix.channel }}
+          name: AkatsubakiEmu-${{ matrix.platform }}-${{ matrix.channel }}
           path: |
             build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa
             build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa.sha256
@@ -298,21 +304,21 @@ jobs:
         if: steps.freshness.outputs.publish == 'true'
         uses: actions/download-artifact@v8
         with:
-          name: iSteam-iOS-${{ matrix.channel }}
+          name: AkatsubakiEmu-iOS-${{ matrix.channel }}
           path: build
 
       - name: Download tvOS build
         if: steps.freshness.outputs.publish == 'true'
         uses: actions/download-artifact@v8
         with:
-          name: iSteam-tvOS-${{ matrix.channel }}
+          name: AkatsubakiEmu-tvOS-${{ matrix.channel }}
           path: build
 
       - name: Download visionOS build
         if: steps.freshness.outputs.publish == 'true'
         uses: actions/download-artifact@v8
         with:
-          name: iSteam-visionOS-${{ matrix.channel }}
+          name: AkatsubakiEmu-visionOS-${{ matrix.channel }}
           path: build
 
       - name: Verify combined release assets
@@ -373,7 +379,7 @@ jobs:
             build/iSteam-visionOS.ipa
             build/iSteam-visionOS.ipa.sha256
           body: |
-            i-Steam ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
+            Akatsubaki Emu ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
 
             Includes unsigned prototype builds:
             - **iOS:** `iSteam-ios.ipa`

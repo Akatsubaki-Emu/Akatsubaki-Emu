@@ -12,7 +12,7 @@ This guide covers the **unsigned iOS IPA** produced by the combined GitHub Actio
 
 ## Download from a release
 
-1. Open [i-Steam releases](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases).
+1. Open [Akatsubaki Emu releases](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases).
 2. Open the latest **Nightly** release for testing, or **Main** if you specifically want the manually published main channel.
 3. Download **`iSteam-ios.ipa`**. The same release also contains a separate tvOS IPA and SHA-256 checksum files; do not choose the tvOS file for an iPhone/iPad.
 4. Optionally verify the download using the matching `.sha256` file. The checksum file must correspond to the exact IPA downloaded.
@@ -21,7 +21,7 @@ This guide covers the **unsigned iOS IPA** produced by the combined GitHub Actio
 
 1. Open [GitHub Actions](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions/workflows/release.yml).
 2. Open a completed run marked **Success**.
-3. In the Artifacts section, select the iOS artifact named similar to `iSteam-iOS-nightly` or `iSteam-iOS-main`.
+3. In the Artifacts section, select the iOS artifact named similar to `AkatsubakiEmu-iOS-nightly` or `AkatsubakiEmu-iOS-main`.
 4. Extract the downloaded artifact ZIP in Files and locate `iSteam-ios.ipa`.
 
 Do not install the outer artifact ZIP, a checksum file, or an Xcode archive.

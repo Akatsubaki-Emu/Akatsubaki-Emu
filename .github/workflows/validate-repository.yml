@@ -171,7 +171,7 @@ jobs:
               "uses: ./.github/workflows/build-qemu-runtime.yml",
               "needs: [qemu-runtime, check-platform-build-freshness]",
               "actions/download-artifact@",
-              "name: iSteam-qemu-runtime-ios-arm64",
+              "name: AkatsubakiEmu-qemu-runtime-ios-arm64",
               "if-no-files-found: error",
               "validate-release-channel:",
               "target_commitish: " + "$" + "{{ github.sha }}",
@@ -202,12 +202,13 @@ jobs:
               raise SystemExit("QEMU/Mesa build requires the Xcode 27 runner image.")
           if "runs-on: macos-15" in release or "runs-on: macos-15" in platform_validation:
               raise SystemExit("Apple builds must not use an unpinned macOS 15 runner.")
-          if "runs-on: macos-26" not in release or "runs-on: macos-26" not in platform_validation:
-              raise SystemExit("Apple builds must use the macOS 26 runner image.")
+          if "runs-on: xcode-27" not in release or "runs-on: xcode-27" not in platform_validation:
+              raise SystemExit("Apple builds must use the xcode-27 runner image.")
           xcode_contract = [
-              'XCODE_APP="/Applications/Xcode_26.2.app"',
-              'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-              'if [ "$XCODE_VERSION" != "26.2" ]; then',
+              'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
+              'case "$XCODE_VERSION" in',
+              '27.1*|27.[2-9]*) ;;',
+              'Expected Xcode 27.1 or later on the xcode-27 runner',
           ]
           for workflow in (release, platform_validation):
               for token in xcode_contract:
@@ -231,7 +232,7 @@ jobs:
                   raise SystemExit("QEMU build must select and verify its Xcode 27 toolchain: " + token)
           if "spirv-tools" not in qemu or "spirv-llvm-translator" not in qemu:
               raise SystemExit("QEMU Mesa dependency build must install SPIRV-Tools and its LLVM translator.")
-          if "utm-ios-arm64-deps-v14-" not in qemu:
+          if "utm-ios-arm64-deps-v15-" not in qemu:
               raise SystemExit("QEMU dependency cache key must be versioned.")
           if "steps.utm-source.outputs.commit" not in qemu:
               raise SystemExit("QEMU cache key must include the checked-out UTM revision.")
@@ -241,7 +242,7 @@ jobs:
               "scripts/verify_qemu_meson_link.py",
               "ISTEAM_QEMU_LINK_VERIFIER",
               "steps.xcode.outputs.version",
-              "utm-ios-arm64-deps-v14-",
+              "utm-ios-arm64-deps-v15-",
           ]:
               if token not in qemu:
                   raise SystemExit("QEMU build patch contract is missing: " + token)
@@ -305,6 +306,8 @@ jobs:
           "$RUNNER_TEMP/test-elf-phdr"
           swiftc -parse-as-library -swift-version 5 src/QEMU/VNCKeyState.swift scripts/tests/test_vnc_key_state.swift -o "$RUNNER_TEMP/test-vnc-key-state"
           "$RUNNER_TEMP/test-vnc-key-state"
+          swiftc -parse-as-library -swift-version 5 src/QEMU/QEMUCommandBuilder.swift scripts/tests/test_qemu_command_builder.swift -o "$RUNNER_TEMP/test-qemu-command-builder"
+          "$RUNNER_TEMP/test-qemu-command-builder"
           swiftc -parse-as-library -swift-version 5 src/Runtime/WindowsPEImage.swift scripts/tests/test_windows_pe_image.swift -o "$RUNNER_TEMP/test-windows-pe"
           "$RUNNER_TEMP/test-windows-pe"
           swiftc -parse-as-library -swift-version 5 src/Runtime/ELF64Loader.swift src/Runtime/X86_64ALU.swift src/Runtime/LinuxProcessStackBuilder.swift src/Runtime/LinuxSyscallDispatcher.swift src/Runtime/X86_64Interpreter.swift scripts/tests/test_static_elf_execution.swift -o "$RUNNER_TEMP/test-static-elf"
