@@ -463,5 +463,5 @@ extension Data {
 
 
 extension String: LocalizedError {
-    var errorDescription: String? { self }
+    public var errorDescription: String? { self }
 }
