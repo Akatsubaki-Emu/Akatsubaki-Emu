@@ -17,11 +17,12 @@ extern "C" {
 /// QEMU lifecycle exports without starting a guest or consuming the one-shot
 /// QEMU session lifecycle.
 bool isteam_qemu_validate_library(const char * ISTEAM_NONNULL library_path,
+                                  bool requires_jit,
                                   char * ISTEAM_NONNULL error_buffer, int error_capacity);
 /// Starts the in-process QEMU system emulator. Returns false with a diagnostic
 /// if the runtime or required lifecycle symbols are unavailable.
 bool isteam_qemu_start(int argc, const char * ISTEAM_NONNULL const * ISTEAM_NONNULL argv,
-                       const char * ISTEAM_NONNULL library_path,
+                       const char * ISTEAM_NONNULL library_path, bool requires_jit,
                        char * ISTEAM_NONNULL error_buffer, int error_capacity);
 void isteam_qemu_request_stop(void);
 bool isteam_qemu_is_running(void);
