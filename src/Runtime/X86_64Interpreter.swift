@@ -946,8 +946,14 @@ final class X86_64Interpreter: GuestCPUBackend {
         if instructionWindowCursor <= instructionWindowLength,
            instructionWindowLength - instructionWindowCursor >= 8 {
             let offset = instructionWindowCursor
-            var value: UInt64 = 0
-            for shift in 0..<8 { value |= UInt64(instructionWindow[offset + shift]) << (shift * 8) }
+            let value = UInt64(instructionWindow[offset])
+                | UInt64(instructionWindow[offset + 1]) << 8
+                | UInt64(instructionWindow[offset + 2]) << 16
+                | UInt64(instructionWindow[offset + 3]) << 24
+                | UInt64(instructionWindow[offset + 4]) << 32
+                | UInt64(instructionWindow[offset + 5]) << 40
+                | UInt64(instructionWindow[offset + 6]) << 48
+                | UInt64(instructionWindow[offset + 7]) << 56
             instructionWindowCursor += 8
             rip &+= 8
             return value

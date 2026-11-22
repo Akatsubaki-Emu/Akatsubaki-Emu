@@ -15,6 +15,8 @@ class X86InstructionWindowTests(unittest.TestCase):
         self.assertIn("memory.readUInt32(offset: rip)", fetch32)
         self.assertIn("instructionWindowLength - instructionWindowCursor >= 8", fetch64)
         self.assertIn("memory.readUInt64(offset: rip)", fetch64)
+        self.assertIn("UInt64(instructionWindow[offset + 7]) << 56", fetch64)
+        self.assertNotIn("for shift in 0..<8", fetch64)
         self.assertIn("func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int?", memory)
         self.assertNotIn("instructionWindowOffset", interpreter)
         self.assertNotIn("Data(count: 15)", interpreter)
