@@ -152,7 +152,7 @@ bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci
 # The app resolves the runtime through this manifest rather than assuming
 # that every UTM revision names its loadable library the same way.
 printf '%s\n' "$runtime_relative" > "$OUT/QEMU/runtime-library-path.txt"
-printf '%s\n' "$exports" | grep -E ' _?qemu_(init|main_loop|cleanup)$| _?qemu_system_shutdown_request
+printf '%s\n' "$exports" | grep -E ' _?qemu_(init|main_loop|cleanup)$| _?qemu_system_shutdown_request$' > "$OUT/exports.txt" || true
 
 data_dir=""
 found="$(find "$APP" -type f \( \
