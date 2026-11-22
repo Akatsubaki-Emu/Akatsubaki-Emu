@@ -181,12 +181,12 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("#define _POSIX_C_SOURCE 200809L", bridge)
         self.assertIn("g_running = false;", bridge)
         self.assertLess(
-            bridge.index("g_qemu_main_loop();"),
-            bridge.index("g_running = false;", bridge.index("g_qemu_main_loop();")),
+            bridge.index("int qemu_exit_status = g_qemu_main_loop();"),
+            bridge.index("g_running = false;", bridge.index("int qemu_exit_status = g_qemu_main_loop();")),
         )
         self.assertLess(
-            bridge.index("g_running = false;", bridge.index("g_qemu_main_loop();")),
-            bridge.index("if (g_qemu_cleanup) g_qemu_cleanup();"),
+            bridge.index("g_running = false;", bridge.index("int qemu_exit_status = g_qemu_main_loop();")),
+            bridge.index("if (g_qemu_cleanup) g_qemu_cleanup(qemu_exit_status);"),
         )
         self.assertIn("#include <stdlib.h>", test)
         self.assertIn("fake_qemu_cleanup_started_count", test)
