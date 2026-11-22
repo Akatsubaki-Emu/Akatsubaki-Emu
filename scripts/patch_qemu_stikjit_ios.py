@@ -109,6 +109,15 @@ def patch_source(source: str) -> str:
             "isteam_jit_ready_callback",
             "isteam_jit_prepare_callback",
             "isteam_jit_detach_callback",
+            "#if TARGET_OS_IPHONE",
+            "#include <mach/mach_init.h>",
+            "#include <mach/vm_map.h>",
+            "#define mach_vm_address_t vm_address_t",
+            "#define mach_vm_offset_t vm_offset_t",
+            "#define mach_vm_size_t vm_size_t",
+            "#define mach_vm_remap vm_remap",
+            "#define mach_vm_protect vm_protect",
+            "#define mach_vm_deallocate vm_deallocate",
             "#include <mach/mach_vm.h>",
             "iSteamJITGetProtocolMode",
             'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
@@ -133,7 +142,24 @@ def patch_source(source: str) -> str:
         raise SystemExit("QEMU tcg/region.c changed: Darwin Mach include anchor not found")
     source = source.replace(
         INCLUDE_ANCHOR,
-        "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <stdbool.h>\n#include <stddef.h>\n#include <dlfcn.h>\n#include <mach/mach.h>\n#include <mach/mach_vm.h>",
+        "#ifdef CONFIG_DARWIN\n"
+        "#include <TargetConditionals.h>\n"
+        "#include <stdbool.h>\n"
+        "#include <stddef.h>\n"
+        "#include <dlfcn.h>\n"
+        "#if TARGET_OS_IPHONE\n"
+        "#include <mach/mach_init.h>\n"
+        "#include <mach/vm_map.h>\n"
+        "#define mach_vm_address_t vm_address_t\n"
+        "#define mach_vm_offset_t vm_offset_t\n"
+        "#define mach_vm_size_t vm_size_t\n"
+        "#define mach_vm_remap vm_remap\n"
+        "#define mach_vm_protect vm_protect\n"
+        "#define mach_vm_deallocate vm_deallocate\n"
+        "#else\n"
+        "#include <mach/mach.h>\n"
+        "#include <mach/mach_vm.h>\n"
+        "#endif",
         1,
     )
     if FUNCTION_ANCHOR not in source:
@@ -169,6 +195,15 @@ def patch_source(source: str) -> str:
         "isteam_jit_ready_callback",
         "isteam_jit_prepare_callback",
         "isteam_jit_detach_callback",
+        "#if TARGET_OS_IPHONE",
+        "#include <mach/mach_init.h>",
+        "#include <mach/vm_map.h>",
+        "#define mach_vm_address_t vm_address_t",
+        "#define mach_vm_offset_t vm_offset_t",
+        "#define mach_vm_size_t vm_size_t",
+        "#define mach_vm_remap vm_remap",
+        "#define mach_vm_protect vm_protect",
+        "#define mach_vm_deallocate vm_deallocate",
         "#include <mach/mach_vm.h>",
         "iSteamJITGetProtocolMode",
         'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
