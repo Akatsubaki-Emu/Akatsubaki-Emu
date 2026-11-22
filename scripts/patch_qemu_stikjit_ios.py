@@ -120,7 +120,7 @@ def patch_source(source: str) -> str:
         raise SystemExit("QEMU tcg/region.c changed: Darwin Mach include anchor not found")
     source = source.replace(
         INCLUDE_ANCHOR,
-        "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <dlfcn.h>\n#include <mach/mach.h>",
+        "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <stdbool.h>\n#include <stddef.h>\n#include <dlfcn.h>\n#include <mach/mach.h>",
         1,
     )
     if FUNCTION_ANCHOR not in source:
@@ -144,6 +144,8 @@ def patch_source(source: str) -> str:
     source = source.replace(FUNCTION_ANCHOR, replacement, 1)
     required = [
         "#include <TargetConditionals.h>",
+        "#include <stdbool.h>",
+        "#include <stddef.h>",
         "#include <dlfcn.h>",
         "__attribute__((visibility(\"default\")))",
         "isteam_qemu_set_jit_callbacks",
