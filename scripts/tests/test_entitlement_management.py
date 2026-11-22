@@ -35,6 +35,7 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("SecItemAdd", self.keychain)
         self.assertIn("kSecAttrSynchronizable", self.keychain)
         self.assertIn("kSecAttrSynchronizable", self.keychain)
+        self.assertIn("kSecAttrSynchronizable", self.keychain)
 
 
     def test_anisette_helper_does_not_log_auth_material_and_uses_safe_load(self):
@@ -46,6 +47,16 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn('?? "https://ani.sidestore.io"', self.view)
         self.assertIn('anisetteURL.scheme?.lowercased() == "https"', self.view)
         self.assertIn('UserDefaults.standard.set(configuredURL, forKey: "iSteam.anisetteServerURL")', self.view)
+
+    def test_anisette_secrets_are_not_logged(self):
+        for sensitive_log in (
+            "Anisette used:",
+            "Original JSON:",
+            "X-Apple-I-MD-LU:",
+            "X-Mme-Device-Id:",
+            "Got response:",
+        ):
+            self.assertNotIn(sensitive_log, self.anisette)
 
     def test_reinstall_is_required_after_capability_change(self):
         self.assertIn("Reinstall this app through SideStore or AltStore", self.view)
