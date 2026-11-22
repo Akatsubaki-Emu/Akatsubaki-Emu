@@ -3,7 +3,23 @@ name: i-Steam repository and CI configuration validation
 on:
   push:
     branches: [main]
+    paths:
+      - .github/workflows/**
+      - .gitlab-ci.yml
+      - .gitmodules
+      - project.yml
+      - src/**
+      - iSteam/**
+      - scripts/**
   pull_request:
+    paths:
+      - .github/workflows/**
+      - .gitlab-ci.yml
+      - .gitmodules
+      - project.yml
+      - src/**
+      - iSteam/**
+      - scripts/**
   workflow_dispatch:
 
 permissions:
