@@ -180,6 +180,18 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertEqual(readme.count("The runtime library must be built for **physical iOS arm64**"), 1)
         self.assertEqual(readme.count("Physical-device runtime startup"), 1)
 
+    def test_tci_packager_and_merge_keep_mode_specific_artifacts(self):
+        root = Path(__file__).resolve().parents[2]
+        tci = (root / "scripts" / "package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
+        merge = (root / "scripts" / "merge-qemu-runtime-variants.sh").read_text(encoding="utf-8")
+        self.assertIn("has_jit_callbacks=false", tci)
+        self.assertIn("QEMU-TCI.framework", tci)
+        self.assertIn('bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci)
+        self.assertIn("StikJIT callback export: absent by design", tci)
+        self.assertIn("grep -q 'isteam_qemu_set_jit_callbacks' \"$JIT_DIR/exports.txt\"", merge)
+        self.assertIn("if grep -q 'isteam_qemu_set_jit_callbacks' \"$TCI_DIR/exports.txt\"; then", merge)
+        self.assertIn('mkdir -p "$OUT/Frameworks" "$OUT/QEMU/JIT" "$OUT/QEMU/TCI"', merge)
+
     def test_qemu_ios_platform_guard_rejects_simulator_platforms(self):
         pattern = "platform[[:space:]]+IOS([[:space:]]|$)"
         device = subprocess.run(
