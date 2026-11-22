@@ -537,7 +537,8 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertNotIn("Slower compatibility fallback", settings)
         self.assertIn('configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg"', builder)
         self.assertNotIn("tcg,tb-size=64,split-wx=on", builder)
-        self.assertIn("QEMU TCG uses JIT code generation", docs)
+        self.assertIn("only JIT mode requires `isteam_qemu_set_jit_callbacks`", docs)
+        self.assertIn("The TCI runtime artifact is not yet built or packaged", docs)
         self.assertIn("The TCI runtime artifact is not yet built or packaged", docs)
 
     def test_linux_arm32_translator_requires_linux_syscall_abi(self):
