@@ -27,6 +27,11 @@ class GameStoreHotPathTests(unittest.TestCase):
             self.assertIn("persistValidated", body)
             self.assertNotIn("save(", body)
 
+    def test_remove_filters_the_loaded_snapshot_in_place(self):
+        remove = self.source.split("func remove(id:", 1)[1].split("func game(id:", 1)[0]
+        self.assertIn("current.removeAll { $0.id == id }", remove)
+        self.assertNotIn("current.filter", remove)
+
     def test_library_search_filters_and_sorts_in_place(self):
         search = self.source.split("func search(_ query:", 1)[1].split("func setFavorite", 1)[0]
         self.assertIn("results.removeAll { game in", search)
