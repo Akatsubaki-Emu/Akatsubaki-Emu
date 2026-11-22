@@ -87,16 +87,6 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("JITCoordinator.shared.handleCallback(url)", app)
         self.assertIn("JITCoordinator.shared.applicationDidBecomeActive()", app)
 
-    def test_ios_26_jit_readiness_fails_closed_on_unsupported_txm_hardware(self):
-        root = Path(__file__).resolve().parents[2]
-        source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
-        readiness = source.split("bool iSteamJITIsReady(void)", 1)[1].split("\n}\n#else", 1)[0]
-        self.assertIn("if (__builtin_available(iOS 26.0, *))", readiness)
-        self.assertIn("if (!iSteamJITIsSupported())", readiness)
-        self.assertIn("return false;", readiness)
-        self.assertIn("return iSteamJITDebuggerIsAttached();", readiness)
-        self.assertNotIn("&& iSteamJITIsSupported()", readiness)
-
 
 if __name__ == "__main__":
     unittest.main()

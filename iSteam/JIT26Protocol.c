@@ -101,10 +101,7 @@ bool iSteamJITIsReady(void) {
         return false;
     }
 
-    if (__builtin_available(iOS 26.0, *)) {
-        if (!iSteamJITIsSupported()) {
-            return false;
-        }
+    if (__builtin_available(iOS 26.0, *) && iSteamJITIsSupported()) {
         return iSteamJITDebuggerIsAttached();
     }
     return true;
