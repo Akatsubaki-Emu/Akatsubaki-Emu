@@ -224,13 +224,14 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
             self.assertIn("isteam_qemu_set_jit_callbacks;", once_symbols)
             self.assertEqual(once_symbols.count("qemu_system_shutdown_request;"), 1)
             self.assertEqual(once_symbols.count("isteam_qemu_set_jit_callbacks;"), 1)
+            self.assertEqual(once_symbols.count("\n"), symbols.count("\n") + 2)
             patch_qemu_stikjit_ios.patch_qemu_sources(region_path)
             self.assertEqual(region_path.read_text(encoding="utf-8"), once_region)
             self.assertEqual(symbols_path.read_text(encoding="utf-8"), once_symbols)
 
     def test_qemu_stikjit_export_patcher_fails_closed_on_missing_lifecycle_symbols(self):
         with self.assertRaisesRegex(SystemExit, "required lifecycle exports"):
-            patch_qemu_stikjit_ios.patch_exported_symbols("{\\n  qemu_init;\\n};\\n")
+            patch_qemu_stikjit_ios.patch_exported_symbols("{\n  qemu_init;\n};\n")
 
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):
         root = Path(__file__).resolve().parents[2]

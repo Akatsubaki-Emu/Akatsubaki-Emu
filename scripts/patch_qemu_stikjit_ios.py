@@ -199,8 +199,8 @@ def patch_exported_symbols(source: str) -> str:
         if count == 0:
             lines.insert(close_index, "  " + symbol)
             close_index += 1
-    result = "\\n".join(lines)
-    return result + ("\\n" if source.endswith("\\n") else "")
+    result = "\n".join(lines)
+    return result + ("\n" if source.endswith("\n") else "")
 
 
 def patch_qemu_sources(region_path: Path) -> None:
