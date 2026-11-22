@@ -107,4 +107,4 @@ python-source-contracts:
     - python -m unittest discover -s scripts/tests -p 'test_*.py'
     - cc -std=c11 -Wall -Wextra -Werror -pthread -IiSteam iSteam/QEMUNativeBridge.c scripts/tests/test_qemu_native_bridge.c -ldl -o /tmp/test-qemu-native-bridge
     - cc -std=c11 -Wall -Wextra -Werror -fPIC -shared scripts/tests/fake_qemu_runtime.c -o /tmp/libfake-qemu-runtime.so
-    - /tmp/test-qemu-native-bridge /tmp/libfake-qemu-runtime.so
+    - /tmp/test-qemu-native-bridge jit /tmp/libfake-qemu-runtime.so
