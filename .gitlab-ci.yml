@@ -6,9 +6,7 @@ spec:
       options: [Nightly, Main]
       default: Nightly
 ---
-stages: [validate, dispatch]
-stages:
-  - validate
+stages: [validate]
 
 workflow:
   auto_cancel:
