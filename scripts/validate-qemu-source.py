@@ -1016,6 +1016,7 @@ required = {
         "static_cast<uint64_t>(amount) == pageLength",
     ],
     ".github/workflows/validate-repository.yml": [
+        "bash -n scripts/validate-qemu-runtime.sh",
         "test_execution_backend_router.swift",
         "test_elf_loader_program_headers.swift",
         "test_static_elf_execution.swift",
