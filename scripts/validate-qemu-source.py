@@ -989,14 +989,25 @@ if r"\n" in builder:
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
 repository_validation = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
-if "utm-ios-arm64-deps-v12-" not in repository_validation or "utm-ios-arm64-deps-v12-" in repository_validation:
+cache_prefix = "utm-ios-arm64-deps-"
+qemu_cache_namespaces = {
+    line.split(cache_prefix, 1)[1].split("-", 1)[0]
+    for line in qemu_workflow.splitlines()
+    if cache_prefix in line and "key:" in line
+}
+validation_cache_namespaces = {
+    line.split(cache_prefix, 1)[1].split("-", 1)[0]
+    for line in repository_validation.splitlines()
+    if cache_prefix in line
+}
+if len(qemu_cache_namespaces) != 1 or validation_cache_namespaces != qemu_cache_namespaces:
     print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
     failed = True
 for step in (
     "Checkout i-Steam",
     "Checkout UTM with submodules",
     "Select Xcode",
-        "Install UTM build dependencies",
+    "Install UTM build dependencies",
     "Cache UTM dependency build and sysroot",
     "Build UTM dependencies for physical iOS arm64",
     "Build UTM iOS archive",
@@ -1012,13 +1023,13 @@ for obsolete in ("Verify Objective-C class-selector stub compatibility", "-fno-o
         print(f"QEMU workflow: obsolete global Objective-C workaround remains: {obsolete}", file=sys.stderr)
         failed = True
 if "\n; then\n" in qemu_workflow:
-    print("QEMU workflow: Objective-C class-selector probe contains a stray shell terminator", file=sys.stderr)
+    print("QEMU workflow: contains a stray shell terminator", file=sys.stderr)
     failed = True
 for token in [
     "scripts/patch_utm_qemu_ios.py",
     "scripts/patch_qemu_meson_ios.py",
     "scripts/verify_qemu_meson_link.py",
-        "utm-ios-arm64-deps-v12-",
+    "utm-ios-arm64-deps-v12-",
     "spirv-tools",
     "spirv-llvm-translator",
     "steps.xcode.outputs.version",
