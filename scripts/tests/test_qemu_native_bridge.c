@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 bool iSteamJITIsReady(void) { return false; }
 void *iSteamJITPrepareRegion(void *address, size_t size) { (void)address; (void)size; return NULL; }
@@ -43,6 +44,28 @@ static void wait_for_state(bool active) {
     assert(0 && "QEMU bridge did not reach the expected lifecycle state");
 }
 
+
+static int count_lifecycle_event(const char *path, const char *event) {
+    FILE *file = fopen(path, "r");
+    if (!file) return 0;
+    char line[32];
+    int count = 0;
+    while (fgets(line, sizeof(line), file)) {
+        if (strncmp(line, event, strlen(event)) == 0) count++;
+    }
+    fclose(file);
+    return count;
+}
+
+static void wait_for_lifecycle_event(const char *path, const char *event, int expected) {
+    const struct timespec delay = {.tv_sec = 0, .tv_nsec = 5 * 1000 * 1000};
+    for (int attempt = 0; attempt < 400; ++attempt) {
+        if (count_lifecycle_event(path, event) >= expected) return;
+        nanosleep(&delay, NULL);
+    }
+    assert(0 && "QEMU fake runtime did not reach the expected loader lifecycle event");
+}
+
 static int read_counter(void *handle, const char *symbol) {
     int (*read_value)(void) = (int (*)(void))dlsym(handle, symbol);
     assert(read_value != NULL);
@@ -60,10 +83,23 @@ static void wait_for_counter(void *handle, const char *symbol, int expected) {
 
 int main(int argc, char **argv) {
     assert(argc == 2);
+    char lifecycle_path[] = "/tmp/isteam-qemu-lifecycle-XXXXXX";
+    int lifecycle_fd = mkstemp(lifecycle_path);
+    assert(lifecycle_fd >= 0);
+    assert(close(lifecycle_fd) == 0);
+    assert(unlink(lifecycle_path) == 0);
+    assert(setenv("FAKE_QEMU_LIFECYCLE_FILE", lifecycle_path, 1) == 0);
+
     void *probe = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
     assert(probe != NULL);
+    assert(count_lifecycle_event(lifecycle_path, "load") == 1);
     char validation_error[512] = {0};
     assert(isteam_qemu_validate_library(argv[1], validation_error, (int)sizeof(validation_error)));
+    assert(isteam_qemu_validate_library(argv[1], validation_error, (int)sizeof(validation_error)));
+    assert(count_lifecycle_event(lifecycle_path, "load") == 1);
+    assert(dlclose(probe) == 0);
+    probe = NULL;
+    assert(count_lifecycle_event(lifecycle_path, "unload") == 0);
 
     char argumentError[512] = {0};
     const char *tooManyArguments[4097];
@@ -100,6 +136,9 @@ int main(int argc, char **argv) {
 
     // Exactly one simultaneous caller may reserve the process-global QEMU session.
     assert(first.started != second.started);
+    probe = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
+    assert(probe != NULL);
+    assert(count_lifecycle_event(lifecycle_path, "load") == 1);
     assert(isteam_qemu_is_active());
     const struct timespec running_delay = {.tv_sec = 0, .tv_nsec = 5 * 1000 * 1000};
     for (int attempt = 0; attempt < 400 && !isteam_qemu_is_running(); ++attempt) {
@@ -124,7 +163,11 @@ int main(int argc, char **argv) {
     assert(!isteam_qemu_start(1, arguments, argv[1], error, (int)sizeof(error)));
     assert(strstr(error, "cannot safely restart") != NULL);
 
-    dlclose(probe);
-    puts("QEMU native bridge concurrency, argument bounds, cleanup race and one-shot lifecycle tests passed.");
+    assert(dlclose(probe) == 0);
+    wait_for_lifecycle_event(lifecycle_path, "unload", 1);
+    assert(count_lifecycle_event(lifecycle_path, "load") == 1);
+    assert(count_lifecycle_event(lifecycle_path, "unload") == 1);
+    assert(unlink(lifecycle_path) == 0);
+    puts("QEMU native bridge concurrency, argument bounds, cleanup race, preflight handle reuse and one-shot lifecycle tests passed.");
     return 0;
 }

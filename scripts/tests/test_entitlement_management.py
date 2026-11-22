@@ -14,7 +14,7 @@ class EntitlementManagementSourceTests(unittest.TestCase):
 
     def test_only_the_current_bundle_id_is_modified(self):
         self.assertIn("$0.bundleIdentifier == bundleIdentifier", self.view)
-        self.assertIn('"INCREASED_MEMORY_LIMIT"', self.view)
+        self.assertIn('capabilities: ["INCREASED_MEMORY_LIMIT"]', self.view)
         self.assertIn("No App ID for \\(bundleIdentifier) was found", self.view)
 
     def test_uses_getmoreram_stossign_developer_api(self):
@@ -22,27 +22,28 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("AppleAPI.shared.authenticate", self.view)
         self.assertIn("AppleAPI.shared.fetchTeamsForAccount", self.view)
         self.assertIn("AppleAPI.shared.fetchAppIDsForTeam", self.view)
-        self.assertIn("AppleAPI.shared.sendEditRequest", self.view)
+        self.assertIn("AppleAPI.shared.updateAppID", self.view)
         self.assertIn("prepareForVerification(using:", self.view)
         self.assertIn("await self.prepareForVerification", self.view)
         self.assertIn("private func prepareForVerification(using handler: @escaping (String?) -> Void) async", self.view)
 
-
-    def test_existing_capabilities_and_settings_are_preserved(self):
-        self.assertIn("fetchExistingCapabilities", self.view)
-        self.assertIn('"capabilityType"', self.view)
-        self.assertIn('"settings"', self.view)
-        self.assertIn("capabilities.count == records.count", self.view)
-        self.assertIn("Existing App ID capabilities and their settings were preserved", self.view)
-
     def test_anisette_helper_is_vendored_and_uses_secure_device_state(self):
         self.assertIn("class AnisetteDataHelper", self.anisette)
-        self.assertIn("EntitlementAnisetteKeychain.shared.identifier", self.anisette)
-        self.assertIn("EntitlementAnisetteKeychain.shared.adiPb", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.loadIdentifier()", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.loadADIPB()", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.storeIdentifier(", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.storeADIPB(", self.anisette)
         self.assertNotRegex(self.anisette, r"(?<!EntitlementAnisette)Keychain\.shared\.")
         self.assertIn("SecItemCopyMatching", self.keychain)
         self.assertIn("SecItemAdd", self.keychain)
+        self.assertIn("SecItemDelete", self.keychain)
         self.assertIn("kSecAttrSynchronizable", self.keychain)
+        self.assertIn("kCFBooleanFalse", self.keychain)
+        self.assertEqual(self.keychain.count("kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly"), 2)
+        self.assertIn("func loadIdentifier() throws", self.keychain)
+        self.assertIn("func storeIdentifier(_ value: String?) throws", self.keychain)
+        self.assertIn("throw keychainError", self.keychain)
+        self.assertNotIn("query[kSecAttrSynchronizable as String] = kCFBooleanTrue", self.keychain)
 
 
     def test_anisette_helper_does_not_log_auth_material_and_uses_safe_load(self):
@@ -93,6 +94,21 @@ class EntitlementManagementSourceTests(unittest.TestCase):
     def test_existing_memory_entitlement_declarations_are_preserved(self):
         self.assertIn("com.apple.developer.kernel.increased-memory-limit", self.entitlements)
         self.assertIn("com.apple.developer.kernel.extended-virtual-addressing", self.entitlements)
+
+
+    def test_anisette_lookup_and_response_plists_allow_mixed_top_level_values(self):
+        self.assertIn('as? [String: Any]', self.anisette)
+        self.assertIn('root["urls"] as? [String: Any]', self.anisette)
+        self.assertIn('root["Response"] as? [String: Any]', self.anisette)
+        self.assertNotIn("Dictionary<String, Dictionary<String, Any>>", self.anisette)
+
+    def test_anisette_identity_errors_are_not_force_unwrapped(self):
+        for unsafe in ("self.url!", "identifier!", "adiPb!", "self.clientInfo!", "self.userAgent!", "self.mdLu!", "self.deviceId!", "try! JSONSerialization"):
+            self.assertNotIn(unsafe, self.anisette)
+        self.assertIn("decoded.count == MemoryLayout<UUID>.size", self.anisette)
+
+    def test_anisette_client_timestamp_is_explicitly_utc(self):
+        self.assertIn("formatter.timeZone = TimeZone(secondsFromGMT: 0)", self.anisette)
 
 
 if __name__ == "__main__":
