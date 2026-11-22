@@ -26,6 +26,8 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
         self.assertIn("var isQEMUJITReady: Bool", source)
+        readiness = source.split("var isQEMUJITReady: Bool", 1)[1].split("func requestJIT", 1)[0]
+        self.assertIn("if #available(iOS 17.4, *)", readiness)
         self.assertIn(
             "return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady",
             source,
