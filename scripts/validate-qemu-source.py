@@ -772,7 +772,10 @@ required = {
         "CGImageSourceGetCount(image) <= 200",
         "width <= 8192, height <= 8192",
         "width <= (16 * 1024 * 1024) / height",
-        "CGImageSourceCreateImageAtIndex(image, 0, nil) != nil",
+        "CGImageSourceCreateThumbnailAtIndex(image, 0, thumbnailOptions) != nil",
+        "kCGImageSourceCreateThumbnailFromImageAlways: true",
+        "kCGImageSourceThumbnailMaxPixelSize: 512",
+        "kCGImageSourceShouldCacheImmediately: true",
         "org.webmproject.webp",
     ],
     "src/Runtime/ExternalDriveStore.swift": [

@@ -42,6 +42,11 @@ final class GameArtworkStore {
             imageData = try? Data(contentsOf: readableURL, options: [.mappedIfSafe])
         }
         if let coordinationError { throw coordinationError }
+        let thumbnailOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 512,
+            kCGImageSourceShouldCacheImmediately: true
+        ]
         guard let data = imageData, data.count <= maxBytes,
               let image = CGImageSourceCreateWithData(data as CFData, nil),
               CGImageSourceGetCount(image) > 0,
@@ -51,7 +56,7 @@ final class GameArtworkStore {
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0, width <= 8192, height <= 8192,
               width <= (16 * 1024 * 1024) / height,
-              CGImageSourceCreateImageAtIndex(image, 0, nil) != nil,
+              CGImageSourceCreateThumbnailAtIndex(image, 0, thumbnailOptions) != nil,
               let type = CGImageSourceGetType(image) as String?,
               ["public.jpeg", "public.png", "public.heic", "public.webp", "org.webmproject.webp", "com.compuserve.gif"].contains(type) else {
             throw ArtworkError.invalidImage
