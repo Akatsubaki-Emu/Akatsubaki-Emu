@@ -940,6 +940,54 @@ struct InterpreterTests {
         let multiByteNopExit = try multiByteNop.run(maxInstructions: 4)
         precondition(multiByteNopExit == .halted)
 
+        // ENDBR64 is a CET landing pad and has no guest-visible side effects.
+        let endbr64Memory = GuestMemory(size: 64)
+        precondition(endbr64Memory.write(Data([
+            0x31, 0xC0,
+            0xF3, 0x0F, 0x1E, 0xFA,
+            0x74, 0x05,
+            0xBB, 0x01, 0x00, 0x00, 0x00,
+            0xBB, 0x02, 0x00, 0x00, 0x00,
+            0xF4
+        ]), offset: 0))
+        let endbr64 = X86_64Interpreter(memory: endbr64Memory)
+        try endbr64.reset(entryPoint: 0)
+        let endbr64Exit = try endbr64.run(maxInstructions: 5)
+        precondition(endbr64Exit == .halted)
+        precondition(endbr64.registerValue(3) == 2)
+
+        let malformedEndbr64Memory = GuestMemory(size: 16)
+        precondition(malformedEndbr64Memory.write(Data([0xF3, 0x0F, 0x1E, 0xFB]), offset: 0))
+        let malformedEndbr64 = X86_64Interpreter(memory: malformedEndbr64Memory)
+        try malformedEndbr64.reset(entryPoint: 0)
+        let malformedEndbr64Exit = try malformedEndbr64.run(maxInstructions: 1)
+        precondition(malformedEndbr64Exit == .unsupportedInstruction(address: 0))
+
+        let truncatedEndbr64Memory = GuestMemory(size: 3)
+        precondition(truncatedEndbr64Memory.write(Data([0xF3, 0x0F, 0x1E]), offset: 0))
+        let truncatedEndbr64 = X86_64Interpreter(memory: truncatedEndbr64Memory)
+        try truncatedEndbr64.reset(entryPoint: 0)
+        let truncatedEndbr64Exit = try truncatedEndbr64.run(maxInstructions: 1)
+        precondition(truncatedEndbr64Exit == .memoryFault(address: 3))
+
+        // ENDBR64 without its mandatory F3 prefix is not the landing-pad opcode.
+        let unprefixedEndbr64Memory = GuestMemory(size: 16)
+        precondition(unprefixedEndbr64Memory.write(Data([0x0F, 0x1E, 0xFA]), offset: 0))
+        let unprefixedEndbr64 = X86_64Interpreter(memory: unprefixedEndbr64Memory)
+        try unprefixedEndbr64.reset(entryPoint: 0)
+        let unprefixedEndbr64Exit = try unprefixedEndbr64.run(maxInstructions: 1)
+        precondition(unprefixedEndbr64Exit == .unsupportedInstruction(address: 0))
+        precondition(unprefixedEndbr64.instructionPointer == 0)
+
+        // F3 must not be silently ignored on unrelated two-byte instructions.
+        let invalidF3Memory = GuestMemory(size: 16)
+        precondition(invalidF3Memory.write(Data([0xF3, 0x0F, 0x05]), offset: 0))
+        let invalidF3 = X86_64Interpreter(memory: invalidF3Memory)
+        try invalidF3.reset(entryPoint: 0)
+        let invalidF3Exit = try invalidF3.run(maxInstructions: 1)
+        precondition(invalidF3Exit == .unsupportedInstruction(address: 0))
+        precondition(invalidF3.instructionPointer == 0)
+
         let shortParityMemory = GuestMemory(size: 64)
         precondition(shortParityMemory.write(Data([
             0x31, 0xC0, 0x7A, 0x05,
@@ -1101,6 +1149,56 @@ struct InterpreterTests {
         let stackUnderflowExit = try stackUnderflow.run(maxInstructions: 1)
         precondition(stackUnderflowExit == .memoryFault(address: 0))
         precondition(stackUnderflow.registerValue(4) == 0)
+
+        let relativeCallFaultMemory = GuestMemory(size: 64)
+        let relativeCallFaultProgram: [UInt8] = [
+            0x48, 0xBC, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xE8, 0x00, 0x00, 0x00, 0x00
+        ]
+        precondition(relativeCallFaultMemory.write(Data(relativeCallFaultProgram), offset: 0))
+        let relativeCallFault = X86_64Interpreter(memory: relativeCallFaultMemory)
+        try relativeCallFault.reset(entryPoint: 0)
+        let relativeCallFaultExit = try relativeCallFault.run(maxInstructions: 2)
+        precondition(relativeCallFaultExit == .memoryFault(address: 64))
+        precondition(relativeCallFault.registerValue(4) == 72)
+
+        let indirectCallFaultMemory = GuestMemory(size: 64)
+        let indirectCallFaultProgram: [UInt8] = [
+            0x48, 0xBC, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x48, 0xB8, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFF, 0xD0
+        ]
+        precondition(indirectCallFaultMemory.write(Data(indirectCallFaultProgram), offset: 0))
+        let indirectCallFault = X86_64Interpreter(memory: indirectCallFaultMemory)
+        try indirectCallFault.reset(entryPoint: 0)
+        let indirectCallFaultExit = try indirectCallFault.run(maxInstructions: 3)
+        precondition(indirectCallFaultExit == .memoryFault(address: 64))
+        precondition(indirectCallFault.registerValue(4) == 72)
+
+        let indirectPushFaultMemory = GuestMemory(size: 64)
+        let indirectPushFaultProgram: [UInt8] = [
+            0x48, 0xBC, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x48, 0xB8, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFF, 0xF0
+        ]
+        precondition(indirectPushFaultMemory.write(Data(indirectPushFaultProgram), offset: 0))
+        let indirectPushFault = X86_64Interpreter(memory: indirectPushFaultMemory)
+        try indirectPushFault.reset(entryPoint: 0)
+        let indirectPushFaultExit = try indirectPushFault.run(maxInstructions: 3)
+        precondition(indirectPushFaultExit == .memoryFault(address: 64))
+        precondition(indirectPushFault.registerValue(4) == 72)
+
+        let leaveFaultMemory = GuestMemory(size: 64)
+        precondition(leaveFaultMemory.write(Data([
+            0x48, 0xBD, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xC9
+        ]), offset: 0))
+        let leaveFault = X86_64Interpreter(memory: leaveFaultMemory)
+        try leaveFault.reset(entryPoint: 0)
+        let leaveFaultExit = try leaveFault.run(maxInstructions: 2)
+        precondition(leaveFaultExit == .memoryFault(address: 72))
+        precondition(leaveFault.registerValue(4) == 56)
+        precondition(leaveFault.registerValue(5) == 72)
 
         let callStackFaultMemory = GuestMemory(size: 64)
         let callStackFaultProgram: [UInt8] = [
