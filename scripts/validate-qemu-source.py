@@ -916,8 +916,10 @@ required = {
         "__attribute__((visibility(\"default\")))",
         "isteam_jit_prepare_callback",
         "#include <mach/mach_vm.h>",
-        'dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")',
-        "jit_protocol_supported()",
+        "iSteamJITGetProtocolMode",
+        'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
+        "jit_protocol_mode < 0",
+        "jit_protocol_mode > 0",
         "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
     ],
     "iSteam/JIT26Protocol.c": [
@@ -1032,8 +1034,15 @@ for step in (
     if qemu_workflow.count(marker) != 1:
         print(f"QEMU workflow: expected exactly one {marker!r} step", file=sys.stderr)
         failed = True
-if "grep -Fq '_objc_msgSendClass'; then" not in qemu_workflow:
-    print("QEMU workflow: Objective-C class-selector stub probe is malformed", file=sys.stderr)
+if (
+    "PROBE_BINARY=" not in qemu_workflow
+    or "-Wl,-objc_stubs_fast" not in qemu_workflow
+    or "-lobjc" not in qemu_workflow
+):
+    print("QEMU workflow: Objective-C class-selector link probe is missing supported linker flags", file=sys.stderr)
+    failed = True
+if "-fno-objc-msgsend-class-selector-stubs" in qemu_workflow or "export OBJCFLAGS=" in qemu_workflow:
+    print("QEMU workflow: unsupported Objective-C compiler flag must not be used", file=sys.stderr)
     failed = True
 if "\n; then\n" in qemu_workflow:
     print("QEMU workflow: Objective-C class-selector probe contains a stray shell terminator", file=sys.stderr)
@@ -1043,9 +1052,9 @@ for token in [
     "scripts/patch_qemu_meson_ios.py",
     "scripts/verify_qemu_meson_link.py",
     "Verify Objective-C class-selector stub compatibility",
-    "-fno-objc-msgsend-class-selector-stubs",
-    "export OBJCFLAGS=",
-    "grep -Fq",
+    "-Wl,-objc_stubs_fast",
+    "-lobjc",
+    "PROBE_BINARY=",
     "utm-ios-arm64-deps-v13-",
     "spirv-tools",
     "spirv-llvm-translator",
