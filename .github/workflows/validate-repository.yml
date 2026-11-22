@@ -124,11 +124,13 @@ jobs:
               "actions/download-artifact@v4",
               "name: iSteam-qemu-runtime-ios-arm64",
               "if-no-files-found: error",
-            "- .github/workflows/blank.yml",
           ]
           missing = [item for item in required_release if item not in release]
           if missing:
               raise SystemExit("Missing release requirements: " + ", ".join(missing))
+          paths_ignore = release.split("paths-ignore:", 1)[1].split("schedule:", 1)[0]
+          if "- .github/workflows/blank.yml" not in paths_ignore:
+              raise SystemExit("Mirror-only workflow edits must not trigger app release builds.")
           for obsolete in ("PAGES_TOKEN", "I-Steam/I-steam.github.io", "i-steam.github.io"):
               if obsolete in release:
                   raise SystemExit("Legacy website publishing must be handled by the website repository updater: " + obsolete)
