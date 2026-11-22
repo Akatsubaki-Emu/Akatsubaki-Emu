@@ -9,7 +9,7 @@ options:
 packages:
   StosSign:
     url: https://github.com/stossy11/StosSign
-    branch: main
+    revision: f8075577623707bd7899a884f31f2c4674af18d4
 settings:
   base:
     SWIFT_VERSION: "5.9"
@@ -99,10 +99,16 @@ targets:
           - AppDelegate-tvOS.swift
           - LaunchSetupViewController-tvOS.swift
           - SettingsViewController-tvOS.swift
-          - EntitlementSettingsView.swift
       - path: src
         excludes:
           - Display/VMDisplayViewController-tvOS.swift
+    dependencies:
+      - package: StosSign
+        product: StosSign_API
+      - package: StosSign
+        product: StosSign_Auth
+      - package: StosSign
+        product: StosSign_Common
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.visionos

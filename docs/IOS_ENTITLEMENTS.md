@@ -1,28 +1,36 @@
 # iOS memory entitlements
 
-Akatsubaki Emu declares \`com.apple.developer.kernel.increased-memory-limit\` and \`com.apple.developer.kernel.extended-virtual-addressing\` in \`iSteam/iSteam.entitlements\`. A declaration in that file is only a request: the final code signature and provisioning profile must also authorize the entitlement.
+Akatsubaki Emu declares `com.apple.developer.kernel.increased-memory-limit` and `com.apple.developer.kernel.extended-virtual-addressing` in `iSteam/iSteam.entitlements`. A declaration in that file is only a request: the final code signature and provisioning profile must also authorize the entitlement.
 
 ## Enabling Increased Memory Limit
 
 The iOS Settings screen includes an **Entitlements** page based on the Apple Developer Services flow used by [GetMoreRam](https://github.com/hugeBlack/GetMoreRam):
 
-1. Sign in with the Apple account and developer team that own the installed app's App ID.
-2. Complete Apple's two-factor verification if requested.
-3. Select the team containing the exact bundle ID shown by the current build (\`com.xthrx.isteam\` or \`com.xthrx.isteam.nightly\`).
+1. Open Settings → Entitlements.
+2. Sign in with the Apple account that owns the app's App ID and complete two-factor verification if requested.
+3. Select the developer team that contains the exact bundle ID shown by this installation (`com.xthrx.isteam` or `com.xthrx.isteam.nightly`).
 4. Choose **Enable Increased Memory Limit for Akatsubaki Emu**.
-5. Reinstall the app through SideStore or AltStore using the same Apple account so the installer can obtain and apply a refreshed provisioning profile.
+5. Reinstall/re-sign the app through SideStore or AltStore using the same account so the installer obtains a refreshed provisioning profile.
 
-The integration only updates the current build's exact bundle identifier. It does not enumerate or modify unrelated App IDs. It requests the \`INCREASED_MEMORY_LIMIT\` capability, matching GetMoreRam's upstream implementation.
+The integration looks up only the current build's exact bundle identifier and requests the `INCREASED_MEMORY_LIMIT` capability, matching GetMoreRam's upstream implementation. It does not modify other App IDs.
+
+## Authentication and data handling
+
+- Apple authentication and App ID capability updates use the pinned StosSign package, following GetMoreRam's API flow.
+- Anisette data is obtained through the SideStore Anisette V3 service. The service URL defaults to `https://ani.sidestore.io`.
+- The Apple ID password is held only while the sign-in request runs; this integration does not persist it in UserDefaults or Keychain.
+- Anisette device identity and provisioning data are stored using the iOS Keychain helper adapted from GetMoreRam.
+- Apple controls authentication, team permissions, App ID eligibility and capability availability. Errors are displayed as failures; they are not treated as successful updates.
 
 ## Important limits
 
 - The app cannot grant itself a privileged entitlement at runtime, rewrite its own code signature, or replace its installed provisioning profile from inside its sandbox.
 - Apple invalidates provisioning profiles when an App ID's capabilities change. Reinstallation/re-provisioning is therefore required; see [Apple's capability guidance](https://developer.apple.com/help/account/identifiers/enable-app-capabilities).
 - The account must have permission to modify the App ID, and the App ID must already exist in the selected team. This does not bypass Apple's eligibility rules for free or paid developer accounts.
-- \`get-task-allow\` is a development-signing entitlement and is not granted by the Increased Memory Limit capability request.
+- `get-task-allow` is a development-signing entitlement and is not granted by the Increased Memory Limit capability request.
 - Extended Virtual Addressing remains declared in the entitlements file, but this GetMoreRam-compatible flow does not request it. Do not assume it is active until the signed app's effective entitlements and provisioning profile are inspected.
-- Apple Developer Services authentication is controlled by Apple and StosSign. Authentication failures (including Apple's \`-80045\` response) must be surfaced rather than treated as a successful capability update.
+- A successful API response means Apple accepted the App ID update; it does not prove that the currently installed binary carries the entitlement. Verify the effective entitlements after re-signing and test memory headroom on a supported physical device.
 
 ## Validation
 
-The source-contract test is \`scripts/tests/test_entitlement_management.py\`. A successful API response means Apple accepted the App ID update; it is not proof that a later installed build carries the entitlement. Verify the effective entitlements in the reinstalled app's code signature and test memory headroom on a supported physical device.
+The source-contract test is `scripts/tests/test_entitlement_management.py`. Hosted Apple-platform compilation and physical-device provisioning still need to be verified.

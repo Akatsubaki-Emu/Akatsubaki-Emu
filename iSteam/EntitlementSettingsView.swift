@@ -17,6 +17,10 @@ final class EntitlementViewModel: ObservableObject {
 
     private var verificationCodeHandler: ((String?) -> Void)?
 
+    init() {
+        _ = DataManager.shared.model
+    }
+
     var bundleIdentifier: String {
         Bundle.main.bundleIdentifier ?? "Unknown bundle identifier"
     }

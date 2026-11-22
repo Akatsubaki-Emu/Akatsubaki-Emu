@@ -36,12 +36,23 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn('"Entitlements"', self.settings)
         self.assertIn("EntitlementSettingsView()", self.settings)
 
-    def test_stossign_is_only_attached_to_ios_targets(self):
-        self.assertEqual(self.project.count("product: StosSign_API"), 2)
-        self.assertEqual(self.project.count("product: StosSign_Auth"), 2)
-        self.assertEqual(self.project.count("product: StosSign_Common"), 2)
+    def test_stossign_is_attached_to_all_targets_that_compile_its_sources(self):
+        self.assertEqual(self.project.count("product: StosSign_API"), 3)
+        self.assertEqual(self.project.count("product: StosSign_Auth"), 3)
+        self.assertEqual(self.project.count("product: StosSign_Common"), 3)
         vision = self.project.split("  iSteamVision:", 1)[1]
-        self.assertIn("EntitlementSettingsView.swift", vision)
+        self.assertNotIn("EntitlementSettingsView.swift", vision.split("    settings:", 1)[0])
+
+    def test_anisette_dependencies_are_present_and_initialized_before_use(self):
+        shared = (self.root / "iSteam" / "Shared.swift").read_text(encoding="utf-8")
+        keychain = (self.root / "iSteam" / "Keychain.swift").read_text(encoding="utf-8")
+        anisette = (self.root / "iSteam" / "AnisetteDataHelper.swift").read_text(encoding="utf-8")
+        self.assertIn("class DataManager", shared)
+        self.assertIn("AnisetteDataHelper.shared.url = URL(string: anisetteServerURL)", shared)
+        self.assertIn("class Keychain", keychain)
+        self.assertIn("class AnisetteDataHelper", anisette)
+        self.assertIn("_ = DataManager.shared.model", self.view)
+        self.assertLess(self.view.index("_ = DataManager.shared.model"), self.view.index("AnisetteDataHelper.shared.getAnisetteData()"))
 
     def test_existing_memory_entitlement_declarations_are_preserved(self):
         self.assertIn("com.apple.developer.kernel.increased-memory-limit", self.entitlements)
