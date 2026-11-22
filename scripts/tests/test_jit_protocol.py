@@ -13,6 +13,12 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn("bool iSteamJITIsReady(void)", source)
         self.assertIn("bool iSteamJITIsReady(void);", header)
 
+    def test_non_device_builds_export_unknown_protocol_mode(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
+        fallback = source.rsplit("#else", 1)[1]
+        self.assertIn("int iSteamJITGetProtocolMode(void) { return ISTEAM_JIT_PROTOCOL_UNKNOWN; }", fallback)
+
     def test_jit_readiness_requires_cs_debugged(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
