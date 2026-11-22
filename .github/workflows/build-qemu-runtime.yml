@@ -72,10 +72,14 @@ jobs:
           SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
           PROBE_SOURCE="$RUNNER_TEMP/objc-class-selector-stub-probe.m"
           PROBE_OBJECT="$RUNNER_TEMP/objc-class-selector-stub-probe.o"
+          PROBE_BINARY="$RUNNER_TEMP/objc-class-selector-stub-probe"
           cat > "$PROBE_SOURCE" <<'EOF'
           #import <Metal/Metal.h>
           id iSteamClassSelectorStubProbe(void) {
               return [MTLRenderPassDescriptor renderPassDescriptor];
+          }
+          int main(void) {
+              return iSteamClassSelectorStubProbe() == nil;
           }
           EOF
           "$CLANG" -target arm64-apple-ios15.0 -isysroot "$SDKROOT" \
@@ -85,7 +89,9 @@ jobs:
             echo "Xcode still emitted an Objective-C class-selector stub that the selected linker cannot resolve." >&2
             exit 1
           fi
-          echo "Verified Objective-C class-selector stubs are disabled for the iOS toolchain."
+          "$CLANG" -target arm64-apple-ios15.0 -isysroot "$SDKROOT" \
+            -Wl,-objc_stubs_fast -lobjc -framework Metal "$PROBE_OBJECT" -o "$PROBE_BINARY"
+          echo "Verified the Objective-C class-selector compiler and linker flags on the iOS toolchain."
 
       - name: Install UTM build dependencies
         run: |

@@ -1063,6 +1063,9 @@ for token in [
     'XCODE_APP="/Applications/Xcode_27.1.app"',
     'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
     'if [ "$XCODE_VERSION" != "27.1" ]; then',
+    "PROBE_BINARY=",
+    "-Wl,-objc_stubs_fast",
+    "-lobjc -framework Metal",
 ]:
     if token not in qemu_workflow:
         print(f"QEMU workflow: missing build-integrity step {token!r}", file=sys.stderr)
