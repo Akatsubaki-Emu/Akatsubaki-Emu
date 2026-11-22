@@ -186,7 +186,7 @@ jobs:
             UTM/sysroot-iOS-TCI-arm64
           # Include the workflow itself: Meson cross-file fixes change build configuration.
           # A workflow-only fix must not reuse a QEMU build tree configured without it.
-          key: utm-ios-arm64-deps-v14-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
+          key: utm-ios-arm64-deps-v15-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/package-utm-qemu-tci-runtime.sh', 'scripts/merge-qemu-runtime-variants.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
 
       - name: Build UTM dependencies for physical iOS arm64
         if: steps.freshness.outputs.build == 'true'
@@ -217,13 +217,13 @@ jobs:
         shell: bash
         env:
           NCPU: "2"
-          ISTEAM_QEMU_JIT_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_stikjit_ios.py
           ISTEAM_QEMU_MESON_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_meson_ios.py
           ISTEAM_QEMU_LINK_VERIFIER: ${{ github.workspace }}/scripts/verify_qemu_meson_link.py
         run: |
           set -euo pipefail
           cd UTM
           export OBJCFLAGS="${OBJCFLAGS:-} -fno-objc-msgsend-class-selector-stubs"
+          # ios-tci supplies TCI_BUILD_FLAGS; the patcher preserves them and skips StikJIT region changes.
           python3 "$GITHUB_WORKSPACE/scripts/patch_utm_qemu_ios.py" scripts/build_dependencies.sh
           if [ "${{ inputs.rebuild_dependencies }}" = "true" ] || [ ! -f build-iOS-TCI-arm64/BUILD_SUCCESS ]; then
             ./scripts/build_dependencies.sh -p ios-tci -a arm64
@@ -256,43 +256,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/package-utm-qemu-runtime.sh UTM/UTMBuild.xcarchive build/qemu-runtime-jit jit
-          bash scripts/package-utm-qemu-runtime.sh UTM/UTMBuildTCI.xcarchive build/qemu-runtime-tci tci
+          bash scripts/package-utm-qemu-runtime.sh UTM/UTMBuild.xcarchive build/qemu-runtime-jit
+          bash scripts/package-utm-qemu-tci-runtime.sh UTM/UTMBuildTCI.xcarchive build/qemu-runtime-tci
 
-          mkdir -p build/qemu-runtime/Frameworks build/qemu-runtime/QEMU
-          cp -R build/qemu-runtime-jit/Frameworks/. build/qemu-runtime/Frameworks/
-          cp -R build/qemu-runtime-tci/Frameworks/. build/qemu-runtime/Frameworks/
-          cp -R build/qemu-runtime-jit/QEMU/. build/qemu-runtime/QEMU/
-          cp -R build/qemu-runtime-tci/QEMU/TCI build/qemu-runtime/QEMU/
-          cp build/qemu-runtime-jit/exports.txt build/qemu-runtime/exports.txt
-          cp build/qemu-runtime-jit/BUILD-INFO-jit.txt build/qemu-runtime/BUILD-INFO-jit.txt
-          cp build/qemu-runtime-tci/BUILD-INFO-tci.txt build/qemu-runtime/BUILD-INFO-tci.txt
-          cp build/qemu-runtime-jit/dependency-report-jit.txt build/qemu-runtime/dependency-report-jit.txt
-          cp build/qemu-runtime-tci/dependency-report-tci.txt build/qemu-runtime/dependency-report-tci.txt
-          cp build/qemu-runtime-jit/runtime-file-inventory.txt build/qemu-runtime/runtime-file-inventory-jit.txt
-          cp build/qemu-runtime-tci/runtime-file-inventory.txt build/qemu-runtime/runtime-file-inventory-tci.txt
-          cp UTM/UTMBuild.xcarchive/Info.plist build/qemu-runtime/UTM-archive-Info-JIT.plist
-          cp UTM/UTMBuildTCI.xcarchive/Info.plist build/qemu-runtime/UTM-archive-Info-TCI.plist
-          for mode in JIT TCI; do
-            test -s "build/qemu-runtime/QEMU/$mode/runtime-library-path.txt"
-            relative="$(head -n 1 "build/qemu-runtime/QEMU/$mode/runtime-library-path.txt")"
-            case "$relative" in Frameworks/*) ;; *) echo "Unsafe $mode runtime path: $relative" >&2; exit 1 ;; esac
-            test -s "build/qemu-runtime/$relative"
-          done
-          for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request; do
-            grep -Eq " _?${symbol}$" build/qemu-runtime/QEMU/TCI/exports.txt || {
-              echo "TCI runtime is missing lifecycle export: $symbol" >&2
-              exit 1
-            }
-          done
-          {
-            echo "UTM revision: $(git -C UTM rev-parse HEAD)"
-            echo "Physical iOS arm64 runtime variants: JIT and TCI"
-            echo "JIT uses StikDebug callbacks; TCI uses UTM's iOS-TCI threaded interpreter build and requires no JIT callback."
-            cat build/qemu-runtime/BUILD-INFO-jit.txt
-            cat build/qemu-runtime/BUILD-INFO-tci.txt
-          } > build/qemu-runtime/BUILD-INFO.txt
-          cat build/qemu-runtime/BUILD-INFO.txt
+          git -C UTM rev-parse HEAD > build/qemu-runtime-jit/UTM-SOURCE-REVISION.txt
+          git -C UTM rev-parse HEAD > build/qemu-runtime-tci/UTM-SOURCE-REVISION.txt
+          cp UTM/UTMBuild.xcarchive/Info.plist build/qemu-runtime-jit/UTM-archive-Info.plist
+          cp UTM/UTMBuildTCI.xcarchive/Info.plist build/qemu-runtime-tci/UTM-archive-Info.plist
+
+          bash scripts/merge-qemu-runtime-variants.sh build/qemu-runtime-jit build/qemu-runtime-tci build/qemu-runtime
+          test -s build/qemu-runtime/QEMU/JIT/runtime-library-path.txt
+          test -s build/qemu-runtime/QEMU/TCI/runtime-library-path.txt
+          test -s build/qemu-runtime/QEMU/JIT/exports.txt
+          test -s build/qemu-runtime/QEMU/TCI/exports.txt
 
       - name: Upload verified QEMU runtime artifact
         if: steps.freshness.outputs.build == 'true'
