@@ -21,6 +21,9 @@
  * QEMU runtimes retain their callback ABI without detaching the debugger.
  */
 void iSteamJITDetach(void) {}
+void iSteamJITDetach(void) {
+    /* Intentionally empty: keep TXM executable mappings valid. */
+}
 __attribute__((noinline, optnone, naked))
 void *iSteamJITPrepareRegion(void *address, size_t length) {
     __asm__ volatile("mov x16, #1\n"
