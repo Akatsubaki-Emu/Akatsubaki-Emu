@@ -82,7 +82,7 @@ class EmbeddedStikJITIntegrationTests(unittest.TestCase):
             settings,
         )
         self.assertIn(
-            "Application Support/StikJIT/pairingFile.plist",
+            "Documents/StikJIT/pairingFile.plist",
             settings,
         )
 
@@ -111,6 +111,12 @@ class StikPairIntegrationTests(unittest.TestCase):
     def test_jit_uses_shared_pairing_file_store(self):
         s=self.read("iSteam/JITCoordinator.swift")
         self.assertIn("StikJITPairingFileStore.hasPairingFile",s);self.assertIn("StikJITPairingFileStore.load()",s)
+    def test_pairing_pin_callback_uses_the_callback_function(self):
+        rust=self.read("pairing-ffi/src/lib.rs")
+        self.assertIn('let pin_callback=pin.ok_or("Missing pairing PIN callback")?;',rust)
+        self.assertIn("unsafe{pin_callback(ctx,p.as_ptr())}",rust)
+        self.assertNotIn("pin.ok_or(()).unwrap()",rust)
+
 
 if __name__ == "__main__":
     unittest.main()

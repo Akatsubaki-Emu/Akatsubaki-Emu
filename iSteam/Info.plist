@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
+<plist version="1.0">
+<dict>
 <key>CFBundleExecutable</key><string>iSteam</string>
 <key>CFBundleDisplayName</key><string>Akatsubaki Emu</string>
 <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
@@ -11,13 +12,27 @@
 <key>LSRequiresIPhoneOS</key><true/>
 <key>UIFileSharingEnabled</key><true/>
 <key>LSSupportsOpeningDocumentsInPlace</key><true/>
-<key>LSApplicationQueriesSchemes</key><array><string>stikdebug</string><string>localdevvpn</string></array>\n<key>NSLocalNetworkUsageDescription</key>
-<string>Akatsubaki uses local network discovery to create a secure on-device pairing file for StikJIT.</string>
-<key>NSBonjourServices</key><array><string>_remotepairing-pairable-host._tcp</string></array>
-<key>BGTaskSchedulerPermittedIdentifiers</key><array><string>$(PRODUCT_BUNDLE_IDENTIFIER).pairing.*</string></array>
-<key>UIBackgroundModes</key><array><string>processing</string></array>
-<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleURLSchemes</key><array><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string></array></dict></array>
-<key>NSMotionUsageDescription</key><string>Akatsubaki Emu uses device motion for head-look input in Cardboard VR mode.</string>
+<key>LSApplicationQueriesSchemes</key>
+<array><string>stikdebug</string><string>localdevvpn</string></array>
+<key>NSLocalNetworkUsageDescription</key>
+<string>Akatsubaki uses the local Remote Pairing service to prepare built-in JIT.</string>
+<key>NSBonjourServices</key>
+<array><string>_remotepairing-pairable-host._tcp</string></array>
+<key>BGTaskSchedulerPermittedIdentifiers</key>
+<array><string>$(PRODUCT_BUNDLE_IDENTIFIER).pairing.*</string></array>
+<key>CFBundleURLTypes</key>
+<array><dict>
+<key>CFBundleURLName</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+<key>CFBundleURLSchemes</key><array><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string></array>
+</dict></array>
+<key>NSMotionUsageDescription</key>
+<string>Akatsubaki Emu uses device motion for head-look input in Cardboard VR mode.</string>
 <key>UILaunchScreen</key><dict/>
-<key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
-</dict></plist>
+<key>UISupportedInterfaceOrientations</key>
+<array>
+<string>UIInterfaceOrientationPortrait</string>
+<string>UIInterfaceOrientationLandscapeLeft</string>
+<string>UIInterfaceOrientationLandscapeRight</string>
+</array>
+</dict>
+</plist>

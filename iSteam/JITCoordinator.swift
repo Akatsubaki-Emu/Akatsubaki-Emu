@@ -124,7 +124,7 @@ final class JITCoordinator: NSObject, UIDocumentPickerDelegate {
             let completion = pairingImportCompletion
             pairingImportCompletion = nil
             completion?()
-            show("The device pairing file is stored in the app's protected Application Support container. Its contents are not logged.", title: "Pairing file imported")
+            show("The device pairing file is stored in Documents/StikJIT with complete file protection. Its contents are not logged.", title: "Pairing file imported")
         } catch {
             show("Could not import the pairing file: \(error.localizedDescription)", title: "Pairing file error")
         }
