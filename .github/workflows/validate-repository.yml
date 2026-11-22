@@ -260,6 +260,7 @@ jobs:
         run: python3 scripts/validate-qemu-source.py
 
       - name: Test idempotent QEMU build patchers and link guard
+        if: always()
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
       - name: Compile and run native guest-memory regression tests
@@ -273,6 +274,7 @@ jobs:
           "$RUNNER_TEMP/test-native-guest-memory"
 
       - name: Test native QEMU bridge concurrency and lifecycle
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
