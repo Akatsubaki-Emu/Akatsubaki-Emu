@@ -13,6 +13,9 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
     private let diskLabel = UILabel()
     private var selectedDiskURL: URL?
     private var loadedConfiguration: VMConfiguration?
+    private var launchInProgress = false
+    private var pendingLaunchConfiguration: VMConfiguration?
+    private var pendingLaunchDiskURL: URL?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -213,6 +216,7 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
     }
 
     @objc private func launchSession() {
+        guard !launchInProgress else { return }
         let config = makeConfiguration()
         VRSettings.shared.mode = vrSwitch.isOn ? .cardboard : .flat
         UserDefaults.standard.set(persistSwitch.isOn, forKey: "iSteam.persistSessionData")
@@ -244,15 +248,53 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
             chooseGuestImage()
             return
         }
+        if JITCoordinator.shared.isStikDebugAvailable && !JITCoordinator.shared.isJITReady {
+            launchInProgress = true
+            pendingLaunchConfiguration = config
+            pendingLaunchDiskURL = diskURL
+            statusLabel.text = "Waiting for StikDebug to enable JIT. Return to Akatsubaki Emu after attaching; the VM will start automatically."
+            JITCoordinator.shared.requestJIT(from: self)
+            waitForJIT(until: Date().addingTimeInterval(180))
+            return
+        }
+        completeLaunch(configuration: config, diskURL: diskURL)
+    }
+
+
+    private func waitForJIT(until deadline: Date) {
+        guard launchInProgress,
+              let configuration = pendingLaunchConfiguration,
+              let diskURL = pendingLaunchDiskURL else { return }
+
+        if JITCoordinator.shared.isJITReady {
+            completeLaunch(configuration: configuration, diskURL: diskURL)
+            return
+        }
+        guard Date() < deadline else {
+            launchInProgress = false
+            pendingLaunchConfiguration = nil
+            pendingLaunchDiskURL = nil
+            statusLabel.text = "JIT was not enabled. The VM was not started. Enable JIT in StikDebug and tap Launch again."
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.waitForJIT(until: deadline)
+        }
+    }
+
+    private func completeLaunch(configuration: VMConfiguration, diskURL: URL) {
+        launchInProgress = false
+        pendingLaunchConfiguration = nil
+        pendingLaunchDiskURL = nil
         if persistSwitch.isOn {
             do {
-                try VMSaveSlotStore.shared.saveSessionMetadata(configuration: config, diskImageURL: diskURL)
+                try VMSaveSlotStore.shared.saveSessionMetadata(configuration: configuration, diskImageURL: diskURL)
             } catch {
                 statusLabel.text = "Could not save session: \(error.localizedDescription)"
             }
         }
         navigationController?.pushViewController(
-            VMDisplayViewController(configuration: config, diskImage: diskURL),
+            VMDisplayViewController(configuration: configuration, diskImage: diskURL),
             animated: true
         )
     }
