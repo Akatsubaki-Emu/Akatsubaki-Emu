@@ -7,7 +7,58 @@
 #include <random>
 #include <vector>
 
+static void testGuestMemoryPermissions() {
+    constexpr uint64_t pageSize = 4096;
+    ISteamGuestMemory *memory = isteam_guest_memory_create(pageSize * 4);
+    assert(memory);
+    assert(isteam_guest_memory_begin_mapping(memory));
+
+    constexpr uint8_t readWrite = 0x03;
+    constexpr uint8_t readExecute = 0x05;
+    assert(isteam_guest_memory_map(memory, 0, pageSize * 2, readWrite, false));
+
+    const uint8_t marker = 0x5A;
+    uint8_t value = 0;
+    assert(isteam_guest_memory_write(memory, 0, &marker, 1));
+    assert(isteam_guest_memory_read(memory, 0, &value, 1) && value == marker);
+    assert(!isteam_guest_memory_read_execute(memory, 0, &value, 1));
+
+    assert(isteam_guest_memory_protect(memory, 0, pageSize, readExecute));
+    assert(!isteam_guest_memory_write(memory, 0, &marker, 1));
+    assert(isteam_guest_memory_read_execute(memory, 0, &value, 1) && value == marker);
+
+    std::array<uint8_t, 64> window{};
+    assert(isteam_guest_memory_read_execute_prefix(memory, 0, window.data(), window.size()) == window.size());
+    assert(isteam_guest_memory_read_execute_prefix(memory, pageSize, window.data(), window.size()) == 0);
+
+    assert(!isteam_guest_memory_protect(memory, pageSize * 2, pageSize, 0));
+    assert(!isteam_guest_memory_map(memory, pageSize, pageSize, 0, false));
+    assert(isteam_guest_memory_map(memory, pageSize, pageSize, 0, true));
+    assert(!isteam_guest_memory_read(memory, pageSize, &value, 1));
+    assert(!isteam_guest_memory_write(memory, pageSize, &marker, 1));
+    assert(!isteam_guest_memory_read_execute(memory, pageSize, &value, 1));
+
+    assert(isteam_guest_memory_unmap(memory, 0, pageSize));
+    assert(!isteam_guest_memory_read(memory, 0, &value, 1));
+    assert(!isteam_guest_memory_read_execute(memory, 0, &value, 1));
+    assert(isteam_guest_memory_allocated_pages(memory) == 0);
+    assert(isteam_guest_memory_unmap(memory, 0, pageSize));
+    assert(isteam_guest_memory_unmap(memory, pageSize * 2, pageSize));
+    isteam_guest_memory_destroy(memory);
+
+    ISteamGuestMemory *sparse = isteam_guest_memory_create((1ULL << 30) + pageSize * 8);
+    assert(sparse && isteam_guest_memory_begin_mapping(sparse));
+    const uint64_t sparseAddress = (1ULL << 30) + pageSize * 2;
+    assert(isteam_guest_memory_map(sparse, sparseAddress, pageSize, readExecute, false));
+    assert(isteam_guest_memory_read_execute(sparse, sparseAddress, &value, 1));
+    assert(!isteam_guest_memory_write(sparse, sparseAddress, &marker, 1));
+    assert(isteam_guest_memory_unmap(sparse, sparseAddress, pageSize));
+    assert(!isteam_guest_memory_read_execute(sparse, sparseAddress, &value, 1));
+    isteam_guest_memory_destroy(sparse);
+}
+
 int main() {
+    testGuestMemoryPermissions();
     constexpr uint64_t pageSize = 4096;
     ISteamGuestMemory *memory = isteam_guest_memory_create(pageSize * 3);
     assert(memory != nullptr);
