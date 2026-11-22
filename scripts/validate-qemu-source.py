@@ -166,7 +166,7 @@ required = {
         "min(UInt64(999_999_999)",
         "min(UInt64(999_999)",
 
-        "case 158:",    ],
+            ],
     ".github/workflows/build-qemu-runtime.yml": [
         "group: qemu-runtime-ios-arm64-",
         "cancel-in-progress: false",
@@ -374,7 +374,9 @@ required = {
         "activeSegmentBase = gsBase",
         "dispatchArchPrctl(operation: registers[7], argument: registers[6])",
         "private func dispatchArchPrctl(operation: UInt64, argument: UInt64) -> UInt64",
-        "includeSegmentBase: Bool = true",    ],
+        "includeSegmentBase: Bool = true",
+        "if number == 158",
+    ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
         "hello from static ELF",
@@ -464,7 +466,8 @@ required = {
 
         "let fsSegmentMemory = GuestMemory(size: 4096)",
         "precondition(fsSegmentMemory.readByte(offset: 0x1020) == 0x5A)",
-        "precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)",    ],
+        "precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)",
+    ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
         "\"-vnc\", \"127.0.0.1:0\"",
