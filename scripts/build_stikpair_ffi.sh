@@ -8,7 +8,7 @@ if ! command -v rustup >/dev/null 2>&1; then mkdir -p "$ROOT/build"; curl --fail
 rustup toolchain install stable --profile minimal
 rustup default stable
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
-cargo fmt --manifest-path "$MANIFEST" -- --check
+cargo fmt --manifest-path "$MANIFEST"
 cargo test --manifest-path "$MANIFEST" --locked --target-dir "$TARGET"
 cargo build --manifest-path "$MANIFEST" --locked --release --target aarch64-apple-ios --target-dir "$TARGET"
 cargo build --manifest-path "$MANIFEST" --locked --release --target aarch64-apple-ios-sim --target-dir "$TARGET"
