@@ -422,6 +422,39 @@ struct InterpreterTests {
         precondition(overlongExit == .unsupportedInstruction(address: 0))
         precondition(overlong.rip == 0)
 
+        // ModRM/SIB, displacement, and trailing-immediate decode failures
+        // caused by the 15-byte limit must be unsupported instructions, not
+        // guest-memory faults.
+        let overlongSIBMemory = GuestMemory(size: 64)
+        var overlongSIBInstruction = Data(repeating: 0x48, count: 13)
+        overlongSIBInstruction.append(contentsOf: [0x8B, 0x04, 0x25, 0, 0, 0, 0])
+        precondition(overlongSIBMemory.write(overlongSIBInstruction, offset: 0))
+        let overlongSIB = X86_64Interpreter(memory: overlongSIBMemory)
+        try overlongSIB.reset(entryPoint: 0)
+        let overlongSIBExit = try overlongSIB.run(maxInstructions: 1)
+        precondition(overlongSIBExit == .unsupportedInstruction(address: 0))
+        precondition(overlongSIB.rip == 0)
+
+        let overlongDisplacementMemory = GuestMemory(size: 64)
+        var overlongDisplacementInstruction = Data(repeating: 0x48, count: 12)
+        overlongDisplacementInstruction.append(contentsOf: [0x8B, 0x05, 0, 0, 0, 0])
+        precondition(overlongDisplacementMemory.write(overlongDisplacementInstruction, offset: 0))
+        let overlongDisplacement = X86_64Interpreter(memory: overlongDisplacementMemory)
+        try overlongDisplacement.reset(entryPoint: 0)
+        let overlongDisplacementExit = try overlongDisplacement.run(maxInstructions: 1)
+        precondition(overlongDisplacementExit == .unsupportedInstruction(address: 0))
+        precondition(overlongDisplacement.rip == 0)
+
+        let overlongImmediateMemory = GuestMemory(size: 64)
+        var overlongImmediateInstruction = Data(repeating: 0x48, count: 12)
+        overlongImmediateInstruction.append(contentsOf: [0x81, 0xC0, 1, 2, 3, 4])
+        precondition(overlongImmediateMemory.write(overlongImmediateInstruction, offset: 0))
+        let overlongImmediate = X86_64Interpreter(memory: overlongImmediateMemory)
+        try overlongImmediate.reset(entryPoint: 0)
+        let overlongImmediateExit = try overlongImmediate.run(maxInstructions: 1)
+        precondition(overlongImmediateExit == .unsupportedInstruction(address: 0))
+        precondition(overlongImmediate.rip == 0)
+
         // Fifteen bytes total is valid: fourteen prefixes plus the HLT opcode.
         let maximumLengthMemory = GuestMemory(size: 64)
         var maximumLengthInstruction = Data(repeating: 0x48, count: 14)
