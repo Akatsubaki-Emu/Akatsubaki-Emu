@@ -93,7 +93,15 @@ final class KenranButoExecutableMemory {
     private let entryPoint: UnsafeMutableRawPointer
 
     static var isAvailable: Bool {
-        iSteamAOTExecutableMemoryIsAvailable()
+        #if os(iOS) && !targetEnvironment(simulator)
+        let protocolMode = iSteamJITGetProtocolMode()
+        let coordinatorReady = protocolMode == 1
+            ? JITCoordinator.shared.isQEMUJITReady
+            : JITCoordinator.shared.isJITReady
+        return coordinatorReady && iSteamAOTExecutableMemoryIsAvailable()
+        #else
+        return iSteamAOTExecutableMemoryIsAvailable()
+        #endif
     }
 
     init(code: Data) throws {
