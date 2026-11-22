@@ -34,6 +34,22 @@ class VNCPointerCoalescingTests(unittest.TestCase):
         self.assertLess(start.index("guard !Task.isCancelled"), start.index("self.connection = candidate"))
         self.assertLess(start.index("self.connection = candidate"), start.index("guard installed else"))
 
+    def test_reconnect_does_not_publish_unhandshaken_or_stale_connection(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
+        start = source.split("func start(port:", 1)[1].split("func stop()", 1)[0]
+        install = start.split("let installed = self.withStateLock", 1)[1].split("guard installed", 1)[0]
+        self.assertIn("self.connected = false", install)
+        self.assertIn("self.pointerSendBatch = nil", install)
+        activation = start.split("try await self.performHandshake(candidate)", 1)[1].split("self.onStatus", 1)[0]
+        self.assertIn("guard !Task.isCancelled, self.connection === candidate else { return false }", activation)
+        self.assertIn("guard activated else {", activation)
+        catch = start.split("} catch {", 1)[1].split("if attempt < 119", 1)[0]
+        self.assertIn("if self.connection === candidate", catch)
+        self.assertIn("self.connection = nil", catch)
+        self.assertIn("self.connected = false", catch)
+        self.assertIn("_ = self.keyState.releaseAll()", catch)
+
 
 if __name__ == "__main__":
     unittest.main()

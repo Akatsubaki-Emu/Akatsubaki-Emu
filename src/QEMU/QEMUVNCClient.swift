@@ -85,6 +85,8 @@ final class QEMUVNCClient {
                 let installed = self.withStateLock {
                     guard !Task.isCancelled else { return false }
                     self.connection = candidate
+                    self.connected = false
+                    self.pointerSendBatch = nil
                     return true
                 }
                 guard installed else {
@@ -94,9 +96,15 @@ final class QEMUVNCClient {
                 do {
                     try await self.waitUntilReady(candidate)
                     try await self.performHandshake(candidate)
-                    self.withStateLock {
+                    let activated = self.withStateLock {
+                        guard !Task.isCancelled, self.connection === candidate else { return false }
                         self.connected = true
                         self.pointerSendBatch = VNCPointerSendBatch()
+                        return true
+                    }
+                    guard activated else {
+                        candidate.cancel()
+                        return
                     }
                     self.onStatus?("Guest display connected • local VNC")
                     try await self.readServerMessages(candidate)
@@ -104,6 +112,14 @@ final class QEMUVNCClient {
                 } catch {
                     lastError = error
                     if Task.isCancelled { return }
+                    self.withStateLock {
+                        if self.connection === candidate {
+                            self.connection = nil
+                            self.connected = false
+                            self.pointerSendBatch = nil
+                            _ = self.keyState.releaseAll()
+                        }
+                    }
                     candidate.cancel()
                     if attempt < 119 {
                         try? await Task.sleep(nanoseconds: 500_000_000)
