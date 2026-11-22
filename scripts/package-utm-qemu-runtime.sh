@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ARCHIVE="\${1:?usage: package-utm-qemu-runtime.sh /path/to/UTM.xcarchive /path/to/output [jit|tci]}"
-OUT_REQUEST="\${2:?usage: package-utm-qemu-runtime.sh /path/to/UTM.xcarchive build/output-name [jit|tci]}"
-MODE="\${3:-jit}"
+ARCHIVE="${1:?usage: package-utm-qemu-runtime.sh /path/to/UTM.xcarchive /path/to/output [jit|tci]}"
+OUT_REQUEST="${2:?usage: package-utm-qemu-runtime.sh /path/to/UTM.xcarchive build/output-name [jit|tci]}"
+MODE="${3:-jit}"
 case "$MODE" in
   jit|tci) ;;
   *) echo "Runtime mode must be jit or tci: $MODE" >&2; exit 2 ;;
 esac
 
-SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd -P)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 
 case "$OUT_REQUEST" in
-  build/*) OUT_NAME="\${OUT_REQUEST#build/}" ;;
+  build/*) OUT_NAME="${OUT_REQUEST#build/}" ;;
   *) echo "Refusing unsafe output path (must be build/<name>): $OUT_REQUEST" >&2; exit 2 ;;
 esac
 case "$OUT_NAME" in
@@ -120,7 +120,7 @@ fi
 # original install name/path; renaming it can invalidate LC_ID_DYLIB/@rpath.
 case "$candidate" in
   "$APP/Frameworks/"*)
-    relative="\${candidate#"$APP/Frameworks/"}"
+    relative="${candidate#"$APP/Frameworks/"}"
     runtime_relative="Frameworks/$relative"
     ;;
   *)
@@ -162,7 +162,7 @@ while IFS= read -r firmware_file; do
   [ "$source_dir" = "$data_dir" ] && continue
   case "$source_dir" in
     "$APP") relative_dir="root" ;;
-    "$APP"/*) relative_dir="\${source_dir#"$APP"/}" ;;
+    "$APP"/*) relative_dir="${source_dir#"$APP"/}" ;;
     *) echo "Refusing firmware path outside UTM.app: $firmware_file" >&2; exit 5 ;;
   esac
   case "/$relative_dir/" in
@@ -199,7 +199,7 @@ for root in "$OUT/Frameworks" "$MODE_DIR"; do
   while IFS= read -r -d '' binary; do
     if file "$binary" | grep -q 'Mach-O'; then
       {
-        printf '\n===== %s =====\n' "\${binary#"$OUT"/}"
+        printf '\n===== %s =====\n' "${binary#"$OUT"/}"
         printf '%s\n' '-- architectures --'
         lipo -archs "$binary" 2>&1 || true
         printf '%s\n' '-- linked libraries --'
