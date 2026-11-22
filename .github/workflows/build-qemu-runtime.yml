@@ -47,15 +47,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          XCODE_APP="/Applications/Xcode_27.1.app"
+          XCODE_APP="/Applications/Xcode_27.2.app"
           if [ ! -d "$XCODE_APP" ]; then
-            echo "Xcode 27.1 is required for the QEMU/Mesa Metal 4 headers." >&2
+            echo "Xcode 27.2 is required for the QEMU/Mesa Metal 4 headers." >&2
             exit 1
           fi
           sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
           XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
-          if [ "$XCODE_VERSION" != "27.1" ]; then
-            echo "Expected Xcode 27.1, selected $XCODE_VERSION." >&2
+          if [ "$XCODE_VERSION" != "27.2" ]; then
+            echo "Expected Xcode 27.2, selected $XCODE_VERSION." >&2
             exit 1
           fi
           xcode-select -p
