@@ -173,8 +173,6 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("void isteam_qemu_set_jit_callbacks(ISTEAMJITReadyFunction ready,", once)
         self.assertIn("isteam_jit_ready_callback = ready", once)
         self.assertIn("ISTEAMJITPrepareFunction prepare_region = isteam_jit_prepare_callback", once)
-        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")', once)
-        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITIsReady")', once)
         self.assertIn("__builtin_available(iOS 26.0, *)", once)
         bridge = (Path(__file__).resolve().parents[2] / "iSteam/QEMUNativeBridge.c").read_text(encoding="utf-8")
         self.assertIn(
@@ -185,6 +183,10 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
             "typedef void (*qemu_set_jit_callbacks_fn)(bool (*)(void), void *(*)(void *, size_t), void (*)(void));",
             bridge,
         )
+        with self.assertRaisesRegex(SystemExit, "unexpected host-symbol lookup"):
+            patch_qemu_stikjit_ios.patch_source(
+                once + '\\nvoid *invalid_callback = dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion");'
+            )
         self.assertIn("mach_vm_remap(mach_task_self(), &buf_rw", once)
         self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
         with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
