@@ -18,12 +18,14 @@
 #include <mach/mach.h>
 #include <mach/mach_init.h>
 #include <mach/vm_map.h>
-#define iSteamMachAddress mach_vm_address_t
-#define iSteamMachSize mach_vm_size_t
-#define iSteamMachOffset mach_vm_offset_t
-#define iSteamMachRemap mach_vm_remap
-#define iSteamMachProtect mach_vm_protect
-#define iSteamMachDeallocate mach_vm_deallocate
+// iOS exposes the vm_* user-space API; use the same split-map
+// operations as the existing QEMU StikDebug allocator.
+#define iSteamMachAddress vm_address_t
+#define iSteamMachSize vm_size_t
+#define iSteamMachOffset vm_offset_t
+#define iSteamMachRemap vm_remap
+#define iSteamMachProtect vm_protect
+#define iSteamMachDeallocate vm_deallocate
 #else
 #define iSteamMachAddress vm_address_t
 #define iSteamMachSize vm_size_t
