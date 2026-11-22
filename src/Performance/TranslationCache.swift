@@ -9,6 +9,9 @@ struct TranslationCacheIdentity: Codable, Equatable {
     let hostArchitecture: String
     let cpuFeatures: [String]
     let guestABI: String
+    let translationInstructionBudget: Int
+    let translationInputByteBudget: Int
+    let translationOutputByteBudget: Int
 
     init(guestCodeSHA256: String,
          guestArchitecture: String,
@@ -16,7 +19,10 @@ struct TranslationCacheIdentity: Codable, Equatable {
          translatorVersion: String,
          hostArchitecture: String,
          cpuFeatures: [String],
-         guestABI: String) {
+         guestABI: String,
+         translationInstructionBudget: Int = 4096,
+         translationInputByteBudget: Int = 65_536,
+         translationOutputByteBudget: Int = 1_048_576) {
         self.guestCodeSHA256 = guestCodeSHA256.lowercased()
         self.guestArchitecture = guestArchitecture
         self.translatorIdentifier = translatorIdentifier
@@ -24,6 +30,9 @@ struct TranslationCacheIdentity: Codable, Equatable {
         self.hostArchitecture = hostArchitecture
         self.cpuFeatures = Array(Set(cpuFeatures)).sorted()
         self.guestABI = guestABI
+        self.translationInstructionBudget = translationInstructionBudget
+        self.translationInputByteBudget = translationInputByteBudget
+        self.translationOutputByteBudget = translationOutputByteBudget
     }
 
     var isValid: Bool {
@@ -34,6 +43,10 @@ struct TranslationCacheIdentity: Codable, Equatable {
             && Self.validToken(translatorVersion, maximum: 64)
             && Self.validToken(hostArchitecture, maximum: 32)
             && Self.validToken(guestABI, maximum: 96)
+            && translationInstructionBudget > 0 && translationInstructionBudget <= 4096
+            && translationInputByteBudget > 0 && translationInputByteBudget <= 65_536
+            && translationOutputByteBudget >= 4 && translationOutputByteBudget <= 1_048_576
+            && translationOutputByteBudget.isMultiple(of: 4)
             && cpuFeatures.count <= 128
             && cpuFeatures.allSatisfy { Self.validToken($0, maximum: 64) }
     }

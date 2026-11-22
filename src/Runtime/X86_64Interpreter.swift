@@ -7,10 +7,11 @@ final class X86_64Interpreter: GuestCPUBackend {
     let architecture: VMConfiguration.Architecture = .x86_64
     private(set) var instructionCount: UInt64 = 0
     private let memory: GuestMemory
+    private let aotExecutor: KenranButoAOTExecuting?
     private let syscallDispatcher: LinuxSyscallDispatcher
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
-    private var instructionWindow = [UInt8](repeating: 0, count: 15)
+    private var instructionWindow = [UInt8](repeating: 0, count: 64)
     private var instructionWindowLength = 0
     private var instructionWindowCursor = 0
     private var instructionLengthExceeded = false
@@ -22,12 +23,14 @@ final class X86_64Interpreter: GuestCPUBackend {
     private let stopLock = NSLock()
     private var stopRequested = false
 
-    init(memory: GuestMemory) {
+    init(memory: GuestMemory, aotExecutor: KenranButoAOTExecuting? = nil) {
         self.memory = memory
+        self.aotExecutor = aotExecutor
         syscallDispatcher = LinuxSyscallDispatcher(memory: memory)
     }
 
     func reset(entryPoint: UInt64) throws {
+        aotExecutor?.invalidateAll()
         guard entryPoint < memory.size else {
             throw GuestEngineError.backendNotInstalled(.x86_64)
         }
@@ -92,6 +95,39 @@ final class X86_64Interpreter: GuestCPUBackend {
             let instructionAddress = rip
             instructionLengthExceeded = false
             prepareInstructionWindow(at: instructionAddress)
+            if let aotExecutor, instructionWindowLength > 0 {
+                let remaining = maxInstructions - executed
+                let budget = Int(min(remaining, UInt64(X86_64AOTTranslator.maximumInstructionBudget)))
+                if let result = aotExecutor.execute(
+                    guestCode: Data(instructionWindow.prefix(instructionWindowLength)),
+                    registers: &registers, rip: instructionAddress, rflags: flags,
+                    fsBase: fsBase, gsBase: gsBase, memory: memory, maximumInstructions: budget
+                ) {
+                    guard result.instructionCount >= 0 && result.instructionCount <= budget,
+                          result.guestBytesConsumed >= 0 &&
+                          result.guestBytesConsumed <= instructionWindowLength else {
+                        return .backendUnavailable("Kenran Butō AOT returned an invalid block result.")
+                    }
+                    if result.instructionCount > 0 {
+                        let count = UInt64(result.instructionCount)
+                        executed += count
+                        instructionCount &+= count
+                    }
+                    rip = result.exitRip
+                    if result.exitReason == .memoryReadFault || result.exitReason == .memoryWriteFault {
+                        return .memoryFault(address: result.exitAddress)
+                    }
+                    if result.exitReason == .invalidState {
+                        return .backendUnavailable("Kenran Butō AOT guest-state ABI validation failed.")
+                    }
+                    let (expectedRip, overflow) = instructionAddress.addingReportingOverflow(UInt64(result.guestBytesConsumed))
+                    guard !overflow, result.exitRip == expectedRip,
+                          result.guestBytesConsumed > 0, result.instructionCount > 0 else {
+                        return .backendUnavailable("Kenran Butō AOT side exit did not preserve exact guest RIP.")
+                    }
+                    continue
+                }
+            }
             guard var opcode = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
             var rex: UInt8 = 0
             activeSegmentBase = 0

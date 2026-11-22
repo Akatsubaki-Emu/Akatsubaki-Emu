@@ -1243,6 +1243,65 @@ struct InterpreterTests {
         precondition(leaveFault.registerValue(4) == 56)
         precondition(leaveFault.registerValue(5) == 72)
 
+
+        precondition(MemoryLayout<KenranButoAOTGuestState>.size == 96)
+        precondition(MemoryLayout<KenranButoAOTMemoryCallbacks>.size == 32)
+        let callbackMemory = GuestMemory(size: 4096)
+        precondition(callbackMemory.write(Data([0x11,0x22,0x33,0x44]), offset: 128))
+        var callbacks = KenranButoAOTExecutor.makeMemoryCallbacks(for: callbackMemory)
+        var callbackRegisters = [UInt64](repeating: 0, count: 16)
+        var callbackState = KenranButoAOTGuestState()
+        let stateReady = callbackRegisters.withUnsafeMutableBufferPointer { regs in
+            withUnsafePointer(to: &callbacks) { cb in
+                iSteamAOTGuestStateInitialize(&callbackState, regs.baseAddress, 0x1000, 0x202, 0, 0, cb, 16)
+            }
+        }
+        precondition(stateReady && iSteamAOTGuestStateIsValid(&callbackState))
+        var bytes = [UInt8](repeating: 0, count: 4)
+        let readOK = bytes.withUnsafeMutableBufferPointer { p in
+            iSteamAOTGuestMemoryRead(&callbackState, 128, UnsafeMutableRawPointer(p.baseAddress!), p.count)
+        }
+        precondition(readOK && bytes == [0x11,0x22,0x33,0x44])
+        let replacement:[UInt8] = [0xAA,0xBB,0xCC,0xDD]
+        let writeOK = replacement.withUnsafeBufferPointer { p in
+            iSteamAOTGuestMemoryWrite(&callbackState, 132, UnsafeRawPointer(p.baseAddress!), p.count)
+        }
+        precondition(writeOK)
+        var fault:UInt8=0
+        let faultOK = withUnsafeMutablePointer(to:&fault) { p in
+            iSteamAOTGuestMemoryRead(&callbackState, 4096, UnsafeMutableRawPointer(p), 1)
+        }
+        precondition(!faultOK && callbackState.exit_reason == 7)
+        precondition(callbackState.exit_address == 4096 && callbackState.exit_rip == 0x1000)
+
+        if iSteamAOTExecutableMemoryIsAvailable() {
+            let program=Data([0xB8,0x01,0,0,0,0xBB,0x02,0,0,0,0x01,0xD8,0xF4])
+            let hybridMemory=GuestMemory(size:8192)
+            precondition(hybridMemory.write(program,offset:0x1000))
+            let executor=KenranButoAOTExecutor()
+            var regs=[UInt64](repeating:0,count:16)
+            let sideExit=executor.execute(guestCode:program,registers:&regs,rip:0x1000,rflags:0x202,
+                fsBase:0,gsBase:0,memory:hybridMemory,maximumInstructions:8)
+            precondition(sideExit != nil && sideExit!.guestBytesConsumed == 10)
+            precondition(sideExit!.instructionCount == 2 && sideExit!.exitRip == 0x100A)
+            precondition(sideExit!.exitReason == .unsupportedInstruction)
+            precondition(regs[0] == 1 && regs[3] == 2)
+            let baselineMemory=GuestMemory(size:8192)
+            precondition(baselineMemory.write(program,offset:0x1000))
+            let baseline=X86_64Interpreter(memory:baselineMemory)
+            try baseline.reset(entryPoint:0x1000)
+            let baselineExit=try baseline.run(maxInstructions:8)
+            let hybrid=X86_64Interpreter(memory:hybridMemory,aotExecutor:executor)
+            try hybrid.reset(entryPoint:0x1000)
+            let hybridExit=try hybrid.run(maxInstructions:8)
+            precondition(hybridExit == baselineExit && hybridExit == .halted)
+            precondition(hybrid.instructionCount == baseline.instructionCount)
+            for r in 0..<16 { precondition(hybrid.registerValue(r) == baseline.registerValue(r)) }
+            precondition(executor.blocksExecuted >= 2)
+            print("Kenran Butō AOT native block execution, exact-RIP side exit and differential passed")
+        } else {
+            print("Kenran Butō AOT native execution skipped: host lacks ARM64 executable-memory support")
+        }
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
