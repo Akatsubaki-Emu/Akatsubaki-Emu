@@ -54,6 +54,22 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertIn("void qemu_init(int argc, char *argv[])", fake)
         self.assertIn("poison_nonzero_return_register();", fake)
 
+    def test_qemu_main_loop_and_cleanup_use_upstream_status_abi(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
+        thread = source.split("static void *qemu_thread_main", 1)[1].split(
+            "bool isteam_qemu_validate_library", 1
+        )[0]
+        fake = (root / "scripts" / "tests" / "fake_qemu_runtime.c").read_text(encoding="utf-8")
+        self.assertIn("typedef int (*qemu_main_loop_fn)(void);", source)
+        self.assertIn("typedef void (*qemu_cleanup_fn)(int);", source)
+        self.assertIn("#define ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI 5", source)
+        self.assertIn("int qemu_exit_status = g_qemu_main_loop();", thread)
+        self.assertIn("if (g_qemu_cleanup) g_qemu_cleanup(qemu_exit_status);", thread)
+        self.assertIn("int qemu_main_loop(void)", fake)
+        self.assertIn("void qemu_cleanup(int status)", fake)
+        self.assertIn("return 37;", fake)
+
 
 if __name__ == "__main__":
     unittest.main()
