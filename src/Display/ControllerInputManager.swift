@@ -9,6 +9,7 @@ final class ControllerInputManager {
     var onLook: ((Float, Float) -> Void)?
     var onButton: ((String, Bool, String) -> Void)?
     private var isStarted = false
+    private var mappingProfileObserver: NSObjectProtocol?
     private let buttonActionLock = NSLock()
     private var activeButtonActions: [String: String] = [:]
 
@@ -17,6 +18,14 @@ final class ControllerInputManager {
         isStarted = true
         NotificationCenter.default.addObserver(self, selector: #selector(connect(_:)), name: .GCControllerDidConnect, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(disconnect(_:)), name: .GCControllerDidDisconnect, object: nil)
+        mappingProfileObserver = NotificationCenter.default.addObserver(
+            forName: ControllerMappingStore.profileDidChangeNotification,
+            object: ControllerMappingStore.shared,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, self.isStarted else { return }
+            GCController.controllers().forEach(self.configure)
+        }
         GCController.startWirelessControllerDiscovery {}
         GCController.controllers().forEach(configure)
     }
@@ -25,8 +34,13 @@ final class ControllerInputManager {
         guard isStarted else { return }
         isStarted = false
         NotificationCenter.default.removeObserver(self)
+        if let mappingProfileObserver {
+            NotificationCenter.default.removeObserver(mappingProfileObserver)
+            self.mappingProfileObserver = nil
+        }
         GCController.stopWirelessControllerDiscovery()
         onLook?(0, 0)
+        let profile = ControllerMappingStore.shared.profile
         for controller in GCController.controllers() {
             let source = sourceID(for: controller)
             onMove?(0, 0, source + ":left")
@@ -35,7 +49,7 @@ final class ControllerInputManager {
             let buttons = buttonInputs(for: pad)
             for (_, name) in buttons {
                 let buttonSource = source + ":button:" + name
-                let action = mappedAction(for: name, source: buttonSource, pressed: false)
+                let action = mappedAction(for: name, source: buttonSource, pressed: false, profile: profile)
                 onButton?(action, false, buttonSource)
             }
             detachHandlers(from: pad)
@@ -56,26 +70,28 @@ final class ControllerInputManager {
         onMove?(0, 0, source + ":right")
         onLook?(0, 0)
         if let pad = controller.extendedGamepad {
+            let profile = ControllerMappingStore.shared.profile
             let buttons = buttonInputs(for: pad)
             for (_, name) in buttons {
                 let buttonSource = source + ":button:" + name
-                let action = mappedAction(for: name, source: buttonSource, pressed: false)
+                let action = mappedAction(for: name, source: buttonSource, pressed: false, profile: profile)
                 onButton?(action, false, buttonSource)
             }
             detachHandlers(from: pad)
         }
     }
 
-    private func mappedAction(for name: String, source: String, pressed: Bool) -> String {
+    private func mappedAction(for name: String, source: String, pressed: Bool,
+                              profile: ControllerMappingProfile) -> String {
         buttonActionLock.lock()
         defer { buttonActionLock.unlock() }
         if pressed {
-            let action = ControllerMappingStore.shared.profile.action(for: name)
+            let action = profile.action(for: name)
             activeButtonActions[source] = action
             return action
         }
         return activeButtonActions.removeValue(forKey: source)
-            ?? ControllerMappingStore.shared.profile.action(for: name)
+            ?? profile.action(for: name)
     }
 
     private func sourceID(for controller: GCController) -> String {
@@ -92,19 +108,18 @@ final class ControllerInputManager {
 
     private func configure(_ controller: GCController) {
         guard let pad = controller.extendedGamepad else { return }
+        let profile = ControllerMappingStore.shared.profile
         let source = sourceID(for: controller)
         let leftSource = source + ":left"
         let rightSource = source + ":right"
         pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
             guard let self else { return }
-            let profile = ControllerMappingStore.shared.profile
             let point = Self.applyDeadzone(x: x, y: y, deadzone: profile.leftDeadzone)
             if profile.swapSticks { self.onLook?(point.0, point.1) }
             else { self.onMove?(point.0, point.1, leftSource) }
         }
         pad.rightThumbstick.valueChangedHandler = { [weak self] _, x, y in
             guard let self else { return }
-            let profile = ControllerMappingStore.shared.profile
             var point = Self.applyDeadzone(x: x, y: y, deadzone: profile.rightDeadzone)
             if profile.invertLookY { point.1 = -point.1 }
             if profile.swapSticks { self.onMove?(point.0, point.1, rightSource) }
@@ -115,7 +130,8 @@ final class ControllerInputManager {
             let buttonSource = source + ":button:" + name
             button.valueChangedHandler = { [weak self] _, _, pressed in
                 guard let self else { return }
-                let action = self.mappedAction(for: name, source: buttonSource, pressed: pressed)
+                let action = self.mappedAction(for: name, source: buttonSource,
+                                               pressed: pressed, profile: profile)
                 self.onButton?(action, pressed, buttonSource)
             }
         }

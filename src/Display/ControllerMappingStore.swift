@@ -42,6 +42,7 @@ struct ControllerMappingProfile: Codable, Equatable {
 
 final class ControllerMappingStore {
     static let shared = ControllerMappingStore()
+    static let profileDidChangeNotification = Notification.Name("iSteam.controllerMapping.profileDidChange")
     private let defaultsKey = "iSteam.controllerMapping.v1"
     private let lock = NSLock()
     private var cachedProfile: ControllerMappingProfile?
@@ -60,17 +61,19 @@ final class ControllerMappingStore {
             guard (try? newValue.validate()) != nil,
                   let data = try? JSONEncoder().encode(newValue) else { return }
             lock.lock()
-            defer { lock.unlock() }
             UserDefaults.standard.set(data, forKey: defaultsKey)
             cachedProfile = newValue
+            lock.unlock()
+            NotificationCenter.default.post(name: Self.profileDidChangeNotification, object: self)
         }
     }
 
     func reset() {
         lock.lock()
-        defer { lock.unlock() }
         UserDefaults.standard.removeObject(forKey: defaultsKey)
         cachedProfile = .standard
+        lock.unlock()
+        NotificationCenter.default.post(name: Self.profileDidChangeNotification, object: self)
     }
 
     private func loadProfile() -> ControllerMappingProfile {
