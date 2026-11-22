@@ -15,7 +15,7 @@ class QEMUJITPolicyTests(unittest.TestCase):
         self.assertNotIn("isStikDebugAvailable", gate)
         self.assertLess(runtime.index("isQEMUJITReady"), runtime.index("switch QEMURuntimeStatus.inspect()"))
         coordinator = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
-        self.assertIn("return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady", coordinator)
+        self.assertIn("return isJITReady", coordinator)
 
 
 if __name__ == "__main__":
