@@ -28,7 +28,29 @@ jobs:
       - name: Checkout i-Steam
         uses: actions/checkout@v7
 
+      # Recheck after this job obtains an Xcode runner. A queued job can become
+      # stale after the parent workflow's lightweight freshness check.
+      - name: Check push freshness before expensive QEMU build
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 {print $1}')"
+            if [ -z "$latest_main" ]; then
+              echo "Unable to determine the current main commit." >&2
+              exit 1
+            fi
+            if [ "$latest_main" != "$GITHUB_SHA" ]; then
+              echo "Skipping stale QEMU build from $GITHUB_SHA; main is now $latest_main."
+              echo "build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
       - name: Checkout UTM with submodules
+        if: steps.freshness.outputs.build == 'true'
         id: utm-source
         uses: actions/checkout@v7
         with:
@@ -39,6 +61,7 @@ jobs:
           fetch-depth: 1
 
       - name: Select Xcode
+        if: steps.freshness.outputs.build == 'true'
         id: xcode
         shell: bash
         run: |
@@ -61,6 +84,7 @@ jobs:
           echo "version=${XCODE_VERSION}-ios-${IOS_SDK_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Verify Objective-C class-selector stub compatibility
+        if: steps.freshness.outputs.build == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -90,6 +114,7 @@ jobs:
           echo "Verified the Objective-C class-selector compiler and linker flags on the iOS toolchain."
 
       - name: Install UTM build dependencies
+        if: steps.freshness.outputs.build == 'true'
         run: |
           set -euo pipefail
           brew install bison pkg-config gettext glib libgpg-error nasm meson cmake llvm spirv-llvm-translator spirv-tools libxcb libxrandr
@@ -114,6 +139,7 @@ jobs:
           echo "Using iOS compiler runtime: $RUNTIME"
 
       - name: Cache UTM dependency build and sysroot
+        if: steps.freshness.outputs.build == 'true'
         if: ${{ !inputs.rebuild_dependencies }}
         uses: actions/cache@v6
         with:
@@ -125,6 +151,7 @@ jobs:
           key: utm-ios-arm64-deps-v14-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
 
       - name: Build UTM dependencies for physical iOS arm64
+        if: steps.freshness.outputs.build == 'true'
         shell: bash
         env:
           NCPU: "2"
@@ -148,6 +175,7 @@ jobs:
           test -d sysroot-iOS-arm64
 
       - name: Build UTM iOS archive
+        if: steps.freshness.outputs.build == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -156,6 +184,7 @@ jobs:
           test -d UTMBuild.xcarchive/Products/Applications/UTM.app
 
       - name: Package and verify in-process QEMU runtime
+        if: steps.freshness.outputs.build == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -165,6 +194,7 @@ jobs:
           cat build/qemu-runtime/BUILD-INFO.txt
 
       - name: Upload verified QEMU runtime artifact
+        if: steps.freshness.outputs.build == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: iSteam-qemu-runtime-ios-arm64
