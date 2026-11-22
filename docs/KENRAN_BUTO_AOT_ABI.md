@@ -65,7 +65,7 @@ Executable blocks begin with an AArch64 `BTI C` landing instruction. The runtime
 revalidates the ABI, guest-state pointer, budget, exit RIP and exit reason after
 native execution; malformed results restore the pre-call GPR snapshot and fall
 back to interpretation. The in-memory executable-block cache is bounded by both
-64 entries and 16 MiB of generated code.
+64 entries and 16 MiB of page-rounded executable mappings.
 
 The focused native harness includes a 20-byte, four-instruction block to ensure
 multi-instruction AOT dispatch is not accidentally constrained by the 15-byte

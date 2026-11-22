@@ -61,11 +61,18 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
                     return nil
                 }
                 if state.exit_reason==0{
-                    let (next,overflow)=rip.addingReportingOverflow(UInt64(t.guestBytesConsumed));guard !overflow else{return nil}
+                    let (next,overflow)=rip.addingReportingOverflow(UInt64(t.guestBytesConsumed));guard !overflow else {
+                        for index in rb.indices { rb[index]=originalRegisters[index] }
+                        return nil
+                    }
                     state.rip=next;state.exit_rip=next;state.instructions_executed=UInt64(t.instructionCount)
                     state.exit_reason=Self.exitCode(t.stopReason)
                 }
                 guard let reason=KenranButoAOTExitReason(rawValue:state.exit_reason) else {
+                    for index in rb.indices { rb[index]=originalRegisters[index] }
+                    return nil
+                }
+                if reason == .invalidState {
                     for index in rb.indices { rb[index]=originalRegisters[index] }
                     return nil
                 }
@@ -122,7 +129,7 @@ private final class KenranButoAOTExecutableBlock{
             let detail=error.withUnsafeBufferPointer{$0.baseAddress.map{String(cString:$0)} ?? "AOT executable allocation failed."}
             throw NSError(domain:"KenranButoAOT",code:2,userInfo:[NSLocalizedDescriptionKey:detail])
         }
-        region=created;self.translation=translation;codeByteCount=code.count
+        region=created;self.translation=translation;codeByteCount=((code.count+4095)/4096)*4096
     }
     deinit{iSteamAOTExecutableMemoryDestroy(region)}
     func invoke(_ state:inout KenranButoAOTGuestState)->Bool{iSteamAOTExecutableMemoryInvoke(region,&state)}
