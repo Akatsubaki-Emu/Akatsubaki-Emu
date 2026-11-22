@@ -9,7 +9,11 @@ class JITProtocolSourceTests(unittest.TestCase):
         header = (root / "iSteam" / "JIT26Protocol.h").read_text(encoding="utf-8")
         self.assertIn('"brk #0xf00d\\n"', source)
         self.assertIn('"mov x16, #1\\n"', source)
-        self.assertIn('"mov x16, #0\\n"', source)
+        detach = source.split("void iSteamJITDetach(void) {", 1)[1].split("\n}", 1)[0]
+        self.assertIn("compatibility", detach)
+        self.assertIn("no-op", detach)
+        self.assertNotIn("brk #0xf00d", detach)
+        self.assertNotIn("mov x16, #0", detach)
         self.assertIn("bool iSteamJITIsReady(void)", source)
         self.assertIn("bool iSteamJITIsReady(void);", header)
 
