@@ -173,15 +173,20 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
-          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
           APP="build/visionDerivedData/Build/Products/Release-xros/iSteamVision.app"
           test -d "$APP"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "com.xthrx.isteam.visionos"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
           mkdir -p build/visionPayload/Payload
           cp -R "$APP" build/visionPayload/Payload/iSteamVision.app
           ditto -c -k --sequesterRsrc --keepParent build/visionPayload/Payload build/iSteam-visionOS.ipa
           unzip -t build/iSteam-visionOS.ipa >/dev/null
-          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app com.xthrx.isteam.visionos
+          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"
           shasum -a 256 build/iSteam-visionOS.ipa > build/iSteam-visionOS.ipa.sha256
 
       - name: Upload build artifact

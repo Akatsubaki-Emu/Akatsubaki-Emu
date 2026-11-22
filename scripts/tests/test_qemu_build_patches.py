@@ -225,6 +225,17 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertNotIn("export OBJCFLAGS=", source)
         self.assertNotIn("\n; then\n", source)
 
+    def test_visionos_release_channel_uses_distinct_bundle_identifiers(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        step = source.split("- name: Build and package visionOS app", 1)[1].split("- name: Upload build artifact", 1)[0]
+        self.assertIn('if [ "$RELEASE_CHANNEL" = "main" ]; then', step)
+        self.assertIn('EXPECTED_BUNDLE="com.xthrx.isteam.visionos"', step)
+        self.assertIn('EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"', step)
+        self.assertIn('PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE"', step)
+        self.assertIn('grep -Fx "$EXPECTED_BUNDLE"', step)
+        self.assertIn('bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"', step)
+
     def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
   LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a
