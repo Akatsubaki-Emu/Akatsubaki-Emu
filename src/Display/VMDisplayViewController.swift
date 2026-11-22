@@ -124,6 +124,11 @@ final class VMDisplayViewController: UIViewController {
         guard !startupFlowStarted else { return }
         startupFlowStarted = true
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        guard JITCoordinator.shared.isJITProtocolSupported else {
+            status.text = "QEMU unavailable • requires iOS 26+ and a supported StikDebug JIT protocol"
+            EmulationLog.shared.write(status.text)
+            return
+        }
         if !JITCoordinator.shared.isQEMUJITReady {
             status.text = "Waiting for JIT • preparing LocalDevVPN and StikDebug"
             JITCoordinator.shared.requestJIT(from: self, onFailure: { [weak self] message in
