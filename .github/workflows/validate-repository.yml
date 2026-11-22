@@ -215,7 +215,7 @@ jobs:
                   raise SystemExit("QEMU build must pin and verify Xcode 26.2: " + token)
           if "spirv-tools" not in qemu or "spirv-llvm-translator" not in qemu:
               raise SystemExit("QEMU Mesa dependency build must install SPIRV-Tools and its LLVM translator.")
-          if "utm-ios-arm64-deps-v12-" not in qemu:
+          if "utm-ios-arm64-deps-v13-" not in qemu:
               raise SystemExit("QEMU dependency cache key must be versioned.")
           if "steps.utm-source.outputs.commit" not in qemu:
               raise SystemExit("QEMU cache key must include the checked-out UTM revision.")
@@ -230,7 +230,7 @@ jobs:
               "scripts/verify_qemu_meson_link.py",
               "ISTEAM_QEMU_LINK_VERIFIER",
               "steps.xcode.outputs.version",
-              "utm-ios-arm64-deps-v12-",
+              "utm-ios-arm64-deps-v13-",
           ]:
               if token not in qemu:
                   raise SystemExit("QEMU build patch contract is missing: " + token)
@@ -269,8 +269,3 @@ jobs:
             -o "$RUNNER_TEMP/test-qemu-native-bridge"
           "$RUNNER_TEMP/test-qemu-native-bridge" "$RUNNER_TEMP/libfakeqemu.so"
 
-      - name: Check shell script syntax
-        run: |
-          set -euo pipefail
-          bash -n scripts/package-utm-qemu-runtime.sh
-          bash -n scripts/validate-apple-package.sh

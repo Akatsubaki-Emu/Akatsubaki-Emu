@@ -988,6 +988,10 @@ if r"\n" in builder:
 # The QEMU dependency build must patch Meson and verify the actual link edge
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+repository_validation = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
+if "utm-ios-arm64-deps-v13-" not in repository_validation or "utm-ios-arm64-deps-v12-" in repository_validation:
+    print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
+    failed = True
 for step in (
     "Checkout i-Steam",
     "Checkout UTM with submodules",
