@@ -7,13 +7,13 @@ This document describes the QEMU runtime artifact used by Akatsubaki Emu. It doe
 The source tree defines two physical-iOS arm64 UTM runtime variants:
 
 - `iOS`: native TCG/JIT runtime; it requires the StikDebug callback ABI.
-- `iOS-TCI`: threaded TCG interpreter runtime; it must not require executable-memory JIT.
+- `iOS-SE` (UTM platform `ios-tci`): threaded TCG interpreter runtime; it must not require executable-memory JIT.
 
 The intended workflow builds both archives, packages JIT under `QEMU/JIT` and TCI under `QEMU/TCI`, merges the variants, and embeds the combined `Frameworks/` and `QEMU/` directories in the iOS release IPA.
 
-**This pipeline is not yet verified.** The current workflow requests scheme `iOS-TCI` and assumes product `UTM.app`; the pinned upstream UTM build matrix uses platform `ios-tci`, shared scheme `iOS-SE`, and product `UTM SE.app`. Correct scheme/product discovery before relying on the archive.
+The workflow now requests upstream UTM's `iOS-SE` scheme for the `ios-tci` dependency target and expects `UTM SE.app`. The TCI archive path is therefore aligned with the upstream product. The dual-runtime source and packaging guards are implemented, but no successful hosted dual-runtime build or combined IPA has yet been recorded.
 
-The merger is also unsafe in its current form: an output such as `build/../outside` passed the prefix check and was deleted by `rm -rf`; shared-framework collisions can also fail or overwrite content. Restrict output to a validated basename beneath a canonical non-symlink build directory, and compare shared framework contents before merging. Do not run the merger against real artifacts until these defects are fixed.
+The merger now restricts output to a validated child of its canonical build directory and compares shared framework contents before merging. The TCI package path rejects the JIT callback, and the final IPA validator checks both runtime manifests and per-mode exports. These checks still need a successful macOS build and final IPA run.
 
 Build verification: no successful hosted dual-runtime build and combined artifact have been recorded.
 
@@ -21,7 +21,7 @@ The runtime library must be built for **physical iOS arm64** and runs an **x86_6
 
 ## Native bridge contract
 
-`iSteam/QEMUNativeBridge.c` requires all five exports below and registers the JIT callbacks before calling `qemu_init`:
+`iSteam/QEMUNativeBridge.c` requires the four lifecycle exports for both modes. The fifth export is required and registered only for the JIT runtime:
 
 - `qemu_init`
 - `qemu_main_loop`
@@ -44,7 +44,7 @@ Do not declare the main loop or cleanup as `void(void)`: doing so discards the r
 
 `src/QEMU/QEMURuntimeStatus.swift` resolves the library path from the generated manifest. `QEMURuntimeStatus.inspect(requiresJIT:)` selects the JIT or TCI directory and asks the native bridge to load the library with `RTLD_NOW` and resolve the mode-specific exports. `QEMUNativeRuntime` performs this preflight before starting QEMU.
 
-The app-side TCI selection path bypasses the JIT callback/readiness check, but automatic accelerator selection is not yet correct: `.automatic` currently maps directly to `.jit` rather than selecting TCI when JIT is unavailable and a validated TCI runtime is present. Do not enable automatic fallback until both packaged runtime variants pass validation.
+The app-side TCI path bypasses JIT callback/readiness checks. `.automatic` now selects JIT only when a supported JIT session is already ready; otherwise it selects the packaged TCI interpreter. The source policy is in place, but the TCI artifact still needs a successful build/load test and physical-device guest boot.
 
 Validate a signed library with the matching mode:
 
@@ -57,22 +57,13 @@ The standalone validator requires Apple tooling (`file`, `lipo`, `nm`, `vtool`, 
 
 ## JIT requirements
 
-On physical iOS 17.4 and later, **JIT mode** requires an active StikDebug debugger/JIT session and the app's `get-task-allow` entitlement. On supported iOS 26+ TXM devices, the patched TCG allocator uses the StikDebug executable-region protocol. The StikDebug allocator patch must be gated to the JIT build; the current TCI patch path still needs that correction.
+For QEMU **JIT mode**, the app requires a physical iOS 26+ device, the `get-task-allow` entitlement, and a supported StikDebug JIT session. On supported TXM devices, the patched TCG allocator uses the StikDebug executable-region protocol. The allocator patch is now applied only when `PLATFORM=ios`; the `ios-tci` build does not receive the JIT patch.
 
 TCI uses the threaded TCG interpreter and bypasses the physical-iOS JIT readiness path. This does not prove that the current TCI artifact builds, loads, or boots.
 
 ## No-JIT fallback status
 
-UTM upstream provides a separate `ios-tci` dependency target using `--enable-tcg-threaded-interpreter`, with the shared `iOS-SE` scheme and `UTM SE.app` product. Akatsubaki has source for a TCI build/package path, but the following blockers remain:
-
-1. Correct the workflow's scheme and product discovery to match the pinned UTM revision.
-2. Apply the StikDebug executable-memory patch only to the JIT build.
-3. Require the four lifecycle/shutdown exports in TCI and reject `isteam_qemu_set_jit_callbacks`.
-4. Fix merger path containment and shared-framework collision handling.
-5. Make the final IPA validator inspect both manifests and enforce the correct per-mode export policy.
-6. Make `.automatic` choose JIT only when JIT is ready, otherwise choose TCI only when the TCI artifact is validated and loadable.
-
-Do not claim no-JIT guest execution until the TCI library and complete transitive dependencies are embedded, the final IPA validates both modes, and a physical iPad boots a guest without requesting JIT.
+UTM upstream provides a separate `ios-tci` dependency target using `--enable-tcg-threaded-interpreter`, the shared `iOS-SE` scheme and `UTM SE.app` product. The source-level blockers have now been addressed: the workflow uses the correct scheme/product; the StikDebug allocator patch is JIT-only; the TCI packager requires lifecycle exports and rejects the JIT callback; the merger checks path containment and shared framework contents; the release workflow and IPA validator check both runtime variants; and automatic mode falls back to TCI when JIT is not ready. The remaining blockers are successful hosted archive/link/package verification and a physical iPad guest boot without requesting JIT.
 
 Reference: [UTM iOS development and iOS SE build instructions](https://github.com/utmapp/UTM/blob/main/Documentation/iOSDevelopment.md).
 
