@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
+#include <sys/sysctl.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 #endif
@@ -90,6 +91,16 @@ static bool iSteamJITDebuggerIsAttached(void) {
         && (info.kp_proc.p_flag & P_TRACED) != 0;
 }
 
+static bool iSteamJITDebuggerIsAttached(void) {
+    int mib[4] = { CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid() };
+    kinfo_proc info;
+    size_t size = sizeof(info);
+    info.kp_proc.p_flag = 0;
+    return sysctl(mib, 4, &info, &size, NULL, 0) == 0
+        && size >= sizeof(info)
+        && (info.kp_proc.p_flag & P_TRACED) != 0;
+}
+
 bool iSteamJITIsReady(void) {
     typedef int (*CSOpsFunction)(pid_t, unsigned int, void *, size_t);
     CSOpsFunction queryStatus = (CSOpsFunction)dlsym(RTLD_DEFAULT, "csops");
@@ -101,6 +112,7 @@ bool iSteamJITIsReady(void) {
         return false;
     }
 
+    if (__builtin_available(iOS 26.0, *)) {
     if (__builtin_available(iOS 26.0, *) && iSteamJITIsSupported()) {
         return iSteamJITDebuggerIsAttached();
     }
