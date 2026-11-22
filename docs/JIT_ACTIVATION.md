@@ -12,7 +12,7 @@
 4. LocalDevVPN submits its tunnel-start request and calls back to Akatsubaki after its own one-second delay. Akatsubaki waits a further two seconds, then opens StikDebug with the current bundle identifier and process ID using `stikdebug://enable-jit`.
 5. On iOS 26+ devices with TXM/SPTM, the StikDebug request includes `script-name=universal.js`. The QEMU allocator selects the breakpoint-based executable-region protocol only when the host's hardware check reports TXM; non-TXM devices omit the script and retain QEMU's normal Darwin split-W^X allocator.
 6. When Akatsubaki becomes active again, it polls the process debugger/JIT status. QEMU starts only after that state is confirmed. If the request fails or times out, QEMU remains stopped.
-7. Before `qemu_init`, the native bridge resolves QEMU's exported `isteam_qemu_set_jit_callbacks` and registers three direct host callbacks: `iSteamJITIsReady`, `iSteamJITPrepareRegion`, and `iSteamJITDetach`. QEMU separately resolves only `iSteamJITIsSupported` to choose the iOS 26+ TXM path. The QEMU allocator uses the registered callbacks to prepare the executable region and detach after the writable/executable aliases are established.
+7. Before `qemu_init`, the native bridge resolves QEMU's exported `isteam_qemu_set_jit_callbacks` and registers three direct host callbacks: `iSteamJITIsReady`, `iSteamJITPrepareRegion`, and `iSteamJITDetach`. QEMU separately resolves only `iSteamJITIsSupported` to choose the iOS 26+ TXM path. The allocator prepares the executable region through the callback; `iSteamJITDetach` deliberately remains a no-op because early StikDebug detachment can revoke execute permission from the TXM RX alias. The debugger stays attached for the app process lifetime.
 
 ## First-time setup
 

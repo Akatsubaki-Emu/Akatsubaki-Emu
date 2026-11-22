@@ -13,12 +13,14 @@
 #endif
 
 #if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR
-__attribute__((noinline, optnone, naked))
-void iSteamJITDetach(void) {
-    __asm__ volatile("mov x16, #0\n"
-                     "brk #0xf00d\n"
-                     "ret\n");
-}
+/*
+ * Keep the StikDebug session attached for the process lifetime.
+ *
+ * On TXM devices, detaching after creating the RX alias can revoke execute
+ * permission from that mapping. Keep this exported hook as a no-op so older
+ * QEMU runtimes retain their callback ABI without detaching the debugger.
+ */
+void iSteamJITDetach(void) {}
 __attribute__((noinline, optnone, naked))
 void *iSteamJITPrepareRegion(void *address, size_t length) {
     __asm__ volatile("mov x16, #1\n"
