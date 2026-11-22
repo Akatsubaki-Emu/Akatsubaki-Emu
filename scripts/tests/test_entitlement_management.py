@@ -39,6 +39,7 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("SecItemDelete", self.keychain)
         self.assertIn("kSecAttrSynchronizable", self.keychain)
         self.assertIn("kCFBooleanFalse", self.keychain)
+        self.assertEqual(self.keychain.count("kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly"), 2)
         self.assertIn("func loadIdentifier() throws", self.keychain)
         self.assertIn("func storeIdentifier(_ value: String?) throws", self.keychain)
         self.assertIn("throw keychainError", self.keychain)

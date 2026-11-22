@@ -57,13 +57,13 @@ final class EntitlementAnisetteKeychain {
         }
 
         var attributes = query
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         attributes[kSecValueData as String] = data
         let addStatus = SecItemAdd(attributes as CFDictionary, nil)
         if addStatus == errSecDuplicateItem {
             let updateAttributes: [String: Any] = [
                 kSecValueData as String: data,
-                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             ]
             let updateStatus = SecItemUpdate(query as CFDictionary, updateAttributes as CFDictionary)
             guard updateStatus == errSecSuccess else { throw keychainError("update", status: updateStatus) }
