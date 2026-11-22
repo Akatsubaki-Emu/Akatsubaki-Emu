@@ -53,6 +53,27 @@ jobs:
             scripts/tests/test_translation_cache.swift \
             -o "$RUNNER_TEMP/test-translation-cache"
           "$RUNNER_TEMP/test-translation-cache"
+      - name: Test Kenran Buto x86-64 to ARM64 AOT translation
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/X86_64AOTTranslator.swift \
+            scripts/tests/test_kenran_buto_aot_translator.swift \
+            -o "$RUNNER_TEMP/test-kenran-buto-aot"
+          "$RUNNER_TEMP/test-kenran-buto-aot"
+      - name: Test Kenran Buto AOT artifact cache and ABI isolation
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Core/EmulationLog.swift \
+            src/Performance/TranslationCache.swift \
+            src/Runtime/X86_64AOTTranslator.swift \
+            src/Runtime/KenranButoAOTCompiler.swift \
+            scripts/tests/test_kenran_buto_aot_cache.swift \
+            -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
+          "$RUNNER_TEMP/test-kenran-buto-aot-cache"
       - name: Test ELF program-header table mapping
         if: matrix.scheme == 'iSteam'
         run: |

@@ -1,8 +1,8 @@
 # Kenran Butō (絢爛舞踏) — Hybrid runtime composition
 
 - **System name:** Kenran Butō (絢爛舞踏).
-- **Status:** composable execution-policy prototype; the translation-cache artifact layer is implemented and a limited static Linux process-entry stack is now built, but no production translator or full Windows/Linux userspace stack is integrated.
-- **Component naming:** Kenran Butō AOT is the planned static x86-64 → ARM64 translator; Kenran Butō Cache stores validated translated-code artifacts; Kenran Butō Router selects backends and fallback; Kenran Butō Runtime orchestrates execution; Kenran Butō Graphics owns graphics translation. These names do not imply that missing implementations are complete.
+- **Status:** composable execution-policy prototype; the translation-cache artifact layer and a bounded x86-64 to AArch64 AOT translation/cache bring-up are implemented, alongside a limited static Linux process-entry stack. No executable AOT dispatcher or full Windows/Linux userspace stack is integrated.
+- **Component naming:** Kenran Butō AOT is a bounded static x86-64 → ARM64 translator bring-up; Kenran Butō Cache stores validated translated-code artifacts; Kenran Butō Router selects backends and fallback; Kenran Butō Runtime orchestrates execution; Kenran Butō Graphics owns graphics translation. These names do not imply that missing implementations are complete.
 - **Planner:** `src/Runtime/ExecutionBackendRouter.swift`
 - **Cache:** `src/Performance/TranslationCache.swift`
 - **Launch entry point:** `src/Steam/GameLauncher.swift` → `src/Steam/LinuxELFRuntime` (bounded static ELF bring-up through `GuestMachine`) or `src/Runtime/WindowsRuntime.swift` (Windows path still requires a verified compatibility stack)
@@ -33,9 +33,9 @@
 
 ## What is actually integrated today
 
-- **Translation cache:** stores versioned translated-code artifacts using a cache identity that includes guest-code SHA-256, guest architecture, translator identity/version, host architecture, CPU features and guest ABI. Each artifact has an integrity digest, is written atomically, is rejected and removed if corrupt or mismatched, and is bounded to 8 MiB per code artifact, 512 entries and 256 MiB total. Cache entries can be explicitly invalidated. The cache returns bytes only; it does not allocate executable memory, invoke JIT, or execute code. No translator currently consumes or produces these artifacts.
+- **Translation cache:** stores versioned translated-code artifacts using a cache identity that includes guest-code SHA-256, guest architecture, translator identity/version, host architecture, CPU features and guest ABI. Each artifact has an integrity digest, is written atomically, is rejected and removed if corrupt or mismatched, and is bounded to 8 MiB per code artifact, 512 entries and 256 MiB total. Cache entries can be explicitly invalidated. The cache returns bytes only; it does not allocate executable memory, invoke JIT, or execute code. `KenranButoAOTCompiler` now produces and validates bounded translation artifacts, but no executable dispatcher consumes them.
 - **Windows PE:** `WindowsPEImage` performs bounded metadata inspection; `WindowsPELoader` is read-only inspection. No PE image mapping, executable memory, import resolver, AOT translator or Windows process execution engine is integrated.
-- **Static AOT:** no complete x86-64→ARM64 decoder, semantic IR, code generator or relinker is integrated.
+- **Static AOT:** `X86_64AOTTranslator` currently translates a deliberately small subset (NOP, exact ENDBR64-as-no-op, MOV immediate and register-only MOV) and stops at the first unsupported instruction with an exact fallback offset. `KenranButoAOTCompiler` keys and caches the validated artifact. This is not a complete decoder/IR/code generator/relinker and the emitted ARM64 bytes are not executable or dispatched.
 - **FEXCore:** not integrated or packaged.
 - **Box64:** a C/Swift bridge can look for an already-loaded Box64 entry point. It does not bundle Box64, provide a Linux rootfs/syscall ABI, or prove game execution.
 - **Wine/Proton:** not integrated.
@@ -65,3 +65,12 @@ The planner's availability set must be populated only by concrete runtime probes
 - A Windows kernel and kernel-mode anti-cheat cannot be replaced by user-mode CPU translation. Anti-cheat support requires publisher approval for the exact environment.
 - Do not disable, bypass, spoof or tamper with anti-cheat.
 - A planned composition is not a working runtime. Verify physical-device boot, process launch, graphics, input/audio, shutdown and persistence before claiming compatibility.
+
+ 
+## Kenran Butō AOT translator bring-up
+
+`src/Runtime/X86_64AOTTranslator.swift` provides bounded x86-64 to AArch64 block translation for NOP, exact ENDBR64-as-no-op, MOV register-immediate (32/64-bit), and register-only MOV (32/64-bit). These operations do not modify x86 arithmetic flags. The translator enforces instruction, output and guest-input budgets, rejects the REX.B `0x90` XCHG form rather than miscompiling it as NOP, and stops at the first unsupported/truncated instruction with a precise guest-byte fallback offset.
+
+`KenranButoAOTCompiler` validates and caches serialized translation artifacts using guest-code SHA-256, guest ABI, translator version, AArch64 target and CPU feature identity. Cache hits are revalidated against the original guest bytes.
+
+**This remains a translation foundation, not an executable AOT runtime.** There is no guest-register context ABI, executable-memory provider, block dispatcher, cache invalidation integration for self-modifying guest code, or tested transition back into the interpreter. Arithmetic/flags, memory operands, branches, calls/returns, syscalls, SIMD, atomics, relocations and cross-block control flow remain unsupported. The router must not advertise `.staticAOT` as operational until those execution requirements and physical-iOS JIT constraints are implemented and validated.
