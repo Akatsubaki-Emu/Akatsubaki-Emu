@@ -65,3 +65,12 @@ The planner's availability set must be populated only by concrete runtime probes
 - A Windows kernel and kernel-mode anti-cheat cannot be replaced by user-mode CPU translation. Anti-cheat support requires publisher approval for the exact environment.
 - Do not disable, bypass, spoof or tamper with anti-cheat.
 - A planned composition is not a working runtime. Verify physical-device boot, process launch, graphics, input/audio, shutdown and persistence before claiming compatibility.
+
+
+## Kenran Butō AOT translator bring-up
+
+The initial x86-64 → AArch64 translator is now integrated as a deliberately narrow foundation. It currently translates NOP (excluding the REX.B XCHG encoding), exact ENDBR64-as-no-op, MOV register-immediate (32/64-bit), and register-only MOV (32/64-bit). These instructions do not modify x86 arithmetic flags, so their emitted AArch64 instructions preserve the supported guest-visible register semantics without inventing flag state.
+
+The decoder stops before the first unsupported or truncated instruction and returns an exact guest-byte fallback offset. Instruction count and output size are bounded, and no partially decoded instruction is emitted. The compiler keys artifacts by guest-code SHA-256, guest ABI, translator version, AArch64 target and baseline CPU feature set, then stores validated results through TranslationCache.
+
+This remains a translation/cache foundation, not an executable AOT runtime. The emitted ARM64 bytes are not allocated as executable memory or dispatched. Arithmetic/flags, memory operands, branches, calls/returns, syscalls, SIMD, atomics, exception behavior, relocation/linking and cross-block control flow remain unsupported. The router must not advertise staticAOT as operational until a platform-verified execution adapter safely maps/dispatches artifacts, validates guest state and resumes the interpreter/dynamic backend at the recorded fallback offset.
