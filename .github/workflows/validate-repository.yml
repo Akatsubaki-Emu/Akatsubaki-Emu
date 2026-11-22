@@ -167,7 +167,7 @@ jobs:
           required_release = [
               "platform: [iOS, tvOS, visionOS]",
               "uses: ./.github/workflows/build-qemu-runtime.yml",
-              "needs: qemu-runtime",
+              "needs: [qemu-runtime, check-platform-build-freshness]",
               "actions/download-artifact@",
               "name: iSteam-qemu-runtime-ios-arm64",
               "if-no-files-found: error",
@@ -193,6 +193,9 @@ jobs:
               raise SystemExit("Release artifacts must not silently ignore missing files.")
           if "workflow_call:" not in qemu or "workflow_dispatch:" not in qemu:
               raise SystemExit("QEMU workflow must support both reusable and manual execution.")
+          qemu_job = qemu.split("\n  build-utm-runtime:\n", 1)[1].split("\n    steps:\n", 1)[0]
+          if "concurrency:" in qemu_job or "group: qemu-runtime-" in qemu_job:
+              raise SystemExit("QEMU builds must not be serialized by a concurrency group.")
           if "runs-on: xcode-27" not in qemu:
               raise SystemExit("QEMU/Mesa build requires the Xcode 27 runner image.")
           if "runs-on: macos-15" in release or "runs-on: macos-15" in platform_validation:
@@ -209,6 +212,8 @@ jobs:
                   if token not in workflow:
                       raise SystemExit("Apple build workflow must pin and verify Xcode 26.2: " + token)
           release_job = release.split("\n  release:\n", 1)[1]
+          if "group: isteam-release-publish-${{ matrix.channel }}" not in release_job or "cancel-in-progress: false" not in release_job:
+              raise SystemExit("Release-channel publication must remain serialized.")
           if "runs-on: ubuntu-24.04" not in release_job or "sha256sum -c" not in release_job:
               raise SystemExit("Release publication should verify assets on Ubuntu, not consume a macOS runner.")
           push_contract = "push:\n    branches: [main]\n    paths:\n      - .github/workflows/validate-ios-build.yml"
@@ -240,7 +245,7 @@ jobs:
                   raise SystemExit("QEMU build patch contract is missing: " + token)
           if "--extra-ldflags=-Wl,-force_load" in qemu:
               raise SystemExit("Do not rely on QEMU configure LDFLAGS; verify the Meson target LINK_ARGS instead.")
-          if "qemu-runtime:" not in release or "needs: qemu-runtime" not in release:
+          if "qemu-runtime:" not in release or "needs: [qemu-runtime, check-platform-build-freshness]" not in release:
               raise SystemExit("App builds must wait for the same-run QEMU runtime artifact.")
           # Permit only the rolling release-tag update after all assets publish.
           release_without_channel_tag_update = release.replace(

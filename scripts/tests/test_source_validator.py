@@ -435,12 +435,12 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("min(UInt64(999_999)", timeval)
 
 
-    def test_qemu_runtime_does_not_cancel_active_builds_or_release_jobs(self):
+    def test_qemu_runtime_allows_parallel_builds_and_serializes_release_publication(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
         qemu_job = workflow.split("\n  build-utm-runtime:\n", 1)[1].split("\n    steps:\n", 1)[0]
-        self.assertIn("group: qemu-runtime-${{ github.workflow }}-${{ github.ref }}", qemu_job)
-        self.assertIn("cancel-in-progress: false", qemu_job)
+        self.assertNotIn("concurrency:", qemu_job)
+        self.assertNotIn("group: qemu-runtime-", qemu_job)
 
         release = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         release_job = release.split("\n  release:\n", 1)[1]
