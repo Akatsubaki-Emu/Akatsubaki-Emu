@@ -24,6 +24,8 @@ swift-runtime-tests:
   interruptible: true
   timeout: 20m
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+      when: never
     - changes:
         - src/Runtime/*.swift
         - src/Runtime/**/*.swift
@@ -60,6 +62,8 @@ native-memory-tests:
   interruptible: true
   timeout: 5m
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+      when: never
     - changes:
         - iSteam/NativeGuestMemory.cpp
         - iSteam/NativeGuestMemory.h
@@ -75,6 +79,7 @@ python-source-contracts:
   interruptible: true
   timeout: 5m
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "api"'
     - changes:
         - .gitlab-ci.yml
         - .github/workflows/**/*
@@ -85,6 +90,7 @@ python-source-contracts:
     - when: never
   script:
     - apt-get update && apt-get install -y --no-install-recommends bash build-essential && rm -rf /var/lib/apt/lists/*
+    - bash -n scripts/package-utm-qemu-runtime.sh scripts/validate-qemu-runtime.sh scripts/validate-apple-package.sh
     - python -m py_compile scripts/validate-qemu-source.py
     - python scripts/validate-qemu-source.py
     - python -m unittest discover -s scripts/tests -p 'test_*.py'
