@@ -174,12 +174,45 @@ final class QEMUNativeRuntime {
             ("edk2-x86_64-code.fd", "edk2-x86_64-vars.fd"),
             ("edk2-x86_64-code.secboot.fd", "edk2-x86_64-vars.fd"),
         ]
-        for (codeName, variablesName) in pairs {
-            guard let code = containedRegularFile(named: [codeName], in: directory),
-                  let variables = containedRegularFile(named: [variablesName], in: directory) else { continue }
-            return (code: code, variables: variables)
+        let names = Set(pairs.flatMap { [$0.0, $0.1] })
+        let root = directory.resolvingSymlinksInPath().standardizedFileURL
+        let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+
+        func validated(_ candidate: URL) -> URL? {
+            let resolved = candidate.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+            let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey])
+            guard resolved.path.hasPrefix(prefix), values?.isRegularFile == true else { return nil }
+            return resolved
         }
-        return nil
+
+        var matches: [String: URL] = [:]
+        for name in names {
+            if let candidate = validated(directory.appendingPathComponent(name)) {
+                matches[name] = candidate
+            }
+        }
+
+        func matchedPair() -> (code: URL, variables: URL)? {
+            for (codeName, variablesName) in pairs {
+                if let code = matches[codeName], let variables = matches[variablesName] {
+                    return (code: code, variables: variables)
+                }
+            }
+            return nil
+        }
+        if let pair = matchedPair() { return pair }
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+        for case let url as URL in enumerator where names.contains(url.lastPathComponent) {
+            let name = url.lastPathComponent
+            guard matches[name] == nil, let candidate = validated(url) else { continue }
+            matches[name] = candidate
+        }
+        return matchedPair()
     }
 
     private static func findUEFIVariables(matching firmware: URL, in directory: URL) -> URL? {

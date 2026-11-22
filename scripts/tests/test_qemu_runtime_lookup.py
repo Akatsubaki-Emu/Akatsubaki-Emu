@@ -34,6 +34,18 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertIn("findUEFIVariables(matching: firmware, in: dataDirectory)", runtime)
         self.assertIn("selectedFirmware.lastPathComponent", runtime)
 
+    def test_uefi_pair_lookup_enumerates_nested_bundle_once(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        pair_finder = runtime.split("private static func findUEFIFirmwarePair", 1)[1].split(
+            "private static func findUEFIVariables", 1
+        )[0]
+        self.assertEqual(pair_finder.count("FileManager.default.enumerator("), 1)
+        self.assertIn("let names = Set(pairs.flatMap", pair_finder)
+        self.assertIn("names.contains(url.lastPathComponent)", pair_finder)
+        self.assertIn("matches[name] == nil", pair_finder)
+        self.assertIn("validated(directory.appendingPathComponent(name))", pair_finder)
+
     def test_uefi_variable_store_path_rejects_symlinks_and_escapes(self):
         root = Path(__file__).resolve().parents[2]
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
