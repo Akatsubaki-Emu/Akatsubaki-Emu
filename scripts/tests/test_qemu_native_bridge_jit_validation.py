@@ -54,6 +54,7 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertIn("void qemu_init(int argc, char *argv[])", fake)
         self.assertIn("poison_nonzero_return_register();", fake)
 
+
     def test_clear_starting_helper_has_valid_declaration(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")

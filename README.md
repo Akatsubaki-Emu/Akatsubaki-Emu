@@ -18,12 +18,23 @@
 
 [**GitHub**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu) · [**All releases**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases) · [**Nightly builds**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) · [**GitLab mirror**](https://gitlab.com/chantinlongxthrx/I-steam) · [**AltStore source**](https://altdirect.app/?url=https://akatsubaki-emu.github.io/AltSource.json)
 
-![Alt](https://repobeats.axiom.co/api/embed/60c92ea5e53d1048f89bf703d5444e243a2c5244.svg "Repobeats analytics image")
+
+| Project Activity & Code Diffs | Contributors & Languages |
+| :---: | :---: |
+| ![Overview](docs/metrics-overview.svg) | ![Team](docs/metrics-team.svg) |
+
+
 
 **Akatsubaki Emu** is a Steam-oriented game library and experimental guest-runtime project for Apple platforms.
 
 > [!WARNING]
 > **Akatsubaki Emu is experimental and is not yet a working PC emulator.** It does not currently boot arbitrary Windows/Linux images through a fully integrated emulator or promise that Steam games will run. The tvOS interface is a prototype, not a game launcher. CI IPAs are unsigned; installation requires a compatible signing method, and packaging success does not prove the app works on a device.
+
+## Development timeline (estimate)
+
+- **First playable physical iOS build: February–May 2027.** This is an ambitious planning estimate, not a promised release date. It depends on completing and integrating the Kenran Butō execution path, the required AOT/runtime and ABI work, a reproducible physical-device build, and basic guest display/input. The estimate must be revised as real integration, CI and device-test evidence becomes available.
+- **Full emulator completion: not yet estimable.** Broad Windows/Linux compatibility, graphics translation and other production features remain outside the first-playable milestone; there is not enough verified progress to give them a reliable completion date.
+
 
 ## Downloads
 

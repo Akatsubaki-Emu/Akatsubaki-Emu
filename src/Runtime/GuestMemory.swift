@@ -28,6 +28,20 @@ final class GuestMemory {
         return success ? data : nil
     }
 
+    func read(offset: UInt64, length: Int, into data: inout Data,
+              destinationOffset: Int) -> Bool {
+        guard let native, length >= 0, destinationOffset >= 0,
+              destinationOffset <= data.count,
+              length <= data.count - destinationOffset,
+              offset <= size, UInt64(length) <= size - offset else { return false }
+        if length == 0 { return true }
+        return data.withUnsafeMutableBytes { bytes -> Bool in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            let destination = base.advanced(by: destinationOffset)
+            return isteam_guest_memory_read(native, offset, destination, length)
+        }
+    }
+
     func readByte(offset: UInt64) -> UInt8? {
         guard let native, offset < size else { return nil }
         var value: UInt8 = 0

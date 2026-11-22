@@ -1,7 +1,7 @@
 # Automatic QEMU JIT activation
 
 - **Status:** Implemented at source level; not yet verified on a physical device.
-- **Scope:** Physical iOS devices running iOS 17.4 or later. Simulator and Mac Catalyst paths are excluded.
+- **Scope:** General StikDebug JIT acquisition supports physical iOS 17.4+ devices. QEMU TCG specifically requires iOS 26+ and a recognised protocol (standard split-WX or TXM); simulator and Mac Catalyst are excluded from the device activation path.
 - **Owner:** `JITCoordinator` coordinates helper apps and readiness; `VMDisplayViewController` gates QEMU startup; the existing QEMU native bridge and allocator own executable-region preparation.
 
 ## Startup lifecycle

@@ -14,6 +14,20 @@ final class GuestMemory {
         return Data(bytes[Int(offset)..<Int(offset) + length])
     }
 
+    func read(offset: UInt64, length: Int, into data: inout Data,
+              destinationOffset: Int) -> Bool {
+        guard length >= 0, destinationOffset >= 0,
+              destinationOffset <= data.count,
+              length <= data.count - destinationOffset,
+              offset <= size, UInt64(length) <= size - offset else { return false }
+        if length == 0 { return true }
+        let start = Int(offset)
+        data.replaceSubrange(destinationOffset..<(destinationOffset + length),
+                             with: bytes[start..<(start + length)])
+        return true
+    }
+
+
     func write(_ data: Data, offset: UInt64) -> Bool {
         guard offset <= size, UInt64(data.count) <= size - offset else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset) + data.count, with: data)
@@ -41,6 +55,7 @@ final class GuestMemory {
             $0 | UInt64($1.element) << ($1.offset * 8)
         }
     }
+
 
     func zero(offset: UInt64, length: UInt64) -> Bool {
         guard offset <= size, length <= size - offset, length <= UInt64(Int.max) else { return false }

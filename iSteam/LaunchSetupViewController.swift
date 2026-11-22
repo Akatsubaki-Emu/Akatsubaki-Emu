@@ -275,9 +275,10 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
             return
         }
         let writableDiskURL = selectedWritableDiskURL
-        if JITCoordinator.shared.isStikDebugAvailable && !JITCoordinator.shared.isJITReady {
+#if !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        if !JITCoordinator.shared.isQEMUJITReady {
             launchInProgress = true
-            statusLabel.text = "Akatsubaki is starting LocalDevVPN and StikDebug. Return here after the JIT handoff; the VM will start automatically."
+            statusLabel.text = "Akatsubaki is checking executable-memory readiness. Complete the JIT handoff if prompted; the VM will start automatically."
             JITCoordinator.shared.requestJIT(from: self, onFailure: { [weak self] message in
                 guard let self else { return }
                 self.launchInProgress = false
@@ -286,6 +287,7 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
                 self?.completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)
             }
             return
+#endif
         }
         completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)
     }

@@ -130,11 +130,16 @@ final class LinuxELFRuntime {
                 memorySize: Self.guestMemorySize
             )
             guard machine.state == .configured else {
+                let initializationError = machine.initializationError
+                    ?? GuestEngineError.invalidState("The guest machine failed to initialize without a recorded error.")
+                EmulationLog.shared.write(
+                    "Linux guest machine initialization failed: \(initializationError.localizedDescription)"
+                )
                 machine.stop()
                 self.finish(
                     token: token,
                     machine: nil,
-                    result: .failure(GuestEngineError.memoryUnavailable)
+                    result: .failure(initializationError)
                 )
                 return
             }
