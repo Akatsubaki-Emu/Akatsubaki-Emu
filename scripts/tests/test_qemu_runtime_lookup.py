@@ -71,6 +71,24 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertIn("values?.isRegularFile == true", library_check)
         self.assertNotIn("isDirectory", library_check)
 
+    def test_fallback_runtime_scan_filters_jit_and_tci_artifacts(self):
+        root = Path(__file__).resolve().parents[2]
+        status = (root / "src" / "QEMU" / "QEMURuntimeStatus.swift").read_text(encoding="utf-8")
+        locate = status.split("static func locate", 1)[1].split(
+            "private static func validateLoadableLibrary", 1
+        )[0]
+        self.assertIn('let isTCIArtifact = name.contains("-tci")', locate)
+        self.assertIn('path.contains("/tci/")', locate)
+        self.assertIn('path.contains("/qemu-tci.framework/")', locate)
+        self.assertIn('requiresJIT ? !isTCIArtifact : isTCIArtifact', locate)
+
+    def test_capability_probe_accepts_tci_when_jit_runtime_is_missing(self):
+        root = Path(__file__).resolve().parents[2]
+        registry = (root / "src" / "Runtime" / "RuntimeCapabilityRegistry.swift").read_text(encoding="utf-8")
+        self.assertIn("QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: true)", registry)
+        self.assertIn("QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: false)", registry)
+        self.assertIn("The bundled QEMU TCI no-JIT library loads", registry)
+
     def test_start_path_uses_loadability_preflight_before_native_start(self):
         root = Path(__file__).resolve().parents[2]
         status = (root / "src" / "QEMU" / "QEMURuntimeStatus.swift").read_text(encoding="utf-8")
