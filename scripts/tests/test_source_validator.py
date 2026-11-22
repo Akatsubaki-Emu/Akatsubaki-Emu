@@ -62,6 +62,22 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("clearPendingStopRequest()", pause)
         self.assertIn("clearPendingStopRequest()", stop)
 
+    def test_release_ipa_requires_all_five_qemu_exports(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        ios_package = workflow.split("- name: Build and package iOS IPA", 1)[1].split(
+            "- name: Build and package tvOS IPA", 1
+        )[0]
+        for symbol in (
+            "qemu_init",
+            "qemu_main_loop",
+            "qemu_cleanup",
+            "qemu_system_shutdown_request",
+            "isteam_qemu_set_jit_callbacks",
+        ):
+            with self.subTest(symbol=symbol):
+                self.assertIn(f"grep -Eq ' _?{symbol}$'", ios_package)
+
     def test_qemu_packager_has_one_complete_candidate_scan(self):
         root = Path(__file__).resolve().parents[2]
         package = (root / "scripts" / "package-utm-qemu-runtime.sh").read_text(encoding="utf-8")
@@ -334,10 +350,11 @@ class SourceValidatorTests(unittest.TestCase):
         settings = (root / "src" / "Core" / "RuntimeSettings.swift").read_text(encoding="utf-8")
         builder = (root / "src" / "QEMU" / "QEMUCommandBuilder.swift").read_text(encoding="utf-8")
         docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
-        self.assertIn("TCG still uses JIT code generation", settings)
+        self.assertIn("TCG with a 64 MiB split-WX translation buffer; still requires JIT executable memory", settings)
+        self.assertIn("?? .linuxVM", settings)
         self.assertNotIn("Slower compatibility fallback", settings)
         self.assertIn("tcg,tb-size=128,split-wx=on", builder)
-        self.assertIn(' : "tcg"', builder)
+        self.assertIn("tcg,tb-size=64,split-wx=on", builder)
         self.assertIn("QEMU TCG uses JIT code generation", docs)
 
     def test_linux_arm32_translator_requires_linux_syscall_abi(self):

@@ -428,7 +428,7 @@ required = {
         "Self.escapeDriveValue(diskImage.path)",
         "replacingOccurrences(of: \",\", with: \",,\")",
         "tcg,tb-size=128,split-wx=on",
-        'configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg,tb-size=64,split-wx=on"',
+        "tcg,tb-size=64,split-wx=on",
     ],
     "src/Core/VMEngine.swift": [
         "var onStateChange: ((State) -> Void)?",
@@ -902,6 +902,8 @@ else:
         'grep -Eq \' _?qemu_init$\' "$RUNTIME_DIR/exports.txt"',
         'grep -Eq \' _?qemu_main_loop$\' "$RUNTIME_DIR/exports.txt"',
         'grep -Eq \' _?qemu_cleanup$\' "$RUNTIME_DIR/exports.txt"',
+        'grep -Eq \' _?qemu_system_shutdown_request$\' "$RUNTIME_DIR/exports.txt"',
+        'grep -Eq \' _?isteam_qemu_set_jit_callbacks$\' "$RUNTIME_DIR/exports.txt"',
     ]:
         if token not in ios_package:
             print(f"release workflow: runtime packaging guard missing: {token}", file=sys.stderr)
