@@ -35,6 +35,9 @@ enum VMAccelerationBackend: String, CaseIterable {
         }
     }
 
+    /// Explicit QEMU JIT selection must not silently change to TCI; only Automatic may fall back.
+    var allowsTCIFallback: Bool { self == .automatic }
+
     var detail: String {
         switch self {
         case .automatic:
