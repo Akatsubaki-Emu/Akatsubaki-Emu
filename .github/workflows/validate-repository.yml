@@ -306,6 +306,8 @@ jobs:
           "$RUNNER_TEMP/test-elf-phdr"
           swiftc -parse-as-library -swift-version 5 src/QEMU/VNCKeyState.swift scripts/tests/test_vnc_key_state.swift -o "$RUNNER_TEMP/test-vnc-key-state"
           "$RUNNER_TEMP/test-vnc-key-state"
+          swiftc -parse-as-library -swift-version 5 src/QEMU/QEMUCommandBuilder.swift scripts/tests/test_qemu_command_builder.swift -o "$RUNNER_TEMP/test-qemu-command-builder"
+          "$RUNNER_TEMP/test-qemu-command-builder"
           swiftc -parse-as-library -swift-version 5 src/Runtime/WindowsPEImage.swift scripts/tests/test_windows_pe_image.swift -o "$RUNNER_TEMP/test-windows-pe"
           "$RUNNER_TEMP/test-windows-pe"
           swiftc -parse-as-library -swift-version 5 src/Runtime/ELF64Loader.swift src/Runtime/X86_64ALU.swift src/Runtime/LinuxProcessStackBuilder.swift src/Runtime/LinuxSyscallDispatcher.swift src/Runtime/X86_64Interpreter.swift scripts/tests/test_static_elf_execution.swift -o "$RUNNER_TEMP/test-static-elf"
