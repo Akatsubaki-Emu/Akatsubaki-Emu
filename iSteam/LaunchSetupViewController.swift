@@ -297,17 +297,27 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         }
         let writableDiskURL = selectedWritableDiskURL
 #if !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
-        if !JITCoordinator.shared.isQEMUJITReady {
+        if config.accelerator == .jit && !JITCoordinator.shared.isQEMUJITReady {
             launchInProgress = true
             statusLabel.text = "Akatsubaki is checking executable-memory readiness. Complete the JIT handoff if prompted; the VM will start automatically."
             JITCoordinator.shared.requestJIT(from: self, onFailure: { [weak self] message in
                 guard let self else { return }
-                self.launchInProgress = false
-                self.statusLabel.text = "JIT failed • \(message)"
+                switch QEMURuntimeStatus.inspect(requiresJIT: false) {
+                case .ready:
+                    var fallbackConfiguration = config
+                    fallbackConfiguration.accelerator = .tcg
+                    self.statusLabel.text = "JIT unavailable; falling back to the no-JIT QEMU TCI interpreter."
+                    self.completeLaunch(configuration: fallbackConfiguration, diskURL: diskURL,
+                                         writableDiskURL: writableDiskURL)
+                case .unavailable(let reason):
+                    self.launchInProgress = false
+                    self.statusLabel.text = "JIT failed • \(message). No-JIT TCI fallback unavailable • \(reason)"
+                }
             }) { [weak self] in
                 self?.completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)
             }
             return
+        }
 #endif
         }
         completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)
