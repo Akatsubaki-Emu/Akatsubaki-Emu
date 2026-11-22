@@ -22,6 +22,40 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("var isJITReady: Bool", source)
         self.assertIn("return iSteamJITIsReady()", source)
 
+    def test_qemu_jit_readiness_requires_every_physical_ios_prerequisite(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("var isQEMUJITReady: Bool", source)
+        self.assertIn(
+            "return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady",
+            source,
+        )
+        self.assertIn("#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)", source)
+        self.assertIn("return false", source.split("var isQEMUJITReady: Bool", 1)[1].split("func requestJIT", 1)[0])
+
+    def test_launch_setup_cannot_skip_the_jit_gate_on_unsupported_physical_ios(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "LaunchSetupViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)", source)
+        self.assertIn("if !JITCoordinator.shared.isQEMUJITReady", source)
+        self.assertNotIn(
+            "if JITCoordinator.shared.isStikDebugAvailable && !JITCoordinator.shared.isJITReady",
+            source,
+        )
+
+    def test_native_qemu_runtime_rechecks_jit_readiness_before_loading_qemu(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        self.assertIn("guard JITCoordinator.shared.isQEMUJITReady else", source)
+        self.assertLess(source.index("isQEMUJITReady"), source.index("QEMURuntimeStatus.inspect()"))
+        self.assertNotIn("if #available(iOS 17.4, *), JITCoordinator.shared.isStikDebugAvailable", source)
+
+    def test_vm_display_rechecks_qemu_jit_readiness_before_engine_start(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("if !JITCoordinator.shared.isQEMUJITReady", source)
+        self.assertLess(source.index("isQEMUJITReady"), source.index("private func startEngine()"))
+
     def test_stikdebug_request_targets_this_app_process(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
@@ -65,6 +99,7 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
         self.assertIn("JITCoordinator.shared.requestJIT(from: self, onFailure:", source)
+        self.assertIn("if !JITCoordinator.shared.isQEMUJITReady", source)
         self.assertIn("override func viewDidAppear", source)
         self.assertIn("guard !startupFlowStarted else { return }", source)
         self.assertIn("self?.startEngine()", source)

@@ -75,6 +75,15 @@ final class JITCoordinator {
         return false
     }
 
+    /// QEMU TCG on physical iOS requires an explicitly confirmed executable-memory handshake.
+    var isQEMUJITReady: Bool {
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady
+        #else
+        return false
+        #endif
+    }
+
     func requestJIT(from controller: UIViewController?, onFailure: ((String) -> Void)? = nil, onReady: (() -> Void)? = nil) {
         presentationController = controller
         onJITReady = onReady
