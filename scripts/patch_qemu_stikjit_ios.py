@@ -6,6 +6,43 @@ import sys
 INCLUDE_ANCHOR = "#ifdef CONFIG_DARWIN\n#include <mach/mach.h>"
 FUNCTION_ANCHOR = "static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)\n{\n"
 MARKER = "alloc_code_gen_buffer_splitwx_stikdebug"
+
+LEGACY_IOS_MACH_INCLUDE = """#if TARGET_OS_IPHONE
+#include <mach/mach_init.h>
+#include <mach/vm_map.h>
+#define mach_vm_address_t vm_address_t
+#define mach_vm_offset_t vm_offset_t
+#define mach_vm_size_t vm_size_t
+#define mach_vm_remap vm_remap
+#define mach_vm_protect vm_protect
+#define mach_vm_deallocate vm_deallocate
+#else
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#endif"""
+UPDATED_IOS_MACH_INCLUDE = """#if TARGET_OS_IPHONE
+#include <mach/mach_init.h>
+#include <mach/vm_map.h>
+#define mach_vm_address_t vm_address_t
+#define mach_vm_offset_t vm_offset_t
+#define mach_vm_size_t vm_size_t
+#define mach_vm_remap vm_remap
+#define mach_vm_protect vm_protect
+#define mach_vm_deallocate vm_deallocate
+#elif TARGET_OS_IOS
+#include <mach/mach_init.h>
+#include <mach/vm_map.h>
+#define mach_vm_address_t vm_address_t
+#define mach_vm_offset_t vm_offset_t
+#define mach_vm_size_t vm_size_t
+#define mach_vm_remap vm_remap
+#define mach_vm_protect vm_protect
+#define mach_vm_deallocate vm_deallocate
+#else
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#endif"""
+
 EXPORT_LIST_REQUIRED = ("qemu_init;", "qemu_main_loop;", "qemu_cleanup;")
 EXPORT_LIST_ADDITIONS = ("qemu_system_shutdown_request;", "isteam_qemu_set_jit_callbacks;")
 
@@ -104,12 +141,19 @@ static int alloc_code_gen_buffer_splitwx_stikdebug(size_t size, Error **errp)
 
 def patch_source(source: str) -> str:
     if MARKER in source:
+        # Modern SDKs may set TARGET_OS_IOS without the deprecated TARGET_OS_IPHONE macro.
+        if "#elif TARGET_OS_IOS" not in source:
+            if source.count(LEGACY_IOS_MACH_INCLUDE) != 1:
+                raise SystemExit("Existing StikDebug QEMU patch has an unrecognized Mach include block")
+            source = source.replace(LEGACY_IOS_MACH_INCLUDE, UPDATED_IOS_MACH_INCLUDE, 1)
         required = [
             "isteam_qemu_set_jit_callbacks",
             "isteam_jit_ready_callback",
             "isteam_jit_prepare_callback",
             "isteam_jit_detach_callback",
             "#if TARGET_OS_IPHONE",
+        "#elif TARGET_OS_IOS",
+            "#elif TARGET_OS_IOS",
             "#include <mach/mach_init.h>",
             "#include <mach/vm_map.h>",
             "#define mach_vm_address_t vm_address_t",
@@ -148,6 +192,15 @@ def patch_source(source: str) -> str:
         "#include <stddef.h>\n"
         "#include <dlfcn.h>\n"
         "#if TARGET_OS_IPHONE\n"
+        "#include <mach/mach_init.h>\n"
+        "#include <mach/vm_map.h>\n"
+        "#define mach_vm_address_t vm_address_t\n"
+        "#define mach_vm_offset_t vm_offset_t\n"
+        "#define mach_vm_size_t vm_size_t\n"
+        "#define mach_vm_remap vm_remap\n"
+        "#define mach_vm_protect vm_protect\n"
+        "#define mach_vm_deallocate vm_deallocate\n"
+        "#elif TARGET_OS_IOS\n"
         "#include <mach/mach_init.h>\n"
         "#include <mach/vm_map.h>\n"
         "#define mach_vm_address_t vm_address_t\n"
