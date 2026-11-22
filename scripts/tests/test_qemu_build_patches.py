@@ -329,6 +329,29 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertNotIn('cp "$firmware_file" "$OUT/QEMU/$(basename "$firmware_file")"', script)
 
 
+    def test_release_publication_is_serialized_and_skips_stale_main_builds(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        release_job = source.split("\n  release:\n", 1)[1]
+        self.assertIn("group: isteam-release-publish-${{ matrix.channel }}", release_job)
+        self.assertIn("cancel-in-progress: false", release_job)
+        self.assertIn("id: freshness", release_job)
+        self.assertIn('if [ "$GITHUB_REF" = "refs/heads/main" ]; then', release_job)
+        self.assertIn('latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk', release_job)
+        self.assertIn('echo "publish=false" >> "$GITHUB_OUTPUT"', release_job)
+        self.assertIn('echo "publish=true" >> "$GITHUB_OUTPUT"', release_job)
+        for name in (
+            "Download iOS build",
+            "Download tvOS build",
+            "Download visionOS build",
+            "Verify combined release assets",
+            "Set release metadata",
+            "Publish combined release",
+        ):
+            step = release_job.split("- name: " + name, 1)[1].split("\n      - name:", 1)[0]
+            self.assertIn("if: steps.freshness.outputs.publish == 'true'", step)
+
+
     def test_release_tag_is_created_from_the_workflow_commit(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
         source = workflow.read_text(encoding="utf-8")
