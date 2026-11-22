@@ -83,9 +83,11 @@ static int alloc_code_gen_buffer_splitwx_stikdebug(size_t size, Error **errp)
 def patch_source(source: str) -> str:
     if MARKER in source:
         required = [
+            "iSteamJITIsSupported",
             "iSteamJITIsReady",
             "iSteamJITPrepareRegion",
             "iSteamJITDetach",
+            "jit_protocol_supported()",
             "__builtin_available(iOS 26.0, *)",
             "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
             "tcg_splitwx_diff = buf_rx - buf_rw",
@@ -107,7 +109,16 @@ def patch_source(source: str) -> str:
     replacement = HELPER + FUNCTION_ANCHOR + (
         "#if TARGET_OS_IOS\n"
         "    if (__builtin_available(iOS 26.0, *)) {\n"
-        "        return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);\n"
+        "        typedef bool (*JITProtocolSupportedFunction)(void);\n"
+        "        JITProtocolSupportedFunction jit_protocol_supported =\n"
+        "            (JITProtocolSupportedFunction)dlsym(RTLD_DEFAULT, \"iSteamJITIsSupported\");\n"
+        "        if (jit_protocol_supported == NULL) {\n"
+        "            error_setg(errp, \"Could not determine whether this iOS device requires the StikDebug JIT breakpoint protocol.\");\n"
+        "            return -1;\n"
+        "        }\n"
+        "        if (jit_protocol_supported()) {\n"
+        "            return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);\n"
+        "        }\n"
         "    }\n"
         "#endif\n"
     )
@@ -115,9 +126,12 @@ def patch_source(source: str) -> str:
     required = [
         "#include <TargetConditionals.h>",
         "#include <dlfcn.h>",
+        "iSteamJITIsSupported",
         "iSteamJITIsReady",
         "iSteamJITPrepareRegion",
         "iSteamJITDetach",
+        "jit_protocol_supported()",
+        "if (jit_protocol_supported())",
         "__builtin_available(iOS 26.0, *)",
         "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
         "mach_vm_remap(mach_task_self(), &buf_rw",
@@ -137,7 +151,7 @@ def main() -> None:
     source = path.read_text(encoding="utf-8")
     patched = patch_source(source)
     path.write_text(patched, encoding="utf-8")
-    print("Patched QEMU TCG split-W^X allocation to use the StikDebug iOS 26+ JIT protocol.")
+    print("Patched QEMU TCG split-W^X allocation to use the StikDebug iOS 26+ TXM breakpoint protocol.")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@
 2. `JITCoordinator` checks the running process's actual `get-task-allow` entitlement using `SecTaskCreateFromSelf` and `SecTaskCopyValueForEntitlement` resolved from Security at runtime. If the entitlement is missing, the VM is not started.
 3. The coordinator opens LocalDevVPN with `localdevvpn://enable?scheme=<bundle-id>`. The bundle ID is also registered as Akatsubaki's callback URL scheme, so stable and nightly builds can return to their own app instance.
 4. LocalDevVPN submits its tunnel-start request and calls back to Akatsubaki after its own one-second delay. Akatsubaki waits a further two seconds, then opens StikDebug with the current bundle identifier and process ID using `stikdebug://enable-jit`.
-5. On iOS 26 and later, the StikDebug request includes `script-name=universal.js` for the existing breakpoint-based executable-region protocol.
+5. On iOS 26+ devices with TXM/SPTM, the StikDebug request includes `script-name=universal.js`. The QEMU allocator selects the breakpoint-based executable-region protocol only when the host's hardware check reports TXM; non-TXM devices omit the script and retain QEMU's normal Darwin split-W^X allocator.
 6. When Akatsubaki becomes active again, it polls the process debugger/JIT status. QEMU starts only after that state is confirmed. If the request fails or times out, QEMU remains stopped.
 7. During QEMU initialization, the existing native bridge registers `iSteamJITPrepareRegion` and `iSteamJITDetach` callbacks. The QEMU allocator uses those breakpoints to prepare executable regions and detach at the appropriate point; the bridge's required `isteam_qemu_set_jit_callbacks` export remains part of the runtime contract.
 
@@ -30,18 +30,20 @@ The helper apps are not embedded in Akatsubaki. They remain external dependencie
 - Missing LocalDevVPN, missing StikDebug, an unavailable callback, or a missing `get-task-allow` entitlement prevents QEMU startup.
 - LocalDevVPN's callback confirms that the tunnel-start request was submitted; it does **not** confirm that the VPN is connected. The readiness check is separate. If acquisition fails, verify the VPN is connected, StikDebug pairing is valid, Developer Mode is enabled, and the signing entitlement is present.
 - The entitlement query uses Security task SPI. This is a sideload/developer workflow and is not suitable for App Store submission.
-- The coordinator owns one foreground readiness poll and reports completion through callbacks; Launch Setup does not run a second polling loop. The readiness probe checks the process's `CS_DEBUGGED` state. The QEMU allocator then performs the executable-region breakpoint protocol. A successful helper handoff alone is not treated as proof of a usable VM session.
+- The coordinator owns one foreground readiness poll and reports completion through callbacks; Launch Setup does not run a second polling loop. Every supported JIT path requires `CS_DEBUGGED`. On iOS 26+ TXM/SPTM devices, readiness additionally requires a live `P_TRACED` debugger because QEMU must complete the universal breakpoint protocol before detaching. Non-TXM devices use the normal split-W^X allocator and do not require a live debugger after JIT is enabled. A successful helper handoff alone is not treated as proof of a usable VM session.
 
 ## Build integration
 
 - `iSteam/JITCoordinator.swift` — helper orchestration, entitlement gate, callback handling and readiness polling.
-- `iSteam/JIT26Protocol.c` / `.h` — entitlement lookup and iOS 26 breakpoint protocol entry points.
+- `iSteam/JIT26Protocol.c` / `.h` — runtime signing-entitlement inspection, StikDebug TXM hardware detection, version-aware readiness, and iOS 26 breakpoint protocol entry points.
 - `iSteam/Info.plist` — LocalDevVPN query permission and per-bundle callback URL scheme.
 - `iSteam/AppDelegate.swift` — callback dispatch and app-activation readiness polling.
 - `iSteam/LaunchSetupViewController.swift` — waits for the coordinator's success/failure callback before presenting the VM.
 - `src/Display/VMDisplayViewController.swift` — repeats the readiness gate and starts QEMU only once.
 - `iSteam/SettingsViewController.swift` — describes the automatic helper sequence.
 - `project.yml` — links Security for the stable and nightly iOS targets.
+- `scripts/patch_qemu_stikjit_ios.py` — selects the breakpoint allocator only on TXM devices; non-TXM iOS 26 devices retain the upstream split-W^X allocator.
+- `scripts/tests/test_jit_protocol.py` — source-contract regression coverage for TXM model detection, live-debugger gating, and QEMU allocator routing.
 - `scripts/tests/test_jit_coordinator.py` — source-contract regression coverage.
 
 ## Validation status
