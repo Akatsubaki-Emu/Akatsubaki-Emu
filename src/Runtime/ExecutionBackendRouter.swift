@@ -167,7 +167,11 @@ struct RuntimeExecutionPlan {
     /// bring-up subset without misreporting it as a complete Linux ABI.
     /// Missing required layers remain visible and general execution stays false.
     var isRunnableAsDiagnosticBringUp: Bool {
-        diagnosticFallback != nil && antiCheatAssessment == .notRequested
+        missingRequiredLayers == [.linuxSyscallABI]
+            && diagnosticFallback == .x86Interpreter
+            && dynamicTranslationBackend == nil
+            && fullSystemFallback == nil
+            && antiCheatAssessment == .notRequested
     }
 }
 
