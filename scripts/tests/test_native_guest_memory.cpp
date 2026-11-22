@@ -106,6 +106,9 @@ int main() {
     assert(isteam_guest_memory_map(protectedMemory, pageSize * 2, pageSize, 2, true)); // merge permissions
     assert(isteam_guest_memory_write(protectedMemory, pageSize * 2, instruction.data(), instruction.size()));
     assert(isteam_guest_memory_read_execute(protectedMemory, pageSize * 2, protectedBytes.data(), protectedBytes.size()));
+    assert(isteam_guest_memory_unmap(protectedMemory, pageSize * 2, pageSize));
+    assert(!isteam_guest_memory_protect(protectedMemory, pageSize * 2, pageSize, 5));
+    assert(!isteam_guest_memory_read_execute(protectedMemory, pageSize * 2, protectedBytes.data(), protectedBytes.size()));
     assert(!isteam_guest_memory_map(protectedMemory, UINT64_MAX, 2, 3, false));
     isteam_guest_memory_clear(protectedMemory);
     assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));

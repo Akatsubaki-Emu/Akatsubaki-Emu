@@ -16,6 +16,7 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset, const
 bool isteam_guest_memory_begin_mapping(ISteamGuestMemory *memory);
 bool isteam_guest_memory_map(ISteamGuestMemory *memory, uint64_t offset, uint64_t length, uint8_t permissions, bool merge);
 bool isteam_guest_memory_protect(ISteamGuestMemory *memory, uint64_t offset, uint64_t length, uint8_t permissions);
+bool isteam_guest_memory_unmap(ISteamGuestMemory *memory, uint64_t offset, uint64_t length);
 bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset, uint64_t length);
 void isteam_guest_memory_clear(ISteamGuestMemory *memory);
 size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory);

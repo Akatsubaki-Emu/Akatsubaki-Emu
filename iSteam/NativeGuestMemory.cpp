@@ -328,6 +328,27 @@ bool isteam_guest_memory_protect(ISteamGuestMemory *memory, uint64_t offset,
     }
 }
 
+bool isteam_guest_memory_unmap(ISteamGuestMemory *memory, uint64_t offset,
+                               uint64_t length) {
+    if (!memory || !length || offset % pageSize != 0
+        || offset > memory->size || length > memory->size - offset) return false;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!memory->permissionsEnabled) return false;
+        const uint64_t firstPage = offset / pageSize;
+        const uint64_t lastPage = (offset + length - 1) / pageSize;
+        for (uint64_t page = firstPage; page <= lastPage; ++page) {
+            if (memory->pagePermissions.find(page) == memory->pagePermissions.end()) return false;
+        }
+        for (uint64_t page = firstPage; page <= lastPage; ++page) {
+            memory->pagePermissions.erase(page);
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset,
                               uint64_t length) {
     if (!memory || offset > memory->size || length > memory->size - offset) {
