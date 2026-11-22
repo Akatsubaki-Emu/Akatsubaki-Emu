@@ -45,24 +45,28 @@ final class QEMUNativeRuntime {
         }
 
         let selectedFirmware: URL?
+        let variablesTemplate: URL?
         if let firmware {
             selectedFirmware = firmware
+            variablesTemplate = Self.findUEFIVariables(matching: firmware, in: dataDirectory)
         } else if configuration.requiresUEFI {
-            guard let uefi = Self.findUEFIFirmware(in: dataDirectory) else {
+            guard let pair = Self.findUEFIFirmwarePair(in: dataDirectory) else {
                 throw RuntimeError.runtimeUnavailable(
-                    "This VM profile requires an x86_64 UEFI code image (OVMF_CODE.fd or edk2-x86_64-code.fd) in the bundled QEMU data directory."
+                    "This VM profile requires a matching UEFI code/variable-store pair: OVMF_CODE.fd + OVMF_VARS.fd, OVMF_CODE_4M.fd + OVMF_VARS_4M.fd, or edk2-x86_64-code.fd + edk2-x86_64-vars.fd."
                 )
             }
-            selectedFirmware = uefi
+            selectedFirmware = pair.code
+            variablesTemplate = pair.variables
         } else {
             selectedFirmware = nil
+            variablesTemplate = nil
         }
 
         let selectedFirmwareVariables: URL?
-        if selectedFirmware != nil {
-            guard let variablesTemplate = Self.findUEFIVariables(in: dataDirectory) else {
+        if let selectedFirmware {
+            guard let variablesTemplate else {
                 throw RuntimeError.runtimeUnavailable(
-                    "UEFI code was found, but no writable variable-store template (OVMF_VARS.fd or edk2-x86_64-vars.fd) is bundled."
+                    "The selected UEFI code image \(selectedFirmware.lastPathComponent) has no matching bundled variable-store template."
                 )
             }
             selectedFirmwareVariables = try Self.makeWritableUEFIVariables(from: variablesTemplate, for: configuration.id)
@@ -154,18 +158,34 @@ final class QEMUNativeRuntime {
         return nil
     }
 
-    private static func findUEFIFirmware(in directory: URL) -> URL? {
-        containedRegularFile(
-            named: ["OVMF_CODE.fd", "OVMF_CODE_4M.fd", "edk2-x86_64-code.fd", "edk2-x86_64-code.secboot.fd"],
-            in: directory
-        )
+    private static func findUEFIFirmwarePair(in directory: URL) -> (code: URL, variables: URL)? {
+        let pairs = [
+            ("OVMF_CODE.fd", "OVMF_VARS.fd"),
+            ("OVMF_CODE_4M.fd", "OVMF_VARS_4M.fd"),
+            ("edk2-x86_64-code.fd", "edk2-x86_64-vars.fd"),
+            ("edk2-x86_64-code.secboot.fd", "edk2-x86_64-vars.fd"),
+        ]
+        for (codeName, variablesName) in pairs {
+            guard let code = containedRegularFile(named: [codeName], in: directory),
+                  let variables = containedRegularFile(named: [variablesName], in: directory) else { continue }
+            return (code: code, variables: variables)
+        }
+        return nil
     }
 
-    private static func findUEFIVariables(in directory: URL) -> URL? {
-        containedRegularFile(
-            named: ["OVMF_VARS.fd", "OVMF_VARS_4M.fd", "edk2-x86_64-vars.fd"],
-            in: directory
-        )
+    private static func findUEFIVariables(matching firmware: URL, in directory: URL) -> URL? {
+        let variablesName: String
+        switch firmware.lastPathComponent {
+        case "OVMF_CODE.fd":
+            variablesName = "OVMF_VARS.fd"
+        case "OVMF_CODE_4M.fd":
+            variablesName = "OVMF_VARS_4M.fd"
+        case "edk2-x86_64-code.fd", "edk2-x86_64-code.secboot.fd":
+            variablesName = "edk2-x86_64-vars.fd"
+        default:
+            return nil
+        }
+        return containedRegularFile(named: [variablesName], in: directory)
     }
 
     /// UEFI variable stores are writable guest state. Keep one persistent copy

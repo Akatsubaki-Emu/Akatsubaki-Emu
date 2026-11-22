@@ -22,6 +22,8 @@ The native bridge in `iSteam/QEMUNativeBridge.c` requires these exported symbols
 
 Both graceful shutdown and the StikDebug JIT callback registration export are required. The bridge rejects a runtime missing either contract; actual shutdown and JIT behavior still require physical-device validation.
 
+UEFI code and variable-store templates are selected as matching pairs: `OVMF_CODE.fd` with `OVMF_VARS.fd`, `OVMF_CODE_4M.fd` with `OVMF_VARS_4M.fd`, or `edk2-x86_64-code.fd` with `edk2-x86_64-vars.fd`. Custom code images must match one of these supported names so the runtime cannot pair unrelated firmware generations.
+
 The Swift runtime locator is `src/QEMU/QEMURuntimeStatus.swift`; the lifecycle owner is `src/QEMU/QEMUNativeRuntime.swift`. The locator reads the generated manifest and resolves the library inside the app bundle. The native bridge then loads it with `dlopen` and resolves the lifecycle symbols with `dlsym`.
 
 ## Validation

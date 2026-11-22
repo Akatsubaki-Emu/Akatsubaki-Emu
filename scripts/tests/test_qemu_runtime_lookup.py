@@ -16,6 +16,24 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertNotIn("isDirectory", resolver)
 
 
+    def test_uefi_code_and_variable_store_templates_are_selected_as_matching_pairs(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        pair_finder = runtime.split("private static func findUEFIFirmwarePair", 1)[1].split(
+            "private static func findUEFIVariables", 1
+        )[0]
+        for code, variables in (
+            ("OVMF_CODE.fd", "OVMF_VARS.fd"),
+            ("OVMF_CODE_4M.fd", "OVMF_VARS_4M.fd"),
+            ("edk2-x86_64-code.fd", "edk2-x86_64-vars.fd"),
+            ("edk2-x86_64-code.secboot.fd", "edk2-x86_64-vars.fd"),
+        ):
+            with self.subTest(code=code):
+                self.assertIn(code, pair_finder)
+                self.assertIn(variables, pair_finder)
+        self.assertIn("findUEFIVariables(matching: firmware, in: dataDirectory)", runtime)
+        self.assertIn("selectedFirmware.lastPathComponent", runtime)
+
     def test_runtime_library_candidates_must_be_contained_regular_files(self):
         root = Path(__file__).resolve().parents[2]
         status = (root / "src" / "QEMU" / "QEMURuntimeStatus.swift").read_text(encoding="utf-8")
