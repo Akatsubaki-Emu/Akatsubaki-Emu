@@ -27,6 +27,7 @@ final class QEMUNativeRuntime {
         }
 
         let requestedJIT = configuration.accelerator == .jit
+        var effectiveConfiguration = configuration
         var requiresJIT = requestedJIT
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if requiresJIT && !JITCoordinator.shared.isQEMUJITReady {
@@ -113,7 +114,9 @@ final class QEMUNativeRuntime {
             }
         }
 
-        let args = QEMUCommandBuilder(configuration: configuration)
+        effectiveConfiguration.accelerator = requiresJIT ? .jit : .tcg
+        EmulationLog.shared.write("QEMU effective accelerator: \(requiresJIT ? \"JIT\" : \"TCI\")")
+        let args = QEMUCommandBuilder(configuration: effectiveConfiguration)
             .arguments(diskImage: diskImage, writableDiskImage: writableDiskImage,
                        firmware: selectedFirmware, firmwareVariables: selectedFirmwareVariables)
             + ["-L", dataDirectory.path]

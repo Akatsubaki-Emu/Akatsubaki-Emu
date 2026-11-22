@@ -4,6 +4,14 @@ from pathlib import Path
 import sys
 
 
+TCI_BUILD_FAMILY_MARKER = 'PLATFORM_FAMILY_NAME="$PLATFORM_FAMILY_PREFIX-TCI"'
+
+
+def validate_tci_build_directory(source: str) -> None:
+    if "ios-tci" not in source or TCI_BUILD_FAMILY_MARKER not in source:
+        raise SystemExit("UTM build_dependencies.sh no longer isolates the iOS TCI build directory")
+
+
 def replace_once(source: str, old: str, new: str, label: str) -> str:
     if new in source:
         return source
@@ -105,6 +113,7 @@ def main() -> None:
         raise SystemExit("usage: patch_utm_qemu_ios.py /path/to/UTM/scripts/build_dependencies.sh")
     path = Path(sys.argv[1])
     source = path.read_text(encoding="utf-8")
+    validate_tci_build_directory(source)
     patched = patch_script(source)
     path.write_text(patched, encoding="utf-8")
     print("Installed idempotent iOS QEMU JIT/TCI, Meson-link and pre-build verification hooks.")

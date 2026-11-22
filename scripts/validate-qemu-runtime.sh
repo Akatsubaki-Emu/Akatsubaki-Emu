@@ -63,6 +63,17 @@ for symbol in "${required_symbols[@]}"; do
   echo "Found required export: $symbol"
 done
 
+if [[ "$mode" == "tci" ]] && grep -Eq '[[:space:]][A-Za-z][[:space:]]_?isteam_qemu_set_jit_callbacks
+echo "== Code signature =="
+codesign --verify --strict "$library"
+
+echo "QEMU $mode runtime dynamic-library type, iOS platform, arm64 architecture, required lifecycle/shutdown exports, mode-specific JIT policy, and code signature verified."
+echo "This does not prove dependent libraries load or that a guest boots."
+ <<<"$symbols"; then
+  echo "TCI runtime must not export the StikJIT callback." >&2
+  exit 3
+fi
+
 echo "== Code signature =="
 codesign --verify --strict "$library"
 
