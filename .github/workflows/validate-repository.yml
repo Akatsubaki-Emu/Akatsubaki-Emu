@@ -284,3 +284,46 @@ jobs:
             -o "$RUNNER_TEMP/test-qemu-native-bridge"
           "$RUNNER_TEMP/test-qemu-native-bridge" "$RUNNER_TEMP/libfakeqemu.so"
 
+
+
+  swift-runtime-tests:
+    name: Compile and run Swift guest-runtime regression tests
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Verify Swift toolchain
+        run: swiftc --version
+
+      - name: Compile and run Swift runtime tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 src/Runtime/ELF64Loader.swift scripts/tests/test_elf_loader_program_headers.swift -o "$RUNNER_TEMP/test-elf-phdr"
+          "$RUNNER_TEMP/test-elf-phdr"
+          swiftc -parse-as-library -swift-version 5 src/QEMU/VNCKeyState.swift scripts/tests/test_vnc_key_state.swift -o "$RUNNER_TEMP/test-vnc-key-state"
+          "$RUNNER_TEMP/test-vnc-key-state"
+          swiftc -parse-as-library -swift-version 5 src/Runtime/WindowsPEImage.swift scripts/tests/test_windows_pe_image.swift -o "$RUNNER_TEMP/test-windows-pe"
+          "$RUNNER_TEMP/test-windows-pe"
+          swiftc -parse-as-library -swift-version 5 src/Runtime/ELF64Loader.swift src/Runtime/X86_64ALU.swift src/Runtime/LinuxProcessStackBuilder.swift src/Runtime/LinuxSyscallDispatcher.swift src/Runtime/X86_64Interpreter.swift scripts/tests/test_static_elf_execution.swift -o "$RUNNER_TEMP/test-static-elf"
+          "$RUNNER_TEMP/test-static-elf"
+          swiftc -parse-as-library -swift-version 5 src/Core/EmulationLog.swift scripts/tests/test_emulation_log_observer.swift -o "$RUNNER_TEMP/test-emulation-log-observer"
+          "$RUNNER_TEMP/test-emulation-log-observer"
+          swiftc -parse-as-library -swift-version 5 src/Runtime/X86_64AOTTranslator.swift scripts/tests/test_kenran_buto_aot_translator.swift -o "$RUNNER_TEMP/test-kenran-buto-aot"
+          "$RUNNER_TEMP/test-kenran-buto-aot"
+          swiftc -parse-as-library -swift-version 5 src/Runtime/X86_64ALU.swift src/Runtime/LinuxSyscallDispatcher.swift src/Runtime/X86_64Interpreter.swift scripts/tests/test_x86_64_interpreter.swift -o "$RUNNER_TEMP/test-x86-interpreter"
+          "$RUNNER_TEMP/test-x86-interpreter"
+          swiftc -parse-as-library -swift-version 5 src/Runtime/LinuxProcessStackBuilder.swift scripts/tests/test_linux_process_stack.swift -o "$RUNNER_TEMP/test-linux-stack"
+          "$RUNNER_TEMP/test-linux-stack"
+          swiftc -parse-as-library -swift-version 5 src/Runtime/LinuxSyscallDispatcher.swift scripts/tests/test_linux_syscall_dispatcher.swift -o "$RUNNER_TEMP/test-linux-syscalls"
+          "$RUNNER_TEMP/test-linux-syscalls"
+          swiftc -parse-as-library -swift-version 5 src/Runtime/ExecutionBackendRouter.swift scripts/tests/test_execution_backend_router.swift -o "$RUNNER_TEMP/test-backend-router"
+          "$RUNNER_TEMP/test-backend-router"
+          swiftc -parse-as-library -swift-version 5 src/Core/EmulationLog.swift src/Performance/TranslationCache.swift src/Runtime/X86_64AOTTranslator.swift src/Runtime/KenranButoAOTCompiler.swift scripts/tests/test_kenran_buto_aot_cache.swift -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
+          "$RUNNER_TEMP/test-kenran-buto-aot-cache"
+          swiftc -parse-as-library -swift-version 5 src/GPU/GPUBackend.swift scripts/tests/test_gpu_frame_region.swift -o "$RUNNER_TEMP/test-gpu-frame-region"
+          "$RUNNER_TEMP/test-gpu-frame-region"
+          swiftc -parse-as-library -swift-version 5 src/Display/TouchStickMath.swift scripts/tests/test_touch_stick_math.swift -o "$RUNNER_TEMP/test-touch-stick"
+          "$RUNNER_TEMP/test-touch-stick"
