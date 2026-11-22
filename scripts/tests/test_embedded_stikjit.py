@@ -78,13 +78,15 @@ class EmbeddedStikJITIntegrationTests(unittest.TestCase):
             coordinator,
         )
         self.assertIn(
-            "Import a StikJIT pairing file before selecting this method.",
+            "Generate a pairing file on iOS 27+ or import an existing one.",
             settings,
         )
         self.assertIn(
             "Documents/StikJIT/pairingFile.plist",
             settings,
         )
+        self.assertIn("Generate device pairing file", settings)
+        self.assertIn("Import existing pairing file", settings)
 
 class StikPairIntegrationTests(unittest.TestCase):
     root=Path(__file__).resolve().parents[2]
