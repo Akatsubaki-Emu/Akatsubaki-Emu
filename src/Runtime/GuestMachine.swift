@@ -104,7 +104,7 @@ final class GuestMachine {
         return backend != nil
     }
 
-    init(configuration: VMConfiguration, memorySize: UInt64? = nil) {
+    init(configuration: VMConfiguration, memorySize: UInt64? = nil, aotExecutor: X86_64AOTExecuting? = nil) {
         self.configuration = configuration
         // Keep malformed or imported configurations from overflowing the
         // byte conversion or requesting unbounded host memory in this prototype.
@@ -122,7 +122,7 @@ final class GuestMachine {
         // Ship the small x86-64 interpreter as the first runnable backend.
         // Other architectures still require a compatible backend integration.
         if configuration.architecture == .x86_64 {
-            self.cpu = X86_64Interpreter(memory: self.memory)
+            self.cpu = X86_64Interpreter(memory: self.memory, aotExecutor: aotExecutor)
             self.state = .configured
         } else {
             let error = GuestEngineError.backendNotInstalled(configuration.architecture)
