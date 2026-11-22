@@ -1,12 +1,10 @@
 #include "JIT26Protocol.h"
 
-#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 #if defined(__APPLE__)
@@ -22,14 +20,9 @@
 // operations as the existing QEMU StikDebug allocator.
 #define iSteamMachAddress vm_address_t
 #define iSteamMachSize vm_size_t
-#define iSteamMachOffset vm_offset_t
 #define iSteamMachRemap vm_remap
 #define iSteamMachProtect vm_protect
 #define iSteamMachDeallocate vm_deallocate
-#else
-#define iSteamMachAddress vm_address_t
-#define iSteamMachSize vm_size_t
-#define iSteamMachOffset vm_offset_t
 #endif
 
 #define ISTEAM_AOT_MAX_CODE_BYTES (1024U * 1024U)
