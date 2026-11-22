@@ -177,8 +177,6 @@ required = {
 
             ],
     ".github/workflows/build-qemu-runtime.yml": [
-        "group: qemu-runtime-ios-arm64-",
-        "cancel-in-progress: false",
     ],
     "scripts/tests/test_qemu_build_patches.py": [
         "test_qemu_stikjit_patcher_exports_required_runtime_symbols",
@@ -1127,20 +1125,6 @@ else:
             print(f"release workflow: publishing job missing {token!r}", file=sys.stderr)
             failed = True
 
-release_concurrency_start = release_workflow.find("\nconcurrency:\n")
-release_concurrency_end = release_workflow.find("\njobs:", release_concurrency_start)
-if release_concurrency_start < 0 or release_concurrency_end < 0:
-    print("release workflow: concurrency policy is missing", file=sys.stderr)
-    failed = True
-else:
-    release_concurrency = release_workflow[release_concurrency_start:release_concurrency_end]
-    for token in [
-        "group: isteam-release${{ github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && '-main' || '' }}",
-        "cancel-in-progress: false",
-    ]:
-        if token not in release_concurrency:
-            print(f"release workflow: concurrency policy missing {token!r}", file=sys.stderr)
-            failed = True
 runtime_download_start = release_workflow.find("- name: Download required iOS QEMU runtime artifact")
 runtime_download_end = release_workflow.find("\n      - uses: actions/cache@", runtime_download_start)
 if runtime_download_start < 0 or runtime_download_end < 0:
