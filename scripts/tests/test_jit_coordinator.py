@@ -68,7 +68,7 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("override func viewDidAppear", source)
         self.assertIn("guard !startupFlowStarted else { return }", source)
         self.assertIn("self?.startEngine()", source)
-        self.assertLess(source.index("JITCoordinator.shared.requestJIT(from: self)"), source.index("private func startEngine()"))
+        self.assertLess(source.index("JITCoordinator.shared.requestJIT(from: self, onFailure:"), source.index("private func startEngine()"))
         self.assertIn("guard !engineStartRequested else { return }", source)
 
     def test_jit_failure_callback_reaches_launch_ui(self):
