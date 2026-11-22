@@ -1020,7 +1020,6 @@ for step in (
     "Checkout i-Steam",
     "Checkout UTM with submodules",
     "Select Xcode",
-    "Verify Objective-C class-selector stub compatibility",
     "Install UTM build dependencies",
     "Cache UTM dependency build and sysroot",
     "Build UTM dependencies for physical iOS arm64",
@@ -1032,20 +1031,10 @@ for step in (
     if qemu_workflow.count(marker) != 1:
         print(f"QEMU workflow: expected exactly one {marker!r} step", file=sys.stderr)
         failed = True
-if "grep -Fq '_objc_msgSendClass'; then" not in qemu_workflow:
-    print("QEMU workflow: Objective-C class-selector stub probe is malformed", file=sys.stderr)
-    failed = True
-if "\n; then\n" in qemu_workflow:
-    print("QEMU workflow: Objective-C class-selector probe contains a stray shell terminator", file=sys.stderr)
-    failed = True
 for token in [
     "scripts/patch_utm_qemu_ios.py",
     "scripts/patch_qemu_meson_ios.py",
     "scripts/verify_qemu_meson_link.py",
-    "Verify Objective-C class-selector stub compatibility",
-    "-fno-objc-msgsend-class-selector-stubs",
-    "export OBJCFLAGS=",
-    "grep -Fq",
     "utm-ios-arm64-deps-v13-",
     "spirv-tools",
     "spirv-llvm-translator",
@@ -1060,6 +1049,12 @@ for token in [
         failed = True
 if "--extra-ldflags=-Wl,-force_load" in qemu_workflow:
     print("QEMU workflow: obsolete configure-level compiler-rt workaround remains", file=sys.stderr)
+    failed = True
+if "-fno-objc-msgsend-class-selector-stubs" in qemu_workflow or "export OBJCFLAGS=" in qemu_workflow:
+    print("QEMU workflow: unsupported Objective-C compiler flag remains", file=sys.stderr)
+    failed = True
+if "Verify Objective-C class-selector stub compatibility" in qemu_workflow:
+    print("QEMU workflow: obsolete Objective-C compiler probe remains", file=sys.stderr)
     failed = True
 
 
