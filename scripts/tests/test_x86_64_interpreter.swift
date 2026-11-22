@@ -1006,6 +1006,68 @@ struct InterpreterTests {
         precondition(accumulatorExchange64.registerValue(0) == 0x8877665544332211)
         precondition(accumulatorExchange64.registerValue(8) == 0x1122334455667788)
 
+
+        let registerStackMemory = GuestMemory(size: 128)
+        precondition(registerStackMemory.write(Data([
+            0xB8, 0x44, 0x33, 0x22, 0x11,
+            0x50,
+            0xB8, 0x00, 0x00, 0x00, 0x00,
+            0x58, 0xF4
+        ]), offset: 0))
+        let registerStack = X86_64Interpreter(memory: registerStackMemory)
+        try registerStack.reset(entryPoint: 0)
+        let registerStackExit = try registerStack.run(maxInstructions: 5)
+        precondition(registerStackExit == .halted)
+        precondition(registerStack.registerValue(0) == 0x11223344)
+        precondition(registerStack.registerValue(4) == 120)
+
+        let extendedStackMemory = GuestMemory(size: 128)
+        precondition(extendedStackMemory.write(Data([
+            0x41, 0xB8, 0x11, 0x22, 0x33, 0x44,
+            0x41, 0x50,
+            0x41, 0xB8, 0x00, 0x00, 0x00, 0x00,
+            0x41, 0x58, 0xF4
+        ]), offset: 0))
+        let extendedStack = X86_64Interpreter(memory: extendedStackMemory)
+        try extendedStack.reset(entryPoint: 0)
+        let extendedStackExit = try extendedStack.run(maxInstructions: 5)
+        precondition(extendedStackExit == .halted)
+        precondition(extendedStack.registerValue(8) == 0x44332211)
+        precondition(extendedStack.registerValue(4) == 120)
+
+        let immediateByteStackMemory = GuestMemory(size: 128)
+        precondition(immediateByteStackMemory.write(Data([0x6A, 0x80, 0x58, 0xF4]), offset: 0))
+        let immediateByteStack = X86_64Interpreter(memory: immediateByteStackMemory)
+        try immediateByteStack.reset(entryPoint: 0)
+        let immediateByteStackExit = try immediateByteStack.run(maxInstructions: 3)
+        precondition(immediateByteStackExit == .halted)
+        precondition(immediateByteStack.registerValue(0) == 0xFFFFFFFFFFFFFF80)
+
+        let immediateDwordStackMemory = GuestMemory(size: 128)
+        precondition(immediateDwordStackMemory.write(Data([0x68, 0x00, 0x00, 0x00, 0x80, 0x58, 0xF4]), offset: 0))
+        let immediateDwordStack = X86_64Interpreter(memory: immediateDwordStackMemory)
+        try immediateDwordStack.reset(entryPoint: 0)
+        let immediateDwordStackExit = try immediateDwordStack.run(maxInstructions: 3)
+        precondition(immediateDwordStackExit == .halted)
+        precondition(immediateDwordStack.registerValue(0) == 0xFFFFFFFF80000000)
+
+        let popStackPointerMemory = GuestMemory(size: 128)
+        precondition(popStackPointerMemory.write(Data([0x5C, 0xF4]), offset: 0))
+        precondition(popStackPointerMemory.writeUInt64(64, offset: 120))
+        let popStackPointer = X86_64Interpreter(memory: popStackPointerMemory)
+        try popStackPointer.reset(entryPoint: 0)
+        let popStackPointerExit = try popStackPointer.run(maxInstructions: 2)
+        precondition(popStackPointerExit == .halted)
+        precondition(popStackPointer.registerValue(4) == 64)
+
+        let stackUnderflowMemory = GuestMemory(size: 8)
+        precondition(stackUnderflowMemory.write(Data([0x50]), offset: 0))
+        let stackUnderflow = X86_64Interpreter(memory: stackUnderflowMemory)
+        try stackUnderflow.reset(entryPoint: 0)
+        let stackUnderflowExit = try stackUnderflow.run(maxInstructions: 1)
+        precondition(stackUnderflowExit == .memoryFault(address: 0))
+        precondition(stackUnderflow.registerValue(4) == 0)
+
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
