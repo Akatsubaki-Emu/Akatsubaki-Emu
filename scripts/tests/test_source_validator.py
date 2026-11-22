@@ -123,7 +123,21 @@ class SourceValidatorTests(unittest.TestCase):
     def test_repository_validation_checks_runtime_validator_shell_syntax(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "validate-repository.yml").read_text(encoding="utf-8")
+        self.assertIn("bash -n scripts/package-utm-qemu-runtime.sh", workflow)
         self.assertIn("bash -n scripts/validate-qemu-runtime.sh", workflow)
+        self.assertIn("bash -n scripts/validate-apple-package.sh", workflow)
+        for script in (
+            "scripts/package-utm-qemu-runtime.sh",
+            "scripts/validate-qemu-runtime.sh",
+            "scripts/validate-apple-package.sh",
+        ):
+            result = subprocess.run(
+                ["bash", "-n", str(root / script)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, f"{script}: {result.stderr}")
 
     def test_qemu_ios_platform_guard_rejects_simulator_platforms(self):
         pattern = "platform[[:space:]]+IOS([[:space:]]|$)"
