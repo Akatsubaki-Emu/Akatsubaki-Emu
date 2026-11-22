@@ -302,7 +302,10 @@ final class VMDisplayViewController: UIViewController {
             guard now - self.lastMotionStatusUpdate >= 0.25 else { return }
             self.lastMotionStatusUpdate = now
             let summary = String(format: "MOTION • Y %.2f P %.2f R %.2f", yaw, pitch, roll)
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
+                guard let self,
+                      case .running = self.engine.state,
+                      self.vncClient.isConnected else { return }
                 self.status.text = summary
             }
         }
