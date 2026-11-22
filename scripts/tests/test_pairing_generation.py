@@ -14,7 +14,7 @@ class PairingGenerationTests(unittest.TestCase):
         self.assertIn('"time"', cargo)
         self.assertIn("PairableHostInfo::generate", source)
         self.assertIn("PairableHost::new", source)
-        self.assertRegex(source, r"host\\.accept\\(&mut pairing,?\\s*pin_cb\\)")
+        self.assertRegex(source, r"host\.accept\(&mut pairing,?\s*pin_cb\)")
         self.assertIn("write_to_file(&out)", source)
         self.assertIn("PAIRABLE_HOST_SERVICE_TYPE", source)
         self.assertIn('pin.ok_or("Missing pairing PIN callback")', source)

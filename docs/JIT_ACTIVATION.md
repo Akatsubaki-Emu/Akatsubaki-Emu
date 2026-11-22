@@ -8,7 +8,7 @@
 
 The iOS app embeds an ExtensionKit helper, not a second runnable app. The helper contains the pinned StikJIT 2.0.1 XCFramework and runs outside the host process so it can attach a debugger to Akatsubaki without self-attach deadlocking.
 
-1. Import a device pairing file in Settings → JIT. Akatsubaki validates it as a property-list dictionary and stores it at `Documents/StikJIT/pairingFile.plist`. The file contents are never logged.
+1. Import a device pairing file in Settings → JIT. Akatsubaki validates it as a property-list dictionary and stores it at `Application Support/StikJIT/pairingFile.plist`. The file contents are never logged.
 2. Start LocalDevVPN through its documented `localdevvpn://enable?scheme=<bundle-id>` URL. Its callback means the start request was submitted, not that the tunnel is connected.
 3. Akatsubaki sends the current PID and pairing-file bytes over an ExtensionFoundation XPC session to the embedded helper.
 4. The helper writes a temporary extension-local pairing file, then synchronously calls `StikJIT.enableJIT` on one serial queue. StikJIT checks RSD reachability and downloads/mounts/verifies the appropriate Developer Disk Image. It detects TXM itself: TXM devices run the universal breakpoint script; when TXM is absent it uses its attach-only path and skips the script; an unknown result fails closed.
@@ -73,7 +73,7 @@ Do not describe this integration as device-working until the iOS 26 extension is
 
 ## On-device pairing
 
-iOS/iPadOS 27+ physical devices can generate their own Remote Pairing file from Settings → JIT. Allow Local Network access, select Pair with Akatsubaki Emu in Developer Mode settings and enter the PIN displayed in the continued-processing Live Activity. The pairing file is protected at `Documents/StikJIT/pairingFile.plist`; the host `altIRK` is retained separately. iOS 26 keeps manual import.
+iOS/iPadOS 27+ physical devices can generate their own Remote Pairing file from Settings → JIT. Allow Local Network access, select Pair with Akatsubaki Emu in Developer Mode settings and enter the PIN displayed in the continued-processing Live Activity. The pairing file is protected at `Application Support/StikJIT/pairingFile.plist`; the host `altIRK` is retained separately. iOS 26 keeps manual import.
 
 The standalone StikPair app is MIT, Non-Commercial, so its app and FFI wrapper source are not redistributed. Akatsubaki uses an original FFI over the pinned MIT `idevice` Remote Pairing library instead.
 
