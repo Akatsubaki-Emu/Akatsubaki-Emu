@@ -13,10 +13,10 @@ class QEMUJITPolicyTests(unittest.TestCase):
         self.assertIn("guard JITCoordinator.shared.isQEMUJITReady else", gate)
         self.assertIn("QEMU TCG requires a physical iOS 26+ device", gate)
         self.assertIn("get-task-allow entitlement", gate)
-        self.assertIn("supported StikDebug TXM protocol", gate)
+        self.assertIn("recognised StikDebug JIT protocol (standard split-WX or TXM)", gate)
         self.assertLess(runtime.index("isQEMUJITReady"), runtime.index("switch QEMURuntimeStatus.inspect()"))
         coordinator = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
-        self.assertIn("return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolSupported && isJITProtocolKnown && isJITReady", coordinator)
+        self.assertIn("return isStikDebugAvailable && hasGetTaskAllow && isQEMUProtocolAvailable && isJITReady", coordinator)
 
 
 if __name__ == "__main__":
