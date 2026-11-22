@@ -18,6 +18,8 @@ class JITProtocolSourceTests(unittest.TestCase):
         source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
         self.assertIn('dlsym(RTLD_DEFAULT, "csops")', source)
         self.assertIn("queryStatus(getpid(), 0, &status, sizeof(status)) == 0", source)
+        self.assertIn("bool hasDebuggedStatus = queryStatus != NULL", source)
+        self.assertIn("if (!hasDebuggedStatus)", source)
         self.assertIn("status & UINT32_C(0x10000000)", source)
         self.assertIn("bool iSteamJITIsReady(void) { return false; }", source)
 

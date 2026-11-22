@@ -57,9 +57,10 @@ bool iSteamJITIsReady(void) {
     typedef int (*CSOpsFunction)(pid_t, unsigned int, void *, size_t);
     CSOpsFunction queryStatus = (CSOpsFunction)dlsym(RTLD_DEFAULT, "csops");
     uint32_t status = 0;
-    if (queryStatus == NULL
-        || queryStatus(getpid(), 0, &status, sizeof(status)) != 0
-        || (status & UINT32_C(0x10000000)) == 0) {
+    bool hasDebuggedStatus = queryStatus != NULL
+        && queryStatus(getpid(), 0, &status, sizeof(status)) == 0
+        && (status & UINT32_C(0x10000000)) != 0;
+    if (!hasDebuggedStatus) {
         return false;
     }
 
