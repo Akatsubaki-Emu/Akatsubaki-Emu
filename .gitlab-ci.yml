@@ -2,6 +2,8 @@ stages:
   - validate
 
 workflow:
+  auto_cancel:
+    on_new_commit: interruptible
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -12,6 +14,15 @@ swift-runtime-tests:
   image: swift:6.0
   interruptible: true
   timeout: 20m
+  rules:
+    - changes:
+        - src/Runtime/*.swift
+        - src/Runtime/**/*.swift
+        - src/Performance/*.swift
+        - src/QEMU/VNCKeyState.swift
+        - scripts/tests/*.swift
+        - scripts/tests/**/*.swift
+    - when: never
   script:
     - swiftc -parse-as-library -swift-version 5 src/Runtime/ELF64Loader.swift scripts/tests/test_elf_loader_program_headers.swift -o /tmp/test-elf-phdr
     - /tmp/test-elf-phdr
@@ -35,6 +46,12 @@ native-memory-tests:
   image: gcc:14
   interruptible: true
   timeout: 5m
+  rules:
+    - changes:
+        - iSteam/NativeGuestMemory.cpp
+        - iSteam/NativeGuestMemory.h
+        - scripts/tests/test_native_guest_memory.cpp
+    - when: never
   script:
     - g++ -std=c++17 -Wall -Wextra -Werror -IiSteam iSteam/NativeGuestMemory.cpp scripts/tests/test_native_guest_memory.cpp -o /tmp/test-native-memory
     - /tmp/test-native-memory
@@ -44,6 +61,15 @@ python-source-contracts:
   image: python:3.12-slim
   interruptible: true
   timeout: 5m
+  rules:
+    - changes:
+        - .gitlab-ci.yml
+        - .github/workflows/**/*
+        - project.yml
+        - src/**/*
+        - iSteam/**/*
+        - scripts/**/*
+    - when: never
   script:
     - apt-get update && apt-get install -y --no-install-recommends bash build-essential && rm -rf /var/lib/apt/lists/*
     - python -m py_compile scripts/validate-qemu-source.py
