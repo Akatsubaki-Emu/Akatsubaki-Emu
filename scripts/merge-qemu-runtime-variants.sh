@@ -110,11 +110,11 @@ merge_framework_tree() {
         cp -a "$entry" "$target"
       fi
     elif [[ -d "$entry" ]]; then
-      [[ ! -e "$target" || -d "$target" ]] || fail "framework file/directory collision: $relative"
+      [[ ! -L "$target" && ( ! -e "$target" || -d "$target" ) ]] || fail "framework file/directory collision: $relative"
       mkdir -p "$target"
     elif [[ -f "$entry" ]]; then
-      if [[ -e "$target" ]]; then
-        [[ -f "$target" ]] && cmp -s "$entry" "$target" || fail "different JIT/TCI dependency bytes: $relative"
+      if [[ -e "$target" || -L "$target" ]]; then
+        [[ ! -L "$target" && -f "$target" ]] && cmp -s "$entry" "$target" || fail "different JIT/TCI dependency bytes: $relative"
       else
         mkdir -p "$(dirname "$target")"
         cp -a "$entry" "$target"
@@ -169,7 +169,11 @@ cp "$TCI_DIR/UTM-archive-Info.plist" "$TEMP_OUT/UTM-TCI-archive-Info.plist" 2>/d
 } > "$TEMP_OUT/QEMU/runtime-mode-manifest.txt"
 {
   echo "=== JIT runtime ==="
-  cat "$JIT_DIR/BUILD-INFO.txt" 2>/dev/null || true
+  if [[ -s "$JIT_DIR/BUILD-INFO-jit.txt" ]]; then
+    cat "$JIT_DIR/BUILD-INFO-jit.txt"
+  else
+    cat "$JIT_DIR/BUILD-INFO.txt" 2>/dev/null || true
+  fi
   echo "=== TCI runtime ==="
   cat "$TCI_DIR/BUILD-INFO.txt" 2>/dev/null || true
 } > "$TEMP_OUT/BUILD-INFO.txt"
@@ -179,15 +183,25 @@ cp "$TCI_DIR/UTM-archive-Info.plist" "$TEMP_OUT/UTM-TCI-archive-Info.plist" 2>/d
   echo "=== TCI exports ==="
   cat "$TCI_DIR/exports.txt"
 } > "$TEMP_OUT/exports.txt"
-for report in runtime-file-inventory.txt dependency-report.txt; do
-  : > "$TEMP_OUT/$report"
-  for package in "$JIT_DIR" "$TCI_DIR"; do
-    if [[ -f "$package/$report" ]]; then
-      echo "=== $package ===" >> "$TEMP_OUT/$report"
-      cat "$package/$report" >> "$TEMP_OUT/$report"
-    fi
-  done
+: > "$TEMP_OUT/runtime-file-inventory.txt"
+for package in "$JIT_DIR" "$TCI_DIR"; do
+  if [[ -f "$package/runtime-file-inventory.txt" ]]; then
+    echo "=== $package ===" >> "$TEMP_OUT/runtime-file-inventory.txt"
+    cat "$package/runtime-file-inventory.txt" >> "$TEMP_OUT/runtime-file-inventory.txt"
+  fi
 done
+: > "$TEMP_OUT/dependency-report.txt"
+if [[ -f "$JIT_DIR/dependency-report-jit.txt" ]]; then
+  echo "=== JIT dependency report ===" >> "$TEMP_OUT/dependency-report.txt"
+  cat "$JIT_DIR/dependency-report-jit.txt" >> "$TEMP_OUT/dependency-report.txt"
+elif [[ -f "$JIT_DIR/dependency-report.txt" ]]; then
+  echo "=== JIT dependency report ===" >> "$TEMP_OUT/dependency-report.txt"
+  cat "$JIT_DIR/dependency-report.txt" >> "$TEMP_OUT/dependency-report.txt"
+fi
+if [[ -f "$TCI_DIR/dependency-report.txt" ]]; then
+  echo "=== TCI dependency report ===" >> "$TEMP_OUT/dependency-report.txt"
+  cat "$TCI_DIR/dependency-report.txt" >> "$TEMP_OUT/dependency-report.txt"
+fi
 
 [[ -f "$TEMP_OUT/$jit_library" && -f "$TEMP_OUT/$tci_library_merged" ]] || fail "merged runtime libraries are missing"
 [[ ! -L "$OUT" && ( ! -e "$OUT" || -d "$OUT" ) ]] || fail "output path changed during merge"
