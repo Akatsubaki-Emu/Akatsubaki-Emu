@@ -855,10 +855,14 @@ for token in [
     "scripts/patch_utm_qemu_ios.py",
     "scripts/patch_qemu_meson_ios.py",
     "scripts/verify_qemu_meson_link.py",
-    "utm-ios-arm64-deps-v11-",
+    "utm-ios-arm64-deps-v12-",
     "spirv-tools",
     "spirv-llvm-translator",
     "steps.xcode.outputs.version",
+    "runs-on: macos-26",
+    'XCODE_APP="/Applications/Xcode_26.2.app"',
+    'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
+    'if [ "$XCODE_VERSION" != "26.2" ]; then',
 ]:
     if token not in qemu_workflow:
         print(f"QEMU workflow: missing build-integrity step {token!r}", file=sys.stderr)

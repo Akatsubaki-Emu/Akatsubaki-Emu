@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   build-utm-runtime:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 350
     steps:
       - name: Checkout i-Steam
@@ -47,10 +47,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          XCODE_APP="/Applications/Xcode_26.2.app"
+          if [ ! -d "$XCODE_APP" ]; then
+            echo "Xcode 26.2 is required for the QEMU/Mesa Metal 4 headers." >&2
+            exit 1
+          fi
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+          XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          if [ "$XCODE_VERSION" != "26.2" ]; then
+            echo "Expected Xcode 26.2, selected $XCODE_VERSION." >&2
+            exit 1
+          fi
           xcode-select -p
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
-          XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
           IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
           echo "version=${XCODE_VERSION}-ios-${IOS_SDK_VERSION}" >> "$GITHUB_OUTPUT"
 
@@ -87,7 +97,7 @@ jobs:
             UTM/sysroot-iOS-arm64
           # Include the workflow itself: Meson cross-file fixes change build configuration.
           # A workflow-only fix must not reuse a QEMU build tree configured without it.
-          key: utm-ios-arm64-deps-v11-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
+          key: utm-ios-arm64-deps-v12-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
 
       - name: Build UTM dependencies for physical iOS arm64
         shell: bash

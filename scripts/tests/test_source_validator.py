@@ -344,6 +344,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: false", workflow)
         self.assertIn("test_qemu_runtime_does_not_cancel_in_progress_release_build", tests)
 
+    def test_qemu_runtime_pins_macos26_and_xcode26_2(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
+        self.assertIn("runs-on: macos-26", workflow)
+        self.assertIn('XCODE_APP="/Applications/Xcode_26.2.app"', workflow)
+        self.assertIn('sudo xcode-select --switch "$XCODE_APP/Contents/Developer"', workflow)
+        self.assertIn('if [ "$XCODE_VERSION" != "26.2" ]; then', workflow)
+
 
     def test_qemu_acceleration_profiles_describe_actual_tcg_behavior(self):
         root = Path(__file__).resolve().parents[2]

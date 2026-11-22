@@ -113,9 +113,18 @@ jobs:
               raise SystemExit("Release artifacts must not silently ignore missing files.")
           if "workflow_call:" not in qemu or "workflow_dispatch:" not in qemu:
               raise SystemExit("QEMU workflow must support both reusable and manual execution.")
+          if "runs-on: macos-26" not in qemu:
+              raise SystemExit("QEMU/Mesa build requires the macOS 26 runner image.")
+          for token in [
+              'XCODE_APP="/Applications/Xcode_26.2.app"',
+              'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
+              'if [ "$XCODE_VERSION" != "26.2" ]; then',
+          ]:
+              if token not in qemu:
+                  raise SystemExit("QEMU build must pin and verify Xcode 26.2: " + token)
           if "spirv-tools" not in qemu or "spirv-llvm-translator" not in qemu:
               raise SystemExit("QEMU Mesa dependency build must install SPIRV-Tools and its LLVM translator.")
-          if "utm-ios-arm64-deps-v11-" not in qemu:
+          if "utm-ios-arm64-deps-v12-" not in qemu:
               raise SystemExit("QEMU dependency cache key must be versioned.")
           if "steps.utm-source.outputs.commit" not in qemu:
               raise SystemExit("QEMU cache key must include the checked-out UTM revision.")
@@ -130,7 +139,7 @@ jobs:
               "scripts/verify_qemu_meson_link.py",
               "ISTEAM_QEMU_LINK_VERIFIER",
               "steps.xcode.outputs.version",
-              "utm-ios-arm64-deps-v11-",
+              "utm-ios-arm64-deps-v12-",
           ]:
               if token not in qemu:
                   raise SystemExit("QEMU build patch contract is missing: " + token)
