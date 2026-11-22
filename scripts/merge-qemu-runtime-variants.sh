@@ -30,6 +30,7 @@ TCI_DIR="$(cd "$TCI_REQUEST" && pwd -P)"
 
 path_is_within() {
   local candidate="$1" parent="$2"
+  [[ "$candidate" == "$parent" ]] && return 0
   case "$candidate/" in "$parent/"*) return 0 ;; esac
   return 1
 }
