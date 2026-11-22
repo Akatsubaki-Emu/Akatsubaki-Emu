@@ -1340,6 +1340,104 @@ for token in ("endbr64Memory", "malformedEndbr64Memory", "truncatedEndbr64Memory
         print(f"x86-64 interpreter tests: missing ENDBR64 prefix regression {token!r}", file=sys.stderr)
         failed = True
 
+
+# Kenran Buto's translated blocks must use the checked guest-register ABI,
+# platform-gated executable pages, and a tested interpreter side-exit.
+aot_translator_source = Path("src/Runtime/X86_64AOTTranslator.swift").read_text(encoding="utf-8")
+aot_compiler_source = Path("src/Runtime/KenranButoAOTCompiler.swift").read_text(encoding="utf-8")
+aot_execution_source = Path("src/Runtime/KenranButoAOTExecution.swift").read_text(encoding="utf-8")
+aot_memory_source = Path("iSteam/KenranButoAOTExecutableMemory.c").read_text(encoding="utf-8")
+aot_interpreter_source = Path("src/Runtime/X86_64Interpreter.swift").read_text(encoding="utf-8")
+aot_guest_machine_source = Path("src/Runtime/GuestMachine.swift").read_text(encoding="utf-8")
+aot_execution_tests = Path("scripts/tests/test_kenran_buto_aot_execution.swift").read_text(encoding="utf-8")
+aot_interpreter_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
+aot_workflow = Path(".github/workflows/validate-ios-build.yml").read_text(encoding="utf-8")
+
+for token in (
+    "maximumInstructionBudget = 4096",
+    "maximumOutputBudget = 1_048_576",
+    "maximumGuestByteBudget = 65_536",
+    "min(maximumInstructions, Self.maximumInstructionBudget)",
+    "min(maximumOutputBytes, Self.maximumOutputBudget)",
+    "min(maximumGuestBytes, Self.maximumGuestByteBudget)",
+):
+    if token not in aot_translator_source:
+        print(f"Kenran Buto AOT translator: missing hard resource limit {token!r}", file=sys.stderr)
+        failed = True
+
+for token in (
+    "cachedTranslation == translation",
+    "Re-decode the guest bytes",
+):
+    if token not in aot_compiler_source:
+        print(f"Kenran Buto AOT compiler: missing cache authenticity check {token!r}", file=sys.stderr)
+        failed = True
+
+for token in (
+    "mov x16, x0",
+    "0xAA0003F0",
+    "guestRegisterCount = 16",
+    "0xF9400000",
+    "0xF9000000",
+    "0xD65F03C0",
+    "maximumCachedBlocks = 64",
+    "KenranButoExecutableMemory.isAvailable",
+):
+    if token not in aot_execution_source:
+        print(f"Kenran Buto AOT execution: missing block ABI/runtime contract {token!r}", file=sys.stderr)
+        failed = True
+
+for token in (
+    "iSteamJITIsReady()",
+    "iSteamJITPrepareRegion(NULL, mappedSize)",
+    "vm_remap",
+    "vm_protect",
+    "PROT_READ | PROT_EXEC",
+    "TARGET_OS_SIMULATOR",
+    "TARGET_OS_MACCATALYST",
+):
+    if token not in aot_memory_source:
+        print(f"Kenran Buto executable memory: missing platform/JIT guard {token!r}", file=sys.stderr)
+        failed = True
+if "iSteamJITDetach(" in aot_memory_source:
+    print("Kenran Buto executable memory: TXM block allocator must not detach the StikDebug session", file=sys.stderr)
+    failed = True
+
+for token in (
+    "protocol X86_64AOTExecuting",
+    "aotExecutor.execute(",
+    "result.guestBytesConsumed <= instructionWindowLength",
+    "instructionCount &+= count",
+):
+    if token not in aot_interpreter_source:
+        print(f"x86-64 interpreter: missing AOT dispatch/side-exit contract {token!r}", file=sys.stderr)
+        failed = True
+if "KenranButoAOTExecutor()" not in aot_guest_machine_source:
+    print("GuestMachine: x86-64 guest execution is not wired to Kenran Buto AOT", file=sys.stderr)
+    failed = True
+
+for token in (
+    "KenranButoAOTBlock.build(from: translation)",
+    "registers[0] == 7",
+    "registers[3] == 7",
+    "maximumInstructions: 1",
+):
+    if token not in aot_execution_tests:
+        print(f"Kenran Buto AOT execution tests: missing executable-block regression {token!r}", file=sys.stderr)
+        failed = True
+for token in (
+    "aotSideExit",
+    "unavailableAOT",
+    "aotExecutor.lastInstructionBudget == 1",
+):
+    if token not in aot_interpreter_tests:
+        print(f"x86-64 interpreter tests: missing AOT fallback regression {token!r}", file=sys.stderr)
+        failed = True
+if "Test Kenran Buto ARM64 executable blocks and register ABI" not in aot_workflow:
+    print("iOS validation workflow: native ARM64 AOT execution harness is not run", file=sys.stderr)
+    failed = True
+
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")
