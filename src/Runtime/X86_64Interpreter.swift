@@ -689,6 +689,9 @@ final class X86_64Interpreter: GuestCPUBackend {
             case 0x0F: // Two-byte opcode map
                 guard let second = fetchByte() else { return .memoryFault(address: rip) }
                 if second == 0x05 {
+                    // SYSCALL saves the post-instruction RIP and guest flags in RCX/R11.
+                    registers[1] = rip
+                    registers[11] = flags
                     let number = registers[0]
                     if number == 158 {
                         registers[0] = dispatchArchPrctl(operation: registers[7], argument: registers[6])

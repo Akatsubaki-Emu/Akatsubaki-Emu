@@ -64,6 +64,7 @@ The source includes separate entries for iOS Main, iOS Nightly, tvOS Main, and t
 - Native DroidDeck-inspired library backup/restore, per-game profile defaults, artwork caching, local compatibility records, and runtime component integrity verification.
 
 These are works in progress. Importing a file or inspecting its metadata does not execute it, and a storage prototype is not a complete virtual storage controller. JIT behavior depends on iOS version, device, signing, entitlements, and supported tooling. The current VM launch path requests JIT through LocalDevVPN and StikDebug before starting QEMU; those helper apps and a compatible signature are still required. Akatsubaki Emu does not yet embed the StikJIT helper extension.
+These are works in progress. Importing a file or inspecting its metadata does not execute it, and a storage prototype is not a complete virtual storage controller. JIT behavior depends on iOS version, device, signing, entitlements, and supported tooling. Akatsubaki Emu requests JIT only for its QEMU VM process through the LocalDevVPN/StikDebug flow; it does not enable JIT for unrelated apps.
 
 ### tvOS app
 
@@ -94,6 +95,10 @@ The project currently declares iOS 16, tvOS 17, and visionOS 1.0 deployment targ
 - **AltStore source:** add `https://akatsubaki-emu.github.io/AltSource.json` in a compatible app.
 - **Troubleshooting:** include your device/OS version and the relevant build or crash log when reporting an issue.
 - **File access:** iOS file-picker access and persistent bookmark access are different; a selected file may not remain accessible if its security-scoped bookmark cannot be created or reopened.
+
+## Automatic JIT activation
+
+Akatsubaki can orchestrate JIT acquisition for its QEMU VM on supported physical iOS devices through LocalDevVPN and StikDebug. This sideload/developer workflow requires a valid `get-task-allow` entitlement. See [Automatic JIT activation](docs/JIT_ACTIVATION.md) for setup, lifecycle, failure handling and validation.
 
 ## Building
 
@@ -141,6 +146,7 @@ Bug reports, documentation improvements, and focused pull requests are welcome. 
 - [QEMU runtime build and failure diagnostics](docs/QEMU_BUILD_WORKFLOW.md)
 - [DroidDeck feature-port plan](docs/DROIDDECK_PORT_PLAN.md)
 - [DroidDeck port status](docs/DROIDDECK_PORT_STATUS.md)
+- [iOS memory entitlements](docs/IOS_ENTITLEMENTS.md)
 - Portable library transfer, per-game profile defaults, and feature readiness services: `src/Steam/DroidDeckFeatureServices.swift`
 - Artwork cache: `src/Steam/GameArtworkStore.swift`
 - Compatibility records: `src/Windows/GameCompatibilityDatabase.swift`

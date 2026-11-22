@@ -379,6 +379,8 @@ required = {
         "private func dispatchArchPrctl(operation: UInt64, argument: UInt64) -> UInt64",
         "includeSegmentBase: Bool = true",
         "if number == 158",
+        "registers[1] = rip",
+        "registers[11] = flags",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
@@ -470,6 +472,8 @@ required = {
         "let fsSegmentMemory = GuestMemory(size: 4096)",
         "precondition(fsSegmentMemory.readByte(offset: 0x1020) == 0x5A)",
         "precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)",
+        "precondition(syscallInterpreter.registerValue(1) == 21)",
+        "precondition(syscallInterpreter.registerValue(11) == 0x46)",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",

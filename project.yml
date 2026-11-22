@@ -6,6 +6,10 @@ options:
     iOS: "16.0"
     tvOS: "17.0"
     visionOS: "1.0"
+packages:
+  StosSign:
+    url: https://github.com/stossy11/StosSign
+    branch: main
 settings:
   base:
     SWIFT_VERSION: "5.9"
@@ -26,6 +30,13 @@ targets:
       - path: src
         excludes:
           - Display/VMDisplayViewController-tvOS.swift
+    dependencies:
+      - package: StosSign
+        product: StosSign_API
+      - package: StosSign
+        product: StosSign_Auth
+      - package: StosSign
+        product: StosSign_Common
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam
@@ -49,6 +60,13 @@ targets:
       - path: src
         excludes:
           - Display/VMDisplayViewController-tvOS.swift
+    dependencies:
+      - package: StosSign
+        product: StosSign_API
+      - package: StosSign
+        product: StosSign_Auth
+      - package: StosSign
+        product: StosSign_Common
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.nightly
@@ -81,6 +99,7 @@ targets:
           - AppDelegate-tvOS.swift
           - LaunchSetupViewController-tvOS.swift
           - SettingsViewController-tvOS.swift
+          - EntitlementSettingsView.swift
       - path: src
         excludes:
           - Display/VMDisplayViewController-tvOS.swift

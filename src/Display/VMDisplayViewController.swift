@@ -90,9 +90,9 @@ final class VMDisplayViewController: UIViewController {
         registerKeyboardNotifications()
         refreshHardwareKeyboardState()
         virtioGPU.start()
-        vncClient.onFrame = { [weak self] data, width, height in
+        vncClient.onFrame = { [weak self] data, width, height, dirtyRegion in
             guard let self else { return }
-            self.virtioGPU.submit(.updateFramebuffer(data, width: width, height: height))
+            self.virtioGPU.submit(.updateFramebuffer(data, width: width, height: height, dirtyRegion: dirtyRegion))
             guard self.lastReportedGuestFrameWidth != width
                 || self.lastReportedGuestFrameHeight != height else { return }
             self.lastReportedGuestFrameWidth = width

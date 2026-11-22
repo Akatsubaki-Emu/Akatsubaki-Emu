@@ -19,6 +19,7 @@ swift-runtime-tests:
         - src/Runtime/*.swift
         - src/Runtime/**/*.swift
         - src/Performance/*.swift
+        - src/GPU/*.swift
         - src/QEMU/VNCKeyState.swift
         - scripts/tests/*.swift
         - scripts/tests/**/*.swift
@@ -40,6 +41,8 @@ swift-runtime-tests:
     - /tmp/test-linux-syscalls
     - swiftc -parse-as-library -swift-version 5 src/Runtime/ExecutionBackendRouter.swift scripts/tests/test_execution_backend_router.swift -o /tmp/test-backend-router
     - /tmp/test-backend-router
+    - swiftc -parse-as-library -swift-version 5 src/GPU/GPUBackend.swift scripts/tests/test_gpu_frame_region.swift -o /tmp/test-gpu-frame-region
+    - /tmp/test-gpu-frame-region
 
 native-memory-tests:
   stage: validate
