@@ -37,10 +37,10 @@ class GameLibraryTransferSnapshotTests(unittest.TestCase):
         self.assertIn("profiles.sort", snapshot)
 
     def test_uuid_sets_use_lazy_projection_without_intermediate_arrays(self):
-        export = section(TRANSFER, "    func export(to destination: URL)", "    @discardableResult\\n    func importBackup")
+        export = section(TRANSFER, "    func export(to destination: URL)", "    @discardableResult\n    func importBackup")
         importer = section(TRANSFER, "    func importBackup(from source: URL)", "    enum TransferError")
-        self.assertIn("Set(games.lazy.map(\\\\.id))", export)
-        self.assertIn("Set(currentSnapshot.lazy.map(\\\\.id))", importer)
+        self.assertIn("Set(games.lazy.map(\\.id))", export)
+        self.assertIn("Set(currentSnapshot.lazy.map(\\.id))", importer)
         self.assertNotIn("Set(games.map(", export)
         self.assertNotIn("Set(currentSnapshot.map(", importer)
 
