@@ -3,6 +3,8 @@ import Foundation
 /// Loads ELF64 ET_EXEC images and self-contained ET_DYN static PIE images.
 /// PIE support is limited to R_X86_64_RELATIVE relocations; dynamic linking is not implemented.
 final class ELF64Loader {
+    private typealias LoadSegmentMapping = (virtualAddress: UInt64, fileOffset: UInt64, fileSize: UInt64, memorySize: UInt64)
+
     struct Segment {
         let guestAddress: UInt64
         let fileSize: UInt64
@@ -97,7 +99,7 @@ final class ELF64Loader {
 
         var segments: [Segment] = []
         var pending: [(Segment, Int)] = []
-        var rawLoadSegments: [(virtualAddress: UInt64, fileOffset: UInt64, fileSize: UInt64, memorySize: UInt64)] = []
+        var rawLoadSegments: [LoadSegmentMapping] = []
         var dynamicSegment: (virtualAddress: UInt64, fileOffset: UInt64, fileSize: UInt64, memorySize: UInt64)?
         var total: UInt64 = 0
         var mappedProgramHeaderAddress: UInt64?
@@ -259,7 +261,7 @@ final class ELF64Loader {
         fileOffset: UInt64,
         fileSize: UInt64,
         loadBias: UInt64,
-        loadSegments: [(virtualAddress: UInt64, fileOffset: UInt64, fileSize: UInt64, memorySize: UInt64)],
+        loadSegments: [LoadSegmentMapping],
         memory: GuestMemory
     ) throws {
         guard fileOffset <= UInt64(data.count),
@@ -312,16 +314,17 @@ final class ELF64Loader {
         }
         guard relaSize > 0 else { return }
 
-        let relaFileOffset = loadSegments.compactMap { segment -> UInt64? in
-            guard relaAddress >= segment.virtualAddress else { return nil }
-            let delta = relaAddress - segment.virtualAddress
-            guard delta <= segment.fileSize, relaSize <= segment.fileSize - delta else { return nil }
-            let (offset, overflow) = segment.fileOffset.addingReportingOverflow(delta)
-            return overflow ? nil : offset
-        }.first
-        guard let relaFileOffset,
-              relaFileOffset <= UInt64(data.count),
-              relaSize <= UInt64(data.count) - relaFileOffset else {
+        // PT_LOAD ranges are validated as non-overlapping before relocation.
+        // Sort once, then use binary search for each relocation instead of
+        // scanning every segment in the hot relocation loop.
+        let orderedLoadSegments = loadSegments.sorted { $0.virtualAddress < $1.virtualAddress }
+        guard let relaFileOffset = fileOffset(
+            forVirtualAddress: relaAddress,
+            byteCount: relaSize,
+            in: orderedLoadSegments
+        ),
+        relaFileOffset <= UInt64(data.count),
+        relaSize <= UInt64(data.count) - relaFileOffset else {
             throw LoadError.unsupportedDynamicImage
         }
 
@@ -336,11 +339,7 @@ final class ELF64Loader {
                 let relocationType = UInt32(truncatingIfNeeded: information)
                 let symbolIndex = UInt32(information >> 32)
                 guard relocationType == 8, symbolIndex == 0,
-                      loadSegments.contains(where: { segment in
-                          guard target >= segment.virtualAddress else { return false }
-                          let delta = target - segment.virtualAddress
-                          return delta <= segment.memorySize && 8 <= segment.memorySize - delta
-                      }) else {
+                      containsGuestRange(target, byteCount: 8, in: orderedLoadSegments) else {
                     return false
                 }
                 let (targetAddress, targetOverflow) = target.addingReportingOverflow(loadBias)
@@ -354,6 +353,39 @@ final class ELF64Loader {
             return true
         }
         guard relocationsApplied else { throw LoadError.unsupportedDynamicImage }
+    }
+
+    private func loadSegment(containing address: UInt64,
+                              in segments: [LoadSegmentMapping]) -> LoadSegmentMapping? {
+        var lowerBound = 0
+        var upperBound = segments.count
+        while lowerBound < upperBound {
+            let middle = lowerBound + (upperBound - lowerBound) / 2
+            if segments[middle].virtualAddress <= address {
+                lowerBound = middle + 1
+            } else {
+                upperBound = middle
+            }
+        }
+        guard lowerBound > 0 else { return nil }
+        let candidate = segments[lowerBound - 1]
+        return address - candidate.virtualAddress < candidate.memorySize ? candidate : nil
+    }
+
+    private func containsGuestRange(_ address: UInt64, byteCount: UInt64,
+                                    in segments: [LoadSegmentMapping]) -> Bool {
+        guard let segment = loadSegment(containing: address, in: segments) else { return false }
+        let delta = address - segment.virtualAddress
+        return delta <= segment.memorySize && byteCount <= segment.memorySize - delta
+    }
+
+    private func fileOffset(forVirtualAddress address: UInt64, byteCount: UInt64,
+                            in segments: [LoadSegmentMapping]) -> UInt64? {
+        guard let segment = loadSegment(containing: address, in: segments) else { return nil }
+        let delta = address - segment.virtualAddress
+        guard delta <= segment.fileSize, byteCount <= segment.fileSize - delta else { return nil }
+        let (offset, overflow) = segment.fileOffset.addingReportingOverflow(delta)
+        return overflow ? nil : offset
     }
 
     private func u16(_ data: Data, _ offset: Int) -> UInt16? {
