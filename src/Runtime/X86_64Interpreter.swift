@@ -139,6 +139,11 @@ final class X86_64Interpreter: GuestCPUBackend {
                         continue
                     }
                     aotDisabledForRun = true
+                } else {
+                    // A declined block is unavailable, unsupported, or failed to allocate.
+                    // Do not repeat the same expensive probe/translation attempt for every
+                    // instruction in this bounded interpreter batch.
+                    aotDisabledForRun = true
                 }
             }
             guard var opcode = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }

@@ -157,6 +157,20 @@ private final class CorruptingAOTExecutor: KenranButoAOTExecuting {
     }
 }
 
+private final class DecliningAOTExecutor: KenranButoAOTExecuting {
+    private(set) var calls = 0
+    private(set) var invalidations = 0
+
+    func invalidateAll() { invalidations += 1 }
+
+    func execute(guestCode: Data, registers: inout [UInt64], rip: UInt64,
+                 rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
+                 memory: GuestMemory, maximumInstructions: Int) -> KenranButoAOTExecutionResult? {
+        calls += 1
+        return nil
+    }
+}
+
 @main
 struct InterpreterTests {
     static func main() throws {
@@ -1347,6 +1361,17 @@ struct InterpreterTests {
         precondition(protectedInterpreter.instructionCount == fallbackBaseline.instructionCount)
         precondition(corruptingExecutor.calls == 1 && corruptingExecutor.invalidations == 1)
         print("Kenran Butō AOT invalid side-exit rejection preserved interpreter state")
+
+        let decliningMemory = GuestMemory(size: 8192)
+        precondition(decliningMemory.write(Data([0x90, 0x90, 0xF4]), offset: 0x1000))
+        let decliningExecutor = DecliningAOTExecutor()
+        let decliningInterpreter = X86_64Interpreter(memory: decliningMemory, aotExecutor: decliningExecutor)
+        try decliningInterpreter.reset(entryPoint: 0x1000)
+        let decliningExit = try decliningInterpreter.run(maxInstructions: 4)
+        precondition(decliningExit == .halted)
+        precondition(decliningInterpreter.instructionCount == 3)
+        precondition(decliningExecutor.calls == 1 && decliningExecutor.invalidations == 1)
+        print("Kenran Butō AOT declined block is not retried within the same execution batch")
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
