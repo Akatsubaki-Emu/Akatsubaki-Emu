@@ -100,6 +100,8 @@ final class LinuxSyscallDispatcher {
             return .returned(validateRange(address: arg0, length: arg1))
         case 39, 186:
             return .returned(1)
+        case 63:
+            return .returned(writeUname(at: arg0))
         case 96:
             return .returned(writeTimeval(at: arg0, timezone: arg1))
         case 102, 104, 107, 108:
@@ -358,6 +360,19 @@ final class LinuxSyscallDispatcher {
             if cursor == end { return 0 }
         }
         return errno(12)
+    }
+
+    /// Returns a stable, virtual Linux x86-64 identity without exposing host details.
+    /// The Linux x86-64 utsname ABI is six fixed 65-byte, NUL-terminated fields.
+    private func writeUname(at address: UInt64) -> UInt64 {
+        let fields = ["Linux", "akatsubaki", "6.0.0-akatsubaki", "Kenran Buto", "x86_64", "localdomain"]
+        var bytes = [UInt8](repeating: 0, count: 65 * fields.count)
+        for (index, field) in fields.enumerated() {
+            let encoded = Array(field.utf8.prefix(64))
+            let start = index * 65
+            bytes.replaceSubrange(start..<(start + encoded.count), with: encoded)
+        }
+        return memory.write(Data(bytes), offset: address) ? 0 : errno(14)
     }
 
     private func getRandom(at address: UInt64, length: UInt64, flags: UInt64) -> UInt64 {
