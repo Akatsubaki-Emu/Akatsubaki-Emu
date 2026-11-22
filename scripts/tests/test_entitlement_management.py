@@ -29,12 +29,20 @@ class EntitlementManagementSourceTests(unittest.TestCase):
 
     def test_anisette_helper_is_vendored_and_uses_secure_device_state(self):
         self.assertIn("class AnisetteDataHelper", self.anisette)
-        self.assertIn("EntitlementAnisetteKeychain.shared.identifier", self.anisette)
-        self.assertIn("EntitlementAnisetteKeychain.shared.adiPb", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.loadIdentifier()", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.loadADIPB()", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.storeIdentifier(", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.storeADIPB(", self.anisette)
         self.assertNotRegex(self.anisette, r"(?<!EntitlementAnisette)Keychain\.shared\.")
         self.assertIn("SecItemCopyMatching", self.keychain)
         self.assertIn("SecItemAdd", self.keychain)
+        self.assertIn("SecItemDelete", self.keychain)
         self.assertIn("kSecAttrSynchronizable", self.keychain)
+        self.assertIn("kCFBooleanFalse", self.keychain)
+        self.assertIn("func loadIdentifier() throws", self.keychain)
+        self.assertIn("func storeIdentifier(_ value: String?) throws", self.keychain)
+        self.assertIn("throw keychainError", self.keychain)
+        self.assertNotIn("query[kSecAttrSynchronizable as String] = kCFBooleanTrue", self.keychain)
 
 
     def test_anisette_helper_does_not_log_auth_material_and_uses_safe_load(self):
@@ -85,6 +93,21 @@ class EntitlementManagementSourceTests(unittest.TestCase):
     def test_existing_memory_entitlement_declarations_are_preserved(self):
         self.assertIn("com.apple.developer.kernel.increased-memory-limit", self.entitlements)
         self.assertIn("com.apple.developer.kernel.extended-virtual-addressing", self.entitlements)
+
+
+    def test_anisette_lookup_and_response_plists_allow_mixed_top_level_values(self):
+        self.assertIn('as? [String: Any]', self.anisette)
+        self.assertIn('root["urls"] as? [String: Any]', self.anisette)
+        self.assertIn('root["Response"] as? [String: Any]', self.anisette)
+        self.assertNotIn("Dictionary<String, Dictionary<String, Any>>", self.anisette)
+
+    def test_anisette_identity_errors_are_not_force_unwrapped(self):
+        for unsafe in ("self.url!", "identifier!", "adiPb!", "self.clientInfo!", "self.userAgent!", "self.mdLu!", "self.deviceId!", "try! JSONSerialization"):
+            self.assertNotIn(unsafe, self.anisette)
+        self.assertIn("decoded.count == MemoryLayout<UUID>.size", self.anisette)
+
+    def test_anisette_client_timestamp_is_explicitly_utc(self):
+        self.assertIn("formatter.timeZone = TimeZone(secondsFromGMT: 0)", self.anisette)
 
 
 if __name__ == "__main__":
