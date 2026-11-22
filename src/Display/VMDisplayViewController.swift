@@ -73,7 +73,9 @@ final class VMDisplayViewController: UIViewController {
                 self.status.text = "Starting QEMU • waiting for guest display"
             case .running:
                 if !self.vncClient.isConnected {
-                    self.status.text = "QEMU active • waiting for guest display"
+                    self.status.text = "QEMU active • connecting to guest display"
+                     // Start the retry window only after QEMU's native main loop is active.
+                     self.vncClient.start()
                 }
             case .stopping:
                 self.status.text = "Stopping virtual machine…"
@@ -157,8 +159,6 @@ final class VMDisplayViewController: UIViewController {
         if case .failed(let message) = engine.state {
             status.text = "VM failed • \(message)"
             EmulationLog.shared.write("Display launch failed: \(message)")
-        } else {
-            vncClient.start()
         }
     }
 

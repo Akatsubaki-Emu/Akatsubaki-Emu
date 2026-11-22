@@ -1391,6 +1391,19 @@ struct InterpreterTests {
             precondition(executor.cachedExecutableBytes > 0)
             precondition(executor.cachedExecutableBytes <= 16 * 1024 * 1024)
             print("Kenran Butō AOT native block execution, exact-RIP side exit, differential and 96-block cache pressure passed")
+
+             // Direct executor callers cannot bypass the native stop-latency bound.
+             let longNopCode = Data(repeating: 0x90, count: 300)
+             var budgetRegisters = [UInt64](repeating: 0, count: 16)
+             let budgetResult = executor.execute(
+                 guestCode: longNopCode, registers: &budgetRegisters,
+                 rip: 0x1000, rflags: 0x202, fsBase: 0, gsBase: 0,
+                 memory: hybridMemory, maximumInstructions: 4096
+             )
+             precondition(budgetResult != nil)
+             precondition(budgetResult!.instructionCount == KenranButoAOTExecutor.maximumDispatchInstructions)
+             precondition(budgetResult!.guestBytesConsumed == KenranButoAOTExecutor.maximumDispatchInstructions)
+             print("Kenran Butō AOT 256-instruction dispatch cap passed")
         let fallbackProgram = Data([0xB8, 0x2A, 0, 0, 0, 0xF4])
         let fallbackBaselineMemory = GuestMemory(size: 8192)
         precondition(fallbackBaselineMemory.write(fallbackProgram, offset: 0x1000))

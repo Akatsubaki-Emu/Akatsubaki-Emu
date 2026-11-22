@@ -16,6 +16,7 @@ protocol KenranButoAOTExecuting:AnyObject {
  func invalidateAll()
 }
 final class KenranButoAOTExecutor:KenranButoAOTExecuting {
+ static let maximumDispatchInstructions = 256
  private struct BlockKey:Hashable {
   let code:Data;let instructionBudget:Int;let inputBudget:Int;let outputBudget:Int
   let translatorVersion:String;let abiVersion:UInt32
@@ -64,7 +65,7 @@ final class KenranButoAOTExecutor:KenranButoAOTExecuting {
  func execute(guestCode:Data,registers:inout [UInt64],rip:UInt64,rflags:UInt64,
               fsBase:UInt64,gsBase:UInt64,memory:GuestMemory,maximumInstructions:Int)->KenranButoAOTExecutionResult?{
   guard isAvailable,registers.count==16,!guestCode.isEmpty,guestCode.count<=maximumGuestBytes,maximumInstructions>0 else{return nil}
-  let budget=min(maximumInstructions,X86_64AOTTranslator.maximumInstructionBudget)
+  let budget=min(maximumInstructions,Self.maximumDispatchInstructions)
   let key=BlockKey(code:guestCode,instructionBudget:budget,inputBudget:maximumGuestBytes,
    outputBudget:maximumOutputBytes,translatorVersion:X86_64AOTTranslator.translatorVersion,
    abiVersion:KENRAN_BUTO_AOT_ABI_VERSION)

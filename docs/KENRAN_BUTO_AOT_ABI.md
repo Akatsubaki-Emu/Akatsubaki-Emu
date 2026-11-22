@@ -54,3 +54,8 @@ with canonical output before a cache hit is trusted.
 ABI v1 is an interpreter fast path, not a complete x86-64 AOT backend. Unsupported
 instructions always fall back. Physical iOS/TXM execution remains unverified until
 tested on a real iOS ARM64 device.
+
+
+## Native dispatch responsiveness
+
+The executable-block executor independently caps each native dispatch at 256 guest instructions, even when a caller supplies a larger budget. This matches the interpreter's stop-request polling cadence and prevents direct executor callers from creating long uninterruptible native batches. A 300-NOP regression verifies the 256-instruction cap.

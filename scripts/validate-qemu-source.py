@@ -1441,7 +1441,7 @@ if guard < 0 or "deallocate_mach_address(write,mapped)" not in aot_memory[guard:
     failed = True
 for token in ("KenranButoAOTGuestState", "makeMemoryCallbacks(for:memory)",
               "iSteamAOTExecutableMemoryInvoke", "maximumCachedBlocks=64",
-              "maximumCachedExecutableBytes", "maximumGuestBytes=4096",
+              "maximumCachedExecutableBytes", "maximumGuestBytes=4096", "maximumDispatchInstructions = 256", "Self.maximumDispatchInstructions",
               "refreshAvailability()->Bool", "availabilitySnapshot",
               "cachedBlockCount", "cachedExecutableBytes"):
     if token not in aot_execution:
@@ -1478,6 +1478,7 @@ for token in ("maximumInstructions", "maximumOutputBytes", "maximumGuestBytes", 
 aot_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
 for token in ("iSteamAOTGuestMemoryRead", "iSteamAOTGuestMemoryWrite",
               "sideExit!.exitRip == 0x100A", "Kenran Butō AOT native block execution",
+               "Kenran Butō AOT 256-instruction dispatch cap passed",
               "CorruptingAOTExecutor", "Kenran Butō AOT invalid side-exit rejection preserved interpreter state",
               "DecliningAOTExecutor", "Kenran Butō AOT declined block is not retried within the same execution batch",
               "ARM64 CI must execute native AOT blocks", "invalidEmptyRead", "invalidEmptyWrite",
@@ -1523,6 +1524,22 @@ if "maximumLength: Int? = nil" not in static_elf_tests or "static let pageSize: 
 if "test-static-elf-aot" not in aot_workflow:
     print("AOT workflow does not execute the static ELF guest smoke test", file=sys.stderr)
     failed = True
+
+# VNC retries begin only after QEMU's native main loop is active.
+vnc_display_source = Path("src/Display/VMDisplayViewController.swift").read_text(encoding="utf-8")
+vnc_running_start = vnc_display_source.find("case .running:")
+vnc_stopping_start = vnc_display_source.find("case .stopping:", vnc_running_start)
+vnc_start_engine = vnc_display_source.find("private func startEngine()")
+vnc_start_engine_end = vnc_display_source.find("\n    private func ", vnc_start_engine + 1)
+if vnc_running_start < 0 or vnc_stopping_start < 0 or vnc_start_engine < 0:
+    print("VNC startup-order source contract is missing", file=sys.stderr)
+else:
+    vnc_running_block = vnc_display_source[vnc_running_start:vnc_stopping_start]
+    vnc_engine_block = vnc_display_source[vnc_start_engine:vnc_start_engine_end if vnc_start_engine_end >= 0 else len(vnc_display_source)]
+    if "self.vncClient.start()" not in vnc_running_block:
+        print("VNC must start only after QEMU reports its main loop active", file=sys.stderr)
+    if "vncClient.start()" in vnc_engine_block:
+        print("VNC retry budget starts before QEMU initialization", file=sys.stderr)
 
 if failed:
     raise SystemExit(1)
