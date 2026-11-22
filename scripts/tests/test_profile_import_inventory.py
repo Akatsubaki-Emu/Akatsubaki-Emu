@@ -29,7 +29,6 @@ class ProfileImportInventoryTests(unittest.TestCase):
         inventory = section(PROFILE_STORE, "    func existingProfileIDs(", "    private func profileFiles()")
         self.assertIn("GameRuntimeProfile.ProfileError.corruptStoredProfile", inventory)
 
-    def test_import_uses_one_profile_inventory_not_per_entry_lookup(self):
     def test_import_rolls_back_only_profiles_created_by_this_import(self):
         importer = section(TRANSFER, "    func importBackup(from source: URL)", "    enum TransferError")
         self.assertIn("if try GameRuntimeProfileStore.shared.saveIfAbsent(profile)", importer)
