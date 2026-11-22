@@ -38,7 +38,7 @@ fi
 build_relevant_change=false
 while IFS= read -r -d '' path; do
   case "$path" in
-    .github/workflows/blank.yml|.github/workflows/validate-ios-build.yml|.github/workflows/validate-repository.yml|.gitlab-ci.yml|scripts/tests/*|README.md|CONTRIBUTING.md|INSTALL.md|LICENSE|docs/*|scripts/validate-qemu-source.py)
+    .github/workflows/blank.yml|.github/workflows/reconcile-gitlab-main.yml|.github/workflows/validate-ios-build.yml|.github/workflows/validate-repository.yml|.gitlab-ci.yml|scripts/tests/*|README.md|CONTRIBUTING.md|INSTALL.md|LICENSE|docs/*|scripts/validate-qemu-source.py)
       # These paths are excluded by release.yml paths-ignore.
       ;;
     *)
