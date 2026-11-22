@@ -117,6 +117,8 @@ int main(int argc, char **argv) {
     assert(read_counter(probe, "fake_qemu_init_count") == 1);
     assert(read_counter(probe, "fake_qemu_loop_count") == 1);
     assert(read_counter(probe, "fake_qemu_cleanup_count") == 1);
+    assert(read_counter(probe, "fake_qemu_cleanup_status") == 37);
+    assert(read_counter(probe, "fake_qemu_shutdown_cause") == 5);
     assert(read_counter(probe, "fake_qemu_shutdown_count") == 1);
 
     char error[512] = {0};
