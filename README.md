@@ -144,20 +144,24 @@ Bug reports, documentation improvements, and focused pull requests are welcome. 
 
 ## Documentation
 
-- [Installation guide](INSTALL.md)
-- [Contribution guide](CONTRIBUTING.md)
-- [Build and release workflow](docs/RELEASES.md)
-- [tvOS status and roadmap](docs/TVOS.md)
-- [Host-device bridge](docs/HOST_DEVICE_BRIDGE.md)
-- [Hybrid runtime architecture and roadmap](docs/HYBRID_RUNTIME_ARCHITECTURE.md)
-- [QEMU runtime build and failure diagnostics](docs/QEMU_BUILD_WORKFLOW.md)
-- [DroidDeck feature-port plan](docs/DROIDDECK_PORT_PLAN.md)
-- [DroidDeck port status](docs/DROIDDECK_PORT_STATUS.md)
-- [iOS memory entitlements](docs/IOS_ENTITLEMENTS.md)
-- Portable library transfer, per-game profile defaults, and feature readiness services: `src/Steam/DroidDeckFeatureServices.swift`
-- Artwork cache: `src/Steam/GameArtworkStore.swift`
-- Compatibility records: `src/Windows/GameCompatibilityDatabase.swift`
-- Runtime manifest verification: `src/Runtime/RuntimeComponentManifest.swift`
+**[Open the official Akatsubaki Emu wiki](https://akatsubaki-emu.github.io/docs/)** — searchable, mobile-friendly documentation with a navigable sidebar.
+
+- [Installation guide](https://akatsubaki-emu.github.io/docs/installation)
+- [Contributing guide](https://akatsubaki-emu.github.io/docs/contributing)
+- [Kenran Butō hybrid runtime architecture](https://akatsubaki-emu.github.io/docs/hybrid-runtime-architecture)
+- [Host-device bridge](https://akatsubaki-emu.github.io/docs/host-device-bridge)
+- [QEMU iOS runtime build workflow](https://akatsubaki-emu.github.io/docs/qemu-build-workflow)
+- [Automatic JIT activation](https://akatsubaki-emu.github.io/docs/jit-activation)
+- [iOS memory entitlements](https://akatsubaki-emu.github.io/docs/ios-entitlements)
+- [tvOS status and roadmap](https://akatsubaki-emu.github.io/docs/tvos)
+- [DroidDeck feature-port plan](https://akatsubaki-emu.github.io/docs/droiddeck-port-plan)
+- [DroidDeck port status](https://akatsubaki-emu.github.io/docs/droiddeck-port-status)
+- [Windows x64 to ARM64 static translation](https://akatsubaki-emu.github.io/docs/windows-arm64-static-translation)
+- [Build and release channels](https://akatsubaki-emu.github.io/docs/releases)
+- [GitHub Actions and GitLab synchronization](https://akatsubaki-emu.github.io/docs/git-sync)
+- [Third-party notices](https://akatsubaki-emu.github.io/docs/third-party-notices)
+
+The Markdown source remains in this repository for version control and review; the published wiki is the primary reader-facing documentation.
 
 ## Credits and technical references
 
