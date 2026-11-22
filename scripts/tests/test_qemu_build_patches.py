@@ -340,7 +340,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
         source = workflow.read_text(encoding="utf-8")
         self.assertIn("validate-release-channel:", source)
-        self.assertIn("needs: validate-release-channel", source)
+        self.assertRegex(source, r"needs:\s*(?:validate-release-channel|\[[^\]]*validate-release-channel[^\]]*\])")
         self.assertIn("inputs.channel == 'Main'", source)
         self.assertIn("github.ref != 'refs/heads/main'", source)
         self.assertIn("The Main release channel can only be dispatched from refs/heads/main", source)
