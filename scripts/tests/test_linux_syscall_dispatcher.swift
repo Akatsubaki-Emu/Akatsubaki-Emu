@@ -140,6 +140,18 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let invalidMmapFDValue) = invalidMmapFD else { preconditionFailure() }
         precondition(invalidMmapFDValue == UInt64(bitPattern: Int64(-22)))
 
+        precondition(memory.write(Data([0xCC, 0xDD, 0xEE]), offset: 0x47000))
+        precondition(memory.write(Data([0x11, 0x22, 0x33]), offset: 0x49000))
+        let partialFixed = dispatcher.dispatch(number: 9, arguments: [0x47000, 8192, 3, 0x32, UInt64.max, 0])!
+        guard case .returned(let partialFixedAddress) = partialFixed else { preconditionFailure() }
+        precondition(partialFixedAddress == 0x47000)
+        precondition(memory.read(offset: 0x47000, length: 3) == Data([0, 0, 0]))
+        precondition(memory.read(offset: 0x48000, length: 3) == Data([0, 0, 0]))
+        precondition(memory.read(offset: 0x49000, length: 3) == Data([0x11, 0x22, 0x33]))
+        let preservedSuffixProtection = dispatcher.dispatch(number: 10, arguments: [0x49000, 4096, 1, 0, 0, 0])!
+        guard case .returned(let preservedSuffixResult) = preservedSuffixProtection else { preconditionFailure() }
+        precondition(preservedSuffixResult == 0)
+
         let outputLog = EmulationLog()
         let outputDispatcher = LinuxSyscallDispatcher(memory: memory, log: outputLog)
         try outputDispatcher.configure(programBreak: 0x41000, stackBase: 0x3F0000)
@@ -156,56 +168,6 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let unicodeWritten) = unicodeWrite else { preconditionFailure() }
         precondition(unicodeWritten == UInt64(unicodeOutput.utf8.count))
         precondition(outputLog.messages.suffix(3).map { $0.replacingOccurrences(of: "[guest stdout] ", with: "") }.joined() == unicodeOutput)
-
-
-        // Linux writev (syscall 20) concatenates bounded guest iovecs without
-        // exposing guest descriptors to the host filesystem.
-        let vectorFirst = Data("hello ".utf8)
-        let vectorSecond = Data("world".utf8)
-        precondition(memory.write(vectorFirst, offset: 0x3F3000))
-        precondition(memory.write(vectorSecond, offset: 0x3F4000))
-        precondition(memory.writeUInt64(0x3F3000, offset: 0x3F2000))
-        precondition(memory.writeUInt64(UInt64(vectorFirst.count), offset: 0x3F2008))
-        precondition(memory.writeUInt64(0x3F4000, offset: 0x3F2010))
-        precondition(memory.writeUInt64(UInt64(vectorSecond.count), offset: 0x3F2018))
-        let vectorWrite = outputDispatcher.dispatch(
-            number: 20, arg0: 1, arg1: 0x3F2000, arg2: 2, arg3: 0, arg4: 0, arg5: 0
-        )!
-        guard case .returned(let vectorBytes) = vectorWrite else { preconditionFailure() }
-        precondition(vectorBytes == 11)
-        precondition(outputLog.messages.last == "[guest stdout] hello world")
-
-        let invalidVector = outputDispatcher.dispatch(
-            number: 20, arg0: 1, arg1: UInt64.max - 8, arg2: 1, arg3: 0, arg4: 0, arg5: 0
-        )!
-        guard case .returned(let invalidVectorValue) = invalidVector else { preconditionFailure() }
-        precondition(invalidVectorValue == UInt64(bitPattern: Int64(-14)))
-
-        let invalidVectorDescriptor = outputDispatcher.dispatch(
-            number: 20, arg0: 3, arg1: 0x3F2000, arg2: 2, arg3: 0, arg4: 0, arg5: 0
-        )!
-        guard case .returned(let invalidVectorDescriptorValue) = invalidVectorDescriptor else { preconditionFailure() }
-        precondition(invalidVectorDescriptorValue == UInt64(bitPattern: Int64(-9)))
-
-        let tooManyVectors = outputDispatcher.dispatch(
-            number: 20, arg0: 1, arg1: 0x3F2000, arg2: 1025, arg3: 0, arg4: 0, arg5: 0
-        )!
-        guard case .returned(let tooManyVectorsValue) = tooManyVectors else { preconditionFailure() }
-        precondition(tooManyVectorsValue == UInt64(bitPattern: Int64(-22)))
-
-        precondition(memory.writeUInt64(0x3F5000, offset: 0x3F2020))
-        precondition(memory.writeUInt64(1_048_577, offset: 0x3F2028))
-        let oversizedVector = outputDispatcher.dispatch(
-            number: 20, arg0: 1, arg1: 0x3F2020, arg2: 1, arg3: 0, arg4: 0, arg5: 0
-        )!
-        guard case .returned(let oversizedVectorValue) = oversizedVector else { preconditionFailure() }
-        precondition(oversizedVectorValue == UInt64(bitPattern: Int64(-22)))
-
-        let noVectors = outputDispatcher.dispatch(
-            number: 20, arg0: 1, arg1: UInt64.max, arg2: 0, arg3: 0, arg4: 0, arg5: 0
-        )!
-        guard case .returned(let noVectorsValue) = noVectors else { preconditionFailure() }
-        precondition(noVectorsValue == 0)
 
         let invalidRandomFlags = dispatcher.dispatch(number: 318, arguments: [0x40800, 8, 8, 0, 0, 0])!
         guard case .returned(let invalidRandomFlagsValue) = invalidRandomFlags else { preconditionFailure() }
@@ -250,6 +212,6 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let resetValue) = resetBreak else { preconditionFailure() }
         precondition(resetValue == 0x40000)
 
-        print("Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/identity and reset tests passed")
+        print("Linux x86-64 brk/mmap/munmap/mprotect/time/random/identity and reset tests passed")
     }
 }

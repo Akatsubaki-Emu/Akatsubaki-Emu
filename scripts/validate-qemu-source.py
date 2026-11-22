@@ -168,6 +168,12 @@ required = {
     "scripts/tests/test_linux_mapping_order.py": [
         "mappedRanges.first?.lowerBound ?? mmapCursor",
         "insertMappedRange(address..<end)",
+        "var overlappingRanges: [Range<UInt64>] = []",
+        "let overlapStart = max(address, overlap.lowerBound)",
+        "let overlapEnd = min(end, overlap.upperBound)",
+        "if zeroCursor < overlapStart",
+        "if zeroCursor < end",
+        "self.assertNotIn(\"rangeWasCleared\", mapping)",
     ],
     "scripts/tests/test_native_guest_memory.cpp": [
         "1ULL << 30",
@@ -185,6 +191,10 @@ required = {
         "precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-12)))",
         "precondition(badTimezoneValue == UInt64(bitPattern: Int64(-14)))",
         "precondition(invalidMmapFDValue == UInt64(bitPattern: Int64(-22)))",
+        "let partialFixed = dispatcher.dispatch(number: 9, arguments: [0x47000, 8192, 3, 0x32, UInt64.max, 0])!",
+        "precondition(memory.read(offset: 0x47000, length: 3) == Data([0, 0, 0]))",
+        "precondition(memory.read(offset: 0x49000, length: 3) == Data([0x11, 0x22, 0x33]))",
+        "precondition(preservedSuffixResult == 0)",
         "let heapUnmap = dispatcher.dispatch(number: 11, arguments: [0x40000, 4096, 0, 0, 0, 0])!",
         "precondition(heapUnmapValue == UInt64(bitPattern: Int64(-22)))",
         "precondition(memory.read(offset: 0x40000, length: 2) == Data([0xAA, 0xBB]))",

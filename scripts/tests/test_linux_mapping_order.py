@@ -16,8 +16,13 @@ class LinuxMappingOrderTests(unittest.TestCase):
         self.assertNotIn("mappedRanges.firstIndex(where:", source)
         self.assertIn("mappedRanges.first?.lowerBound ?? mmapCursor", source)
         mapping = source.split("private func mapAnonymous", 1)[1].split("private func insertMappedRange", 1)[0]
-        self.assertIn("rangeWasCleared = true", mapping)
-        self.assertIn("if !rangeWasCleared && !memory.zero", mapping)
+        self.assertIn("var overlappingRanges: [Range<UInt64>] = []", mapping)
+        self.assertIn("while index < mappedRanges.count && mappedRanges[index].lowerBound < end", mapping)
+        self.assertIn("let overlapStart = max(address, overlap.lowerBound)", mapping)
+        self.assertIn("let overlapEnd = min(end, overlap.upperBound)", mapping)
+        self.assertIn("if zeroCursor < overlapStart", mapping)
+        self.assertIn("if zeroCursor < end", mapping)
+        self.assertNotIn("rangeWasCleared", mapping)
 
 
 if __name__ == "__main__":
