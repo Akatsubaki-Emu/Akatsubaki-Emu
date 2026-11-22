@@ -274,6 +274,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertEqual(result.returncode, 0, result.stderr)
         for name in (
             "Verify Objective-C class-selector stub compatibility",
+            "Verify iOS vm_map compatibility",
             "Install UTM build dependencies",
             "Cache UTM dependency build and sysroot",
             "Build UTM dependencies for physical iOS arm64",
@@ -295,14 +296,26 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("bootWindows: false, bootUEFI: true", configuration)
         self.assertIn("configuration.requiresUEFI", runtime)
 
-    def test_build_workflows_do_not_serialize_or_cancel_runs(self):
+    def test_build_workflows_do_not_serialize_or_cancel_builds(self):
         root = Path(__file__).resolve().parents[2]
-        for relative in (
-            ".github/workflows/build-qemu-runtime.yml",
-            ".github/workflows/release.yml",
-        ):
-            source = (root / relative).read_text(encoding="utf-8")
-            self.assertNotIn("\\nconcurrency:\\n", source, relative)
+        qemu_source = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        release_source = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        self.assertNotIn("\\nconcurrency:\\n", qemu_source)
+        release_prefix, release_job = release_source.split("\\n  release:\\n", 1)
+        self.assertNotIn("\\nconcurrency:\\n", release_prefix)
+        self.assertIn("group: isteam-release-publish-", release_job)
+        self.assertIn("cancel-in-progress: false", release_job)
+
+    def test_qemu_workflow_ios_vm_map_probe_shell_syntax(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        probe = source.split("      - name: Verify iOS vm_map compatibility", 1)[1]
+        probe = probe.split("      - name: Install UTM build dependencies", 1)[0]
+        script = textwrap.dedent(probe.split("        run: |\\n", 1)[1])
+        result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for token in ("<mach/vm_map.h>", "mach_vm_remap", "mach_vm_protect", "mach_vm_deallocate"):
+            self.assertIn(token, script)
 
     def test_qemu_workflow_installs_both_spirv_dependencies(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
