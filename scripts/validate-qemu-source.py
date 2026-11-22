@@ -861,6 +861,10 @@ required = {
         "var isReadable: Bool",
         "games.count <= 10_000",
         "GameRuntimeProfileStore.shared.removeProfile(for: id)",
+
+        "var results = readableGames() ?? []",
+        "results.removeAll { game in",
+        "results.sort {",
     ],
     "src/Steam/GameLibraryQuery.swift": [
         "for game in games",
@@ -868,6 +872,16 @@ required = {
         "let key = tag.folding(options: .caseInsensitive, locale: .current)",
         "if seen.insert(key).inserted",
         "tags.append(tag)",
+
+        "var result = source",
+        "result.removeAll { game in",
+        "result.min(by: orderedBefore)",
+        "result.sort(by: orderedBefore)",
+        "result.removeLast(result.count - limit)",
+        "tags.sort {",
+        "var result = games",
+        "result.removeAll { $0.lastPlayedAt == nil }",
+        "result.sort {",
     ],
     "src/Steam/GameRuntimeProfile.swift": [
         "var hasUnreadableProfiles: Bool",

@@ -172,15 +172,18 @@ final class GameStore {
 
     func search(_ query: String, favoritesOnly: Bool = false) -> [GameEntry] {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (readableGames() ?? []).filter { game in
-            (!favoritesOnly || game.isFavorite) &&
-            (normalized.isEmpty ||
-             game.name.localizedCaseInsensitiveContains(normalized) ||
-             game.tags.contains(where: { $0.localizedCaseInsensitiveContains(normalized) }))
-        }.sorted {
-            if $0.isFavorite != $1.isFavorite { return $0.isFavorite && !$1.isFavorite }
+        var results = readableGames() ?? []
+        results.removeAll { game in
+            if favoritesOnly && !game.isFavorite { return true }
+            guard !normalized.isEmpty else { return false }
+            return !game.name.localizedCaseInsensitiveContains(normalized)
+                && !game.tags.contains(where: { $0.localizedCaseInsensitiveContains(normalized) })
+        }
+        results.sort {
+            if $0.isFavorite != $1.isFavorite { return $0.isFavorite }
             return $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
+        return results
     }
 
     func setFavorite(_ favorite: Bool, id: UUID) {
