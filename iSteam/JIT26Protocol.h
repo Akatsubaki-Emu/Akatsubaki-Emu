@@ -2,6 +2,7 @@
 #define JIT26Protocol_h
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #define ISTEAM_JIT_PROTOCOL_UNKNOWN (-1)
 #define ISTEAM_JIT_PROTOCOL_STANDARD 0
 #define ISTEAM_JIT_PROTOCOL_STIKDEBUG 1
@@ -21,5 +22,6 @@ iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate(
     const void *code, size_t length, char *error, size_t errorCapacity
 );
 void *iSteamAOTExecutableMemoryEntry(iSteamAOTExecutableRegion *region);
+bool iSteamAOTExecutableMemoryInvoke(iSteamAOTExecutableRegion *region, uint64_t *guestRegisters);
 void iSteamAOTExecutableMemoryDestroy(iSteamAOTExecutableRegion *region);
 #endif
