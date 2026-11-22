@@ -10,8 +10,8 @@ This note documents the iOS device-arm64 QEMU runtime build in `.github/workflow
 4. Run `scripts/patch_utm_qemu_ios.py` against UTM's `scripts/build_dependencies.sh`. It installs the StikDebug TCG allocator patcher before QEMU configure, then installs the existing Meson/link-verifier hooks; the patch is idempotent and fails if upstream changes its expected integration points.
 5. During UTM's dependency build, `scripts/patch_qemu_stikjit_ios.py` patches QEMU `tcg/region.c` and `system/qemu.symbols`: it exports `qemu_system_shutdown_request` and `isteam_qemu_set_jit_callbacks` through the explicit Darwin symbol list, while storing the host app's readiness, executable-region preparation, and detach callbacks in QEMU-owned function pointers. Default symbol visibility alone cannot bypass Meson's `-exported_symbols_list`. On iOS 26+ QEMU obtains the RX translation buffer through that explicit callback ABI, remaps a writable alias, and detaches the debugger after the one-time allocation. The compiled allocator retains UTM's split-WX fallback for earlier iOS releases, but the app's current QEMU readiness policy blocks QEMU startup below iOS 26 until that fallback is separately validated. `scripts/patch_qemu_meson_ios.py` updates QEMU's iOS POSIX_MEMALIGN feature and adds Objective-C fast message stubs, `libobjc`, and Apple's compiler runtime to the emulator-specific link arguments.
 6. Immediately after QEMU's Meson configure step and before its compilation starts, UTM invokes `scripts/verify_qemu_meson_link.py` against the QEMU source directory's `build/build.ninja` using `$PWD` (UTM's build helper has already changed into that source directory). It requires the `libqemu-x86_64-softmmu.dylib` link edge itself to contain `-Wl,-objc_stubs_fast`, `-lobjc`, and the exact `-Wl,-force_load,<libclang_rt.ios.a>` argument. The build stops before thousands of compile tasks if the argument is absent.
-7. Build the UTM iOS archive, package its device-arm64 QEMU library, framework dependencies and firmware/data. The packager verifies both the `arm64` architecture and Mach-O `IOS` build platform, rejecting macOS or simulator binaries before upload. Validate the artifact and upload `iSteam-qemu-runtime-ios-arm64`.
-8. The release workflow downloads that artifact from the same workflow run before packaging the iOS IPA; it does not fall back to a stale or optional runtime artifact.
+7. Build two UTM iOS device archives from the same checkout: the `iOS` scheme with `ios` dependencies for native TCG/JIT, and the `iOS-TCI` scheme with `ios-tci` dependencies for the threaded TCG interpreter. Package them separately with `scripts/package-utm-qemu-runtime.sh <archive> build/<output-name> jit|tci`, then merge their framework trees and mode-specific data into one artifact. The packager verifies physical iOS `arm64`, Mach-O `IOS`, lifecycle/shutdown exports in both modes, and the StikDebug callback only for JIT. The TCI library is renamed `QEMU-TCI.framework` so the two runtime variants cannot overwrite one another.
+8. The release workflow downloads the combined `iSteam-qemu-runtime-ios-arm64` artifact from the same workflow run, verifies both JIT and TCI manifests/libraries, and embeds both before packaging the iOS IPA; it does not fall back to a stale or optional runtime artifact.
 
 ## Patch and test files
 
@@ -26,15 +26,16 @@ This note documents the iOS device-arm64 QEMU runtime build in `.github/workflow
 
 ## Runtime integration constraints
 
-The in-app QEMU command builder uses an explicit q35 device graph rather than relying on implicit devices disabled by `-nodefaults`. Both acceleration profiles request split-WX: the 128 MiB profile uses the larger translation buffer, while the 64 MiB profile is still TCG JIT, not a JIT-less interpreter.
+The in-app QEMU command builder uses an explicit q35 device graph rather than relying on implicit devices disabled by `-nodefaults`. The JIT profile uses `-accel tcg,tb-size=128,split-wx=on` and native TCG code generation. The no-JIT profile uses `-accel tcg` and the UTM `iOS-TCI` threaded TCG interpreter; it does not request executable memory and is expected to be slower.
 
 - An explicit ICH9 AHCI controller carries the guest disk and CD-ROM. Windows guests use the broadly supported AHCI path rather than requiring VirtIO storage drivers during installation.
 - Windows guests use standard VGA and E1000E networking; Linux guests use the configured VirtIO GPU and VirtIO networking.
 - USB keyboard/tablet devices are explicit. QEMU's monitor, serial and parallel consoles are disabled because the UI uses the loopback VNC client.
 - The QEMU VNC server binds to `127.0.0.1`; the app accepts only the no-authentication RFB method on that loopback connection. Framebuffer allocation is capped at 64 MiB.
 - Windows and SteamOS UEFI profiles require both a code image and a writable variable-store template. The app copies the template into per-configuration Application Support storage and passes it as the second pflash device; it never writes variables into the signed app bundle.
-- Runtime packaging and preflight require `qemu_init`, `qemu_main_loop`, `qemu_cleanup`, `qemu_system_shutdown_request`, and `isteam_qemu_set_jit_callbacks`. The packager and standalone validator reject a library missing the StikDebug JIT callback registration export or graceful shutdown rather than uploading an artifact the native bridge cannot start.
-- The app currently permits QEMU TCG only on physical iOS 26+ devices with a valid `get-task-allow` entitlement, a recognised StikDebug JIT protocol (standard split-WX or TXM), and confirmed executable-memory readiness. General StikDebug JIT acquisition on iOS 17.4+ does not by itself make QEMU TCG available on those older OS versions. On iOS 26+, the patched TCG allocator obtains the executable RX region through `iSteamJITPrepareRegion`, creates the writable alias with `mach_vm_remap`/`mach_vm_protect`, and calls `iSteamJITDetach` once the buffer is ready. The app checks `CS_DEBUGGED` before starting; this protects against calling the breakpoint protocol when no debugger is attached.
+- Both runtime variants require `qemu_init`, `qemu_main_loop`, `qemu_cleanup`, and `qemu_system_shutdown_request`. Only JIT mode requires `isteam_qemu_set_jit_callbacks`; the package script, standalone validator and native bridge apply that requirement conditionally.
+- JIT startup is currently permitted only on supported physical iOS devices with a valid `get-task-allow` entitlement, a recognised StikDebug JIT protocol (standard split-WX or TXM), and confirmed executable-memory readiness. General StikDebug JIT acquisition on iOS 17.4+ does not by itself make native TCG available on those older OS versions. On iOS 26+, the patched TCG allocator obtains the executable RX region through `iSteamJITPrepareRegion`, creates the writable alias with `mach_vm_remap`/`mach_vm_protect`, and calls `iSteamJITDetach` once the buffer is ready. The app checks `CS_DEBUGGED` before starting; this protects against calling the breakpoint protocol when no debugger is attached.
+- TCI mode selects the separately packaged `QEMU/TCI` library and firmware data, uses the threaded interpreter, and does not require a JIT session or executable-memory entitlement. It remains a full-system x86_64 guest runtime, not a process translator.
 
 The iOS launch flow accepts one boot disk or installer/live ISO plus an optional writable disk. For ISO installation, QEMU attaches the writable destination as the first AHCI hard disk and the ISO as optical media on a separate port. Launch Setup can create a sparse raw destination disk in app storage or select an existing disk image. Existing one-disk sessions remain supported, and Continue from Last Session preserves the optional second-disk bookmark. The native QEMU bridge is intentionally one-shot per app process because the embedded QEMU global state is not proven safe to reinitialize. After stopping a QEMU guest, relaunch Akatsubaki Emu before starting another one. No physical-device guest boot has been verified.
 
@@ -42,7 +43,14 @@ The iOS launch flow accepts one boot disk or installer/live ISO plus an optional
 
 ```sh
 ISTEAM_QEMU_JIT_PATCHER=scripts/patch_qemu_stikjit_ios.py python3 scripts/patch_utm_qemu_ios.py UTM/scripts/build_dependencies.sh
-IOS_COMPILER_RT=/path/to/libclang_rt.ios.a python3 scripts/patch_qemu_meson_ios.py UTM/build-iOS-arm64/qemu-*/meson.build
+# In UTM/, build both dependency targets and archives:
+./scripts/build_dependencies.sh -p ios -a arm64
+./scripts/build_utm.sh -k iphoneos -s iOS -a arm64 -o UTMBuild
+./scripts/build_dependencies.sh -p ios-tci -a arm64
+./scripts/build_utm.sh -k iphoneos -s iOS-TCI -a arm64 -o UTMBuildTCI
+# From the Akatsubaki repository root, package each archive:
+bash scripts/package-utm-qemu-runtime.sh UTM/UTMBuild.xcarchive build/qemu-runtime-jit jit
+bash scripts/package-utm-qemu-runtime.sh UTM/UTMBuildTCI.xcarchive build/qemu-runtime-tci tci
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 ```
 
