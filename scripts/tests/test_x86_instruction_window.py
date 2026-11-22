@@ -34,6 +34,8 @@ class X86InstructionWindowTests(unittest.TestCase):
         self.assertNotIn("memory.readUInt64(offset: rip)", fetch64)
 
         self.assertIn("func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int?", memory)
+        self.assertIn("isteam_guest_memory_generation(native)", memory)
+        self.assertNotIn("native.map { isteam_guest_memory_generation", memory)
         self.assertNotIn("instructionWindowOffset", interpreter)
         self.assertNotIn("Data(count: 15)", interpreter)
 

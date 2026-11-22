@@ -7,7 +7,10 @@ final class GuestMemory {
     let size: UInt64
     private let native: OpaquePointer?
     var isAvailable: Bool { native != nil }
-    var mutationGeneration: UInt64 { native.map { isteam_guest_memory_generation($0) } ?? 0 }
+    var mutationGeneration: UInt64 {
+        guard let native else { return 0 }
+        return isteam_guest_memory_generation(native)
+    }
 
     init(size: UInt64) {
         self.size = size

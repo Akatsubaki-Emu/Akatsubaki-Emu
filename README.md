@@ -18,7 +18,8 @@
 
 [**GitHub**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu) · [**All releases**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases) · [**Nightly builds**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) · [**GitLab mirror**](https://gitlab.com/chantinlongxthrx/I-steam) · [**AltStore source**](https://altdirect.app/?url=https://akatsubaki-emu.github.io/AltSource.json)
 
-![Alt](https://repobeats.axiom.co/api/embed/60c92ea5e53d1048f89bf703d5444e243a2c5244.svg "Repobeats analytics image")
+![Repository Metrics](docs/metrics.svg)
+
 
 **Akatsubaki Emu** is a Steam-oriented game library and experimental guest-runtime project for Apple platforms.
 
