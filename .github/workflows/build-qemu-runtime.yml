@@ -217,13 +217,14 @@ jobs:
         shell: bash
         env:
           NCPU: "1"
+          ISTEAM_QEMU_TCI_EXPORT_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_tci_ios.py
           ISTEAM_QEMU_MESON_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_meson_ios.py
           ISTEAM_QEMU_LINK_VERIFIER: ${{ github.workspace }}/scripts/verify_qemu_meson_link.py
         run: |
           set -euo pipefail
           cd UTM
           export OBJCFLAGS="${OBJCFLAGS:-} -fno-objc-msgsend-class-selector-stubs"
-          # ios-tci supplies TCI_BUILD_FLAGS; the patcher preserves them and skips StikJIT region changes.
+          # ios-tci supplies TCI_BUILD_FLAGS; the patcher adds only graceful-shutdown export and skips StikJIT region changes.
           python3 "$GITHUB_WORKSPACE/scripts/patch_utm_qemu_ios.py" scripts/build_dependencies.sh
           if [ "${{ inputs.rebuild_dependencies }}" = "true" ] || [ ! -f build-iOS-TCI-arm64/BUILD_SUCCESS ]; then
             ./scripts/build_dependencies.sh -p ios-tci -a arm64
