@@ -125,6 +125,10 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertNotIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$DIR/build/build.ninja"', twice)
         self.assertIn("http://ftp.gnu.org/gnu/libiconv/*", twice)
         self.assertIn("https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}", twice)
+        self.assertIn('case "$PLATFORM" in', twice)
+        self.assertIn('*-tci) ;; # TCI_BUILD_FLAGS already selects the threaded interpreter and guest targets.', twice)
+        self.assertIn("TCI mode: skipping the StikJIT executable-region patch.", twice)
+        self.assertIn("$TCI_BUILD_FLAGS", twice)
         shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
         self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
 
@@ -136,11 +140,12 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn('string(forKey: "iSteam.lastGuest") ?? "Ubuntu"', launch)
         self.assertIn("case .linuxVM:", launch)
 
-    def test_qemu_tcg_profiles_both_request_split_wx(self):
+    def test_qemu_jit_uses_split_wx_and_tci_does_not(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src/QEMU/QEMUCommandBuilder.swift").read_text(encoding="utf-8")
         self.assertIn('"tcg,tb-size=128,split-wx=on"', source)
-        self.assertIn('"tcg,tb-size=64,split-wx=on"', source)
+        self.assertIn('"tcg",', source)
+        self.assertNotIn('"tcg,tb-size=64,split-wx=on"', source)
 
     def test_launch_setup_uses_jit_callbacks_before_presenting_vm(self):
         root = Path(__file__).resolve().parents[2]
@@ -157,7 +162,23 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("self.launchInProgress = false", launch_method)
         self.assertNotIn("waitForJIT", launch)
         self.assertIn("VMDisplayViewController(configuration: configuration", complete_method)
-        self.assertIn("guard JITCoordinator.shared.isQEMUJITReady else", native)
+        self.assertIn("if requiresJIT && !JITCoordinator.shared.isQEMUJITReady", native)
+
+    def test_qemu_runtime_packaging_scripts_have_valid_shell_syntax(self):
+        root = Path(__file__).resolve().parents[2]
+        for relative in (
+            "scripts/package-utm-qemu-runtime.sh",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+            "scripts/merge-qemu-runtime-variants.sh",
+            "scripts/validate-qemu-runtime.sh",
+        ):
+            result = subprocess.run(["bash", "-n", str(root / relative)], text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, f"{relative}: {result.stderr}")
+
+        tci_packager = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
+        self.assertIn('[ "$has_jit_callbacks" = false ]', tci_packager)
+        self.assertIn("QEMU-TCI.framework", tci_packager)
+        self.assertIn('scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci_packager)
 
     def test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed(self):
         source = """#ifdef CONFIG_DARWIN
@@ -283,7 +304,9 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
             "Install UTM build dependencies",
             "Cache UTM dependency build and sysroot",
             "Build UTM dependencies for physical iOS arm64",
+            "Build UTM TCI dependencies for physical iOS arm64",
             "Build UTM iOS archive",
+            "Build UTM iOS TCI archive",
             "Package and verify in-process QEMU runtime",
             "Upload verified QEMU runtime artifact",
         ):
