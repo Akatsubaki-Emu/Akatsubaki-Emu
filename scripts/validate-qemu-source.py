@@ -270,7 +270,7 @@ required = {
         "loadBias % alignment == 0",
         "dynamicSegment.virtualAddress",
         "orderedSegments",
-        "entry - $0.guestAddress < $0.fileSize",
+        "loadedEntryPoint - $0.guestAddress < $0.fileSize",
         "programHeaderAddress",
         "programHeadersNotMapped",
         "fileSize <= UInt64(data.count) - fileOffset",
