@@ -87,6 +87,15 @@ final class JITCoordinator {
         #endif
     }
 
+    /// QEMU TCG on physical iOS requires a confirmed executable-memory handshake.
+    var isQEMUJITReady: Bool {
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && isJITReady
+        #else
+        return false
+        #endif
+    }
+
     func requestJIT(from controller: UIViewController?, onFailure: ((String) -> Void)? = nil, onReady: (() -> Void)? = nil) {
         guard !isRequestInProgress else {
             let message = "A JIT request is already in progress. Wait for it to finish before starting another."
