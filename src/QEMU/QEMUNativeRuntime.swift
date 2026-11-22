@@ -26,11 +26,10 @@ final class QEMUNativeRuntime {
             )
         }
 
-        #if os(iOS)
-        if #available(iOS 17.4, *), JITCoordinator.shared.isStikDebugAvailable,
-           !JITCoordinator.shared.isJITReady {
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        guard JITCoordinator.shared.isQEMUJITReady else {
             throw RuntimeError.runtimeUnavailable(
-                "QEMU TCG needs executable memory. Enable JIT for Akatsubaki Emu with StikDebug, return to the app, and try again."
+                "QEMU TCG requires a physical iOS 17.4+ device, the get-task-allow entitlement, a recognized JIT protocol, and confirmed executable-memory readiness. Enable JIT for Akatsubaki Emu with StikDebug and try again."
             )
         }
         #endif
