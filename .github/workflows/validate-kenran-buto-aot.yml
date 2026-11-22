@@ -6,15 +6,31 @@ on:
     paths:
       - "src/Runtime/X86_64AOTTranslator.swift"
       - "src/Runtime/KenranButoAOTCompiler.swift"
+      - "src/Runtime/KenranButoAOTExecution.swift"
+      - "src/Runtime/X86_64Interpreter.swift"
+      - "src/Runtime/GuestMachine.swift"
+      - "src/Steam/GameLauncher.swift"
       - "src/Performance/TranslationCache.swift"
+      - "iSteam/KenranButoAOTExecutableMemory.c"
+      - "iSteam/JIT26Protocol.h"
       - "scripts/tests/test_kenran_buto_aot_*.swift"
+      - "scripts/tests/test_x86_64_interpreter.swift"
+      - "scripts/tests/test_aot_translator_allocation_hot_path.py"
       - ".github/workflows/validate-kenran-buto-aot.yml"
   pull_request:
     paths:
       - "src/Runtime/X86_64AOTTranslator.swift"
       - "src/Runtime/KenranButoAOTCompiler.swift"
+      - "src/Runtime/KenranButoAOTExecution.swift"
+      - "src/Runtime/X86_64Interpreter.swift"
+      - "src/Runtime/GuestMachine.swift"
+      - "src/Steam/GameLauncher.swift"
       - "src/Performance/TranslationCache.swift"
+      - "iSteam/KenranButoAOTExecutableMemory.c"
+      - "iSteam/JIT26Protocol.h"
       - "scripts/tests/test_kenran_buto_aot_*.swift"
+      - "scripts/tests/test_x86_64_interpreter.swift"
+      - "scripts/tests/test_aot_translator_allocation_hot_path.py"
       - ".github/workflows/validate-kenran-buto-aot.yml"
   workflow_dispatch:
 
@@ -24,9 +40,14 @@ permissions:
 jobs:
   translator:
     runs-on: macos-26
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+      - name: Verify fixed-buffer translator allocation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p 'test_aot_translator_allocation_hot_path.py'
       - name: Compile and test x86-64 to AArch64 decoder
         shell: bash
         run: |
@@ -41,10 +62,41 @@ jobs:
         run: |
           set -euo pipefail
           swiftc -parse-as-library -swift-version 5 \
-            src/Core/EmulationLog.swift \
             src/Performance/TranslationCache.swift \
             src/Runtime/X86_64AOTTranslator.swift \
             src/Runtime/KenranButoAOTCompiler.swift \
             scripts/tests/test_kenran_buto_aot_cache.swift \
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
+      - name: Compile executable-memory provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang -std=c11 -Wall -Wextra -Werror -I iSteam \
+            -c iSteam/KenranButoAOTExecutableMemory.c \
+            -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
+      - name: Compile and test ARM64 AOT block execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            -import-objc-header iSteam/JIT26Protocol.h \
+            src/Performance/TranslationCache.swift \
+            src/Runtime/X86_64AOTTranslator.swift \
+            src/Runtime/KenranButoAOTCompiler.swift \
+            src/Runtime/KenranButoAOTExecution.swift \
+            scripts/tests/test_kenran_buto_aot_execution.swift \
+            "$RUNNER_TEMP/kenran-buto-aot-memory.o" \
+            -o "$RUNNER_TEMP/test-kenran-buto-aot-execution"
+          "$RUNNER_TEMP/test-kenran-buto-aot-execution"
+      - name: Compile and test interpreter dispatch and safe side exits
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/X86_64ALU.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            src/Runtime/X86_64Interpreter.swift \
+            scripts/tests/test_x86_64_interpreter.swift \
+            -o "$RUNNER_TEMP/test-x86-64-interpreter"
+          "$RUNNER_TEMP/test-x86-64-interpreter"
