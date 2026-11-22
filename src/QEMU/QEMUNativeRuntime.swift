@@ -196,19 +196,38 @@ final class QEMUNativeRuntime {
         let size = values.fileSize ?? 0
         guard size > 0 else { throw RuntimeError.runtimeUnavailable("The bundled UEFI variable-store template is empty.") }
         let modified = Int(values.contentModificationDate?.timeIntervalSince1970 ?? 0)
-        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("AkatsubakiEmu/QEMU/firmware", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let stem = template.deletingPathExtension().lastPathComponent
-        let destination = directory.appendingPathComponent("\(stem)-\(configurationID.uuidString)-\(size)-\(modified).fd")
         let fileManager = FileManager.default
-        let existingSize = try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize
-        if existingSize != size {
-            let temporary = directory.appendingPathComponent("\(UUID().uuidString).tmp")
+        let supportRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let directory = supportRoot.appendingPathComponent("AkatsubakiEmu/QEMU/firmware", isDirectory: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let resolvedDirectory = directory.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let directoryValues = try resolvedDirectory.resourceValues(forKeys: [.isDirectoryKey])
+        guard directory.standardizedFileURL.path == resolvedDirectory.path,
+              resolvedDirectory.path.hasPrefix(supportRoot.path + "/"),
+              directoryValues.isDirectory == true else {
+            throw RuntimeError.runtimeUnavailable("The UEFI variable-store directory must remain inside Application Support.")
+        }
+        let stem = template.deletingPathExtension().lastPathComponent
+        let destination = resolvedDirectory.appendingPathComponent("\(stem)-\(configurationID.uuidString)-\(size)-\(modified).fd")
+        let destinationValues = try? destination.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey])
+        let destinationIsSymbolicLink = (try? fileManager.destinationOfSymbolicLink(atPath: destination.path)) != nil
+        let destinationExists = fileManager.fileExists(atPath: destination.path) || destinationIsSymbolicLink
+        if destinationValues?.isDirectory == true && !destinationIsSymbolicLink {
+            throw RuntimeError.runtimeUnavailable("The UEFI variable-store destination is a directory, not a regular file.")
+        }
+        let existingFileIsSafe = !destinationIsSymbolicLink
+            && destinationValues?.isRegularFile == true
+            && destinationValues?.fileSize == size
+        if !existingFileIsSafe {
+            let temporary = resolvedDirectory.appendingPathComponent("\(UUID().uuidString).tmp")
             defer { try? fileManager.removeItem(at: temporary) }
             try fileManager.copyItem(at: template, to: temporary)
             try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
-            if fileManager.fileExists(atPath: destination.path) {
+            if destinationIsSymbolicLink || (destinationExists && destinationValues?.isRegularFile != true) {
+                try fileManager.removeItem(at: destination)
+                try fileManager.moveItem(at: temporary, to: destination)
+            } else if destinationExists {
                 _ = try fileManager.replaceItemAt(destination, withItemAt: temporary)
             } else {
                 try fileManager.moveItem(at: temporary, to: destination)

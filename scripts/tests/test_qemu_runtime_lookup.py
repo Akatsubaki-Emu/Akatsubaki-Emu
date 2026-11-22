@@ -34,6 +34,19 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertIn("findUEFIVariables(matching: firmware, in: dataDirectory)", runtime)
         self.assertIn("selectedFirmware.lastPathComponent", runtime)
 
+    def test_uefi_variable_store_path_rejects_symlinks_and_escapes(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        store = runtime.split("private static func makeWritableUEFIVariables", 1)[1].split(
+            "func stop()", 1
+        )[0]
+        self.assertIn("resolvingSymlinksInPath().standardizedFileURL", store)
+        self.assertIn("directory.standardizedFileURL.path == resolvedDirectory.path", store)
+        self.assertIn('resolvedDirectory.path.hasPrefix(supportRoot.path + "/")', store)
+        self.assertIn("destinationOfSymbolicLink(atPath: destination.path)", store)
+        self.assertIn("destinationValues?.isRegularFile == true", store)
+        self.assertIn("destinationValues?.isDirectory == true", store)
+
     def test_runtime_library_candidates_must_be_contained_regular_files(self):
         root = Path(__file__).resolve().parents[2]
         status = (root / "src" / "QEMU" / "QEMURuntimeStatus.swift").read_text(encoding="utf-8")
