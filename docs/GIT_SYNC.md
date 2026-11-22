@@ -24,7 +24,7 @@ There is no `.gitlab-ci.yml` in the canonical repository. Do not recreate GitLab
 
 ## GitHub → GitLab synchronization
 
-The retained `.github/workflows/blank.yml` workflow pushes canonical GitHub `main` to GitLab `main` using the existing `GITLAB_TOKEN` GitHub Actions secret. It:
+The retained `.github/workflows/blank.yml` workflow pushes canonical GitHub `main` to GitLab `main` using the existing `GITLAB_TOKEN` GitHub Actions secret. The metrics workflow writes SVG commits using `GITHUB_TOKEN`, which does not trigger a normal push workflow; its final `sync-mirror` job therefore dispatches `blank.yml` with `workflow_dispatch` after both metrics jobs succeed. This keeps generated metrics commits mirrored without changing the protected sync workflow. The sync workflow:
 
 - fetches GitLab history before pushing;
 - exits when both main refs already match;
