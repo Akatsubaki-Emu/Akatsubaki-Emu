@@ -25,6 +25,7 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("AppleAPI.shared.updateAppID", self.view)
         self.assertIn("prepareForVerification(using:", self.view)
         self.assertIn("await self.prepareForVerification", self.view)
+        self.assertIn("private func prepareForVerification(using handler: @escaping (String?) -> Void) async", self.view)
 
     def test_anisette_helper_is_vendored_and_uses_secure_device_state(self):
         self.assertIn("class AnisetteDataHelper", self.anisette)
