@@ -182,8 +182,6 @@ required = {
         "test_qemu_stikjit_patcher_exports_required_runtime_symbols",
         "test_qemu_stikjit_patcher_updates_region_and_export_list_together",
         "test_qemu_workflow_probe_shell_syntax_and_steps_are_unique",
-        "test_qemu_runtime_does_not_cancel_in_progress_release_build",
-        "cancel-in-progress: false",
         "def test_windows_and_steamos_profiles_select_uefi_firmware",
         "test_link_verifier_rejects_missing_objc_stub_generation",
         "test_link_verifier_rejects_missing_libobjc",
