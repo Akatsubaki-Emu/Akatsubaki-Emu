@@ -84,6 +84,12 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("Reinstall this app through SideStore or AltStore", self.view)
         self.assertIn("cannot update its own code signature", self.view)
 
+    def test_sign_out_clears_the_shared_authenticated_session(self):
+        self.assertIn("func signOut()", self.view)
+        self.assertIn("session = nil", self.view)
+        self.assertIn("accountEmail = nil", self.view)
+        self.assertIn('status = "Signed out."', self.view)
+
     def test_no_password_is_persisted(self):
         self.assertNotIn("UserDefaults.standard.set(password", self.view)
         self.assertNotIn("appleIDPassword", self.view)
@@ -91,9 +97,12 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertNotIn("DataManager.shared", self.view)
 
     def test_settings_exposes_entitlement_screen(self):
-        self.assertIn("case 6, 7, 8, 9, 10, 11: return 1", self.settings)
+        self.assertIn("case 6, 7, 8, 9, 10, 11, 12: return 1", self.settings)
         self.assertIn("case 11:", self.settings)
         self.assertIn('"Entitlements"', self.settings)
+        self.assertIn('"Experiments"', self.settings)
+        self.assertIn("case 12:", self.settings)
+        self.assertIn("ExperimentsView()", self.settings)
         self.assertIn("EntitlementSettingsView()", self.settings)
 
     def test_stossign_is_only_attached_to_ios_targets(self):
@@ -104,6 +113,22 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("AnisetteDataHelper.swift", vision)
         self.assertIn("EntitlementAnisetteKeychain.swift", vision)
         self.assertIn("EntitlementSettingsView.swift", vision)
+        self.assertIn("ExperimentsView.swift", vision)
+
+    def test_experiments_screen_exposes_add_anything_capability_input(self):
+        experiments = (self.root / "iSteam" / "ExperimentsView.swift").read_text(encoding="utf-8")
+        self.assertIn('Section("Add Anything")', experiments)
+        self.assertIn('TextField("Anything"', experiments)
+        self.assertIn('Button("Add")', experiments)
+        self.assertIn("model.addCapability(requested)", experiments)
+        self.assertIn('.navigationTitle("Experiments")', experiments)
+
+    def test_custom_capability_requests_are_validated_and_use_existing_capability_state(self):
+        self.assertIn("func addCapability(_ rawCapability: String) async -> Bool", self.view)
+        self.assertIn('capability.range(of: "^[A-Za-z0-9_.-]+$", options: .regularExpression)', self.view)
+        self.assertIn("capabilitiesToEnable.append((type: capability, settings: []))", self.view)
+        self.assertIn("fetchExistingCapabilities(for: appID, session: session)", self.view)
+        self.assertIn("Existing App ID capabilities and their settings were preserved", self.view)
 
     def test_existing_memory_entitlement_declarations_are_preserved(self):
         self.assertIn("com.apple.developer.kernel.increased-memory-limit", self.entitlements)

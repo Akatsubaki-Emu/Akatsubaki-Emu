@@ -6,6 +6,7 @@ import StosSign_Common
 
 @MainActor
 final class EntitlementViewModel: ObservableObject {
+    static let shared = EntitlementViewModel()
     @Published var appleID = ""
     @Published var password = ""
     @Published var verificationCode = ""
@@ -20,7 +21,7 @@ final class EntitlementViewModel: ObservableObject {
     private var session: AppleAPISession?
     private var verificationCodeHandler: ((String?) -> Void)?
 
-    init() {
+    private init() {
         anisetteServerURL = UserDefaults.standard.string(forKey: "iSteam.anisetteServerURL") ?? "https://ani.sidestore.io"
     }
 
@@ -89,10 +90,21 @@ final class EntitlementViewModel: ObservableObject {
     }
 
     func enableIncreasedMemoryLimit() async {
-        guard !isBusy else { return }
+        _ = await addCapability("INCREASED_MEMORY_LIMIT")
+    }
+
+    @discardableResult
+    func addCapability(_ rawCapability: String) async -> Bool {
+        guard !isBusy else { return false }
+        let capability = rawCapability.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard capability.utf8.count <= 128,
+              capability.range(of: "^[A-Za-z0-9_.-]+$", options: .regularExpression) != nil else {
+            status = "Enter a capability identifier using letters, numbers, dots, underscores or hyphens (maximum 128 characters)."
+            return false
+        }
         guard let team = selectedTeam, let session else {
             status = "Sign in and select your Apple Developer team first."
-            return
+            return false
         }
 
         isBusy = true
@@ -103,29 +115,29 @@ final class EntitlementViewModel: ObservableObject {
             let appIDs = try await AppleAPI.shared.fetchAppIDsForTeam(team: team, session: session)
             guard let appID = appIDs.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
                 status = "No App ID for \(bundleIdentifier) was found in this team. Install this build with the same Apple account first, then refresh and try again."
-                return
+                return false
             }
 
             let existingCapabilities = try await fetchExistingCapabilities(for: appID, session: session)
-            if existingCapabilities.contains(where: { $0.type == "INCREASED_MEMORY_LIMIT" }) {
-                status = "Apple already reports Increased Memory Limit enabled for \(bundleIdentifier). Reinstall this app through SideStore or AltStore if this installation has not yet received a refreshed provisioning profile."
-                return
+            if existingCapabilities.contains(where: { $0.type == capability }) {
+                status = "Apple already reports \(capability) enabled for \(bundleIdentifier). Reinstall this app through SideStore or AltStore if this installation has not yet received a refreshed provisioning profile."
+                return true
             }
 
             var capabilitiesToEnable = existingCapabilities
-            capabilitiesToEnable.append((type: "INCREASED_MEMORY_LIMIT", settings: []))
-            let capabilityPayload: [[String: Any]] = capabilitiesToEnable.map { capability in
+            capabilitiesToEnable.append((type: capability, settings: []))
+            let capabilityPayload: [[String: Any]] = capabilitiesToEnable.map { item in
                 [
                     "type": "bundleIdCapabilities",
                     "attributes": [
                         "enabled": true,
-                        "settings": capability.settings
+                        "settings": item.settings
                     ],
                     "relationships": [
                         "capability": [
                             "data": [
                                 "type": "capabilities",
-                                "id": capability.type
+                                "id": item.type
                             ]
                         ]
                     ]
@@ -167,9 +179,11 @@ final class EntitlementViewModel: ObservableObject {
                     userInfo: [NSLocalizedDescriptionKey: message]
                 )
             }
-            status = "Apple accepted the Increased Memory Limit capability update for \(bundleIdentifier). Existing App ID capabilities and their settings were preserved. Reinstall this app through SideStore or AltStore using the same account so the provisioning profile is regenerated. The running installation cannot update its own code signature."
+            status = "Apple accepted the \(capability) capability update for \(bundleIdentifier). Existing App ID capabilities and their settings were preserved. Reinstall this app through SideStore or AltStore using the same account so the provisioning profile is regenerated. The running installation cannot update its own code signature."
+            return true
         } catch {
             status = error.localizedDescription
+            return false
         }
     }
 
@@ -185,7 +199,6 @@ final class EntitlementViewModel: ObservableObject {
         verificationCode = ""
         status = "Signed out."
     }
-
 
     private func fetchExistingCapabilities(
         for appID: AppID,
@@ -280,7 +293,7 @@ final class EntitlementViewModel: ObservableObject {
 }
 
 struct EntitlementSettingsView: View {
-    @StateObject private var model = EntitlementViewModel()
+    @StateObject private var model = EntitlementViewModel.shared
 
     var body: some View {
         Form {
