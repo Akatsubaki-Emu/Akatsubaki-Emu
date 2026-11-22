@@ -3,6 +3,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -185,6 +186,51 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
             )
         with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
             patch_qemu_stikjit_ios.patch_source("#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n#endif\n")
+
+    def test_qemu_stikjit_patcher_updates_region_and_export_list_together(self):
+        region = """#ifdef CONFIG_DARWIN
+#include <mach/mach.h>
+static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
+{
+    return 0;
+}
+#endif
+"""
+        symbols = """{
+  qemu_init;
+  qemu_main_loop;
+  qemu_cleanup;
+  bql_lock_impl;
+  bql_unlock;
+  g_assertion_message_expr;
+  qemu_thread_create;
+  replay_mutex_lock;
+  replay_mutex_unlock;
+};
+"""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "tcg").mkdir()
+            (root / "system").mkdir()
+            region_path = root / "tcg" / "region.c"
+            symbols_path = root / "system" / "qemu.symbols"
+            region_path.write_text(region, encoding="utf-8")
+            symbols_path.write_text(symbols, encoding="utf-8")
+            patch_qemu_stikjit_ios.patch_qemu_sources(region_path)
+            once_region = region_path.read_text(encoding="utf-8")
+            once_symbols = symbols_path.read_text(encoding="utf-8")
+            self.assertIn("isteam_qemu_set_jit_callbacks", once_region)
+            self.assertIn("qemu_system_shutdown_request;", once_symbols)
+            self.assertIn("isteam_qemu_set_jit_callbacks;", once_symbols)
+            self.assertEqual(once_symbols.count("qemu_system_shutdown_request;"), 1)
+            self.assertEqual(once_symbols.count("isteam_qemu_set_jit_callbacks;"), 1)
+            patch_qemu_stikjit_ios.patch_qemu_sources(region_path)
+            self.assertEqual(region_path.read_text(encoding="utf-8"), once_region)
+            self.assertEqual(symbols_path.read_text(encoding="utf-8"), once_symbols)
+
+    def test_qemu_stikjit_export_patcher_fails_closed_on_missing_lifecycle_symbols(self):
+        with self.assertRaisesRegex(SystemExit, "required lifecycle exports"):
+            patch_qemu_stikjit_ios.patch_exported_symbols("{\\n  qemu_init;\\n};\\n")
 
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):
         root = Path(__file__).resolve().parents[2]
