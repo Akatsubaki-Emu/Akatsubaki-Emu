@@ -24,10 +24,12 @@ jobs:
   build-utm-runtime:
     # Concurrency must be declared on the actual job in a reusable workflow;
     # caller-side concurrency is ignored for jobs that use a reusable workflow.
-    # Keep only the newest queued/running QEMU build for this workflow/ref.
+    # Let an active QEMU build finish: cancel-in-progress starves this multi-hour
+    # build whenever another commit arrives. GitHub retains only the newest
+    # pending run in a concurrency group, and the freshness check skips it if stale.
     concurrency:
       group: qemu-runtime-${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     runs-on: xcode-27
     timeout-minutes: 350
     steps:
