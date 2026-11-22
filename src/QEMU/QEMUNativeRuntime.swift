@@ -132,10 +132,9 @@ final class QEMUNativeRuntime {
         let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
         func validated(_ candidate: URL) -> URL? {
             let resolved = candidate.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
-            var isDirectory: ObjCBool = false
+            let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey])
             guard resolved.path.hasPrefix(prefix),
-                  FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDirectory),
-                  !isDirectory.boolValue else { return nil }
+                  values?.isRegularFile == true else { return nil }
             return resolved
         }
 
