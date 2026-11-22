@@ -35,7 +35,7 @@
 
 - **Translation cache:** stores versioned translated-code artifacts using a cache identity that includes guest-code SHA-256, guest architecture, translator identity/version, host architecture, CPU features and guest ABI. Each artifact has an integrity digest, is written atomically, is rejected and removed if corrupt or mismatched, and is bounded to 8 MiB per code artifact, 512 entries and 256 MiB total. Cache entries can be explicitly invalidated. The cache returns bytes only; it does not allocate executable memory, invoke JIT, or execute code. No translator currently consumes or produces these artifacts.
 - **Windows PE:** `WindowsPEImage` performs bounded metadata inspection; `WindowsPELoader` is read-only inspection. No PE image mapping, executable memory, import resolver, AOT translator or Windows process execution engine is integrated.
-- **Static AOT:** no complete x86-64→ARM64 decoder, semantic IR, code generator or relinker is integrated.
+- **Static AOT:** a conservative x86-64→ARM64 bring-up translator and cache compiler are present on the decoder-correctness branch. The supported subset is still limited to NOP and register/immediate MOV forms; REX.B opcode 0x90 and ENDBR64 without an explicit CET policy deliberately side-exit, and the full 15-byte x86 instruction limit is enforced. These outputs are artifacts only: there is no guest-state ABI, executable block trampoline, side-exit dispatcher, relocation/linking, memory/flags/branch translation, or execution test. The router and capability registry must continue to mark AOT unavailable until those pieces and differential tests exist.
 - **FEXCore:** not integrated or packaged.
 - **Box64:** a C/Swift bridge can look for an already-loaded Box64 entry point. It does not bundle Box64, provide a Linux rootfs/syscall ABI, or prove game execution.
 - **Wine/Proton:** not integrated.
@@ -47,6 +47,12 @@
 - **Audio/input/network/storage:** host and prototype services exist in parts, but complete guest-device adapters are not proven.
 
 The planner's availability set must be populated only by concrete runtime probes that validate the binary, architecture, ABI, transitive libraries, required compatibility services and platform constraints. The QEMU probe now validates loadability and lifecycle exports, but the higher-level planner is not yet wired to populate availability from this probe. A source file or enum case is not proof that a backend is installed. Empty availability is deliberately safe.
+
+## Kenran Butō AOT bring-up status
+
+The current AOT work is a decoder and cache-integrity milestone, not a completed execution backend. The translator emits only semantics-preserving baseline ARM64 for a narrow x86-64 subset and stops before unsupported instructions so the interpreter can retain ownership of guest state. The compiler uses the existing content-addressed translation cache with guest ABI, translator version, host architecture and CPU features in its identity. CI runs separate decoder and cache round-trip harnesses on the iOS validation workflow.
+
+The next AOT milestone is a versioned guest CPU-state ABI and an execution adapter with safe executable-memory allocation, block entry/exit trampolines, guest-memory mapping, fault/side-exit handling, self-modifying-code invalidation and differential tests against the interpreter/reference x86 implementation. On iOS, generated code may only be executed through an explicitly validated JIT-capable path; this AOT artifact cannot be treated as an ordinary executable file or used to bypass iOS code-signing and executable-memory policy. A no-JIT full-system route must use a real interpreter backend such as UTM TCI, not this AOT output.
 
 ## Performance policy
 
