@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import subprocess
+import shutil
 import sys
 import unittest
 from pathlib import Path
@@ -50,6 +51,8 @@ class QEMUTCIContractTests(unittest.TestCase):
 
 
     def test_qemu_runtime_swift_source_parses(self):
+        if shutil.which("swiftc") is None:
+            self.skipTest("Swift compiler unavailable; Xcode validation covers this source")
         runtime_path = Path(__file__).resolve().parents[2] / "src/QEMU/QEMUNativeRuntime.swift"
         result = subprocess.run(
             ["swiftc", "-frontend", "-parse", str(runtime_path)],
