@@ -176,28 +176,23 @@ enum X86_64ALU {
     }
 
     static func condition(_ code: UInt8, flags: UInt64) -> Bool {
-        let carrySet = flags & carry != 0
-        let zeroSet = flags & zero != 0
-        let signSet = flags & sign != 0
-        let overflowSet = flags & overflow != 0
-        let paritySet = flags & parity != 0
         switch code & 0x0F {
-        case 0x0: return overflowSet
-        case 0x1: return !overflowSet
-        case 0x2: return carrySet
-        case 0x3: return !carrySet
-        case 0x4: return zeroSet
-        case 0x5: return !zeroSet
-        case 0x6: return carrySet || zeroSet
-        case 0x7: return !carrySet && !zeroSet
-        case 0x8: return signSet
-        case 0x9: return !signSet
-        case 0xA: return paritySet
-        case 0xB: return !paritySet
-        case 0xC: return signSet != overflowSet
-        case 0xD: return signSet == overflowSet
-        case 0xE: return zeroSet || signSet != overflowSet
-        case 0xF: return !zeroSet && signSet == overflowSet
+        case 0x0: return flags & overflow != 0
+        case 0x1: return flags & overflow == 0
+        case 0x2: return flags & carry != 0
+        case 0x3: return flags & carry == 0
+        case 0x4: return flags & zero != 0
+        case 0x5: return flags & zero == 0
+        case 0x6: return flags & (carry | zero) != 0
+        case 0x7: return flags & (carry | zero) == 0
+        case 0x8: return flags & sign != 0
+        case 0x9: return flags & sign == 0
+        case 0xA: return flags & parity != 0
+        case 0xB: return flags & parity == 0
+        case 0xC: return (flags & sign != 0) != (flags & overflow != 0)
+        case 0xD: return (flags & sign != 0) == (flags & overflow != 0)
+        case 0xE: return flags & zero != 0 || (flags & sign != 0) != (flags & overflow != 0)
+        case 0xF: return flags & zero == 0 && (flags & sign != 0) == (flags & overflow != 0)
         default: return false
         }
     }
