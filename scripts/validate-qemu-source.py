@@ -1020,6 +1020,22 @@ required = {
         "-lobjc",
         "-Wl,-force_load,",
     ],
+    ".github/workflows/blank.yml": [
+        "timeout-minutes: 25",
+        "for attempt in 1 2 3 4 5; do",
+        "grep -Eiq '429|rate limit exceeded|too many requests'",
+        'sleep "$delay"',
+        "git fetch --no-tags gitlab main",
+        'git merge-base --is-ancestor "${GITLAB_SHA}" "${GITHUB_SHA}"',
+        "cancel-in-progress: false",
+    ],
+    "scripts/tests/test_gitlab_sync_workflow.py": [
+        "def test_sync_job_waits_longer_than_gitlab_rate_limit_window",
+        "def test_sync_job_retries_only_rate_limit_responses",
+        "def test_sync_job_rechecks_gitlab_ancestry_before_retry",
+        "def test_sync_job_never_force_pushes",
+        "def test_sync_jobs_are_serialized_without_cancellation",
+    ],
     "scripts/tests/test_qemu_objc_compile_flags.py": [
         "def test_meson_patcher_adds_required_objc_flag_and_is_idempotent",
         "def test_meson_patcher_changes_only_the_objc_compiler_block",
