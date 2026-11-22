@@ -46,7 +46,9 @@ struct X86_64AOTTranslation: Codable, Equatable {
                 && fallbackOffset.map { $0 < guestCode.count } == true
                 && fallbackOpcode == guestCode[guestCode.index(guestCode.startIndex, offsetBy: guestBytesConsumed)]
         case .instructionLimit, .outputLimit:
-            return fallbackOffset == guestBytesConsumed && fallbackOpcode == nil
+            return fallbackOffset == guestBytesConsumed
+                && guestBytesConsumed < guestCode.count
+                && fallbackOpcode == nil
         case .invalidBudget:
             return instructionCount == 0 && guestBytesConsumed == 0
                 && fallbackOffset == nil && fallbackOpcode == nil
