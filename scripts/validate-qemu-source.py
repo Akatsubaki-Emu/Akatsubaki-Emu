@@ -179,6 +179,9 @@ required = {
         "cancel-in-progress: false",
     ],
     "scripts/tests/test_qemu_build_patches.py": [
+        "test_qemu_stikjit_patcher_exports_required_runtime_symbols",
+        "test_qemu_stikjit_patcher_updates_region_and_export_list_together",
+        "test_qemu_workflow_probe_shell_syntax_and_steps_are_unique",
         "test_qemu_runtime_does_not_cancel_in_progress_release_build",
         "cancel-in-progress: false",
         "def test_windows_and_steamos_profiles_select_uefi_firmware",
@@ -912,6 +915,11 @@ required = {
         'if [ "$XCODE_VERSION" != "26.2" ]; then',
     ],
     "scripts/patch_qemu_stikjit_ios.py": [
+        "def patch_exported_symbols(source: str) -> str",
+        "def patch_qemu_sources(region_path: Path) -> None",
+        "qemu_system_shutdown_request;",
+        "isteam_qemu_set_jit_callbacks;",
+        "system/qemu.symbols",
         "isteam_qemu_set_jit_callbacks",
         "__attribute__((visibility(\"default\")))",
         "isteam_jit_prepare_callback",

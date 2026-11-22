@@ -2,7 +2,9 @@
 import subprocess
 import sys
 import unittest
+import textwrap
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -191,6 +193,80 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
         with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
             patch_qemu_stikjit_ios.patch_source("#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n#endif\n")
+
+
+    def test_qemu_stikjit_patcher_exports_required_runtime_symbols(self):
+        symbols = """{
+  qemu_init;
+  qemu_main_loop;
+  qemu_cleanup;
+  bql_lock_impl;
+  bql_unlock;
+  g_assertion_message_expr;
+  qemu_thread_create;
+  replay_mutex_lock;
+  replay_mutex_unlock;
+};
+"""
+        once = patch_qemu_stikjit_ios.patch_exported_symbols(symbols)
+        self.assertEqual(once, patch_qemu_stikjit_ios.patch_exported_symbols(once))
+        generated = [
+            "_" + line.strip()[:-1]
+            for line in once.splitlines()
+            if line.strip().endswith(";")
+        ]
+        self.assertIn("_qemu_system_shutdown_request", generated)
+        self.assertIn("_isteam_qemu_set_jit_callbacks", generated)
+        self.assertEqual(once.count("qemu_system_shutdown_request;"), 1)
+        self.assertEqual(once.count("isteam_qemu_set_jit_callbacks;"), 1)
+        with self.assertRaisesRegex(SystemExit, "expected exactly one closing"):
+            patch_qemu_stikjit_ios.patch_exported_symbols("{\n  qemu_init;\n")
+
+    def test_qemu_stikjit_patcher_updates_region_and_export_list_together(self):
+        with TemporaryDirectory() as temporary:
+            qemu_root = Path(temporary)
+            region = qemu_root / "tcg" / "region.c"
+            symbols = qemu_root / "system" / "qemu.symbols"
+            region.parent.mkdir()
+            symbols.parent.mkdir()
+            region.write_text(
+                "#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n"
+                "static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)\n"
+                "{\n    return 0;\n}\n#endif\n",
+                encoding="utf-8",
+            )
+            symbols.write_text(
+                "{\n  qemu_init;\n  qemu_main_loop;\n  qemu_cleanup;\n};\n",
+                encoding="utf-8",
+            )
+            patch_qemu_stikjit_ios.patch_qemu_sources(region)
+            first_region = region.read_text(encoding="utf-8")
+            first_symbols = symbols.read_text(encoding="utf-8")
+            self.assertIn("isteam_qemu_set_jit_callbacks", first_region)
+            self.assertIn("qemu_system_shutdown_request;", first_symbols)
+            self.assertIn("isteam_qemu_set_jit_callbacks;", first_symbols)
+            patch_qemu_stikjit_ios.patch_qemu_sources(region)
+            self.assertEqual(region.read_text(encoding="utf-8"), first_region)
+            self.assertEqual(symbols.read_text(encoding="utf-8"), first_symbols)
+
+    def test_qemu_workflow_probe_shell_syntax_and_steps_are_unique(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        probe = source.split("      - name: Verify Objective-C class-selector stub compatibility", 1)[1]
+        probe = probe.split("      - name: Install UTM build dependencies", 1)[0]
+        script = textwrap.dedent(probe.split("        run: |\n", 1)[1])
+        result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for name in (
+            "Verify Objective-C class-selector stub compatibility",
+            "Install UTM build dependencies",
+            "Cache UTM dependency build and sysroot",
+            "Build UTM dependencies for physical iOS arm64",
+            "Build UTM iOS archive",
+            "Package and verify in-process QEMU runtime",
+            "Upload verified QEMU runtime artifact",
+        ):
+            self.assertEqual(source.count("      - name: " + name), 1)
 
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):
         root = Path(__file__).resolve().parents[2]
