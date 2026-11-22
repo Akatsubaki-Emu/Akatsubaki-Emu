@@ -1476,6 +1476,50 @@ for contract_path, contract_tokens in guest_memory_contract.items():
             failed = True
 
 
+
+# Mapped-page and Kenran Buto AOT execution contracts.
+mapped_page_contract = {
+    "iSteam/NativeGuestMemory.cpp": ["isteam_guest_memory_has_mapped_pages("],
+    "iSteam/NativeGuestMemory.h": ["isteam_guest_memory_has_mapped_pages"],
+    "src/Runtime/GuestMemory.swift": ["hasMappedPages("],
+    "src/Runtime/LinuxSyscallDispatcher.swift": ["memory.hasMappedPages("],
+}
+for mapped_path, mapped_tokens in mapped_page_contract.items():
+    mapped_content = Path(mapped_path).read_text(encoding="utf-8")
+    for mapped_token in mapped_tokens:
+        if mapped_token not in mapped_content:
+            print(f"mapped-page contract: {mapped_path} missing {mapped_token!r}", file=sys.stderr)
+            failed = True
+
+aot_contract = {
+    "iSteam/JIT26Protocol.h": [
+        "KENRAN_BUTO_AOT_ABI_VERSION", "KenranButoAOTGuestState",
+        "iSteamAOTExecutableMemoryIsAvailable", "iSteamAOTExecutableMemoryInvoke",
+    ],
+    "iSteam/JIT26Protocol.c": ["if (!iSteamJITHasGetTaskAllow()) return false;"],
+    "iSteam/KenranButoAOTExecutableMemory.c": [
+        "iSteamAOTExecutableMemoryIsAvailable", "iSteamAOTExecutableMemoryCreate",
+        "iSteamAOTExecutableMemoryInvoke", "iSteamAOTExecutableMemoryDestroy",
+    ],
+    "src/Runtime/KenranButoAOTExecution.swift": [
+        "maximumDispatchInstructions = 256", "maximumCachedBlocks=64",
+        "maximumGuestBytes=4096", "availabilitySnapshot", "refreshAvailability()",
+    ],
+    "src/Runtime/X86_64AOTTranslator.swift": ['translatorVersion = "3"', "maximumInstructionBudget = 4096"],
+    "src/Runtime/KenranButoAOTCompiler.swift": ["KENRAN_BUTO_AOT_ABI_VERSION", "translatorVersion"],
+    "src/Runtime/GuestMachine.swift": ["aotExecutor: KenranButoAOTExecutor()"],
+    "src/Runtime/X86_64Interpreter.swift": [
+        "aotDisabledForRun", "pageRemaining", "canStartAOTBlock()", "readExecuteByte(offset: rip)",
+    ],
+}
+for aot_path, aot_tokens in aot_contract.items():
+    aot_content = Path(aot_path).read_text(encoding="utf-8")
+    for aot_token in aot_tokens:
+        if aot_token not in aot_content:
+            print(f"Kenran Buto AOT contract: {aot_path} missing {aot_token!r}", file=sys.stderr)
+            failed = True
+
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")

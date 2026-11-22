@@ -7,10 +7,12 @@ final class X86_64Interpreter: GuestCPUBackend {
     let architecture: VMConfiguration.Architecture = .x86_64
     private(set) var instructionCount: UInt64 = 0
     private let memory: GuestMemory
+    private let aotExecutor: KenranButoAOTExecuting?
     private let syscallDispatcher: LinuxSyscallDispatcher
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
     private var instructionWindow = [UInt8](repeating: 0, count: 15)
+    private var aotInstructionWindow = [UInt8](repeating: 0, count: 4096)
     private var instructionWindowLength = 0
     private var instructionWindowCursor = 0
     private var instructionLengthExceeded = false
@@ -22,12 +24,15 @@ final class X86_64Interpreter: GuestCPUBackend {
     private let stopLock = NSLock()
     private var stopRequested = false
 
-    init(memory: GuestMemory) {
+    init(memory: GuestMemory, aotExecutor: KenranButoAOTExecuting? = nil) {
         self.memory = memory
+        self.aotExecutor = aotExecutor
         syscallDispatcher = LinuxSyscallDispatcher(memory: memory)
     }
 
     func reset(entryPoint: UInt64) throws {
+        aotExecutor?.invalidateAll()
+        _ = aotExecutor?.refreshAvailability()
         guard entryPoint < memory.size else {
             throw GuestEngineError.backendNotInstalled(.x86_64)
         }
@@ -81,6 +86,8 @@ final class X86_64Interpreter: GuestCPUBackend {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         if halted { return .halted }
         var executed: UInt64 = 0
+        var aotDisabledForRun = false
+        let aotIsAvailable = aotExecutor?.isAvailable == true
         while executed < maxInstructions {
             if executed & 0xff == 0 {
                 stopLock.lock()
@@ -92,6 +99,69 @@ final class X86_64Interpreter: GuestCPUBackend {
             let instructionAddress = rip
             instructionLengthExceeded = false
             prepareInstructionWindow(at: instructionAddress)
+            if !aotDisabledForRun, aotIsAvailable, let aotExecutor, canStartAOTBlock() {
+                let pageOffset = instructionAddress & (GuestMemory.pageSize - 1)
+                let pageRemaining = Int(GuestMemory.pageSize - pageOffset)
+                let aotMaximumLength = min(aotInstructionWindow.count, pageRemaining)
+                let aotWindowLength = memory.readPrefix(
+                    offset: instructionAddress,
+                    maximumLength: aotMaximumLength,
+                    into: &aotInstructionWindow
+                ) ?? 0
+                if aotWindowLength > 0 {
+                    let remaining = maxInstructions - executed
+                    // Bound native execution to the same cadence used for stop polling.
+                    let budget = Int(min(remaining, 256))
+                    var candidateRegisters = registers
+                    if let result = aotExecutor.execute(
+                        guestCode: Data(aotInstructionWindow.prefix(aotWindowLength)),
+                        registers: &candidateRegisters, rip: instructionAddress, rflags: flags,
+                        fsBase: fsBase, gsBase: gsBase, memory: memory, maximumInstructions: budget
+                    ) {
+                        let countsAreValid = result.instructionCount >= 0 &&
+                            result.instructionCount <= budget &&
+                            result.guestBytesConsumed >= 0 &&
+                            result.guestBytesConsumed <= aotWindowLength
+                        let isMemoryFault = result.exitReason == .memoryReadFault ||
+                            result.exitReason == .memoryWriteFault
+                        let isKnownExit = result.exitReason != .none && result.exitReason != .invalidState
+                        var sideExitIsValid = false
+                        if countsAreValid && isKnownExit {
+                            let (expectedRip, overflow) = instructionAddress.addingReportingOverflow(
+                                UInt64(result.guestBytesConsumed)
+                            )
+                            sideExitIsValid = !overflow && result.exitRip == expectedRip
+                            if !isMemoryFault {
+                                sideExitIsValid = sideExitIsValid &&
+                                    result.guestBytesConsumed > 0 &&
+                                    result.instructionCount > 0 &&
+                                    result.exitAddress == 0
+                            }
+                        }
+                        if sideExitIsValid {
+                            registers = candidateRegisters
+                            if result.instructionCount > 0 {
+                                let count = UInt64(result.instructionCount)
+                                executed += count
+                                instructionCount &+= count
+                            }
+                            rip = result.exitRip
+                            if isMemoryFault {
+                                return .memoryFault(address: result.exitAddress)
+                            }
+                            continue
+                        }
+                        aotDisabledForRun = true
+                    } else {
+                        // A declined block is unavailable, unsupported, or failed to allocate.
+                        // Recheck readiness once, then avoid repeated probes for this run batch.
+                        _ = aotExecutor.refreshAvailability()
+                        aotDisabledForRun = true
+                    }
+                } else {
+                    aotDisabledForRun = true
+                }
+            }
             guard var opcode = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
             var rex: UInt8 = 0
             activeSegmentBase = 0
@@ -944,8 +1014,40 @@ final class X86_64Interpreter: GuestCPUBackend {
         return rip
     }
 
+    /// Avoid the AOT code-window copy when the first instruction cannot be
+    /// emitted by the conservative translator.
+    private func canStartAOTBlock() -> Bool {
+        var cursor = 0
+        var rex: UInt8 = 0
+        while cursor < instructionWindowLength,
+              (0x40...0x4F).contains(instructionWindow[cursor]) {
+            rex = instructionWindow[cursor]
+            cursor += 1
+            if cursor >= 15 { return false }
+        }
+        guard cursor < instructionWindowLength else { return false }
+        switch instructionWindow[cursor] {
+        case 0x90:
+            return rex & 0x01 == 0
+        case 0xB8...0xBF:
+            return true
+        case 0x89, 0x8B:
+            guard cursor + 1 < instructionWindowLength else { return false }
+            return instructionWindow[cursor + 1] >> 6 == 0b11
+        default:
+            return false
+        }
+    }
+
+    /// The x86 decoder may fetch across a page boundary one byte at a time,
+    /// but its initial window must never probe the next page speculatively.
     private func prepareInstructionWindow(at address: UInt64) {
-        instructionWindowLength = memory.readPrefix(offset: address, into: &instructionWindow) ?? 0
+        let pageOffset = address & (GuestMemory.pageSize - 1)
+        let pageRemaining = Int(GuestMemory.pageSize - pageOffset)
+        let maximumLength = min(instructionWindow.count, pageRemaining)
+        instructionWindowLength = memory.readPrefix(
+            offset: address, maximumLength: maximumLength, into: &instructionWindow
+        ) ?? 0
         instructionWindowCursor = 0
     }
 
@@ -993,7 +1095,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             rip &+= 4
             return value
         }
-        guard let value = memory.readUInt32(offset: rip) else { return nil }
+        guard let value = memory.readExecuteUInt32(offset: rip) else { return nil }
         instructionWindowCursor += 4
         rip &+= 4
         return value
@@ -1019,7 +1121,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             rip &+= 8
             return value
         }
-        guard let value = memory.readUInt64(offset: rip) else { return nil }
+        guard let value = memory.readExecuteUInt64(offset: rip) else { return nil }
         instructionWindowCursor += 8
         rip &+= 8
         return value

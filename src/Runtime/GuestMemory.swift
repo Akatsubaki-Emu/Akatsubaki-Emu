@@ -136,6 +136,11 @@ final class GuestMemory {
         return isteam_guest_memory_unmap(native, offset, length)
     }
 
+    func hasMappedPages(offset: UInt64, length: UInt64) -> Bool {
+        guard let native, length > 0, offset <= size, length <= size - offset else { return false }
+        return isteam_guest_memory_has_mapped_pages(native, offset, length)
+    }
+
     func readUInt32(offset: UInt64) -> UInt32? {
         guard let native, offset <= size, 4 <= size - offset else { return nil }
         var value: UInt32 = 0

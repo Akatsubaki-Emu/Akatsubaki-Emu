@@ -242,7 +242,8 @@ final class LinuxSyscallDispatcher {
         let supportedFlags: UInt64 = 0x03 | 0x10 | 0x20 | 0x100000
         guard length > 0, length <= memory.size, flags & 0x20 != 0,
               flags & ~supportedFlags == 0, protection & ~UInt64(0x7) == 0,
-              mapType == 1 || mapType == 2 else { return errno(22) }
+              mapType == 1 || mapType == 2,
+              !(flags & 0x10 != 0 && flags & 0x100000 != 0) else { return errno(22) }
         let (rounded, overflow) = length.addingReportingOverflow(4095)
         guard !overflow else { return errno(12) }
         let size = rounded & ~UInt64(4095)
@@ -264,43 +265,19 @@ final class LinuxSyscallDispatcher {
             }
         }
         let (end, endOverflow) = address.addingReportingOverflow(size)
-        guard !endOverflow, address >= programBreak, end <= limit, end <= memory.size else {
-            return errno(12)
-        }
-        let firstPotential = firstMappedRangeEnding(after: address)
-        var overlappingRanges: [Range<UInt64>] = []
-        if firstPotential < mappedRanges.count {
-            var index = firstPotential
-            while index < mappedRanges.count && mappedRanges[index].lowerBound < end {
-                overlappingRanges.append(mappedRanges[index])
-                index += 1
-            }
-        }
-        if !overlappingRanges.isEmpty {
-            if noReplace { return errno(17) }
-            guard fixed, unmap(address: address, length: size) == 0 else { return errno(12) }
+        guard !endOverflow, end <= memory.size else { return errno(12) }
+        if !fixed && (address < programBreak || end > limit) { return errno(12) }
 
-            // unmap() clears replaced pages; clear only newly covered gaps here.
-            var zeroCursor = address
-            for overlap in overlappingRanges {
-                let overlapStart = max(address, overlap.lowerBound)
-                let overlapEnd = min(end, overlap.upperBound)
-                if zeroCursor < overlapStart,
-                   !memory.zero(offset: zeroCursor, length: overlapStart - zeroCursor) {
-                    return errno(12)
-                }
-                zeroCursor = max(zeroCursor, overlapEnd)
-            }
-            if zeroCursor < end,
-               !memory.zero(offset: zeroCursor, length: end - zeroCursor) {
-                return errno(12)
-            }
-        } else if !memory.zero(offset: address, length: size) {
-            return errno(12)
+        if noReplace && memory.hasMappedPages(offset: address, length: size) {
+            return errno(17)
         }
+        if fixed && !noReplace {
+            guard unmap(address: address, length: size) == 0 else { return errno(12) }
+        }
+        guard memory.zero(offset: address, length: size) else { return errno(12) }
         guard memory.map(offset: address, length: size,
                          permissions: guestPermissions(protection), merge: false) else {
-            return errno(12)
+            return noReplace ? errno(17) : errno(12)
         }
         insertMappedRange(address..<end)
         if !fixed { mmapCursor = max(mmapCursor, end) }
@@ -338,6 +315,11 @@ final class LinuxSyscallDispatcher {
             if range.lowerBound >= candidateEnd { break }
             if candidate < range.upperBound { candidate = Self.alignUp(range.upperBound) }
         }
+        while memory.hasMappedPages(offset: candidate, length: size) {
+            let (next, nextOverflow) = candidate.addingReportingOverflow(4096)
+            guard !nextOverflow else { return nil }
+            candidate = Self.alignUp(next)
+        }
         let (end, overflow) = candidate.addingReportingOverflow(size)
         guard !overflow, end <= limit, end <= memory.size else { return nil }
         return candidate
@@ -349,10 +331,8 @@ final class LinuxSyscallDispatcher {
         guard !overflow else { return errno(22) }
         let size = rounded & ~UInt64(4095)
         let (end, endOverflow) = address.addingReportingOverflow(size)
-        let limit = stackBase >= 4096 ? stackBase - 4096 : 0
-        guard !endOverflow, address >= programBreak, end <= limit, end <= memory.size else {
-            return errno(22)
-        }
+        guard !endOverflow, end <= memory.size,
+              memory.unmap(offset: address, length: size) else { return errno(22) }
 
         var remaining: [Range<UInt64>] = []
         for range in mappedRanges {
@@ -360,20 +340,11 @@ final class LinuxSyscallDispatcher {
                 remaining.append(range)
                 continue
             }
-
-            let overlapStart = max(range.lowerBound, address)
-            let overlapEnd = min(range.upperBound, end)
-            guard memory.unmap(offset: overlapStart, length: overlapEnd - overlapStart) else {
-                return errno(22)
-            }
-            if range.lowerBound < address {
-                remaining.append(range.lowerBound..<address)
-            }
-            if range.upperBound > end {
-                remaining.append(end..<range.upperBound)
-            }
+            if range.lowerBound < address { remaining.append(range.lowerBound..<address) }
+            if range.upperBound > end { remaining.append(end..<range.upperBound) }
         }
         mappedRanges = remaining
+        mmapCursor = min(mmapCursor, address)
         return 0
     }
 
