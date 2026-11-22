@@ -54,6 +54,9 @@ struct X86_64AOTTranslator {
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
+    static let maximumInstructionBudget = 4096
+    static let maximumOutputBudget = 1_048_576
+    static let maximumGuestByteBudget = 65_536
 
     func translate(_ guestCode: Data,
                    maximumInstructions: Int = 4096,
@@ -64,14 +67,19 @@ struct X86_64AOTTranslator {
             return result([], consumed: 0, instructions: 0, reason: .invalidBudget)
         }
 
-        let bytes = [UInt8](guestCode.prefix(maximumGuestBytes))
+        // Callers cannot bypass the translator's resource limits by passing
+        // Int.max or another oversized budget.
+        let instructionBudget = min(maximumInstructions, Self.maximumInstructionBudget)
+        let outputBudget = min(maximumOutputBytes, Self.maximumOutputBudget)
+        let guestByteBudget = min(maximumGuestBytes, Self.maximumGuestByteBudget)
+        let bytes = [UInt8](guestCode.prefix(guestByteBudget))
         var cursor = 0
         var instructions = 0
         var output = [UInt8]()
         output.reserveCapacity(min(maximumOutputBytes, 4096))
 
         while cursor < bytes.count {
-            if instructions >= maximumInstructions {
+            if instructions >= instructionBudget {
                 return result(output, consumed: cursor, instructions: instructions,
                               reason: .instructionLimit, fallbackOffset: cursor)
             }
@@ -88,6 +96,10 @@ struct X86_64AOTTranslator {
             }
 
             guard cursor < bytes.count else {
+                if bytes.count < guestCode.count {
+                    return result(output, consumed: start, instructions: instructions,
+                                  reason: .inputLimit, fallbackOffset: start)
+                }
                 return fallback(output, consumed: start, instructions: instructions,
                                 reason: .truncatedInstruction, opcode: bytes[start])
             }
@@ -111,6 +123,10 @@ struct X86_64AOTTranslator {
                 let is64Bit = (rex & 0x08) != 0
                 let immediateBytes = is64Bit ? 8 : 4
                 guard bytes.count - cursor >= immediateBytes else {
+                    if bytes.count < guestCode.count {
+                        return result(output, consumed: start, instructions: instructions,
+                                      reason: .inputLimit, fallbackOffset: start)
+                    }
                     return fallback(output, consumed: start, instructions: instructions,
                                     reason: .truncatedInstruction, opcode: bytes[start])
                 }
@@ -129,6 +145,10 @@ struct X86_64AOTTranslator {
 
             case 0x89, 0x8B:
                 guard cursor < bytes.count else {
+                    if bytes.count < guestCode.count {
+                        return result(output, consumed: start, instructions: instructions,
+                                      reason: .inputLimit, fallbackOffset: start)
+                    }
                     return fallback(output, consumed: start, instructions: instructions,
                                     reason: .truncatedInstruction, opcode: bytes[start])
                 }
@@ -166,7 +186,7 @@ struct X86_64AOTTranslator {
                                 reason: .unsupportedInstruction, opcode: bytes[start])
             }
             let emittedBytes = words.count * MemoryLayout<UInt32>.size
-            guard emittedBytes <= maximumOutputBytes - output.count else {
+            guard emittedBytes <= outputBudget - output.count else {
                 return result(output, consumed: start, instructions: instructions,
                               reason: .outputLimit, fallbackOffset: start)
             }
