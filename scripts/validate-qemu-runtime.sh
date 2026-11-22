@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 1 ]]; then
-  echo "Usage: $0 /path/to/signed/manifest-selected-QEMU-library" >&2
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+  echo "Usage: $0 /path/to/signed/manifest-selected-QEMU-library [jit|tci]" >&2
   exit 64
 fi
 
 library="$1"
+mode="${2:-jit}"
+case "$mode" in
+  jit|tci) ;;
+  *) echo "Runtime mode must be jit or tci: $mode" >&2; exit 64 ;;
+esac
 [[ -f "$library" ]] || { echo "Missing runtime library: $library" >&2; exit 2; }
 
 for tool in file lipo nm codesign vtool; do
@@ -43,13 +48,16 @@ if ! grep -Eq 'platform[[:space:]]+IOS([[:space:]]|$)' <<<"$build_info"; then
   exit 3
 fi
 
-echo "== Defined external lifecycle and JIT symbols =="
-# -U excludes undefined imports. Do not mistake an undefined reference for
-# an exported implementation required by the native bridge.
+echo "== Defined external lifecycle and mode-specific symbols =="
+# -U excludes undefined imports. TCI deliberately has no StikJIT callback.
 symbols="$(nm -gU "$library")"
-for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request isteam_qemu_set_jit_callbacks; do
+required_symbols=(qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request)
+if [[ "$mode" == "jit" ]]; then
+  required_symbols+=(isteam_qemu_set_jit_callbacks)
+fi
+for symbol in "${required_symbols[@]}"; do
   if ! grep -Eq "[[:space:]][A-Za-z][[:space:]]_?${symbol}$" <<<"$symbols"; then
-    echo "Missing required defined export: $symbol" >&2
+    echo "Missing required defined export for $mode mode: $symbol" >&2
     exit 3
   fi
   echo "Found required export: $symbol"
@@ -58,5 +66,5 @@ done
 echo "== Code signature =="
 codesign --verify --strict "$library"
 
-echo "QEMU runtime dynamic-library type, iOS platform, arm64 architecture, required lifecycle/shutdown/JIT exports, and code signature verified."
+echo "QEMU $mode runtime dynamic-library type, iOS platform, arm64 architecture, required lifecycle/shutdown exports, mode-specific JIT policy, and code signature verified."
 echo "This does not prove dependent libraries load or that a guest boots."
