@@ -31,15 +31,14 @@ final class GameLibraryTransferStore {
     }
 
     func export(to destination: URL) throws {
-        guard GameStore.shared.isReadable else { throw TransferError.libraryUnreadable }
-        guard !GameRuntimeProfileStore.shared.hasUnreadableProfiles else {
+        guard let games = GameStore.shared.validatedSnapshot() else {
+            throw TransferError.libraryUnreadable
+        }
+        guard let allProfiles = GameRuntimeProfileStore.shared.validatedProfiles() else {
             throw TransferError.profileStoreUnreadable
         }
-        let games = GameStore.shared.games
         let gameIDs = Set(games.map(\.id))
-        let profiles = GameRuntimeProfileStore.shared.allProfiles.filter {
-            gameIDs.contains($0.gameID)
-        }
+        let profiles = allProfiles.filter { gameIDs.contains($0.gameID) }
         let backup = GameLibraryBackup(games: games, profiles: profiles)
         let data = try encoder.encode(backup)
         guard data.count <= 20 * 1024 * 1024 else { throw TransferError.backupTooLarge }
@@ -84,8 +83,12 @@ final class GameLibraryTransferStore {
                 throw TransferError.invalidEntry
             }
         }
+        guard let currentSnapshot = GameStore.shared.validatedSnapshot() else {
+            throw TransferError.libraryUnreadable
+        }
+        let existingIDs = Set(currentSnapshot.map(\.id))
+        let validGameIDs = existingIDs.union(seen)
         var profileGameIDs = Set<UUID>()
-        let validGameIDs = Set(GameStore.shared.games.map(\.id)).union(seen)
         for profile in backup.profiles {
             try profile.validate()
             guard validGameIDs.contains(profile.gameID),
@@ -100,8 +103,7 @@ final class GameLibraryTransferStore {
             }
         }
 
-        var current = GameStore.shared.games
-        let existingIDs = Set(current.map(\.id))
+        var current = currentSnapshot
         let incoming = backup.games.filter { !existingIDs.contains($0.id) }
         current.append(contentsOf: incoming)
 
@@ -156,7 +158,7 @@ final class GameLibraryTransferStore {
             case .librarySaveFailed:
                 return "The game library could not be saved. Existing data was preserved and the imported profiles were rolled back."
             case .libraryUnreadable:
-                return "The existing game library is unreadable; export was stopped to avoid creating an incomplete backup."
+                return "The existing game library is unreadable; the backup operation was stopped to preserve existing data."
             case .profileStoreUnreadable:
                 return "One or more per-game profiles are unreadable; export was stopped to avoid creating an incomplete backup."
             }

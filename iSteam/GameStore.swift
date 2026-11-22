@@ -133,6 +133,7 @@ final class GameStore {
     var isReadable: Bool { loadGames() != nil }
 
     var games: [GameEntry] { readableGames() ?? [] }
+    func validatedSnapshot() -> [GameEntry]? { readableGames() }
 
     @discardableResult
     func save(_ games: [GameEntry]) -> Bool {

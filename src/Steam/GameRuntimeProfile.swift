@@ -178,6 +178,20 @@ final class GameRuntimeProfileStore {
         ).filter { $0.pathExtension == "json" }
     }
 
+    func validatedProfiles() -> [GameRuntimeProfile]? {
+        guard let files = try? profileFiles() else { return nil }
+        var profiles: [GameRuntimeProfile] = []
+        profiles.reserveCapacity(files.count)
+        for file in files {
+            guard let profile = readProfile(at: file) else { return nil }
+            profiles.append(profile)
+        }
+        profiles.sort {
+            $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+        }
+        return profiles
+    }
+
     var hasUnreadableProfiles: Bool {
         guard let files = try? profileFiles() else { return true }
         return files.contains { readProfile(at: $0) == nil }
