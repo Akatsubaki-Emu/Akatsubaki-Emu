@@ -98,6 +98,11 @@ jobs:
           grep -Fq "GitHub to GitLab Push Sync" .github/workflows/blank.yml
           grep -Fq "GITLAB_TOKEN" .github/workflows/blank.yml
           grep -Fq "git push gitlab HEAD:refs/heads/main" .github/workflows/blank.yml
+          grep -Fq "Refusing to auto-merge because conflict resolution could discard work on either remote." .github/workflows/blank.yml
+          if grep -Fq "git merge --no-edit -X ours gitlab/main" .github/workflows/blank.yml; then
+            echo "Divergent mirror histories must never be auto-merged with a preferred side." >&2
+            exit 1
+          fi
           test ! -e .github/workflows/mirror-from-gitlab.yml || { echo "Scheduled GitLab polling workflow is redundant with GitLab's configured push mirror." >&2; exit 1; }
 
       - name: Validate release and QEMU workflow contract

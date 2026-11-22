@@ -63,6 +63,5 @@ jobs:
             exit 1
           fi
 
-          echo "Histories diverged; merging GitLab into GitHub's checked-out commit, preferring GitHub files on conflicts."
-          git merge --no-edit -X ours gitlab/main
-          git push gitlab HEAD:refs/heads/main
+          echo "::error::GitHub and GitLab main have diverged. Refusing to auto-merge because conflict resolution could discard work on either remote. Reconcile the histories manually."
+          exit 1
