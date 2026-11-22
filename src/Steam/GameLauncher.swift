@@ -5,10 +5,11 @@ final class GameLauncher {
     private init() {}
 
     @discardableResult
-    func launch(executable: URL, workingDirectory: URL) -> Bool {
+    func launch(executable: URL, workingDirectory: URL, arguments: [String] = [], completion: (@escaping (Result<GuestCPUExit, Error>) -> Void)? = nil) -> Bool {
         let result = GuestProcessManager.shared.inspect(executable)
-        guard case let .success(format) = result, format == .windowsPE else {
-            EmulationLog.shared.write("Game launcher rejected non-Windows executable; Linux ELF execution is not integrated either")
+        guard case let .success(format) = result,
+              format == .windowsPE || format == .linuxELF else {
+            EmulationLog.shared.write("Game launcher rejected an unsupported executable format")
             return false
         }
 
@@ -16,6 +17,25 @@ final class GameLauncher {
         guard directoryValues?.isDirectory == true else {
             EmulationLog.shared.write("Game launcher rejected a missing or non-directory working directory")
             return false
+        }
+
+        if format == .linuxELF {
+            do {
+                try ELFValidator.validate(url: executable)
+            } catch {
+                EmulationLog.shared.write("Linux ELF validation failed: \(error.localizedDescription)")
+                completion?(.failure(error))
+                return false
+            }
+            let accepted = LinuxELFRuntime.shared.launch(
+                executable: executable,
+                arguments: arguments,
+                completion: completion
+            )
+            if !accepted {
+                EmulationLog.shared.write("Linux ELF launch rejected: another guest process is already active.")
+            }
+            return accepted
         }
 
         let capabilities = RuntimeCapabilityRegistry.current
@@ -51,5 +71,146 @@ final class GameLauncher {
         SteamLibrary.shared.prepare()
         WindowsRuntime.shared.prepare()
         return WindowsRuntime.shared.launch(process)
+    }
+}
+
+
+/// Runs the currently supported static Linux ELF subset through GuestMachine.
+/// This is a bounded diagnostic interpreter path, not a dynamic Linux userspace.
+final class LinuxELFRuntime {
+    static let shared = LinuxELFRuntime()
+
+    private static let guestMemorySize: UInt64 = 1024 * 1024 * 1024
+    private static let batchInstructionLimit: UInt64 = 250_000
+
+    private let queue = DispatchQueue(label: "com.xthrx.akatsubaki.linux-elf-runtime", qos: .userInitiated)
+    private let lock = NSLock()
+    private var activeMachine: GuestMachine?
+    private var pendingCompletion: ((Result<GuestCPUExit, Error>) -> Void)?
+    private var generation: UInt64 = 0
+    private var isLaunching = false
+
+    private init() {}
+
+    @discardableResult
+    func launch(
+        executable: URL,
+        arguments: [String],
+        completion: (@escaping (Result<GuestCPUExit, Error>) -> Void)? = nil
+    ) -> Bool {
+        lock.lock()
+        guard activeMachine == nil, !isLaunching else {
+            lock.unlock()
+            return false
+        }
+        generation &+= 1
+        let token = generation
+        isLaunching = true
+        pendingCompletion = completion
+        lock.unlock()
+
+        queue.async { [weak self] in
+            guard let self else { return }
+            let machine = GuestMachine(
+                configuration: .defaultLinux,
+                memorySize: Self.guestMemorySize
+            )
+            guard machine.state == .configured else {
+                machine.stop()
+                self.finish(
+                    token: token,
+                    machine: nil,
+                    result: .failure(GuestEngineError.memoryUnavailable)
+                )
+                return
+            }
+
+            self.lock.lock()
+            guard token == self.generation else {
+                self.lock.unlock()
+                machine.stop()
+                return
+            }
+            self.activeMachine = machine
+            self.isLaunching = false
+            self.lock.unlock()
+
+            do {
+                let image = try machine.loadELFImage(at: executable, arguments: arguments)
+                EmulationLog.shared.write(
+                    "Linux static ELF loaded at 0x" + String(image.entryPoint, radix: 16)
+                )
+                self.runNextBatch(machine: machine, token: token)
+            } catch {
+                self.finish(token: token, machine: machine, result: .failure(error))
+            }
+        }
+        return true
+    }
+
+    func stop() {
+        lock.lock()
+        generation &+= 1
+        let machine = activeMachine
+        activeMachine = nil
+        isLaunching = false
+        let callback = pendingCompletion
+        pendingCompletion = nil
+        lock.unlock()
+
+        machine?.stop()
+        if let callback {
+            DispatchQueue.main.async { callback(.success(.interrupted)) }
+        }
+    }
+
+    private func isCurrent(token: UInt64, machine: GuestMachine) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return token == generation && activeMachine === machine
+    }
+
+    private func runNextBatch(machine: GuestMachine, token: UInt64) {
+        queue.async { [weak self] in
+            guard let self, self.isCurrent(token: token, machine: machine) else { return }
+            do {
+                let exit = try machine.runBatch(maxInstructions: Self.batchInstructionLimit)
+                if exit == .instructionLimit {
+                    self.queue.asyncAfter(deadline: .now() + .milliseconds(1)) {
+                        self.runNextBatch(machine: machine, token: token)
+                    }
+                } else {
+                    self.finish(token: token, machine: machine, result: .success(exit))
+                }
+            } catch {
+                self.finish(token: token, machine: machine, result: .failure(error))
+            }
+        }
+    }
+
+    private func finish(
+        token: UInt64,
+        machine: GuestMachine?,
+        result: Result<GuestCPUExit, Error>
+    ) {
+        lock.lock()
+        guard token == generation else {
+            lock.unlock()
+            return
+        }
+        if let machine, activeMachine !== machine {
+            lock.unlock()
+            return
+        }
+        activeMachine = nil
+        isLaunching = false
+        let callback = pendingCompletion
+        pendingCompletion = nil
+        lock.unlock()
+
+        machine?.stop()
+        if let callback {
+            DispatchQueue.main.async { callback(result) }
+        }
     }
 }

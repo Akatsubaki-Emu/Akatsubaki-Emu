@@ -532,6 +532,12 @@ required = {
         '"[runtime-capability] "',
         "WindowsPELoader().load(executable)",
         "directoryValues?.isDirectory == true",
+        "format == .windowsPE || format == .linuxELF",
+        "LinuxELFRuntime.shared.launch(",
+        "machine.loadELFImage(at: executable, arguments: arguments)",
+        "machine.runBatch(maxInstructions: Self.batchInstructionLimit)",
+        "queue.asyncAfter",
+        "private static let guestMemorySize: UInt64 = 1024 * 1024 * 1024",
     ],
     "src/Core/VMSaveSlotStore.swift": [
         "maximumMetadataBytes = 1 * 1024 * 1024",
@@ -851,6 +857,21 @@ required = {
         "self.assertIn(\"second >= 0x90 && second <= 0x9F\", interpreter)",
         "self.assertIn(\"second == 0x1F\", interpreter)",
         "self.assertIn(\"guard let _ = decodeRM(modrm, rex: rex) else {\", interpreter)",
+    ],
+    "iSteam/ConsoleViewController.swift": [
+        "GameLauncher.shared.launch(",
+        "GameStore.shared.recordLaunchAccepted(id: game.id)",
+        "LinuxELFRuntime.shared.stop()",
+    ],
+    "iSteam/LibraryViewController.swift": [
+        "GameLibraryViewController()",
+        "GameStore.shared.search(\"\")",
+        "ConsoleViewController(game: games[indexPath.row])",
+    ],
+    "scripts/tests/test_source_validator.py": [
+        "def test_linux_elf_launch_uses_bounded_guest_machine_batches(self):",
+        "def test_console_uses_the_runtime_router_instead_of_direct_box64(self):",
+        "def test_imported_games_are_reachable_from_the_ios_library(self):",
     ],
 }
 failed = False

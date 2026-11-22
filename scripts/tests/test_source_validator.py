@@ -388,6 +388,31 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("!translatorOnlyPlan.isExecutableWithInstalledBackends", harness)
         self.assertIn("withABIPlan.isExecutableWithInstalledBackends", harness)
 
+    def test_linux_elf_launch_uses_bounded_guest_machine_batches(self):
+        root = Path(__file__).resolve().parents[2]
+        launcher = (root / "src" / "Steam" / "GameLauncher.swift").read_text(encoding="utf-8")
+        runtime = launcher.split("final class LinuxELFRuntime", 1)[1]
+        self.assertIn("format == .linuxELF", launcher)
+        self.assertIn("LinuxELFRuntime.shared.launch(", launcher)
+        self.assertIn("machine.loadELFImage(at: executable, arguments: arguments)", runtime)
+        self.assertIn("machine.runBatch(maxInstructions: Self.batchInstructionLimit)", runtime)
+        self.assertIn("queue.asyncAfter", runtime)
+        self.assertIn("machine.stop()", runtime)
+
+    def test_console_uses_the_runtime_router_instead_of_direct_box64(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "ConsoleViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("GameLauncher.shared.launch(", source)
+        self.assertNotIn("Box64Bridge.run(", source)
+        self.assertIn("GameStore.shared.recordLaunchAccepted", source)
+
+    def test_imported_games_are_reachable_from_the_ios_library(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "LibraryViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("GameLibraryViewController()", source)
+        self.assertIn("GameStore.shared.search(\"\")", source)
+        self.assertIn("ConsoleViewController(game:", source)
+
     def test_guest_machine_pause_works_between_bounded_execution_batches(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
