@@ -1076,6 +1076,15 @@ struct InterpreterTests {
         precondition(immediateDwordStackExit == .halted)
         precondition(immediateDwordStack.registerValue(0) == 0xFFFFFFFF80000000)
 
+        let pushStackPointerMemory = GuestMemory(size: 128)
+        precondition(pushStackPointerMemory.write(Data([0x54, 0xF4]), offset: 0))
+        let pushStackPointer = X86_64Interpreter(memory: pushStackPointerMemory)
+        try pushStackPointer.reset(entryPoint: 0)
+        let pushStackPointerExit = try pushStackPointer.run(maxInstructions: 2)
+        precondition(pushStackPointerExit == .halted)
+        precondition(pushStackPointer.registerValue(4) == 112)
+        precondition(pushStackPointerMemory.readUInt64(offset: 112) == 120)
+
         let popStackPointerMemory = GuestMemory(size: 128)
         precondition(popStackPointerMemory.write(Data([0x5C, 0xF4]), offset: 0))
         precondition(popStackPointerMemory.writeUInt64(64, offset: 120))
