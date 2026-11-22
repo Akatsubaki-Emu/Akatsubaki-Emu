@@ -163,6 +163,17 @@ jobs:
             -o "$RUNNER_TEMP/test-windows-pe-image"
           "$RUNNER_TEMP/test-windows-pe-image"
 
+      - name: Test guest executable format detection
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/WindowsPEImage.swift \
+            src/Runtime/GuestProcess.swift \
+            scripts/tests/test_guest_process_detection.swift \
+            -o "$RUNNER_TEMP/test-guest-process-detection"
+          "$RUNNER_TEMP/test-guest-process-detection"
+
       - name: Test VNC key-state source arbitration
         if: matrix.scheme == 'iSteam'
         run: |
@@ -193,20 +204,20 @@ jobs:
 
 
   build-ios-device:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - name: Select and verify Xcode 26.2
+      - name: Select and verify Xcode 27.1+
         shell: bash
         run: |
           set -euo pipefail
-          XCODE_APP="/Applications/Xcode_26.2.app"
-          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
+          XCODE_APP="/Applications/Xcode_27.1.app"
+          test -d "$XCODE_APP" || { echo "Xcode 27.1 is not installed on this runner." >&2; exit 1; }
           sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
           XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
-          if [ "$XCODE_VERSION" != "26.2" ]; then
-            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+          if [[ "$XCODE_VERSION" != 27.* ]]; then
+            echo "Expected Xcode 27.x, found $XCODE_VERSION." >&2
             exit 1
           fi
       - name: Install XcodeGen

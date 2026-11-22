@@ -114,7 +114,7 @@ jobs:
     needs: [qemu-runtime, check-platform-build-freshness]
     if: needs.check-platform-build-freshness.outputs.build == 'true'
     name: Build ${{ matrix.platform }} (${{ matrix.channel }})
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -128,16 +128,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select and verify Xcode 26.2
+      - name: Select and verify Xcode 27.1+
         shell: bash
         run: |
           set -euo pipefail
-          XCODE_APP="/Applications/Xcode_26.2.app"
-          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
+          XCODE_APP="/Applications/Xcode_27.1.app"
+          test -d "$XCODE_APP" || { echo "Xcode 27.1 is not installed on this runner." >&2; exit 1; }
           sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
           XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
-          if [ "$XCODE_VERSION" != "26.2" ]; then
-            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+          if [[ "$XCODE_VERSION" != 27.* ]]; then
+            echo "Expected Xcode 27.x, found $XCODE_VERSION." >&2
             exit 1
           fi
 
