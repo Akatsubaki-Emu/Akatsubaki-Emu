@@ -26,18 +26,33 @@ final class QEMUNativeRuntime {
             )
         }
 
-        let requiresJIT = configuration.accelerator == .jit
+        let requestedJIT = configuration.accelerator == .jit
+        var requiresJIT = requestedJIT
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if requiresJIT && !JITCoordinator.shared.isQEMUJITReady {
-            throw RuntimeError.runtimeUnavailable(
-                "The selected QEMU JIT runtime requires physical iOS 26+, the get-task-allow entitlement, and a supported StikDebug protocol. The no-JIT TCI runtime is not packaged yet; enable JIT and try again."
-            )
+            requiresJIT = false
+            EmulationLog.shared.write("QEMU JIT is unavailable; falling back to the TCI no-JIT runtime.")
         }
         #endif
 
+        var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)
+        if case .unavailable(let jitReason) = runtimeStatus, requiresJIT {
+            let tciStatus = QEMURuntimeStatus.inspect(requiresJIT: false)
+            switch tciStatus {
+            case .ready:
+                requiresJIT = false
+                runtimeStatus = tciStatus
+                EmulationLog.shared.write("QEMU JIT runtime failed preflight; falling back to TCI: \(jitReason)")
+            case .unavailable(let tciReason):
+                throw RuntimeError.runtimeUnavailable(
+                    "QEMU JIT runtime unavailable: \(jitReason) TCI runtime unavailable: \(tciReason)"
+                )
+            }
+        }
+
         let libraryURL: URL
         let dataDirectory: URL
-        switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT) {
+        switch runtimeStatus {
         case .unavailable(let reason):
             throw RuntimeError.runtimeUnavailable(reason)
         case .ready(let library, let data):
@@ -100,7 +115,8 @@ final class QEMUNativeRuntime {
 
         let args = QEMUCommandBuilder(configuration: configuration)
             .arguments(diskImage: diskImage, writableDiskImage: writableDiskImage,
-                       firmware: selectedFirmware, firmwareVariables: selectedFirmwareVariables)
+                       firmware: selectedFirmware, firmwareVariables: selectedFirmwareVariables,
+                       requiresJIT: requiresJIT)
             + ["-L", dataDirectory.path]
         let arguments = ["qemu-system-\(configuration.architecture.rawValue)"] + args
         let strings: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) }
