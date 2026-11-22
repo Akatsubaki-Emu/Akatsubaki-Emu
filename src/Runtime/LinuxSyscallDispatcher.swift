@@ -72,24 +72,10 @@ final class LinuxSyscallDispatcher {
                   let bytes = memory.read(offset: address, length: Int(requested)) else {
                 return .returned(errno(14))
             }
-            if let text = String(data: bytes, encoding: .utf8), !text.isEmpty {
-                var chunk = ""
-                var chunkBytes = 0
-                for scalar in text.unicodeScalars {
-                    let scalarByteCount = scalar.utf8.count
-                    if chunkBytes + scalarByteCount > 4096 {
-                        log.write("[guest stdout] " + chunk)
-                        chunk.removeAll(keepingCapacity: true)
-                        chunkBytes = 0
-                    }
-                    chunk.unicodeScalars.append(scalar)
-                    chunkBytes += scalarByteCount
-                }
-                if !chunk.isEmpty { log.write("[guest stdout] " + chunk) }
-            } else if !bytes.isEmpty {
-                log.write("[guest stdout] <\(bytes.count) non-UTF8 bytes>")
-            }
+            logGuestOutput(bytes, descriptor: descriptor)
             return .returned(requested)
+        case 20:
+            return .returned(writeVector(descriptor: arg0, vectors: arg1, count: arg2))
         case 3:
             return .returned(arg0 <= 2 ? 0 : errno(9))
         case 9:
@@ -128,6 +114,65 @@ final class LinuxSyscallDispatcher {
             return .returned(errno(38))
         default:
             return nil
+        }
+    }
+
+
+    private static let maximumVectorCount: UInt64 = 1024
+    private static let maximumVectorBytes: UInt64 = 1_048_576
+
+    /// Implements the bounded stdout/stderr form of Linux writev. Guest file
+    /// descriptors are not exposed to the host filesystem by this runtime.
+    private func writeVector(descriptor: UInt64, vectors: UInt64, count: UInt64) -> UInt64 {
+        guard descriptor == 1 || descriptor == 2 else { return errno(9) }
+        guard count <= Self.maximumVectorCount else { return errno(22) }
+        if count == 0 { return 0 }
+
+        var output = Data()
+        var total: UInt64 = 0
+        for index in 0..<count {
+            let (entryOffset, offsetOverflow) = vectors.addingReportingOverflow(index * 16)
+            let (lengthOffset, lengthOffsetOverflow) = entryOffset.addingReportingOverflow(8)
+            guard !offsetOverflow, !lengthOffsetOverflow,
+                  let base = memory.readUInt64(offset: entryOffset),
+                  let length = memory.readUInt64(offset: lengthOffset) else {
+                return errno(14)
+            }
+            let (nextTotal, lengthOverflow) = total.addingReportingOverflow(length)
+            guard !lengthOverflow, nextTotal <= Self.maximumVectorBytes,
+                  length <= UInt64(Int.max) else {
+                return errno(22)
+            }
+            if length == 0 { continue }
+            guard let bytes = memory.read(offset: base, length: Int(length)) else {
+                return errno(14)
+            }
+            output.append(bytes)
+            total = nextTotal
+        }
+
+        logGuestOutput(output, descriptor: descriptor)
+        return total
+    }
+
+    private func logGuestOutput(_ bytes: Data, descriptor: UInt64) {
+        let stream = descriptor == 2 ? "stderr" : "stdout"
+        if let text = String(data: bytes, encoding: .utf8), !text.isEmpty {
+            var chunk = ""
+            var chunkBytes = 0
+            for scalar in text.unicodeScalars {
+                let scalarByteCount = scalar.utf8.count
+                if chunkBytes + scalarByteCount > 4096 {
+                    log.write("[guest \\(stream)] " + chunk)
+                    chunk.removeAll(keepingCapacity: true)
+                    chunkBytes = 0
+                }
+                chunk.unicodeScalars.append(scalar)
+                chunkBytes += scalarByteCount
+            }
+            if !chunk.isEmpty { log.write("[guest \\(stream)] " + chunk) }
+        } else if !bytes.isEmpty {
+            log.write("[guest \\(stream)] <\\(bytes.count) non-UTF8 bytes>")
         }
     }
 
