@@ -7,6 +7,7 @@ OUT="$ROOT/build/dependencies/AkatsubakiPairingFFI.xcframework"
 if ! command -v rustup >/dev/null 2>&1; then mkdir -p "$ROOT/build"; curl --fail --location --retry 3 https://sh.rustup.rs -o "$ROOT/build/rustup-init.sh"; sh "$ROOT/build/rustup-init.sh" -y --profile minimal; source "$HOME/.cargo/env"; fi
 rustup toolchain install stable --profile minimal
 rustup default stable
+rustup component add rustfmt
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 cargo fmt --manifest-path "$MANIFEST"
 cargo test --manifest-path "$MANIFEST" --locked --target-dir "$TARGET"

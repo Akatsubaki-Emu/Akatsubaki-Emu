@@ -2,7 +2,7 @@ import Foundation
 enum StikJITPairingFileStore {
     struct Session { let hostID: String; let hostIRK: String?; let existing: URL?; let pending: URL }
     private static var support: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("StikJIT", isDirectory: true) }
-    static var pairingFileURL: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("StikJIT", isDirectory: true).appendingPathComponent("pairingFile.plist") }
+    static var pairingFileURL: URL { support.appendingPathComponent("pairingFile.plist") }
     private static var identityURL: URL { support.appendingPathComponent("host-identity.plist") }
     static var hasPairingFile: Bool { (try? load()) != nil }
     static func load() throws -> Data { let d = try Data(contentsOf: pairingFileURL); try validate(d); return d }
@@ -27,6 +27,13 @@ enum StikJITPairingFileStore {
         try write(data, pairingFileURL)
         let identity = try PropertyListSerialization.data(fromPropertyList: ["hostIdentifier":id,"altIRK":key], format:.binary, options:0)
         try write(identity, identityURL); try? FileManager.default.removeItem(at: pending)
+    }
+    static func reset() throws {
+        for url in [pairingFileURL, identityURL, support.appendingPathComponent("pairingFile.pending")] {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+        }
     }
     static func cleanPending(_ url: URL) { try? FileManager.default.removeItem(at: url) }
     private static func validate(_ d: Data) throws {

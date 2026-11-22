@@ -112,7 +112,7 @@ final class SettingsViewController: UITableViewController {
                 cell.accessoryType = .disclosureIndicator
             } else if indexPath.row == jitMethods.count + (StikPairingCoordinator.shared.canGeneratePairingFile ? 1 : 0) {
                 c.text = "Import existing pairing file"
-                c.secondaryText = JITCoordinator.shared.hasPairingFile ? "Pairing file ready · Documents/StikJIT/pairingFile.plist" : "Use an existing Remote Pairing .plist file"
+                c.secondaryText = JITCoordinator.shared.hasPairingFile ? "Pairing file ready · Application Support/StikJIT/pairingFile.plist" : "Use an existing Remote Pairing .plist file"
                 cell.accessoryType = .disclosureIndicator
             } else {
                 c.text = "Request JIT"

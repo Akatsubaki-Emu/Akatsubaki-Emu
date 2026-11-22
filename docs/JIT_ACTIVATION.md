@@ -76,3 +76,7 @@ Do not describe this integration as device-working until the iOS 26 extension is
 iOS/iPadOS 27+ physical devices can generate their own Remote Pairing file from Settings → JIT. Allow Local Network access, select Pair with Akatsubaki Emu in Developer Mode settings and enter the PIN displayed in the continued-processing Live Activity. The pairing file is protected at `Documents/StikJIT/pairingFile.plist`; the host `altIRK` is retained separately. iOS 26 keeps manual import.
 
 The standalone StikPair app is MIT, Non-Commercial, so its app and FFI wrapper source are not redistributed. Akatsubaki uses an original FFI over the pinned MIT `idevice` Remote Pairing library instead.
+
+## On-device pairing generation
+
+On physical iOS 27+ devices, Akatsubaki can generate its own Remote Pairing file from Settings → JIT. It uses the MIT-licensed idevice remote_pairing API, advertises the pairable-host TXT records through Apple's NetService API, and uses a continued-processing task while the user enters the PIN in Developer Mode settings. The pairing plist and host altIRK identity are saved under protected Application Support and reused by JITCoordinator. Regenerating a pairing clears the previous file and identity first. StikPair's MIT Non-Commercial app and wrapper source are not bundled. See [On-device Remote Pairing](PAIRING_GENERATION.md) for requirements, data flow, storage, licensing and validation.

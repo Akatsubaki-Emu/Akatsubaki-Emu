@@ -16,7 +16,27 @@ import AkatsubakiPairingFFI
     func registerBackgroundTask(){guard canGeneratePairingFile else{return};if #available(iOS 26.0,*){StikPairingTaskRunner.shared.register()}}
     func startPairing(from controller:UIViewController,completion:(()->Void)?=nil){
         guard canGeneratePairingFile else{let a=UIAlertController(title:"On-device pairing unavailable",message:"Pairing generation requires iOS 27+ on a physical device outside LiveContainer. Import an existing file on older setups.",preferredStyle:.alert);a.addAction(UIAlertAction(title:"OK",style:.default));controller.present(a,animated:true);return}
-        if #available(iOS 26.0,*){StikPairingTaskRunner.shared.start(from:controller,completion:completion)}
+        if StikJITPairingFileStore.hasPairingFile {
+            let alert = UIAlertController(title: "Replace pairing file?", message: "A pairing file is already stored. Replacing it creates a new pairing identity and requires pairing this iPad again.", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            alert.addAction(UIAlertAction(title: "Replace", style: .destructive) { _ in
+                do {
+                    try StikJITPairingFileStore.reset()
+                    if #available(iOS 26.0, *) {
+                        StikPairingTaskRunner.shared.start(from: controller, completion: completion)
+                    }
+                } catch {
+                    let failure = UIAlertController(title: "Could not replace pairing file", message: error.localizedDescription, preferredStyle: .alert)
+                    failure.addAction(UIAlertAction(title: "OK", style: .default))
+                    controller.present(failure, animated: true)
+                }
+            })
+            controller.present(alert, animated: true)
+            return
+        }
+        if #available(iOS 26.0, *) {
+            StikPairingTaskRunner.shared.start(from: controller, completion: completion)
+        }
     }
     func applicationDidBecomeActive(){if #available(iOS 26.0,*){StikPairingTaskRunner.shared.applicationDidBecomeActive()}}
 }
@@ -76,7 +96,7 @@ import AkatsubakiPairingFFI
     private func finish(_ status:Int32,_ message:String?,_ hostIRK:String?,_ c:StikJITPairingFileStore.Session){
         if cancelled{StikJITPairingFileStore.cleanPending(c.pending);finishTask(false);completion=nil;if let failure{show(failure,"Pairing failed")};return}
         guard status==0,let hostIRK else{failPairing(message ?? "Remote Pairing did not complete");return}
-        do{try StikJITPairingFileStore.save(c.pending,id:c.hostID,irk:hostIRK);task?.progress.completedUnitCount=100;task?.updateTitle("Pairing complete",subtitle:"Pairing file saved");finishTask(true);JITCoordinator.shared.selectedMethod = .builtInStikJIT;completion?();completion=nil;show("Akatsubaki generated its own pairing file at Documents/StikJIT/pairingFile.plist.","Pairing complete")}
+        do{try StikJITPairingFileStore.save(c.pending,id:c.hostID,irk:hostIRK);task?.progress.completedUnitCount=100;task?.updateTitle("Pairing complete",subtitle:"Pairing file saved");finishTask(true);JITCoordinator.shared.selectedMethod = .builtInStikJIT;completion?();completion=nil;show("Akatsubaki generated its own pairing file and saved it securely in Application Support.","Pairing complete")}
         catch{failPairing(error.localizedDescription)}
     }
     private func failPairing(_ message:String){if let session{failure=message;cancelled=true;akatsubaki_pairing_session_cancel(session);service?.stop();service=nil;return};finishTask(false);completion=nil;show(message,"Pairing failed")}
