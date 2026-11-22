@@ -18,17 +18,17 @@ final class VMSaveSlotStore {
         let writableDiskImageBookmark: Data?
     }
 
-    private var directory: URL {
-        let root = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let url = root.appendingPathComponent("VMSlots", isDirectory: true)
-        try? fm.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
-    }
-
+    private let directory: URL
     private let maximumMetadataBytes = 1 * 1024 * 1024
 
     private init() {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let root = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        directory = root.appendingPathComponent("VMSlots", isDirectory: true)
+    }
+
+    private func ensureDirectory() throws {
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
     enum StoreError: LocalizedError {
@@ -80,6 +80,7 @@ final class VMSaveSlotStore {
         let url = directory.appendingPathComponent(safeFilename(name) + ".json")
         let data = try encoder.encode(saved)
         guard data.count <= maximumMetadataBytes else { throw StoreError.metadataTooLarge }
+        try ensureDirectory()
         try data.write(to: url, options: .atomic)
     }
 
@@ -143,6 +144,7 @@ final class VMSaveSlotStore {
         )
         let data = try encoder.encode(session)
         guard data.count <= maximumMetadataBytes else { throw StoreError.metadataTooLarge }
+        try ensureDirectory()
         try data.write(to: directory.appendingPathComponent("last-session.json"), options: .atomic)
     }
 
