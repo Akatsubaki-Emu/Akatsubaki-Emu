@@ -141,6 +141,24 @@ final class EmulationLog {
     func write(_ message: String) { messages.append(message) }
 }
 
+private final class MockAOTExecutor: X86_64AOTExecuting {
+    private(set) var calls = 0
+    var isAvailable = true
+
+    func execute(guestCode: Data,
+                 registers: inout [UInt64],
+                 maximumInstructions: Int) -> X86_64AOTExecutionResult? {
+        calls += 1
+        let expected: [UInt8] = [0xB8, 0x2A, 0x00, 0x00, 0x00]
+        guard maximumInstructions > 0,
+              Array(guestCode.prefix(expected.count)) == expected else {
+            return nil
+        }
+        registers[0] = 42
+        return X86_64AOTExecutionResult(guestBytesConsumed: expected.count, instructionCount: 1)
+    }
+}
+
 @main
 struct InterpreterTests {
     static func main() throws {
@@ -1242,6 +1260,17 @@ struct InterpreterTests {
         precondition(leaveFaultExit == .memoryFault(address: 72))
         precondition(leaveFault.registerValue(4) == 56)
         precondition(leaveFault.registerValue(5) == 72)
+
+        let aotMemory = GuestMemory(size: 64)
+        precondition(aotMemory.write(Data([0xB8, 0x2A, 0x00, 0x00, 0x00, 0x0F, 0x0B]), offset: 0))
+        let mockAOT = MockAOTExecutor()
+        let aotInterpreter = X86_64Interpreter(memory: aotMemory, aotExecutor: mockAOT)
+        try aotInterpreter.reset(entryPoint: 0)
+        let aotExit = try aotInterpreter.run(maxInstructions: 4)
+        precondition(aotExit == .unsupportedInstruction(address: 5))
+        precondition(mockAOT.calls == 1)
+        precondition(aotInterpreter.registerValue(0) == 42)
+        precondition(aotInterpreter.instructionCount == 1)
 
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
