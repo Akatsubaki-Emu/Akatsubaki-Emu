@@ -50,6 +50,21 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertNotIn("print(text!)", self.anisette)
         self.assertIn("loadUnaligned(as: T.self)", self.anisette)
 
+    def test_corrupt_device_identifier_is_replaced_before_uuid_load(self):
+        self.assertIn("decodedIdentifier?.count == MemoryLayout<UUID>.size", self.anisette)
+        self.assertIn("decodedIdentifier.count == MemoryLayout<UUID>.size", self.anisette)
+        self.assertIn("EntitlementAnisetteKeychain.shared.adiPb = nil", self.anisette)
+        self.assertIn("guard EntitlementAnisetteKeychain.shared.identifier == generatedIdentifier", self.anisette)
+        self.assertIn("try await self.fetchClientInfo()", self.anisette)
+        self.assertNotIn("Data(base64Encoded: EntitlementAnisetteKeychain.shared.identifier!)!", self.anisette)
+        self.assertNotIn("try! JSONSerialization.data", self.anisette)
+
+    def test_anisette_requests_fail_cleanly_when_required_state_is_missing(self):
+        self.assertIn("guard let serverURL = self.url else", self.anisette)
+        self.assertIn("guard let identifier = EntitlementAnisetteKeychain.shared.identifier,", self.anisette)
+        self.assertIn("guard let clientInfo = self.clientInfo,", self.anisette)
+        self.assertIn("func buildAppleRequest(url: URL) throws -> URLRequest", self.anisette)
+
     def test_anisette_server_is_https_and_configurable(self):
         self.assertIn('?? "https://ani.sidestore.io"', self.view)
         self.assertIn('anisetteURL.scheme?.lowercased() == "https"', self.view)
