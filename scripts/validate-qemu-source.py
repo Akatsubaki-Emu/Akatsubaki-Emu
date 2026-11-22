@@ -1441,12 +1441,23 @@ if guard < 0 or "deallocate_mach_address(write,mapped)" not in aot_memory[guard:
     failed = True
 for token in ("KenranButoAOTGuestState", "makeMemoryCallbacks(for:memory)",
               "iSteamAOTExecutableMemoryInvoke", "maximumCachedBlocks=64",
-              "maximumCachedExecutableBytes"):
+              "maximumCachedExecutableBytes", "maximumGuestBytes=4096",
+              "refreshAvailability()->Bool", "availabilitySnapshot",
+              "cachedBlockCount", "cachedExecutableBytes"):
     if token not in aot_execution:
         print(f"AOT executor missing {token!r}", file=sys.stderr)
         failed = True
+
+jit_protocol = Path("iSteam/JIT26Protocol.c").read_text(encoding="utf-8")
+for token in ('CFSTR("get-task-allow")', "csops"):
+    if token not in jit_protocol:
+        print(f"Native JIT readiness is missing entitlement/status check {token!r}", file=sys.stderr)
+        failed = True
 for token in ("aotExecutor.execute(", "rip = result.exitRip", "aotExecutor?.invalidateAll()",
-              "instructionWindow = [UInt8](repeating: 0, count: 64)",
+              "instructionWindow = [UInt8](repeating: 0, count: 15)",
+              "aotInstructionWindow = [UInt8](repeating: 0, count: 4096)",
+              "maximumLength: aotMaximumLength", "aotIsAvailable = aotExecutor?.isAvailable == true",
+              "let budget = Int(min(remaining, 256))", "canStartAOTBlock()", "refreshAvailability()",
               "var candidateRegisters = registers", "aotDisabledForRun = true"):
     if token not in aot_interpreter:
         print(f"AOT interpreter integration missing {token!r}", file=sys.stderr)
@@ -1454,6 +1465,12 @@ for token in ("aotExecutor.execute(", "rip = result.exitRip", "aotExecutor?.inva
 if "aotExecutor: KenranButoAOTExecutor()" not in aot_guest_machine:
     print("GuestMachine does not install KenranButoAOTExecutor", file=sys.stderr)
     failed = True
+
+aot_guest_memory = Path("src/Runtime/GuestMemory.swift").read_text(encoding="utf-8")
+for token in ("maximumLength: Int? = nil", "static let pageSize: UInt64 = 4096"):
+    if token not in aot_guest_memory:
+        print(f"GuestMemory bounded AOT-read contract missing {token!r}", file=sys.stderr)
+        failed = True
 for token in ("maximumInstructions", "maximumOutputBytes", "maximumGuestBytes", "inputLimit"):
     if token not in aot_translator:
         print(f"AOT translator missing bounded contract {token!r}", file=sys.stderr)
@@ -1463,13 +1480,19 @@ for token in ("iSteamAOTGuestMemoryRead", "iSteamAOTGuestMemoryWrite",
               "sideExit!.exitRip == 0x100A", "Kenran Butō AOT native block execution",
               "CorruptingAOTExecutor", "Kenran Butō AOT invalid side-exit rejection preserved interpreter state",
               "DecliningAOTExecutor", "Kenran Butō AOT declined block is not retried within the same execution batch",
-              "ARM64 CI must execute native AOT blocks", "invalidEmptyRead", "invalidEmptyWrite"):
+              "ARM64 CI must execute native AOT blocks", "invalidEmptyRead", "invalidEmptyWrite",
+              "for index in 0..<96", "cachedBlockCount == 64", "cachedExecutableBytes > 0",
+              "Kenran Butō page-bounded AOT prefetch and cross-page interpreter fallback passed",
+              "Kenran Butō no-JIT path skips AOT translation-window reads",
+              "Kenran Butō preflight skips unsupported first instructions"):
     if token not in aot_tests:
         print(f"AOT runtime regression missing {token!r}", file=sys.stderr)
         failed = True
 aot_workflow = Path(".github/workflows/validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
 for token in ("KenranButoAOTExecutableMemory.c", "KenranButoAOTExecution.swift",
-              "test_x86_64_interpreter.swift", "Native AOT execution requires an ARM64 runner"):
+              "test_x86_64_interpreter.swift", "Native AOT execution requires an ARM64 runner",
+              "test_x86_instruction_window.py", "test_x86_instruction_window_cursor.py",
+              "unittest discover"):
     if token not in aot_workflow:
         print(f"AOT workflow missing {token!r}", file=sys.stderr)
         failed = True
@@ -1494,6 +1517,9 @@ for token in ("KenranButoAOTExecutor", "aotExecutor.blocksExecuted > 0",
     if token not in static_elf_tests:
         print(f"Static ELF hybrid regression missing {token!r}", file=sys.stderr)
         failed = True
+if "maximumLength: Int? = nil" not in static_elf_tests or "static let pageSize: UInt64 = 4096" not in static_elf_tests:
+    print("Static ELF GuestMemory test double does not implement the bounded-prefix/page-size API", file=sys.stderr)
+    failed = True
 if "test-static-elf-aot" not in aot_workflow:
     print("AOT workflow does not execute the static ELF guest smoke test", file=sys.stderr)
     failed = True

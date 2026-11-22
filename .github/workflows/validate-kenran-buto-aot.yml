@@ -14,6 +14,8 @@ on:
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
       - "src/Runtime/X86_64Interpreter.swift"
+      - "scripts/tests/test_x86_instruction_window.py"
+      - "scripts/tests/test_x86_instruction_window_cursor.py"
       - "src/Runtime/GuestMachine.swift"
       - "src/Core/VMConfiguration.swift"
       - "src/QEMU/QEMUNativeRuntime.swift"
@@ -40,6 +42,8 @@ on:
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
       - "src/Runtime/X86_64Interpreter.swift"
+      - "scripts/tests/test_x86_instruction_window.py"
+      - "scripts/tests/test_x86_instruction_window_cursor.py"
       - "src/Runtime/GuestMachine.swift"
       - "src/Core/VMConfiguration.swift"
       - "src/QEMU/QEMUNativeRuntime.swift"
@@ -79,6 +83,11 @@ jobs:
             scripts/tests/test_kenran_buto_aot_translator.swift \
             -o "$RUNNER_TEMP/test-kenran-buto-aot-translator"
           "$RUNNER_TEMP/test-kenran-buto-aot-translator"
+      - name: Verify page-bounded decoder and AOT-window contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p 'test_x86_instruction_window*.py'
       - name: Compile and test translation-cache integration
         shell: bash
         run: |

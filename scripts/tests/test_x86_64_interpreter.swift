@@ -1385,10 +1385,12 @@ struct InterpreterTests {
                     fsBase: 0, gsBase: 0, memory: hybridMemory, maximumInstructions: 4
                 )
                 precondition(result != nil)
+                precondition(cacheRegisters[0] == UInt64(index))
             }
-            precondition(executor.cachedBlockCount <= 64)
+            precondition(executor.cachedBlockCount == 64)
+            precondition(executor.cachedExecutableBytes > 0)
             precondition(executor.cachedExecutableBytes <= 16 * 1024 * 1024)
-            print("Kenran Butō AOT native block execution, exact-RIP side exit and differential passed")
+            print("Kenran Butō AOT native block execution, exact-RIP side exit, differential and 96-block cache pressure passed")
         let fallbackProgram = Data([0xB8, 0x2A, 0, 0, 0, 0xF4])
         let fallbackBaselineMemory = GuestMemory(size: 8192)
         precondition(fallbackBaselineMemory.write(fallbackProgram, offset: 0x1000))

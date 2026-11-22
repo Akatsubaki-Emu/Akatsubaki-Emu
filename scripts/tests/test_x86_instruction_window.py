@@ -8,7 +8,13 @@ class X86InstructionWindowTests(unittest.TestCase):
         interpreter = (root / "src" / "Runtime" / "X86_64Interpreter.swift").read_text(encoding="utf-8")
         memory = (root / "src" / "Runtime" / "GuestMemory.swift").read_text(encoding="utf-8")
         self.assertIn("prepareInstructionWindow(at: instructionAddress)", interpreter)
-        self.assertIn("memory.readPrefix(offset: address, into: &instructionWindow)", interpreter)
+        self.assertIn("maximumLength: maximumLength", interpreter)
+        self.assertIn("maximumLength: aotMaximumLength", interpreter)
+        self.assertIn("private var instructionWindow = [UInt8](repeating: 0, count: 15)", interpreter)
+        self.assertIn("private var aotInstructionWindow = [UInt8](repeating: 0, count: 4096)", interpreter)
+        self.assertIn("aotIsAvailable = aotExecutor?.isAvailable == true", interpreter)
+        self.assertIn("let budget = Int(min(remaining, 256))", interpreter)
+        self.assertIn("canStartAOTBlock()", interpreter)
         fetch32 = interpreter.split("private func fetchUInt32()", 1)[1].split("private func fetchUInt64()", 1)[0]
         fetch64 = interpreter.split("private func fetchUInt64()", 1)[1].split("private func decodeRM", 1)[0]
         self.assertIn("instructionWindowLength - instructionWindowCursor >= 4", fetch32)
@@ -17,7 +23,7 @@ class X86InstructionWindowTests(unittest.TestCase):
         self.assertIn("memory.readUInt64(offset: rip)", fetch64)
         self.assertIn("UInt64(instructionWindow[offset + 7]) << 56", fetch64)
         self.assertNotIn("for shift in 0..<8", fetch64)
-        self.assertIn("func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int?", memory)
+        self.assertIn("maximumLength: Int? = nil", memory)
         self.assertNotIn("instructionWindowOffset", interpreter)
         self.assertNotIn("Data(count: 15)", interpreter)
 
