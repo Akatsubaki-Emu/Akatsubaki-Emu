@@ -553,8 +553,11 @@ required = {
     "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
         "dlopen(library_path, RTLD_NOW | RTLD_LOCAL)",
-        "malloc(argument_length + 1)",
-        "memcpy(copied_argv[i], argument, argument_length + 1)",
+        "malloc(total_argument_bytes)",
+        "copied_argv[i] = argument_storage + argument_offset",
+        "memcpy(copied_argv[i], argv[i], argument_length + 1u)",
+        "free(g_argument_storage)",
+        "g_argument_storage = argument_storage",
         'dlsym(library, "qemu_init")',
         'dlsym(library, "qemu_main_loop")',
         'dlsym(library, "qemu_cleanup")',
