@@ -81,7 +81,9 @@ final class X86_64Interpreter: GuestCPUBackend {
         if halted { return .halted }
         var executed: UInt64 = 0
         while executed < maxInstructions {
-            if executed & 0xff == 0 {
+            // Bound stop-request latency to 1024 guest instructions while reducing
+            // cross-thread lock traffic in the interpreter hot loop.
+            if executed & 0x3ff == 0 {
                 stopLock.lock()
                 let shouldStop = stopRequested
                 stopLock.unlock()

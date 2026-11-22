@@ -179,6 +179,18 @@ struct InterpreterTests {
         precondition(resumedExit == .instructionLimit)
         precondition(budget.instructionCount == 2)
 
+        // A stop requested from another thread must interrupt a continuously
+        // executing guest loop without waiting for the full instruction budget.
+        let concurrentStopMemory = GuestMemory(size: 16)
+        precondition(concurrentStopMemory.write(Data([0xEB, 0xFE]), offset: 0))
+        let concurrentStop = X86_64Interpreter(memory: concurrentStopMemory)
+        try concurrentStop.reset(entryPoint: 0)
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + .milliseconds(1)) {
+            concurrentStop.requestStop()
+        }
+        let concurrentStopExit = try concurrentStop.run(maxInstructions: UInt64.max)
+        precondition(concurrentStopExit == .interrupted)
+
         let faultMemory = GuestMemory(size: 2)
         precondition(faultMemory.write(Data([0xB8, 0x01]), offset: 0))
         let fault = X86_64Interpreter(memory: faultMemory)
