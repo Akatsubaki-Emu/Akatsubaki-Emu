@@ -9,6 +9,7 @@ bool iSteamJITHasGetTaskAllow(void);
 int iSteamJITGetProtocolMode(void);
 bool iSteamJITIsSupported(void);
 bool iSteamJITIsReady(void);
+/* Compatibility no-op: do not detach while TXM executable mappings may run. */
 void iSteamJITDetach(void);
 void *iSteamJITPrepareRegion(void *address, size_t length);
 #endif
