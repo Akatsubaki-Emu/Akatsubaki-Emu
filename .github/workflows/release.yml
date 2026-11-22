@@ -48,7 +48,7 @@ jobs:
   build:
     needs: qemu-runtime
     name: Build ${{ matrix.platform }} (${{ matrix.channel }})
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -61,6 +61,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Select and verify Xcode 26.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP="/Applications/Xcode_26.2.app"
+          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+          XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
+          if [ "$XCODE_VERSION" != "26.2" ]; then
+            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+            exit 1
+          fi
 
       - name: Download required iOS QEMU runtime artifact from this run
         if: matrix.platform == 'iOS'
@@ -183,7 +196,7 @@ jobs:
   release:
     name: Publish combined ${{ matrix.channel }} release
     needs: build
-    runs-on: macos-15
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -221,7 +234,7 @@ jobs:
             test -s "build/$asset.ipa"
             test -s "build/$asset.ipa.sha256"
             unzip -t "build/$asset.ipa" >/dev/null
-            shasum -a 256 -c "build/$asset.ipa.sha256"
+            sha256sum -c "build/$asset.ipa.sha256"
           done
 
       - name: Set release metadata

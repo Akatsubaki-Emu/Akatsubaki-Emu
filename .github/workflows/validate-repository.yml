@@ -94,6 +94,7 @@ jobs:
 
           release = Path(".github/workflows/release.yml").read_text()
           qemu = Path(".github/workflows/build-qemu-runtime.yml").read_text()
+          platform_validation = Path(".github/workflows/validate-ios-build.yml").read_text()
           # Keep Actions expressions literal while this run block is expanded.
           required_release = [
               "platform: [iOS, tvOS, visionOS]",
@@ -115,6 +116,25 @@ jobs:
               raise SystemExit("QEMU workflow must support both reusable and manual execution.")
           if "runs-on: macos-26" not in qemu:
               raise SystemExit("QEMU/Mesa build requires the macOS 26 runner image.")
+          if "runs-on: macos-15" in release or "runs-on: macos-15" in platform_validation:
+              raise SystemExit("Apple builds must not use an unpinned macOS 15 runner.")
+          if "runs-on: macos-26" not in release or "runs-on: macos-26" not in platform_validation:
+              raise SystemExit("Apple builds must use the macOS 26 runner image.")
+          xcode_contract = [
+              'XCODE_APP="/Applications/Xcode_26.2.app"',
+              'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
+              'if [ "$XCODE_VERSION" != "26.2" ]; then',
+          ]
+          for workflow in (release, platform_validation):
+              for token in xcode_contract:
+                  if token not in workflow:
+                      raise SystemExit("Apple build workflow must pin and verify Xcode 26.2: " + token)
+          release_job = release.split("\n  release:\n", 1)[1]
+          if "runs-on: ubuntu-24.04" not in release_job or "sha256sum -c" not in release_job:
+              raise SystemExit("Release publication should verify assets on Ubuntu, not consume a macOS runner.")
+          push_contract = "push:\n    branches: [main]\n    paths:\n      - .github/workflows/validate-ios-build.yml"
+          if push_contract not in platform_validation:
+              raise SystemExit("Platform validation should not duplicate release builds on every main push.")
           for token in [
               'XCODE_APP="/Applications/Xcode_26.2.app"',
               'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',

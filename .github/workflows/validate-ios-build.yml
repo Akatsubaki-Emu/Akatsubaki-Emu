@@ -2,6 +2,9 @@ name: i-Steam platform compile validation
 
 on:
   push:
+    branches: [main]
+    paths:
+      - .github/workflows/validate-ios-build.yml
   pull_request:
   workflow_dispatch:
 
@@ -14,7 +17,7 @@ concurrency:
 
 jobs:
   build-platform-simulators:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -31,6 +34,18 @@ jobs:
             destination: generic/platform=visionOS Simulator
     steps:
       - uses: actions/checkout@v4
+      - name: Select and verify Xcode 26.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP="/Applications/Xcode_26.2.app"
+          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+          XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
+          if [ "$XCODE_VERSION" != "26.2" ]; then
+            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+            exit 1
+          fi
       - name: Test translation cache integrity and invalidation
         if: matrix.scheme == 'iSteam'
         run: |
