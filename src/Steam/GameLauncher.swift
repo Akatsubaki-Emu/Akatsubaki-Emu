@@ -20,9 +20,10 @@ final class GameLauncher {
         }
 
         if format == .linuxELF {
-            // Only the built-in diagnostic interpreter is integrated today.
-            // Do not advertise FEXCore, Box64, AOT or a complete Linux syscall ABI
-            // until their concrete adapters are packaged and verified.
+            // The diagnostic interpreter is the correctness fallback. A
+            // bounded NOP/MOV AOT fast path is injected for verified StikDebug/TXM
+            // sessions; standard/no-JIT devices remain on the interpreter. This
+            // does not imply FEXCore, Box64 or a complete Linux syscall ABI.
             let availability = RuntimeCapabilityRegistry.current.backendAvailability
             let request = RuntimeExecutionRequest(format: .linuxX64ELF)
             let plan = RuntimeBackendRouter.plan(for: request, availability: availability)
