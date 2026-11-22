@@ -1,0 +1,387 @@
+name: i-Steam Build & Release
+
+on:
+  # Build the runtime in this workflow before any platform app builds.
+  push:
+    branches: [main]
+    paths-ignore:
+      - .github/workflows/blank.yml
+      - .github/workflows/validate-ios-build.yml
+      - .github/workflows/validate-repository.yml
+      - .gitlab-ci.yml
+      - scripts/tests/**
+      - README.md
+      - CONTRIBUTING.md
+      - INSTALL.md
+      - LICENSE
+      - docs/**
+      - scripts/validate-qemu-source.py
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Choose which release channel to publish (iOS, tvOS and visionOS)
+        type: choice
+        required: true
+        default: Nightly
+        options:
+          - Nightly
+          - Main
+
+permissions:
+  contents: write
+  actions: write
+
+
+jobs:
+  validate-release-channel:
+    name: Validate release channel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main ref for Main channel
+        if: github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && github.ref != 'refs/heads/main'
+        shell: bash
+        run: |
+          echo "The Main release channel can only be dispatched from refs/heads/main (got $GITHUB_REF)." >&2
+          exit 1
+
+  # Skip commits that were already superseded before a runner is allocated
+  # for the expensive QEMU build. This does not serialize current builds.
+  check-push-freshness:
+    name: Check whether this push is still current
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.freshness.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Skip superseded push commits
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 {print $1}')"
+            if [ -z "$latest_main" ]; then
+              echo "Unable to determine the current main commit." >&2
+              exit 1
+            fi
+            if [ "$latest_main" != "$GITHUB_SHA" ]; then
+              echo "Skipping stale build from $GITHUB_SHA; main is now $latest_main."
+              echo "build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
+  # This reusable workflow runs inside this run and uploads the artifact here.
+  # App jobs cannot start until the runtime is successfully compiled and packaged.
+  qemu-runtime:
+    needs: [validate-release-channel, check-push-freshness]
+    if: needs.check-push-freshness.outputs.build == 'true'
+    uses: ./.github/workflows/build-qemu-runtime.yml
+    with:
+      rebuild_dependencies: false
+
+  # QEMU can take hours to compile. Re-check after it finishes so platform
+  # builds are not spent on a commit that became stale while QEMU was building.
+  check-platform-build-freshness:
+    name: Check freshness before platform builds
+    needs: qemu-runtime
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.freshness.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Skip platform builds for superseded pushes
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 {print $1}')"
+            if [ -z "$latest_main" ]; then
+              echo "Unable to determine the current main commit." >&2
+              exit 1
+            fi
+            if [ "$latest_main" != "$GITHUB_SHA" ]; then
+              echo "Skipping platform builds from $GITHUB_SHA; main is now $latest_main."
+              echo "build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [qemu-runtime, check-platform-build-freshness]
+    if: needs.check-platform-build-freshness.outputs.build == 'true'
+    name: Build ${{ matrix.platform }} (${{ matrix.channel }})
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [iOS, tvOS, visionOS]
+        channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
+    env:
+      RELEASE_CHANNEL: ${{ matrix.channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Select and verify Xcode 26.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP="/Applications/Xcode_26.2.app"
+          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+          XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
+          if [ "$XCODE_VERSION" != "26.2" ]; then
+            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+            exit 1
+          fi
+
+      - name: Download required iOS QEMU runtime artifact from this run
+        if: matrix.platform == 'iOS'
+        uses: actions/download-artifact@v8
+        with:
+          name: iSteam-qemu-runtime-ios-arm64
+          path: build/qemu-runtime
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: brew-xcodegen-${{ runner.os }}-v1
+
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+
+      - name: Build and package iOS IPA
+        if: matrix.platform == 'iOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            SCHEME="iSteam"
+            EXPECTED_BUNDLE="com.xthrx.isteam"
+          else
+            SCHEME="iSteamNightly"
+            EXPECTED_BUNDLE="com.xthrx.isteam.nightly"
+          fi
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          xcodebuild -project iSteam.xcodeproj -scheme "$SCHEME" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -archivePath "$PWD/build/iSteam.xcarchive" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 archive
+          APP="build/iSteam.xcarchive/Products/Applications/iSteam.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          RUNTIME_DIR="build/qemu-runtime"
+          test -d "$RUNTIME_DIR/Frameworks" || { echo "Required QEMU Frameworks directory is missing." >&2; exit 1; }
+          test -d "$RUNTIME_DIR/QEMU" || { echo "Required QEMU data directory is missing." >&2; exit 1; }
+          test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt" || { echo "Runtime library manifest is missing." >&2; exit 1; }
+          test -s "$RUNTIME_DIR/exports.txt" || { echo "QEMU export manifest is missing." >&2; exit 1; }
+          RUNTIME_REL="$(head -n 1 "$RUNTIME_DIR/QEMU/runtime-library-path.txt")"
+          case "$RUNTIME_REL" in
+            Frameworks/*) ;;
+            *) echo "Unexpected QEMU runtime path: $RUNTIME_REL" >&2; exit 1 ;;
+          esac
+          test -s "$RUNTIME_DIR/$RUNTIME_REL" || { echo "Manifest points to a missing QEMU library: $RUNTIME_REL" >&2; exit 1; }
+          grep -Eq ' _?qemu_init$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU init export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_main_loop$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU main-loop export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_cleanup$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU cleanup export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_system_shutdown_request$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU graceful-shutdown export is missing." >&2; exit 1; }
+          grep -Eq ' _?isteam_qemu_set_jit_callbacks$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU StikDebug JIT callback export is missing." >&2; exit 1; }
+
+          # The IPA must contain the runtime, not just validate an artifact
+          # that is left behind in the runner workspace.
+          mkdir -p "$APP/Frameworks" "$APP/QEMU"
+          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
+          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
+          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
+          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
+          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
+          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
+
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/iSteam.app
+          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
+          unzip -t build/iSteam-ios.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
+
+      - name: Build and package tvOS IPA
+        if: matrix.platform == 'tvOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamTV -configuration Release -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath "$PWD/build/tvDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/tvDerivedData/Build/Products/Release-appletvos/iSteamTV.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/tvPayload/Payload
+          cp -R "$APP" build/tvPayload/Payload/iSteamTV.app
+          ditto -c -k --sequesterRsrc --keepParent build/tvPayload/Payload build/iSteam-tvOS.ipa
+          unzip -t build/iSteam-tvOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-tvOS.ipa iSteamTV.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-tvOS.ipa > build/iSteam-tvOS.ipa.sha256
+
+      - name: Build and package visionOS app
+        if: matrix.platform == 'visionOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/visionDerivedData/Build/Products/Release-xros/iSteamVision.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/visionPayload/Payload
+          cp -R "$APP" build/visionPayload/Payload/iSteamVision.app
+          ditto -c -k --sequesterRsrc --keepParent build/visionPayload/Payload build/iSteam-visionOS.ipa
+          unzip -t build/iSteam-visionOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-visionOS.ipa > build/iSteam-visionOS.ipa.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: iSteam-${{ matrix.platform }}-${{ matrix.channel }}
+          path: |
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish combined ${{ matrix.channel }} release
+    needs: build
+    concurrency:
+      # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
+      group: isteam-release-publish-${{ matrix.channel }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
+    env:
+      RELEASE_CHANNEL: ${{ matrix.channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check that this run still targets the latest main commit
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 {print $1}')"
+            if [ -z "$latest_main" ]; then
+              echo "Unable to determine the current main commit." >&2
+              exit 1
+            fi
+            if [ "$latest_main" != "$GITHUB_SHA" ]; then
+              echo "Skipping stale release from $GITHUB_SHA; main is now $latest_main."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Download iOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: iSteam-iOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download tvOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: iSteam-tvOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download visionOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: iSteam-visionOS-${{ matrix.channel }}
+          path: build
+
+      - name: Verify combined release assets
+        if: steps.freshness.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          for asset in iSteam-ios iSteam-tvOS iSteam-visionOS; do
+            test -s "build/$asset.ipa"
+            test -s "build/$asset.ipa.sha256"
+            unzip -t "build/$asset.ipa" >/dev/null
+            sha256sum -c "build/$asset.ipa.sha256"
+          done
+
+      - name: Set release metadata
+        if: steps.freshness.outputs.publish == 'true'
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            echo "title=$VERSION Main (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=$VERSION Nightly (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish combined release
+        if: steps.freshness.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.meta.outputs.title }}
+          prerelease: ${{ env.RELEASE_CHANNEL == 'nightly' }}
+          make_latest: ${{ env.RELEASE_CHANNEL == 'main' && 'true' || 'false' }}
+          overwrite_files: true
+          files: |
+            build/iSteam-ios.ipa
+            build/iSteam-ios.ipa.sha256
+            build/iSteam-tvOS.ipa
+            build/iSteam-tvOS.ipa.sha256
+            build/iSteam-visionOS.ipa
+            build/iSteam-visionOS.ipa.sha256
+          body: |
+            i-Steam ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
+
+            Includes unsigned prototype builds:
+            - **iOS:** `iSteam-ios.ipa`
+            - **tvOS:** `iSteam-tvOS.ipa`
+            - **visionOS:** `iSteam-visionOS.ipa`
+
+            These are unsigned prototype builds. Sign them with a compatible signer before installing.
+
+      # Official AltStore/PAL feeds are refreshed from published GitHub releases
+      # by the website repository's update-xthrx-alt-source.yml workflow.

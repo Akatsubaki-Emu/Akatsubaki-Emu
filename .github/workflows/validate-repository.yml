@@ -1,0 +1,274 @@
+name: i-Steam repository and CI configuration validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/**
+      - .gitlab-ci.yml
+      - .gitmodules
+      - project.yml
+      - src/**
+      - iSteam/**
+      - scripts/**
+  pull_request:
+    paths:
+      - .github/workflows/**
+      - .gitlab-ci.yml
+      - .gitmodules
+      - project.yml
+      - src/**
+      - iSteam/**
+      - scripts/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-configuration:
+    name: Validate workflows, project configuration, and packaging scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install YAML validator
+        run: python -m pip install --disable-pip-version-check pyyaml
+
+      - name: Parse YAML with duplicate-key rejection
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          import yaml
+
+          class UniqueKeyLoader(yaml.SafeLoader):
+              def construct_mapping(self, node, deep=False):
+                  self.flatten_mapping(node)
+                  mapping = {}
+                  for key_node, value_node in node.value:
+                      key = self.construct_object(key_node, deep=deep)
+                      if key in mapping:
+                          raise yaml.constructor.ConstructorError(
+                              "while constructing a mapping",
+                              node.start_mark,
+                              f"duplicate key {key!r}",
+                              key_node.start_mark,
+                          )
+                      mapping[key] = self.construct_object(value_node, deep=deep)
+                  return mapping
+
+          paths = sorted(Path(".github/workflows").glob("*.yml"))
+          paths += sorted(Path(".github/workflows").glob("*.yaml"))
+          paths += [Path("project.yml"), Path(".gitlab-ci.yml")]
+          if not paths:
+              raise SystemExit("No workflow or project configuration files were found.")
+          for path in paths:
+              try:
+                  with path.open() as stream:
+                      list(yaml.load_all(stream, Loader=UniqueKeyLoader))
+              except yaml.YAMLError as error:
+                  print(f"{path}: YAML validation failed: {error}", file=sys.stderr)
+                  raise SystemExit(1)
+              print(f"Validated {path}")
+          PY
+
+      - name: Check packaging script shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/package-utm-qemu-runtime.sh
+          bash -n scripts/validate-qemu-runtime.sh
+          bash -n scripts/validate-apple-package.sh
+
+      - name: Validate GitHub Actions and GitLab CI while preserving sync directions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .gitlab-ci.yml || { echo "GitLab runtime-test configuration is missing." >&2; exit 1; }
+          grep -Fq "swift-runtime-tests:" .gitlab-ci.yml
+          grep -Fq "python-source-contracts:" .gitlab-ci.yml
+          grep -Fq "test_static_elf_execution.swift" .gitlab-ci.yml
+          test -f .github/workflows/blank.yml || { echo "The owner-required GitHub-to-GitLab sync workflow is missing." >&2; exit 1; }
+          grep -Fq "GitHub to GitLab Push Sync" .github/workflows/blank.yml
+          grep -Fq "GITLAB_TOKEN" .github/workflows/blank.yml
+          grep -Fq "git push gitlab HEAD:refs/heads/main" .github/workflows/blank.yml
+          grep -Fq "Refusing to auto-merge because conflict resolution could discard work on either remote." .github/workflows/blank.yml
+          if grep -Fq "git merge --no-edit -X ours gitlab/main" .github/workflows/blank.yml; then
+            echo "Divergent mirror histories must never be auto-merged with a preferred side." >&2
+            exit 1
+          fi
+          test ! -e .github/workflows/mirror-from-gitlab.yml || { echo "Scheduled GitLab polling workflow is redundant with GitLab's configured push mirror." >&2; exit 1; }
+
+      - name: Enforce Node.js 24-compatible action versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          expected = {
+              "actions/checkout": "v7",
+              "actions/setup-python": "v7",
+              "actions/cache": "v6",
+              "actions/upload-artifact": "v7",
+              "actions/download-artifact": "v8",
+              "softprops/action-gh-release": "v3",
+          }
+          failures = []
+          workflow_paths = sorted(Path(".github/workflows").glob("*.yml"))
+          workflow_paths += sorted(Path(".github/workflows").glob("*.yaml"))
+          for path in workflow_paths:
+              if path.name == "blank.yml":
+                  continue
+              for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                  stripped = line.strip()
+                  if not stripped.startswith("uses: "):
+                      continue
+                  reference = stripped[len("uses: "):].strip()
+                  if reference.startswith("./"):
+                      continue
+                  action, separator, version = reference.partition("@")
+                  required = expected.get(action)
+                  if required and (not separator or version != required):
+                      failures.append(f"{path}:{line_number}: {action} must use {required}, found {version or 'no version'}")
+          if failures:
+              print("\n".join(failures), file=sys.stderr)
+              raise SystemExit(1)
+          print("All non-sync workflows use the approved Node.js 24-compatible action majors.")
+          PY
+
+      - name: Validate release and QEMU workflow contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+
+          release = Path(".github/workflows/release.yml").read_text()
+          qemu = Path(".github/workflows/build-qemu-runtime.yml").read_text()
+          platform_validation = Path(".github/workflows/validate-ios-build.yml").read_text()
+          # Keep Actions expressions literal while this run block is expanded.
+          required_release = [
+              "platform: [iOS, tvOS, visionOS]",
+              "uses: ./.github/workflows/build-qemu-runtime.yml",
+              "needs: qemu-runtime",
+              "actions/download-artifact@",
+              "name: iSteam-qemu-runtime-ios-arm64",
+              "if-no-files-found: error",
+              "validate-release-channel:",
+              "target_commitish: " + "$" + "{{ github.sha }}",
+              "EXPECTED_BUNDLE=\"com.xthrx.isteam.visionos.nightly\"",
+              "github.ref != 'refs/heads/main'",
+
+          ]
+          qemu_job = release.split("\n  qemu-runtime:\n", 1)[1].split("\n  build:\n", 1)[0]
+          if "validate-release-channel" not in qemu_job:
+              raise SystemExit("QEMU runtime must depend on release-channel validation.")
+          missing = [item for item in required_release if item not in release]
+          if missing:
+              raise SystemExit("Missing release requirements: " + ", ".join(missing))
+          paths_ignore = release.split("paths-ignore:", 1)[1].split("schedule:", 1)[0]
+          if "- .github/workflows/blank.yml" not in paths_ignore:
+              raise SystemExit("Mirror-only workflow edits must not trigger app release builds.")
+          for obsolete in ("PAGES_TOKEN", "I-Steam/I-steam.github.io", "i-steam.github.io"):
+              if obsolete in release:
+                  raise SystemExit("Legacy website publishing must be handled by the website repository updater: " + obsolete)
+          if "if-no-files-found: ignore" in release:
+              raise SystemExit("Release artifacts must not silently ignore missing files.")
+          if "workflow_call:" not in qemu or "workflow_dispatch:" not in qemu:
+              raise SystemExit("QEMU workflow must support both reusable and manual execution.")
+          if "runs-on: xcode-27" not in qemu:
+              raise SystemExit("QEMU/Mesa build requires the Xcode 27 runner image.")
+          if "runs-on: macos-15" in release or "runs-on: macos-15" in platform_validation:
+              raise SystemExit("Apple builds must not use an unpinned macOS 15 runner.")
+          if "runs-on: macos-26" not in release or "runs-on: macos-26" not in platform_validation:
+              raise SystemExit("Apple builds must use the macOS 26 runner image.")
+          xcode_contract = [
+              'XCODE_APP="/Applications/Xcode_26.2.app"',
+              'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
+              'if [ "$XCODE_VERSION" != "26.2" ]; then',
+          ]
+          for workflow in (release, platform_validation):
+              for token in xcode_contract:
+                  if token not in workflow:
+                      raise SystemExit("Apple build workflow must pin and verify Xcode 26.2: " + token)
+          release_job = release.split("\n  release:\n", 1)[1]
+          if "runs-on: ubuntu-24.04" not in release_job or "sha256sum -c" not in release_job:
+              raise SystemExit("Release publication should verify assets on Ubuntu, not consume a macOS runner.")
+          push_contract = "push:\n    branches: [main]\n    paths:\n      - .github/workflows/validate-ios-build.yml"
+          if push_contract not in platform_validation:
+              raise SystemExit("Platform validation should not duplicate release builds on every main push.")
+          for token in [
+              'XCODE_APP="/Applications/Xcode_27.1.app"',
+              'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
+              'if [ "$XCODE_VERSION" != "27.1" ]; then',
+          ]:
+              if token not in qemu:
+                  raise SystemExit("QEMU build must pin and verify Xcode 27.1: " + token)
+          if "spirv-tools" not in qemu or "spirv-llvm-translator" not in qemu:
+              raise SystemExit("QEMU Mesa dependency build must install SPIRV-Tools and its LLVM translator.")
+          if "utm-ios-arm64-deps-v14-" not in qemu:
+              raise SystemExit("QEMU dependency cache key must be versioned.")
+          if "steps.utm-source.outputs.commit" not in qemu:
+              raise SystemExit("QEMU cache key must include the checked-out UTM revision.")
+          for token in [
+              "scripts/patch_utm_qemu_ios.py",
+              "scripts/patch_qemu_meson_ios.py",
+              "scripts/verify_qemu_meson_link.py",
+              "ISTEAM_QEMU_LINK_VERIFIER",
+              "steps.xcode.outputs.version",
+              "utm-ios-arm64-deps-v14-",
+          ]:
+              if token not in qemu:
+                  raise SystemExit("QEMU build patch contract is missing: " + token)
+          if "--extra-ldflags=-Wl,-force_load" in qemu:
+              raise SystemExit("Do not rely on QEMU configure LDFLAGS; verify the Meson target LINK_ARGS instead.")
+          if "qemu-runtime:" not in release or "needs: qemu-runtime" not in release:
+              raise SystemExit("App builds must wait for the same-run QEMU runtime artifact.")
+          if "git push" in release or "git push" in qemu:
+              raise SystemExit("Build workflows must not perform repository mirroring pushes.")
+          print("Release/QEMU reusable workflow and same-run artifact contracts passed.")
+          PY
+
+      - name: Validate QEMU upstream source patch assumptions
+        run: python3 scripts/validate-qemu-source.py
+
+      - name: Test idempotent QEMU build patchers and link guard
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+      - name: Compile and run native guest-memory regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ -std=c++17 -Wall -Wextra -Werror -I iSteam \
+            iSteam/NativeGuestMemory.cpp scripts/tests/test_native_guest_memory.cpp \
+            -o "$RUNNER_TEMP/test-native-guest-memory"
+          "$RUNNER_TEMP/test-native-guest-memory"
+
+      - name: Test native QEMU bridge concurrency and lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cc -std=c11 -Wall -Wextra -Werror -pthread -fPIC -shared \
+            scripts/tests/fake_qemu_runtime.c -o "$RUNNER_TEMP/libfakeqemu.so"
+          cc -std=c11 -Wall -Wextra -Werror -pthread -I iSteam \
+            iSteam/QEMUNativeBridge.c scripts/tests/test_qemu_native_bridge.c -ldl \
+            -o "$RUNNER_TEMP/test-qemu-native-bridge"
+          "$RUNNER_TEMP/test-qemu-native-bridge" "$RUNNER_TEMP/libfakeqemu.so"
+

@@ -1,0 +1,119 @@
+name: iSteam
+options:
+  bundleIdPrefix: com.Xthrx
+  xcodeVersion: "26.0"
+  deploymentTarget:
+    iOS: "16.0"
+    tvOS: "17.0"
+    visionOS: "1.0"
+packages:
+  StosSign:
+    url: https://github.com/stossy11/StosSign
+    branch: main
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ARCHS: "arm64"
+    EXCLUDED_ARCHS[sdk=iphonesimulator*]: "arm64e"
+targets:
+  iSteam:
+    type: application
+    platform: iOS
+    sources:
+      - path: iSteam
+        excludes:
+          - Info.plist
+          - Info-tvOS.plist
+          - AppDelegate-tvOS.swift
+          - LaunchSetupViewController-tvOS.swift
+          - SettingsViewController-tvOS.swift
+      - path: src
+        excludes:
+          - Display/VMDisplayViewController-tvOS.swift
+    dependencies:
+      - package: StosSign
+        product: StosSign_API
+      - package: StosSign
+        product: StosSign_Auth
+      - package: StosSign
+        product: StosSign_Common
+      - sdk: IOKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam
+        PRODUCT_NAME: iSteam
+        INFOPLIST_KEY_CFBundleDisplayName: Akatsubaki Emu
+        INFOPLIST_FILE: iSteam/Info.plist
+        CODE_SIGN_ENTITLEMENTS: iSteam/iSteam.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: iSteam/iSteam-Bridging-Header.h
+        OTHER_LDFLAGS: ["$(inherited)", "-ObjC", "-framework", "Metal", "-framework", "MetalKit", "-framework", "Security", "-Wl,-exported_symbol,_iSteamJITIsSupported", "-Wl,-exported_symbol,_iSteamJITGetProtocolMode", "-Wl,-exported_symbol,_iSteamJITIsReady", "-Wl,-exported_symbol,_iSteamJITPrepareRegion", "-Wl,-exported_symbol,_iSteamJITDetach"]
+  iSteamNightly:
+    type: application
+    platform: iOS
+    sources:
+      - path: iSteam
+        excludes:
+          - Info.plist
+          - Info-tvOS.plist
+          - AppDelegate-tvOS.swift
+          - LaunchSetupViewController-tvOS.swift
+          - SettingsViewController-tvOS.swift
+      - path: src
+        excludes:
+          - Display/VMDisplayViewController-tvOS.swift
+    dependencies:
+      - package: StosSign
+        product: StosSign_API
+      - package: StosSign
+        product: StosSign_Auth
+      - package: StosSign
+        product: StosSign_Common
+      - sdk: IOKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.nightly
+        PRODUCT_NAME: iSteam
+        INFOPLIST_KEY_CFBundleDisplayName: Akatsubaki Emu Nightly
+        INFOPLIST_FILE: iSteam/Info.plist
+        CODE_SIGN_ENTITLEMENTS: iSteam/iSteam.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: iSteam/iSteam-Bridging-Header.h
+        OTHER_LDFLAGS: ["$(inherited)", "-ObjC", "-framework", "Metal", "-framework", "MetalKit", "-framework", "Security", "-Wl,-exported_symbol,_iSteamJITIsSupported", "-Wl,-exported_symbol,_iSteamJITGetProtocolMode", "-Wl,-exported_symbol,_iSteamJITIsReady", "-Wl,-exported_symbol,_iSteamJITPrepareRegion", "-Wl,-exported_symbol,_iSteamJITDetach"]
+  iSteamTV:
+    type: application
+    platform: tvOS
+    sources:
+      - path: tvOSApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.tvos
+        PRODUCT_NAME: iSteamTV
+        INFOPLIST_KEY_CFBundleDisplayName: Akatsubaki Emu tvOS
+        INFOPLIST_FILE: iSteam/Info-tvOS.plist
+
+  iSteamVision:
+    type: application
+    platform: visionOS
+    sources:
+      - path: iSteam
+        excludes:
+          - Info.plist
+          - Info-tvOS.plist
+          - AppDelegate-tvOS.swift
+          - LaunchSetupViewController-tvOS.swift
+          - SettingsViewController-tvOS.swift
+          - EntitlementSettingsView.swift
+          - ExperimentsView.swift
+          - EntitlementAnisetteKeychain.swift
+          - AnisetteDataHelper.swift
+      - path: src
+        excludes:
+          - Display/VMDisplayViewController-tvOS.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.visionos
+        PRODUCT_NAME: iSteamVision
+        INFOPLIST_KEY_CFBundleDisplayName: Akatsubaki Emu visionOS
+        INFOPLIST_FILE: iSteam/Info.plist
+        CODE_SIGN_ENTITLEMENTS: iSteam/iSteam.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: iSteam/iSteam-Bridging-Header.h
+        OTHER_LDFLAGS: ["$(inherited)", "-ObjC", "-framework", "Metal", "-framework", "MetalKit"]
