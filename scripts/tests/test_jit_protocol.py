@@ -57,7 +57,7 @@ class JITProtocolSourceTests(unittest.TestCase):
             start = project.index("PRODUCT_BUNDLE_IDENTIFIER: " + bundle)
             end = project.index("  iSteamTV:", start)
             block = project[start:end]
-            for symbol in ("iSteamJITIsReady", "iSteamJITPrepareRegion", "iSteamJITDetach"):
+            for symbol in ("iSteamJITIsSupported", "iSteamJITIsReady", "iSteamJITPrepareRegion", "iSteamJITDetach"):
                 self.assertIn("-Wl,-exported_symbol,_" + symbol, block)
 
 

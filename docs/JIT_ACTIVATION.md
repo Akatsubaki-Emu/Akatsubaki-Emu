@@ -19,11 +19,12 @@
 - Install [StikDebug](https://github.com/StikDebug/StikDebug) and [LocalDevVPN](https://github.com/jkcoxson/LocalDevVPN) separately.
 - Open LocalDevVPN once and approve its VPN configuration.
 - Import the device pairing file into StikDebug.
+- When StikDebug shows its external JIT request confirmation, approve it; cancelling the request leaves QEMU stopped.
 - Enable iOS Developer Mode.
 - Sign Akatsubaki with a profile that preserves `get-task-allow`.
 - When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
 
-The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user.
+The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM hardware classification independently follows the public model/version rules in [StikDebug's ProcessInfo+TXM implementation](https://github.com/StikDebug/StikDebug/blob/main/StikDebug/Support/ProcessInfo+TXM.swift).
 
 ## Failure handling and security
 
