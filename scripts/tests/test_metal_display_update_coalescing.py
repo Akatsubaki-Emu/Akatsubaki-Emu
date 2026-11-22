@@ -11,19 +11,22 @@ class MetalDisplayUpdateCoalescingTests(unittest.TestCase):
         start = source.split("func start()", 1)[1].split("func stop()", 1)[0]
         stop = source.split("func stop()", 1)[1].split("private func scheduleDisplayUpdate()", 1)[0]
         submit = source.split("func submit(frame:", 1)[1].split("private func release(", 1)[0]
-        scheduler = source.split("private func scheduleDisplayUpdate()", 1)[1].split("func submit(frame:", 1)[0]
+        scheduler = source.split("private func scheduleDisplayUpdate()", 1)[1].split("private func enqueueDisplayUpdate()", 1)[0]
+        enqueue = source.split("private func enqueueDisplayUpdate()", 1)[1].split("func submit(frame:", 1)[0]
 
         self.assertIn("scheduleDisplayUpdate()", start)
         self.assertIn("scheduleDisplayUpdate()", stop)
-        self.assertIn("scheduleDisplayUpdate()", submit)
-        self.assertNotIn("DispatchQueue.main.async", submit)
+        self.assertNotIn("scheduleDisplayUpdate()", submit)
+        self.assertIn("let shouldSchedule = publish && !displayUpdateScheduled", submit)
+        self.assertIn("if shouldSchedule { displayUpdateScheduled = true }", submit)
+        self.assertIn("if shouldSchedule { enqueueDisplayUpdate() }", submit)
+        self.assertIn("self.displayUpdateScheduled = false", enqueue)
+        self.assertIn("let width = self.drawableWidth", enqueue)
+        self.assertIn("let height = self.drawableHeight", enqueue)
+        self.assertIn("self.view.setNeedsDisplay()", enqueue)
         self.assertIn("let shouldSchedule = !displayUpdateScheduled", scheduler)
-        self.assertIn("if shouldSchedule { displayUpdateScheduled = true }", scheduler)
         self.assertIn("guard shouldSchedule else { return }", scheduler)
-        self.assertIn("self.displayUpdateScheduled = false", scheduler)
-        self.assertIn("let width = self.drawableWidth", scheduler)
-        self.assertIn("let height = self.drawableHeight", scheduler)
-        self.assertIn("self.view.setNeedsDisplay()", scheduler)
+        self.assertIn("enqueueDisplayUpdate()", scheduler)
 
 
 if __name__ == "__main__":

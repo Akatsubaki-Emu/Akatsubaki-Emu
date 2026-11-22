@@ -81,7 +81,10 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         if shouldSchedule { displayUpdateScheduled = true }
         textureLock.unlock()
         guard shouldSchedule else { return }
+        enqueueDisplayUpdate()
+    }
 
+    private func enqueueDisplayUpdate() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.textureLock.lock()
@@ -156,10 +159,12 @@ final class MetalGPUBackend: NSObject, GPUBackend {
             drawableWidth = frameWidth
             drawableHeight = frameHeight
         }
+        let shouldSchedule = publish && !displayUpdateScheduled
+        if shouldSchedule { displayUpdateScheduled = true }
         textureLock.unlock()
 
         guard publish else { return }
-        scheduleDisplayUpdate()
+        if shouldSchedule { enqueueDisplayUpdate() }
     }
 
     private func release(_ slot: FramebufferSlot) {
