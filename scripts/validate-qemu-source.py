@@ -997,7 +997,6 @@ required = {
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
-        "scripts/check-build-freshness.sh",
         'python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"',
     ],
     "scripts/patch_qemu_meson_ios.py": [
@@ -1112,6 +1111,7 @@ for step in (
     "Select Xcode",
     "Verify Objective-C class-selector stub compatibility",
     "Verify iOS vm_map compatibility",
+    "scripts/check-build-freshness.sh",
     "scripts/check-build-freshness.sh",
     "Install UTM build dependencies",
     "Cache UTM dependency build and sysroot",
