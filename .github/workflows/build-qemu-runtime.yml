@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   build-utm-runtime:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 350
     steps:
       - name: Checkout i-Steam
@@ -47,15 +47,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          XCODE_APP="/Applications/Xcode_26.2.app"
+          XCODE_APP="/Applications/Xcode_27.2.app"
           if [ ! -d "$XCODE_APP" ]; then
-            echo "Xcode 26.2 is required for the QEMU/Mesa Metal 4 headers." >&2
+            echo "Xcode 27.2 is required for the QEMU/Mesa Metal 4 headers and Objective-C class-selector stub control." >&2
             exit 1
           fi
           sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
           XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
-          if [ "$XCODE_VERSION" != "26.2" ]; then
-            echo "Expected Xcode 26.2, selected $XCODE_VERSION." >&2
+          if [ "$XCODE_VERSION" != "27.2" ]; then
+            echo "Expected Xcode 27.2, selected $XCODE_VERSION." >&2
             exit 1
           fi
           xcode-select -p
@@ -70,6 +70,8 @@ jobs:
           set -euo pipefail
           CLANG="$(xcrun --sdk iphoneos --find clang)"
           SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
+          echo "Objective-C compiler: $CLANG"
+          "$CLANG" --version
           PROBE_SOURCE="$RUNNER_TEMP/objc-class-selector-stub-probe.m"
           PROBE_OBJECT="$RUNNER_TEMP/objc-class-selector-stub-probe.o"
           cat > "$PROBE_SOURCE" <<'EOF'
@@ -80,7 +82,8 @@ jobs:
           EOF
           "$CLANG" -target arm64-apple-ios15.0 -isysroot "$SDKROOT" \
             -fno-objc-msgsend-class-selector-stubs -c "$PROBE_SOURCE" -o "$PROBE_OBJECT"
-          if xcrun --sdk iphoneos nm -u "$PROBE_OBJECT" | grep -Fq '_objc_msgSendClass'; then
+          SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"
+          if grep -Fq '_objc_msgSendClass' <<< "$SYMBOLS"; then
             echo "Xcode still emitted an Objective-C class-selector stub that the selected linker cannot resolve." >&2
             exit 1
           fi

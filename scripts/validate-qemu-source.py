@@ -916,8 +916,10 @@ required = {
         "__attribute__((visibility(\"default\")))",
         "isteam_jit_prepare_callback",
         "#include <mach/mach_vm.h>",
-        'dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")',
-        "jit_protocol_supported()",
+        "iSteamJITGetProtocolMode",
+        'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
+        "jit_protocol_mode < 0",
+        "jit_protocol_mode > 0",
         "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
     ],
     "iSteam/JIT26Protocol.c": [
@@ -942,6 +944,7 @@ required = {
     ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
+        'echo "objc_args = [${OBJCFLAGS:+$(meson_quote $OBJCFLAGS)}]" >> $cross',
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
         'python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"',
@@ -1032,7 +1035,10 @@ for step in (
     if qemu_workflow.count(marker) != 1:
         print(f"QEMU workflow: expected exactly one {marker!r} step", file=sys.stderr)
         failed = True
-if "grep -Fq '_objc_msgSendClass'; then" not in qemu_workflow:
+if 'SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"' not in qemu_workflow:
+    print("QEMU workflow: Objective-C symbol inspection command is missing", file=sys.stderr)
+    failed = True
+if "if grep -Fq '_objc_msgSendClass' <<< \"$SYMBOLS\"; then" not in qemu_workflow:
     print("QEMU workflow: Objective-C class-selector stub probe is malformed", file=sys.stderr)
     failed = True
 if "\n; then\n" in qemu_workflow:
@@ -1044,16 +1050,17 @@ for token in [
     "scripts/verify_qemu_meson_link.py",
     "Verify Objective-C class-selector stub compatibility",
     "-fno-objc-msgsend-class-selector-stubs",
+    "SYMBOLS=",
     "export OBJCFLAGS=",
     "grep -Fq",
     "utm-ios-arm64-deps-v13-",
     "spirv-tools",
     "spirv-llvm-translator",
     "steps.xcode.outputs.version",
-    "runs-on: macos-26",
-    'XCODE_APP="/Applications/Xcode_26.2.app"',
+    "runs-on: xcode-27",
+    'XCODE_APP="/Applications/Xcode_27.2.app"',
     'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-    'if [ "$XCODE_VERSION" != "26.2" ]; then',
+    'if [ "$XCODE_VERSION" != "27.2" ]; then',
 ]:
     if token not in qemu_workflow:
         print(f"QEMU workflow: missing build-integrity step {token!r}", file=sys.stderr)

@@ -110,6 +110,7 @@ def patch_source(source: str) -> str:
             "#include <mach/mach_vm.h>",
             "iSteamJITGetProtocolMode",
             'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
+            "jit_protocol_mode < 0",
             "jit_protocol_mode > 0",
             "__builtin_available(iOS 26.0, *)",
             "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",

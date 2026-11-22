@@ -83,6 +83,7 @@ class QEMUBuildPatchTests(unittest.TestCase):
         source = '''#!/bin/sh
 generate_meson_cross() {
     echo "has_function_dup3 = false" >> $cross
+    echo "objc_args = [${OBJCFLAGS:+$(meson_quote $OBJCFLAGS)}]" >> $cross
 }
 QEMU_PLATFORM_BUILD_FLAGS="--enable-shared-lib --disable-cocoa --disable-sdl --disable-coreaudio --disable-slirp-smbd --enable-ucontext --with-coroutine=libucontext $HVF_FLAGS $TCI_BUILD_FLAGS"
 download () {
@@ -106,6 +107,10 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn('python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"', twice)
         self.assertIn('python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"', twice)
         self.assertLess(twice.index("ISTEAM_QEMU_JIT_PATCHER"), twice.index("ISTEAM_QEMU_MESON_PATCHER"))
+        self.assertIn('echo "objc_args = [${OBJCFLAGS:+$(meson_quote $OBJCFLAGS)}]" >> $cross', twice)
+        without_objc_args = source.replace('    echo "objc_args = [${OBJCFLAGS:+$(meson_quote $OBJCFLAGS)}]" >> $cross\\n', "")
+        with self.assertRaisesRegex(SystemExit, "Objective-C flags are not propagated to Meson"):
+            patch_utm_qemu_ios.patch_script(without_objc_args)
         self.assertIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"', twice)
         self.assertNotIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$DIR/build/build.ninja"', twice)
         self.assertIn("http://ftp.gnu.org/gnu/libiconv/*", twice)
@@ -194,6 +199,18 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
         with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
             patch_qemu_stikjit_ios.patch_source("#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n#endif\n")
+        incomplete = once.replace("jit_protocol_mode < 0", "jit_protocol_mode < 1", 1)
+        with self.assertRaisesRegex(SystemExit, "Existing StikDebug QEMU patch is incomplete"):
+            patch_qemu_stikjit_ios.patch_source(incomplete)
+
+    def test_qemu_source_validator_tracks_txm_protocol_mode(self):
+        validator = Path(__file__).resolve().parents[2] / "scripts/validate-qemu-source.py"
+        source = validator.read_text(encoding="utf-8")
+        self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")', source)
+        self.assertIn('"jit_protocol_mode < 0"', source)
+        self.assertIn('"jit_protocol_mode > 0"', source)
+        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")', source)
+        self.assertNotIn('"jit_protocol_supported()"', source)
 
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):
         root = Path(__file__).resolve().parents[2]
@@ -217,14 +234,21 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("spirv-tools", source)
         self.assertIn("spirv-llvm-translator", source)
 
-    def test_qemu_workflow_disables_unsupported_objc_class_selector_stubs(self):
+    def test_qemu_workflow_pins_xcode27_for_objc_class_selector_stubs(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
         source = workflow.read_text(encoding="utf-8")
+        self.assertIn("runs-on: xcode-27", source)
+        self.assertIn('XCODE_APP="/Applications/Xcode_27.2.app"', source)
+        self.assertIn('if [ "$XCODE_VERSION" != "27.2" ]; then', source)
         self.assertIn("Verify Objective-C class-selector stub compatibility", source)
         self.assertIn("-fno-objc-msgsend-class-selector-stubs", source)
         self.assertIn("export OBJCFLAGS=", source)
         self.assertIn("grep -Fq", source)
         self.assertNotIn("\n; then\n", source)
+        self.assertIn('SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"', source)
+        self.assertIn("if grep -Fq '_objc_msgSendClass' <<< \"$SYMBOLS\"; then", source)
+        self.assertIn('echo "Objective-C compiler: $CLANG"', source)
+
 
     def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
