@@ -13,6 +13,11 @@ def replace_once(source: str, old: str, new: str, label: str) -> str:
 
 
 def patch_script(source: str) -> str:
+    # Keep the reusable workflow's freshness guard available before patching/building UTM.
+    freshness_script = Path(__file__).with_name("check-build-freshness.sh")
+    if not freshness_script.is_file():
+        raise SystemExit("Required build freshness guard is missing: scripts/check-build-freshness.sh")
+
     download_hook = "download () {\n    URL=$1"
     download_patch = (
         "download () {\n"
