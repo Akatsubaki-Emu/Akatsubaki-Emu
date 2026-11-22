@@ -6,6 +6,7 @@ import Foundation
 enum KenranButoAOTExitReason: UInt32 { case none=0, unsupportedInstruction=1, truncatedInstruction=2, inputLimit=3, instructionLimit=4, outputLimit=5, endOfInput=6, memoryReadFault=7, memoryWriteFault=8, invalidState=9 }
 struct KenranButoAOTExecutionResult { let guestBytesConsumed:Int; let instructionCount:Int; let exitReason:KenranButoAOTExitReason; let exitRip:UInt64; let exitAddress:UInt64 }
 protocol KenranButoAOTExecuting: AnyObject {
+ var isAvailable: Bool { get }
  func execute(guestCode:Data,registers:inout [UInt64],rip:UInt64,rflags:UInt64,fsBase:UInt64,gsBase:UInt64,memory:GuestMemory,maximumInstructions:Int)->KenranButoAOTExecutionResult?
  func invalidateAll()
 }
@@ -92,6 +93,8 @@ final class X86_64Interpreter: GuestCPUBackend {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         if halted { return .halted }
         var executed: UInt64 = 0
+        // Readiness is stable for one bounded run batch; do not query the JIT handshake per instruction.
+        let aotIsAvailable = aotExecutor?.isAvailable == true
         while executed < maxInstructions {
             if executed & 0xff == 0 {
                 stopLock.lock()
@@ -103,7 +106,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             let instructionAddress = rip
             instructionLengthExceeded = false
             prepareInstructionWindow(at: instructionAddress)
-            if let aotExecutor {
+            if let aotExecutor, aotIsAvailable, canStartAOTBlock() {
                 // Never cross the current guest page while forming a translated block.
                 // The architectural x86 decoder retains its independent 15-byte window.
                 let aotPageRemaining = 4096 - Int(instructionAddress & 0xFFF)
@@ -998,6 +1001,32 @@ final class X86_64Interpreter: GuestCPUBackend {
     private func operandAddress(_ operand: Operand) -> UInt64 {
         if case .memory(let address) = operand { return address }
         return rip
+    }
+
+    /// Probe the already-fetched architectural instruction window before
+    /// allocating/copying a larger AOT block. Only instruction forms emitted
+    /// by the current conservative translator are eligible.
+    private func canStartAOTBlock() -> Bool {
+        var cursor = 0
+        var rex: UInt8 = 0
+        while cursor < instructionWindowLength,
+              (0x40...0x4F).contains(instructionWindow[cursor]) {
+            rex = instructionWindow[cursor]
+            cursor += 1
+            if cursor >= 15 { return false }
+        }
+        guard cursor < instructionWindowLength else { return false }
+        switch instructionWindow[cursor] {
+        case 0x90:
+            return rex & 0x01 == 0
+        case 0xB8...0xBF:
+            return true
+        case 0x89, 0x8B:
+            guard cursor + 1 < instructionWindowLength else { return false }
+            return instructionWindow[cursor + 1] >> 6 == 0b11
+        default:
+            return false
+        }
     }
 
     private func prepareInstructionWindow(at address: UInt64) {

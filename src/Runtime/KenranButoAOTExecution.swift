@@ -15,7 +15,7 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
     var blocksExecuted:Int{lock.lock();defer{lock.unlock()};return executionCount}
     var cachedBlockCount:Int{lock.lock();defer{lock.unlock()};return blocks.count}
     var cachedExecutableBytes:UInt64{lock.lock();defer{lock.unlock()};return cachedExecutableBytesStorage}
-    private var isAvailable:Bool{
+    var isAvailable: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         let mode=iSteamJITGetProtocolMode()
         let ready=mode==1 ? JITCoordinator.shared.isQEMUJITReady : JITCoordinator.shared.isJITReady

@@ -142,6 +142,22 @@ final class EmulationLog {
     func write(_ message: String) { messages.append(message) }
 }
 
+final class TestAOTExecutor: KenranButoAOTExecuting {
+    let isAvailable: Bool
+    private(set) var executeCalls = 0
+
+    init(isAvailable: Bool) { self.isAvailable = isAvailable }
+
+    func execute(guestCode: Data, registers: inout [UInt64], rip: UInt64,
+                 rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
+                 memory: GuestMemory, maximumInstructions: Int) -> KenranButoAOTExecutionResult? {
+        executeCalls += 1
+        return nil
+    }
+
+    func invalidateAll() {}
+}
+
 @main
 struct InterpreterTests {
     static func main() throws {
@@ -159,6 +175,39 @@ struct InterpreterTests {
         ]
         precondition(memory.write(Data(program), offset: 0))
         precondition(memory.write(Data("hello world\n".utf8), offset: 0x80))
+        // The test double enforces the same maximumLength contract as production.
+        let boundedPrefixMemory = GuestMemory(size: 16)
+        precondition(boundedPrefixMemory.write(Data([1, 2, 3, 4, 5]), offset: 0))
+        var boundedPrefix = [UInt8](repeating: 0, count: 8)
+        let boundedPrefixCount = boundedPrefixMemory.readPrefix(
+            offset: 0, maximumLength: 3, into: &boundedPrefix
+        )
+        precondition(boundedPrefixCount == 3)
+        precondition(Array(boundedPrefix.prefix(3)) == [1, 2, 3])
+        precondition(boundedPrefix[3] == 0)
+
+        // JIT-unavailable devices do not build/copy a 4 KiB AOT window per instruction.
+        let noJITMemory = GuestMemory(size: 64)
+        precondition(noJITMemory.write(Data([0xB8, 0x2A, 0, 0, 0, 0xF4]), offset: 0))
+        let unavailableAOT = TestAOTExecutor(isAvailable: false)
+        let noJITInterpreter = X86_64Interpreter(memory: noJITMemory, aotExecutor: unavailableAOT)
+        try noJITInterpreter.reset(entryPoint: 0)
+        let noJITExit = try noJITInterpreter.run(maxInstructions: 4)
+        precondition(noJITExit == .halted)
+        precondition(unavailableAOT.executeCalls == 0)
+        precondition(noJITMemory.readPrefixCalls == 2)
+
+        // Unsupported starts are rejected using the existing 15-byte instruction window.
+        let unsupportedStartMemory = GuestMemory(size: 64)
+        precondition(unsupportedStartMemory.write(Data([0x01, 0xD8]), offset: 0))
+        let readyAOT = TestAOTExecutor(isAvailable: true)
+        let unsupportedStart = X86_64Interpreter(memory: unsupportedStartMemory, aotExecutor: readyAOT)
+        try unsupportedStart.reset(entryPoint: 0)
+        let unsupportedStartExit = try unsupportedStart.run(maxInstructions: 1)
+        precondition(unsupportedStartExit == .unsupportedInstruction(address: 0))
+        precondition(readyAOT.executeCalls == 0)
+        precondition(unsupportedStartMemory.readPrefixCalls == 1)
+
         let interpreter = X86_64Interpreter(memory: memory)
         try interpreter.reset(entryPoint: 0)
         let interpreterExit = try interpreter.run(maxInstructions: 32)
