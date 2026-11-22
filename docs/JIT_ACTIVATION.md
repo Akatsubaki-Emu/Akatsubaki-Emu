@@ -1,0 +1,53 @@
+# Automatic QEMU JIT activation
+
+- **Status:** Implemented at source level; not yet verified on a physical device.
+- **Scope:** Physical iOS devices running iOS 17.4 or later. Simulator and Mac Catalyst paths are excluded.
+- **Owner:** `JITCoordinator` coordinates helper apps and readiness; `VMDisplayViewController` gates QEMU startup; the existing QEMU native bridge and allocator own executable-region preparation.
+
+## Startup lifecycle
+
+1. When the VM display first appears, `VMDisplayViewController` checks whether JIT is already ready. A one-shot startup guard prevents duplicate launches when returning from helper apps.
+2. `JITCoordinator` checks the running process's actual `get-task-allow` entitlement using `SecTaskCreateFromSelf` and `SecTaskCopyValueForEntitlement` resolved from Security at runtime. If the entitlement is missing, the VM is not started.
+3. The coordinator opens LocalDevVPN with `localdevvpn://enable?scheme=<bundle-id>`. The bundle ID is also registered as Akatsubaki's callback URL scheme, so stable and nightly builds can return to their own app instance.
+4. LocalDevVPN submits its tunnel-start request and calls back to Akatsubaki after its own one-second delay. Akatsubaki waits a further two seconds, then opens StikDebug with the current bundle identifier and process ID using `stikdebug://enable-jit`.
+5. On iOS 26 and later, the StikDebug request includes `script-name=universal.js` for the existing breakpoint-based executable-region protocol.
+6. When Akatsubaki becomes active again, it polls the process debugger/JIT status. QEMU starts only after that state is confirmed. If the request fails or times out, QEMU remains stopped.
+7. During QEMU initialization, the existing native bridge registers `iSteamJITPrepareRegion` and `iSteamJITDetach` callbacks. The QEMU allocator uses those breakpoints to prepare executable regions and detach at the appropriate point; the bridge's required `isteam_qemu_set_jit_callbacks` export remains part of the runtime contract.
+
+## First-time setup
+
+- Install [StikDebug](https://github.com/StikDebug/StikDebug) and [LocalDevVPN](https://github.com/jkcoxson/LocalDevVPN) separately.
+- Open LocalDevVPN once and approve its VPN configuration.
+- Import the device pairing file into StikDebug.
+- Enable iOS Developer Mode.
+- Sign Akatsubaki with a profile that preserves `get-task-allow`.
+- When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
+
+The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user.
+
+## Failure handling and security
+
+- Missing LocalDevVPN, missing StikDebug, an unavailable callback, or a missing `get-task-allow` entitlement prevents QEMU startup.
+- LocalDevVPN's callback confirms that the tunnel-start request was submitted; it does **not** confirm that the VPN is connected. The readiness check is separate. If acquisition fails, verify the VPN is connected, StikDebug pairing is valid, Developer Mode is enabled, and the signing entitlement is present.
+- The entitlement query uses Security task SPI. This is a sideload/developer workflow and is not suitable for App Store submission.
+- The current readiness probe checks the process's `CS_DEBUGGED` state. The QEMU allocator then performs the executable-region breakpoint protocol. A successful helper handoff alone is not treated as proof of a usable VM session.
+
+## Build integration
+
+- `iSteam/JITCoordinator.swift` — helper orchestration, entitlement gate, callback handling and readiness polling.
+- `iSteam/JIT26Protocol.c` / `.h` — entitlement lookup and iOS 26 breakpoint protocol entry points.
+- `iSteam/Info.plist` — LocalDevVPN query permission and per-bundle callback URL scheme.
+- `iSteam/AppDelegate.swift` — callback dispatch and app-activation readiness polling.
+- `src/Display/VMDisplayViewController.swift` — delays QEMU startup until JIT is confirmed.
+- `iSteam/SettingsViewController.swift` — describes the automatic helper sequence.
+- `project.yml` — links Security for the stable and nightly iOS targets.
+- `scripts/tests/test_jit_coordinator.py` — source-contract regression coverage.
+
+## Validation status
+
+- **Source readback:** completed for all changed implementation, project, settings and test files.
+- **Static contract checks:** passed for the physical-device guards, entitlement lookup, LocalDevVPN and StikDebug URL construction, iOS 26 script gate, callback registration, Security linker flags, VM launch gate and source-validator contract.
+- **Hosted tests/build:** blocked. GitLab pipeline `3099547557` failed before runner startup with `failure_reason=ci_quota_exceeded`; its `python-source-contracts` job had `started_at=null` and no runner assigned. Manual pipeline creation is rejected by the repository's workflow rules.
+- **Not tested:** Python unittest execution, Xcode compilation, IPA packaging, installation, JIT activation on hardware, QEMU guest boot or persistent guest state.
+
+Do not treat source-level integration as proof of a working JIT session until a physical-device build and VM launch have been tested.
