@@ -99,9 +99,25 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertIn("validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory,", inspect)
         self.assertNotIn("validateLoadableLibrary", locate)
         self.assertIn("return .ready(libraryURL: library, dataDirectory: dataDirectory)", locate)
-        self.assertIn("switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", runtime)
+        self.assertIn("switch runtimeStatus", runtime)
         self.assertNotIn("switch QEMURuntimeStatus.locate()", runtime)
 
+
+    def test_start_path_falls_back_to_tci_when_jit_is_unavailable(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        builder = (root / "src" / "QEMU" / "QEMUCommandBuilder.swift").read_text(encoding="utf-8")
+        self.assertIn("let requestedJIT = configuration.accelerator == .jit", runtime)
+        self.assertIn("var requiresJIT = requestedJIT", runtime)
+        self.assertIn("requiresJIT = false", runtime)
+        self.assertIn("QEMURuntimeStatus.inspect(requiresJIT: false)", runtime)
+        self.assertIn("QEMU JIT runtime failed preflight; falling back to TCI", runtime)
+        self.assertIn("QEMU JIT runtime unavailable:", runtime)
+        self.assertIn("switch runtimeStatus", runtime)
+        self.assertIn("requiresJIT: requiresJIT)", runtime)
+        self.assertIn("requiresJIT: Bool? = nil", builder)
+        self.assertIn("let useSplitWX = requiresJIT ?? (configuration.accelerator == .jit)", builder)
+        self.assertIn('useSplitWX ? "tcg,tb-size=128,split-wx=on" : "tcg"', builder)
 
     def test_explicit_firmware_uses_only_its_same_directory_variable_store(self):
         root = Path(__file__).resolve().parents[2]
