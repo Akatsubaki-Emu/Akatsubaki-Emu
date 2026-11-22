@@ -992,14 +992,24 @@ if r"\n" in builder:
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
 repository_validation = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
-if "utm-ios-arm64-deps-v13-" not in repository_validation or "utm-ios-arm64-deps-v12-" in repository_validation:
+cache_prefix = "utm-ios-arm64-deps-"
+qemu_cache_namespaces = {
+    line.split(cache_prefix, 1)[1].split("-", 1)[0]
+    for line in qemu_workflow.splitlines()
+    if cache_prefix in line and "key:" in line
+}
+validation_cache_namespaces = {
+    line.split(cache_prefix, 1)[1].split("-", 1)[0]
+    for line in repository_validation.splitlines()
+    if cache_prefix in line
+}
+if len(qemu_cache_namespaces) != 1 or validation_cache_namespaces != qemu_cache_namespaces:
     print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
     failed = True
 for step in (
     "Checkout i-Steam",
     "Checkout UTM with submodules",
     "Select Xcode",
-    "Verify Objective-C class-selector stub compatibility",
     "Install UTM build dependencies",
     "Cache UTM dependency build and sysroot",
     "Build UTM dependencies for physical iOS arm64",
@@ -1011,21 +1021,17 @@ for step in (
     if qemu_workflow.count(marker) != 1:
         print(f"QEMU workflow: expected exactly one {marker!r} step", file=sys.stderr)
         failed = True
-if "grep -Fq '_objc_msgSendClass'; then" not in qemu_workflow:
-    print("QEMU workflow: Objective-C class-selector stub probe is malformed", file=sys.stderr)
-    failed = True
+for obsolete in ("Verify Objective-C class-selector stub compatibility", "-fno-objc-msgsend-class-selector-stubs", "export OBJCFLAGS="):
+    if obsolete in qemu_workflow:
+        print(f"QEMU workflow: obsolete global Objective-C workaround remains: {obsolete}", file=sys.stderr)
+        failed = True
 if "\n; then\n" in qemu_workflow:
-    print("QEMU workflow: Objective-C class-selector probe contains a stray shell terminator", file=sys.stderr)
+    print("QEMU workflow: contains a stray shell terminator", file=sys.stderr)
     failed = True
 for token in [
     "scripts/patch_utm_qemu_ios.py",
     "scripts/patch_qemu_meson_ios.py",
     "scripts/verify_qemu_meson_link.py",
-    "Verify Objective-C class-selector stub compatibility",
-    "-fno-objc-msgsend-class-selector-stubs",
-    "export OBJCFLAGS=",
-    "grep -Fq",
-    "utm-ios-arm64-deps-v13-",
     "spirv-tools",
     "spirv-llvm-translator",
     "steps.xcode.outputs.version",

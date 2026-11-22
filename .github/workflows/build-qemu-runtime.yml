@@ -64,28 +64,6 @@ jobs:
           IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
           echo "version=${XCODE_VERSION}-ios-${IOS_SDK_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Verify Objective-C class-selector stub compatibility
-        shell: bash
-        run: |
-          set -euo pipefail
-          CLANG="$(xcrun --sdk iphoneos --find clang)"
-          SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
-          PROBE_SOURCE="$RUNNER_TEMP/objc-class-selector-stub-probe.m"
-          PROBE_OBJECT="$RUNNER_TEMP/objc-class-selector-stub-probe.o"
-          cat > "$PROBE_SOURCE" <<'EOF'
-          #import <Metal/Metal.h>
-          id iSteamClassSelectorStubProbe(void) {
-              return [MTLRenderPassDescriptor renderPassDescriptor];
-          }
-          EOF
-          "$CLANG" -target arm64-apple-ios15.0 -isysroot "$SDKROOT" \
-            -fno-objc-msgsend-class-selector-stubs -c "$PROBE_SOURCE" -o "$PROBE_OBJECT"
-          if xcrun --sdk iphoneos nm -u "$PROBE_OBJECT" | grep -Fq '_objc_msgSendClass'; then
-            echo "Xcode still emitted an Objective-C class-selector stub that the selected linker cannot resolve." >&2
-            exit 1
-          fi
-          echo "Verified Objective-C class-selector stubs are disabled for the iOS toolchain."
-
       - name: Install UTM build dependencies
         run: |
           set -euo pipefail
@@ -119,7 +97,7 @@ jobs:
             UTM/sysroot-iOS-arm64
           # Include the workflow itself: Meson cross-file fixes change build configuration.
           # A workflow-only fix must not reuse a QEMU build tree configured without it.
-          key: utm-ios-arm64-deps-v13-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
+          key: utm-ios-arm64-deps-v12-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
 
       - name: Build UTM dependencies for physical iOS arm64
         shell: bash
@@ -131,8 +109,6 @@ jobs:
         run: |
           set -euo pipefail
           cd UTM
-          # Use regular Objective-C selector stubs supported by the selected Xcode linker.
-          export OBJCFLAGS="${OBJCFLAGS:-} -fno-objc-msgsend-class-selector-stubs"
           # Patch QEMU's iOS 26+ TCG JIT allocator and Meson project, then verify the generated
           # QEMU dylib link edge before its compile/link tasks start.
           python3 "$GITHUB_WORKSPACE/scripts/patch_utm_qemu_ios.py" scripts/build_dependencies.sh
