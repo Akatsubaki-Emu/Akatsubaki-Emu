@@ -551,6 +551,7 @@ final class QEMUVNCClient {
     func sendButton(_ name: String, down: Bool, source: String) {
         let key: String
         switch name {
+        case "View", "view": key = "ESC"
         case "A": key = "SPACE"
         case "B": key = "ESC"
         case "X": key = "E"

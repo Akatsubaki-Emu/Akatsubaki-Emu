@@ -34,6 +34,16 @@ class VNCPointerCoalescingTests(unittest.TestCase):
         self.assertLess(start.index("guard !Task.isCancelled"), start.index("self.connection = candidate"))
         self.assertLess(start.index("self.connection = candidate"), start.index("guard installed else"))
 
+    def test_touch_gamepad_view_button_is_routed_to_guest_back_key(self):
+        root = Path(__file__).resolve().parents[2]
+        touch = (root / "src" / "Display" / "TouchGamepadView.swift").read_text(encoding="utf-8")
+        source = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
+        button_definitions = touch.split("private let buttonDefinitions:", 1)[1].split("override init", 1)[0]
+        send_button = source.split("func sendButton", 1)[1].split("private static func keysym", 1)[0]
+        self.assertIn('("View", "View")', button_definitions)
+        self.assertIn('case "View", "view": key = "ESC"', send_button)
+        self.assertIn('sendKey(key, down: down, source: source + ":" + name)', send_button)
+
     def test_reconnect_does_not_publish_unhandshaken_or_stale_connection(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
