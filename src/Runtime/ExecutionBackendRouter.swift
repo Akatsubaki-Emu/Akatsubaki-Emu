@@ -162,6 +162,13 @@ struct RuntimeExecutionPlan {
         if fullSystemFallback != nil || architectureBackend != nil { return true }
         return dynamicTranslationBackend != nil
     }
+
+    /// Allows the deliberately limited interpreter to run its supported
+    /// bring-up subset without misreporting it as a complete Linux ABI.
+    /// Missing required layers remain visible and general execution stays false.
+    var isRunnableAsDiagnosticBringUp: Bool {
+        diagnosticFallback != nil && antiCheatAssessment == .notRequested
+    }
 }
 
 /// Builds a composable execution strategy. CPU engines are not all run in

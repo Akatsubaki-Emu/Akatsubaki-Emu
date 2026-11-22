@@ -20,6 +20,20 @@ final class GameLauncher {
         }
 
         if format == .linuxELF {
+            // Only the built-in diagnostic interpreter is integrated today.
+            // Do not advertise FEXCore, Box64, AOT or a complete Linux syscall ABI
+            // until their concrete adapters are packaged and verified.
+            let availability = RuntimeBackendAvailability(installed: [.x86Interpreter])
+            let request = RuntimeExecutionRequest(format: .linuxX64ELF)
+            let plan = RuntimeBackendRouter.plan(for: request, availability: availability)
+            for message in plan.explanation {
+                EmulationLog.shared.write("[runtime-plan] " + message)
+            }
+            guard plan.isRunnableAsDiagnosticBringUp else {
+                EmulationLog.shared.write("Linux ELF launch stopped: no diagnostic bring-up backend is installed.")
+                return false
+            }
+
             do {
                 try ELFValidator.validate(url: executable)
             } catch {
