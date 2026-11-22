@@ -8,6 +8,7 @@ final class VMDisplayViewController: UIViewController {
     private let configuration: VMConfiguration
     private let vncClient = QEMUVNCClient()
     private let diskImage: URL
+    private let writableDiskImage: URL?
     private let status = UILabel()
     private var gamepad: TouchGamepadView?
     private let vrSettings = VRSettings.shared
@@ -21,9 +22,10 @@ final class VMDisplayViewController: UIViewController {
     private var engineStartRequested = false
     private var startupFlowStarted = false
 
-    init(configuration: VMConfiguration, diskImage: URL) {
+    init(configuration: VMConfiguration, diskImage: URL, writableDiskImage: URL? = nil) {
         self.configuration = configuration
         self.diskImage = diskImage
+        self.writableDiskImage = writableDiskImage
         let backend = MetalGPUBackend(width: configuration.displayWidth, height: configuration.displayHeight, frameRate: configuration.displayFPS)
         self.gpu = backend
         self.virtioGPU = VirtIOGPU(backend: backend)
@@ -153,7 +155,7 @@ final class VMDisplayViewController: UIViewController {
         guard !engineStartRequested else { return }
         engineStartRequested = true
         status.text = "Starting QEMU • waiting for guest display"
-        engine.start(diskImage: diskImage)
+        engine.start(diskImage: diskImage, writableDiskImage: writableDiskImage)
         if case .failed(let message) = engine.state {
             status.text = "VM failed • \(message)"
             EmulationLog.shared.write("Display launch failed: \(message)")

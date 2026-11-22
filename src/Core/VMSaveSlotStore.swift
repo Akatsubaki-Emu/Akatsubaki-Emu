@@ -14,6 +14,8 @@ final class VMSaveSlotStore {
         let savedAt: Date
         // Optional so sessions written by earlier builds still decode.
         let diskImageBookmark: Data?
+        // Optional for sessions saved before secondary-disk support.
+        let writableDiskImageBookmark: Data?
     }
 
     private var directory: URL {
@@ -108,29 +110,43 @@ final class VMSaveSlotStore {
         }).sorted()
     }
 
-    func saveSessionMetadata(configuration: VMConfiguration, diskImageURL: URL, gameID: UUID? = nil) throws {
-        // Document-picker URLs may be security scoped. Keep the grant active
-        // while the bookmark is created so Continue Last Session can resolve it.
-        let scoped = diskImageURL.startAccessingSecurityScopedResource()
-        defer { if scoped { diskImageURL.stopAccessingSecurityScopedResource() } }
+    func saveSessionMetadata(configuration: VMConfiguration, diskImageURL: URL,
+                             writableDiskImageURL: URL? = nil, gameID: UUID? = nil) throws {
+        let scopedBoot = diskImageURL.startAccessingSecurityScopedResource()
+        let scopedWritable = writableDiskImageURL?.startAccessingSecurityScopedResource() ?? false
+        defer {
+            if scopedBoot { diskImageURL.stopAccessingSecurityScopedResource() }
+            if scopedWritable, let writableDiskImageURL {
+                writableDiskImageURL.stopAccessingSecurityScopedResource()
+            }
+        }
         let bookmark = try diskImageURL.bookmarkData(
             options: [],
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )
-        guard bookmark.count <= maximumMetadataBytes / 2 else { throw StoreError.metadataTooLarge }
+        let writableBookmark = try writableDiskImageURL?.bookmarkData(
+            options: [],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        guard bookmark.count <= maximumMetadataBytes / 2,
+              (writableBookmark?.count ?? 0) <= maximumMetadataBytes / 2 else {
+            throw StoreError.metadataTooLarge
+        }
         let session = Session(
             configuration: configuration,
             gameID: gameID,
             savedAt: Date(),
-            diskImageBookmark: bookmark
+            diskImageBookmark: bookmark,
+            writableDiskImageBookmark: writableBookmark
         )
         let data = try encoder.encode(session)
         guard data.count <= maximumMetadataBytes else { throw StoreError.metadataTooLarge }
         try data.write(to: directory.appendingPathComponent("last-session.json"), options: .atomic)
     }
 
-    func lastSession() -> (configuration: VMConfiguration, diskImageURL: URL)? {
+    func lastSession() -> (configuration: VMConfiguration, diskImageURL: URL, writableDiskImageURL: URL?)? {
         let url = directory.appendingPathComponent("last-session.json")
         guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
               values.isRegularFile == true,
@@ -145,16 +161,25 @@ final class VMSaveSlotStore {
             relativeTo: nil,
             bookmarkDataIsStale: &stale
         ) else { return nil }
-        if stale {
-            // A resolvable stale bookmark is still useful. Refresh it now so
-            // the next launch does not lose Continue Last Session.
+        var writableDiskURL: URL?
+        var writableBookmarkStale = false
+        if let writableBookmark = session.writableDiskImageBookmark {
+            writableDiskURL = try? URL(
+                resolvingBookmarkData: writableBookmark,
+                options: [],
+                relativeTo: nil,
+                bookmarkDataIsStale: &writableBookmarkStale
+            )
+        }
+        if stale || writableBookmarkStale || (session.writableDiskImageBookmark != nil && writableDiskURL == nil) {
             try? saveSessionMetadata(
                 configuration: session.configuration,
                 diskImageURL: diskURL,
+                writableDiskImageURL: writableDiskURL,
                 gameID: session.gameID
             )
         }
-        return (session.configuration, diskURL)
+        return (session.configuration, diskURL, writableDiskURL)
     }
 
     func lastSessionConfiguration() -> VMConfiguration? {
