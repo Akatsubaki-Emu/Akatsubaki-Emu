@@ -132,6 +132,10 @@ required = {
         "resolvingSymlinksInPath()",
         "rootPrefix",
     ],
+    "scripts/tests/test_linux_elf_runtime_initialization.py": [
+        "test_guest_machine_retains_typed_initialization_errors",
+        "test_linux_elf_runtime_propagates_initialization_error",
+    ],
     "src/Runtime/LinuxSyscallDispatcher.swift": [
         "func configure(programBreak: UInt64, stackBase: UInt64) throws",
         "private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64?",
@@ -768,9 +772,12 @@ required = {
         "maximumGuestBytes: UInt64 = 16 * 1024 * 1024 * 1024",
         "guard self.memory.isAvailable",
         "case memoryUnavailable",
+        "private(set) var initializationError: GuestEngineError?",
         "let error = GuestEngineError.backendNotInstalled(configuration.architecture)",
+        "self.initializationError = error",
         "state = .failed(error.localizedDescription)",
         "throw error",
+        "initializationError = nil",
         "withExecutionLock",
         "hasLoadedImage",
         "activeCPULock",
