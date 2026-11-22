@@ -46,6 +46,22 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertNotIn("DataManager.shared", self.view)
         self.assertIn('password = ""', self.view)
 
+    def test_anisette_logs_do_not_expose_authentication_material(self):
+        for sensitive_log in ("Anisette used:", "Original JSON:", "startProvisioningURL:", "endProvisioningURL:", "Anisette URL:", "Client-Info:", "User-Agent:", "X-Apple-I-MD-LU:", "X-Mme-Device-Id:"):
+            self.assertNotIn(sensitive_log, self.anisette)
+
+    def test_anisette_identifier_uses_checked_uuid_construction(self):
+        self.assertIn("decoded.count == 16", self.anisette)
+        self.assertIn("UUID(uuid:", self.anisette)
+        self.assertNotIn("decoded.object()", self.anisette)
+        self.assertNotIn("load(as: T.self)", self.anisette)
+
+    def test_anisette_refresh_discards_cached_provisioning_data(self):
+        self.assertIn("if refresh { EntitlementAnisetteKeychain.shared.adiPb = nil }", self.anisette)
+
+    def test_anisette_v3_timestamp_uses_utc(self):
+        self.assertIn('formatter.timeZone = TimeZone(identifier: "UTC")', self.anisette)
+
     def test_settings_exposes_entitlement_screen(self):
         self.assertIn("case 6, 7, 8, 9, 10, 11: return 1", self.settings)
         self.assertIn("case 11:", self.settings)
