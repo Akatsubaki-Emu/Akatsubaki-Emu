@@ -88,5 +88,26 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("JITCoordinator.shared.applicationDidBecomeActive()", app)
 
 
+    def test_localdevvpn_activation_callback_has_a_five_minute_timeout(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("private let localDevVPNCallbackTimeout: TimeInterval = 300", source)
+        self.assertIn("LocalDevVPN did not return its activation callback within 5 minutes", source)
+        self.assertIn("self.isRequestInProgress, self.waitingForLocalDevVPN", source)
+        self.assertIn("self.requestGeneration == generation", source)
+        self.assertIn("guard url.scheme == Bundle.main.bundleIdentifier, waitingForLocalDevVPN, isRequestInProgress else { return false }", source)
+
+    def test_overlapping_jit_requests_and_stale_callbacks_are_rejected(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("private var isRequestInProgress = false", source)
+        self.assertIn("private var requestGeneration: UInt64 = 0", source)
+        self.assertIn("guard !isRequestInProgress else", source)
+        self.assertIn("self.isRequestInProgress, self.requestGeneration == generation", source)
+        self.assertIn("self.waitingForStikDebugReturn", source)
+        self.assertGreaterEqual(source.count("self.requestGeneration == generation"), 4)
+        self.assertIn("isRequestInProgress = false", source)
+        self.assertIn("requestGeneration &+= 1", source)
+
 if __name__ == "__main__":
     unittest.main()

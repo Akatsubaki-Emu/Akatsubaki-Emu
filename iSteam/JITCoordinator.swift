@@ -15,6 +15,9 @@ final class JITCoordinator {
     private var onJITFailure: ((String) -> Void)?
     private var waitingForStikDebugReturn = false
     private var waitingForLocalDevVPN = false
+    private var isRequestInProgress = false
+    private var requestGeneration: UInt64 = 0
+    private let localDevVPNCallbackTimeout: TimeInterval = 300
     private var readinessChecksRemaining = 0
     private var readinessCheckScheduled = false
 
@@ -76,6 +79,12 @@ final class JITCoordinator {
     }
 
     func requestJIT(from controller: UIViewController?, onFailure: ((String) -> Void)? = nil, onReady: (() -> Void)? = nil) {
+        guard !isRequestInProgress else {
+            show("A JIT request is already in progress. Wait for it to finish before starting another.", title: "JIT request in progress")
+            return
+        }
+        isRequestInProgress = true
+        requestGeneration &+= 1
         presentationController = controller
         onJITReady = onReady
         onJITFailure = onFailure
@@ -108,16 +117,18 @@ final class JITCoordinator {
 
     @discardableResult
     func handleCallback(_ url: URL) -> Bool {
-        guard url.scheme == Bundle.main.bundleIdentifier, waitingForLocalDevVPN else { return false }
+        guard url.scheme == Bundle.main.bundleIdentifier, waitingForLocalDevVPN, isRequestInProgress else { return false }
         waitingForLocalDevVPN = false
+        let generation = requestGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            self?.openStikDebug()
+            guard let self, self.isRequestInProgress, self.requestGeneration == generation else { return }
+            self.openStikDebug()
         }
         return true
     }
 
     func applicationDidBecomeActive() {
-        guard waitingForStikDebugReturn else { return }
+        guard isRequestInProgress, waitingForStikDebugReturn else { return }
         readinessChecksRemaining = max(readinessChecksRemaining, 30)
         checkReadiness()
     }
@@ -143,9 +154,18 @@ final class JITCoordinator {
         }
 
         waitingForLocalDevVPN = true
+        let generation = requestGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + localDevVPNCallbackTimeout) { [weak self] in
+            guard let self, self.isRequestInProgress, self.waitingForLocalDevVPN,
+                  self.requestGeneration == generation else { return }
+            self.failRequest(
+                "LocalDevVPN did not return its activation callback within 5 minutes. Confirm its VPN profile is approved, then try again.",
+                title: "LocalDevVPN timed out"
+            )
+        }
         UIApplication.shared.open(vpnURL, options: [:]) { [weak self] opened in
-            guard let self, !opened else { return }
-            self.waitingForLocalDevVPN = false
+            guard let self, self.isRequestInProgress, self.waitingForLocalDevVPN,
+                  self.requestGeneration == generation, !opened else { return }
             self.failRequest("LocalDevVPN could not be opened. Install it and approve its VPN configuration before requesting JIT.", title: "VPN unavailable")
         }
     }
@@ -175,15 +195,16 @@ final class JITCoordinator {
 
         waitingForStikDebugReturn = true
         readinessChecksRemaining = 30
+        let generation = requestGeneration
         UIApplication.shared.open(url, options: [:]) { [weak self] opened in
-            guard let self else { return }
-            guard !opened else { return }
+            guard let self, self.isRequestInProgress, self.waitingForStikDebugReturn,
+                  self.requestGeneration == generation, !opened else { return }
             self.failRequest("StikDebug could not be opened. Install StikDebug, import this device's pairing file into it, and try again.", title: "StikDebug unavailable")
         }
     }
 
     private func checkReadiness() {
-        guard waitingForStikDebugReturn, !readinessCheckScheduled else { return }
+        guard isRequestInProgress, waitingForStikDebugReturn, !readinessCheckScheduled else { return }
         if isJITReady {
             completeJITRequest()
             return
@@ -196,14 +217,17 @@ final class JITCoordinator {
 
         readinessChecksRemaining -= 1
         readinessCheckScheduled = true
+        let generation = requestGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            guard let self else { return }
+            guard let self, self.isRequestInProgress, self.requestGeneration == generation else { return }
             self.readinessCheckScheduled = false
             self.checkReadiness()
         }
     }
 
     private func completeJITRequest() {
+        isRequestInProgress = false
+        requestGeneration &+= 1
         waitingForStikDebugReturn = false
         waitingForLocalDevVPN = false
         readinessChecksRemaining = 0
@@ -219,6 +243,8 @@ final class JITCoordinator {
     }
 
     private func failRequest(_ message: String, title: String) {
+        isRequestInProgress = false
+        requestGeneration &+= 1
         waitingForStikDebugReturn = false
         waitingForLocalDevVPN = false
         readinessChecksRemaining = 0
