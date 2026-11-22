@@ -881,7 +881,7 @@ required = {
         "self.assertIn(\"case 0x70...0x7F:\", interpreter)",
         "self.assertIn(\"second >= 0x80 && second <= 0x8F\", interpreter)",
         "self.assertIn(\"case 0xF6: // TEST, NOT and NEG r/m8\", interpreter)",
-        'self.assertIn("case 0xFE: // INC and DEC r/m8", interpreter)',
+        "case 0xFE: // INC and DEC r/m8",
         "self.assertIn(\"second >= 0x40 && second <= 0x4F\", interpreter)",
         "self.assertIn(\"second >= 0x90 && second <= 0x9F\", interpreter)",
         "self.assertIn(\"second == 0x1F\", interpreter)",
