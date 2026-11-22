@@ -601,6 +601,9 @@ required = {
         "error_buffer && error_capacity > 0",
     ],
     "scripts/tests/fake_qemu_runtime.c": [
+        "#ifndef FAKE_QEMU_NO_JIT_CALLBACK",
+        "void isteam_qemu_set_jit_callbacks",
+        "fake_qemu_jit_callbacks_installed",
         "void qemu_init(int argc, char *argv[])",
         "poison_nonzero_return_register();",
         "int qemu_main_loop(void)",
@@ -612,6 +615,8 @@ required = {
     "scripts/package-utm-qemu-runtime.sh": [
         " _?isteam_qemu_set_jit_callbacks$",
         "isteam_qemu_set_jit_callbacks",
+        "MODE_DIRECTORY",
+        "QEMU-TCI.framework",
         "vtool -show-build",
         "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
@@ -1189,7 +1194,9 @@ for step in (
     "Install UTM build dependencies",
     "Cache UTM dependency build and sysroot",
     "Build UTM dependencies for physical iOS arm64",
+    "Build UTM TCI dependencies for physical iOS arm64",
     "Build UTM iOS archive",
+    "Build UTM iOS TCI archive",
     "Package and verify in-process QEMU runtime",
     "Upload verified QEMU runtime artifact",
 ):
@@ -1197,6 +1204,19 @@ for step in (
     if qemu_workflow.count(marker) != 1:
         print(f"QEMU workflow: expected exactly one {marker!r} step", file=sys.stderr)
         failed = True
+for token in (
+    "UTM/build-iOS-TCI-arm64",
+    "UTM/sysroot-iOS-TCI-arm64",
+    "./scripts/build_dependencies.sh -p ios-tci -a arm64",
+    "./scripts/build_utm.sh -k iphoneos -s iOS-TCI -a arm64 -o UTMBuildTCI",
+    "build/qemu-runtime-tci/QEMU/TCI",
+    "for mode in JIT TCI; do",
+    "Physical iOS arm64 runtime variants: JIT and TCI",
+):
+    if token not in qemu_workflow:
+        print(f"QEMU workflow: TCI build/package contract is missing {token!r}", file=sys.stderr)
+        failed = True
+
 if 'SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"' not in qemu_workflow:
     print("QEMU workflow: Objective-C symbol inspection command is missing", file=sys.stderr)
     failed = True
@@ -1318,12 +1338,43 @@ else:
         'grep -Eq \' _?qemu_cleanup$\' "$RUNTIME_DIR/exports.txt"',
         'grep -Eq \' _?qemu_system_shutdown_request$\' "$RUNTIME_DIR/exports.txt"',
         'grep -Eq \' _?isteam_qemu_set_jit_callbacks$\' "$RUNTIME_DIR/exports.txt"',
+        'TCI_RUNTIME_DIR="$RUNTIME_DIR/QEMU/TCI"',
+        'test -s "$TCI_RUNTIME_DIR/runtime-library-path.txt"',
+        'test -s "$TCI_RUNTIME_DIR/exports.txt"',
+        'TCI_RUNTIME_REL="$(head -n 1 "$TCI_RUNTIME_DIR/runtime-library-path.txt")"',
+        'test -s "$RUNTIME_DIR/$TCI_RUNTIME_REL"',
+        'test -s "$APP/QEMU/TCI/runtime-library-path.txt"',
+        'test -s "$APP/$TCI_RUNTIME_REL"',
+        'test -s "$APP/QEMU/TCI/exports.txt"',
     ]:
         if token not in ios_package:
             print(f"release workflow: runtime packaging guard missing: {token}", file=sys.stderr)
             failed = True
     if "No verified QEMU runtime artifact is available" in ios_package:
         print("release workflow: must not silently publish IPA without QEMU", file=sys.stderr)
+        failed = True
+
+
+# The no-JIT bridge test must use a fake library that truly lacks the JIT callback.
+fake_qemu_runtime = Path("scripts/tests/fake_qemu_runtime.c").read_text(encoding="utf-8")
+native_bridge_test = Path("scripts/tests/test_qemu_native_bridge.c").read_text(encoding="utf-8")
+validation_workflow = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
+for token in (
+    "-DFAKE_QEMU_NO_JIT_CALLBACK",
+    'test-qemu-native-bridge" jit',
+    'test-qemu-native-bridge" tci',
+    "libfakeqemu-jit.so",
+    "libfakeqemu-tci.so",
+):
+    if token not in validation_workflow:
+        print(f"repository validation workflow: missing JIT/TCI bridge test {token!r}", file=sys.stderr)
+        failed = True
+if "#ifndef FAKE_QEMU_NO_JIT_CALLBACK" not in fake_qemu_runtime:
+    print("fake QEMU runtime: no-JIT fixture does not omit the callback export", file=sys.stderr)
+    failed = True
+for token in ('assert(argc == 3);', 'strcmp(argv[1], "jit")', 'strcmp(argv[1], "tci")'):
+    if token not in native_bridge_test:
+        print(f"native QEMU bridge test: missing mode selection {token!r}", file=sys.stderr)
         failed = True
 
 
