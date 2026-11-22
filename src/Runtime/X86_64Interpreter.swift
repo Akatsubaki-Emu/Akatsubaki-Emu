@@ -14,6 +14,9 @@ final class X86_64Interpreter: GuestCPUBackend {
     private var instructionWindowLength = 0
     private var instructionWindowCursor = 0
     private var flags: UInt64 = 0x2
+    private var fsBase: UInt64 = 0
+    private var gsBase: UInt64 = 0
+    private var activeSegmentBase: UInt64 = 0
     private var halted = false
     private let stopLock = NSLock()
     private var stopRequested = false
@@ -29,6 +32,9 @@ final class X86_64Interpreter: GuestCPUBackend {
         }
         registers = [UInt64](repeating: 0, count: 16)
         flags = 0x2
+        fsBase = 0
+        gsBase = 0
+        activeSegmentBase = 0
         syscallDispatcher.reset()
         registers[4] = memory.size >= 8 ? memory.size - 8 : 0 // RSP
         rip = entryPoint
@@ -86,8 +92,25 @@ final class X86_64Interpreter: GuestCPUBackend {
             prepareInstructionWindow(at: instructionAddress)
             guard var opcode = fetchByte() else { return .memoryFault(address: rip) }
             var rex: UInt8 = 0
-            if opcode >= 0x40 && opcode <= 0x4F {
-                rex = opcode
+            activeSegmentBase = 0
+            var prefixCount = 0
+            while true {
+                if opcode == 0x64 {
+                    activeSegmentBase = fsBase
+                    rex = 0
+                } else if opcode == 0x65 {
+                    activeSegmentBase = gsBase
+                    rex = 0
+                } else if opcode >= 0x40 && opcode <= 0x4F {
+                    rex = opcode
+                } else {
+                    break
+                }
+                prefixCount += 1
+                if prefixCount > 14 {
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
                 guard let next = fetchByte() else { return .memoryFault(address: rip) }
                 opcode = next
             }
@@ -565,7 +588,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                     registers[sourceRegister] = width64 ? value : UInt64(UInt32(truncatingIfNeeded: value))
                 }
             case 0x8D:
-                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex, includeSegmentBase: false) else {
                     return .memoryFault(address: rip)
                 }
                 guard case .memory(let address) = decoded.operand else {
@@ -667,21 +690,25 @@ final class X86_64Interpreter: GuestCPUBackend {
                 guard let second = fetchByte() else { return .memoryFault(address: rip) }
                 if second == 0x05 {
                     let number = registers[0]
-                    guard let outcome = syscallDispatcher.dispatch(
-                        number: number,
-                        arg0: registers[7], arg1: registers[6], arg2: registers[2],
-                        arg3: registers[10], arg4: registers[8], arg5: registers[9]
-                    ) else {
-                        rip = instructionAddress
-                        return .backendUnavailable("Unsupported Linux x86-64 syscall \(number)")
-                    }
-                    switch outcome {
-                    case .returned(let value):
-                        registers[0] = value
-                    case .exited:
-                        halted = true
-                        instructionCount &+= 1
-                        return .halted
+                    if number == 158 {
+                        registers[0] = dispatchArchPrctl(operation: registers[7], argument: registers[6])
+                    } else {
+                        guard let outcome = syscallDispatcher.dispatch(
+                            number: number,
+                            arg0: registers[7], arg1: registers[6], arg2: registers[2],
+                            arg3: registers[10], arg4: registers[8], arg5: registers[9]
+                        ) else {
+                            rip = instructionAddress
+                            return .backendUnavailable("Unsupported Linux x86-64 syscall \(number)")
+                        }
+                        switch outcome {
+                        case .returned(let value):
+                            registers[0] = value
+                        case .exited:
+                            halted = true
+                            instructionCount &+= 1
+                            return .halted
+                        }
                     }
                 } else if second == 0xB6 || second == 0xBE {
                     guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
@@ -774,12 +801,33 @@ final class X86_64Interpreter: GuestCPUBackend {
         return .instructionLimit
     }
 
+
+    private func dispatchArchPrctl(operation: UInt64, argument: UInt64) -> UInt64 {
+        let maximumUserAddress: UInt64 = 0x0000_7FFF_FFFF_FFFF
+        switch operation {
+        case 0x1001: // ARCH_SET_GS
+            guard argument <= maximumUserAddress else { return UInt64(bitPattern: Int64(-22)) }
+            gsBase = argument
+            return 0
+        case 0x1002: // ARCH_SET_FS
+            guard argument <= maximumUserAddress else { return UInt64(bitPattern: Int64(-22)) }
+            fsBase = argument
+            return 0
+        case 0x1003: // ARCH_GET_FS
+            return memory.writeUInt64(fsBase, offset: argument) ? 0 : UInt64(bitPattern: Int64(-14))
+        case 0x1004: // ARCH_GET_GS
+            return memory.writeUInt64(gsBase, offset: argument) ? 0 : UInt64(bitPattern: Int64(-14))
+        default:
+            return UInt64(bitPattern: Int64(-22))
+        }
+    }
+
     private enum Operand {
         case register(Int)
         case memory(UInt64)
     }
 
-    private func decodeRM(_ modrm: UInt8, rex: UInt8, trailingImmediateBytes: UInt8 = 0) -> (reg: Int, operand: Operand)? {
+    private func decodeRM(_ modrm: UInt8, rex: UInt8, trailingImmediateBytes: UInt8 = 0, includeSegmentBase: Bool = true) -> (reg: Int, operand: Operand)? {
         let mode = modrm >> 6
         let reg = Int((modrm >> 3) & 7) | (rex & 0x04 != 0 ? 8 : 0)
         let rmField = modrm & 7
@@ -826,7 +874,8 @@ final class X86_64Interpreter: GuestCPUBackend {
         }
         let addressBase = usesRIPRelative ? rip &+ UInt64(trailingImmediateBytes) : base
         let address = addressBase &+ index &+ UInt64(bitPattern: displacement)
-        return (reg, .memory(address))
+        let segmentedAddress = address &+ (includeSegmentBase ? activeSegmentBase : 0)
+        return (reg, .memory(segmentedAddress))
     }
 
     private func readOperand(_ operand: Operand, width64: Bool) -> UInt64? {

@@ -794,6 +794,28 @@ struct InterpreterTests {
         precondition(syscallExit == .unsupportedInstruction(address: 21))
         precondition(syscallInterpreter.registerValue(0) == 0x2000)
 
+        let fsSegmentMemory = GuestMemory(size: 4096)
+        let fsSegmentProgram: [UInt8] = [
+            0xBF, 0x02, 0x10, 0x00, 0x00,
+            0x48, 0xBE, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xB8, 0x9E, 0x00, 0x00, 0x00,
+            0x0F, 0x05,
+            0x64, 0xC6, 0x04, 0x25, 0x20, 0x00, 0x00, 0x00, 0x5A,
+            0x64, 0x8A, 0x04, 0x25, 0x20, 0x00, 0x00, 0x00,
+            0xBF, 0x03, 0x10, 0x00, 0x00,
+            0x48, 0xBE, 0x80, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xB8, 0x9E, 0x00, 0x00, 0x00,
+            0x0F, 0x05,
+            0xF4
+        ]
+        precondition(fsSegmentMemory.write(Data(fsSegmentProgram), offset: 0))
+        let fsSegment = X86_64Interpreter(memory: fsSegmentMemory)
+        try fsSegment.reset(entryPoint: 0)
+        precondition(try fsSegment.run(maxInstructions: 11) == .halted)
+        precondition(fsSegmentMemory.readByte(offset: 0x1020) == 0x5A)
+        precondition(fsSegment.registerValue(0) == 0x5A)
+        precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)
+
         let unsupportedMemory = GuestMemory(size: 4)
         precondition(unsupportedMemory.write(Data([0x0F, 0x0B]), offset: 0))
         let unsupported = X86_64Interpreter(memory: unsupportedMemory)

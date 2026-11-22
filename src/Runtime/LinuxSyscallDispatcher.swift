@@ -104,8 +104,6 @@ final class LinuxSyscallDispatcher {
             return .returned(writeTimeval(at: arg0, timezone: arg1))
         case 102, 104, 107, 108:
             return .returned(0)
-        case 158:
-            return .returned(errno(38))
         case 202:
             let operation = arg1 & 0x7F
             return .returned(operation == 1 ? 0 : errno(11))

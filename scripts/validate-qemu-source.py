@@ -165,7 +165,8 @@ required = {
         "private func setBreak(",
         "min(UInt64(999_999_999)",
         "min(UInt64(999_999)",
-    ],
+
+        "case 158:",    ],
     ".github/workflows/build-qemu-runtime.yml": [
         "group: qemu-runtime-ios-arm64-",
         "cancel-in-progress: false",
@@ -366,7 +367,14 @@ required = {
         "guard let decoded = decodeRM(modrm, rex: rex) else {",
         "guard let _ = decodeRM(modrm, rex: rex) else {",
         "return .memoryFault(address: rip)",
-    ],
+
+        "private var fsBase: UInt64 = 0",
+        "private var gsBase: UInt64 = 0",
+        "activeSegmentBase = fsBase",
+        "activeSegmentBase = gsBase",
+        "dispatchArchPrctl(operation: registers[7], argument: registers[6])",
+        "private func dispatchArchPrctl(operation: UInt64, argument: UInt64) -> UInt64",
+        "includeSegmentBase: Bool = true",    ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
         "hello from static ELF",
@@ -453,7 +461,10 @@ required = {
         "let multiByteNopMemory = GuestMemory(size: 64)",
         "let truncatedByteIncMemory = GuestMemory(size: 2)",
         "let truncatedMultiByteNopMemory = GuestMemory(size: 3)",
-    ],
+
+        "let fsSegmentMemory = GuestMemory(size: 4096)",
+        "precondition(fsSegmentMemory.readByte(offset: 0x1020) == 0x5A)",
+        "precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)",    ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
         "\"-vnc\", \"127.0.0.1:0\"",
