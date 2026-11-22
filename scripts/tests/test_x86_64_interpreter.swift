@@ -796,7 +796,7 @@ struct InterpreterTests {
         precondition(syscallInterpreter.registerValue(1) == 21)
         precondition(syscallInterpreter.registerValue(11) == 0x46)
 
-        let fsSegmentMemory = GuestMemory(size: 4096)
+        let fsSegmentMemory = GuestMemory(size: 0x2000)
         let fsSegmentProgram: [UInt8] = [
             0xBF, 0x02, 0x10, 0x00, 0x00,
             0x48, 0xBE, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
