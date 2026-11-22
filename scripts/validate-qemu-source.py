@@ -578,7 +578,12 @@ required = {
         "memcpy(copied_argv[i], argv[i], argument_length + 1u)",
         'dlsym(library, "qemu_init")',
         "typedef void (*qemu_init_fn)(int, char **);",
+        "typedef int (*qemu_main_loop_fn)(void);",
+        "typedef void (*qemu_cleanup_fn)(int);",
+        "#define ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI 5",
         "g_qemu_init(g_argc, g_argv);",
+        "int qemu_exit_status = g_qemu_main_loop();",
+        "if (g_qemu_cleanup) g_qemu_cleanup(qemu_exit_status);",
         'dlsym(library, "qemu_main_loop")',
         'dlsym(library, "qemu_cleanup")',
         'dlsym(library, "qemu_system_shutdown_request")',
@@ -595,6 +600,15 @@ required = {
     "scripts/tests/fake_qemu_runtime.c": [
         "void qemu_init(int argc, char *argv[])",
         "poison_nonzero_return_register();",
+        "int qemu_main_loop(void)",
+        "void qemu_cleanup(int status)",
+        "return 37;",
+    ],
+    "scripts/tests/test_qemu_native_bridge.c": [
+        "fake_qemu_cleanup_status",
+        "fake_qemu_shutdown_cause",
+        "== 37",
+        "== 5",
     ],
     "scripts/package-utm-qemu-runtime.sh": [
         " _?isteam_qemu_set_jit_callbacks$",
