@@ -625,6 +625,20 @@ required = {
         'target_dir="$OUT/QEMU/firmware/$relative_dir"',
         'cp "$firmware_file" "$target_dir/"',
     ],
+    "scripts/package-utm-qemu-tci-runtime.sh": [
+        "has_jit_callbacks=false",
+        "QEMU-TCI.framework",
+        'bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci',
+        "StikJIT callback export: absent by design",
+        "runtime-library-path.txt",
+    ],
+    "scripts/merge-qemu-runtime-variants.sh": [
+        'grep -q \'isteam_qemu_set_jit_callbacks\' "$JIT_DIR/exports.txt"',
+        'if grep -q \'isteam_qemu_set_jit_callbacks\' "$TCI_DIR/exports.txt"; then',
+        'mkdir -p "$OUT/Frameworks" "$OUT/QEMU/JIT" "$OUT/QEMU/TCI"',
+        'cp -a "$JIT_DIR/QEMU/." "$OUT/QEMU/JIT/"',
+        'cp -a "$TCI_DIR/QEMU/." "$OUT/QEMU/TCI/"',
+    ],
     "scripts/validate-qemu-runtime.sh": [
         "for tool in file lipo nm codesign vtool; do",
         "required_symbols=(qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request)",
