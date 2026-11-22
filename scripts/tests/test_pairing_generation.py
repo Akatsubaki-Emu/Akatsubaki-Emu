@@ -68,6 +68,18 @@ class PairingGenerationTests(unittest.TestCase):
         self.assertIn("run: bash scripts/build_stikpair_ffi.sh", release)
         self.assertIn("run: bash scripts/build_stikpair_ffi.sh", validation)
 
+    def test_pairing_path_is_consistent_across_app_and_documentation(self):
+        settings = (ROOT / "iSteam" / "SettingsViewController.swift").read_text()
+        store = (ROOT / "iSteam" / "StikJITPairingFileStore.swift").read_text()
+        expected = "Application Support/StikJIT/pairingFile.plist"
+        self.assertIn(expected, settings)
+        self.assertIn('appendingPathComponent("StikJIT"', store)
+        for path in ("README.md", "docs/JIT_ACTIVATION.md", "docs/PAIRING_GENERATION.md"):
+            document = (ROOT / path).read_text()
+            with self.subTest(path=path):
+                self.assertIn(expected, document)
+                self.assertNotIn("Documents/StikJIT/pairingFile.plist", document)
+
     def test_settings_exposes_pairing_generation_and_import(self):
         source = (ROOT / "iSteam" / "SettingsViewController.swift").read_text()
         self.assertIn("StikPairingCoordinator.shared.startPairing(from: self)", source)

@@ -185,4 +185,4 @@ See [QEMU_BUILD_WORKFLOW.md](docs/QEMU_BUILD_WORKFLOW.md) for the UTM/QEMU iOS b
 
 ## On-device JIT pairing
 
-On physical iOS/iPadOS 27+ devices outside LiveContainer, choose **Generate device pairing file** in Settings → JIT, allow Local Network access, then open Settings → Privacy & Security → Developer Mode → Pair with Akatsubaki Emu and enter the PIN shown in the continued-processing Live Activity. Akatsubaki saves the protected file to `Documents/StikJIT/pairingFile.plist`. iOS 26 keeps the import-existing-file option.
+On physical iOS/iPadOS 27+ devices outside LiveContainer, choose **Generate device pairing file** in Settings → JIT, allow Local Network access, then open Settings → Privacy & Security → Developer Mode → Pair with Akatsubaki Emu and enter the PIN shown in the continued-processing Live Activity. Akatsubaki saves the protected file to `Application Support/StikJIT/pairingFile.plist`. iOS 26 keeps the import-existing-file option.

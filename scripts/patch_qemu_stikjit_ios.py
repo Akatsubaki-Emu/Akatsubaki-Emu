@@ -159,7 +159,7 @@ def patch_source(source: str) -> str:
         "g_jit_ready = ready;",
         "g_jit_prepare_region = prepare;",
         "g_jit_detach = detach;",
-        "__attribute__((used, visibility(\\"default\\")))",
+        '__attribute__((used, visibility("default")))',
         'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
         "jit_protocol_mode < 0",
         "jit_protocol_mode > 0",
