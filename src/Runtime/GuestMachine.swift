@@ -61,6 +61,7 @@ final class GuestMachine {
     private let executionLock = NSLock()
     private let activeCPULock = NSLock()
     private var activeCPU: GuestCPUBackend?
+    private var pendingStopRequested = false
 
     private static func alignGuestAddress(_ address: UInt64) throws -> UInt64 {
         let (sum, overflow) = address.addingReportingOverflow(4095)
@@ -77,16 +78,26 @@ final class GuestMachine {
     private func setActiveCPU(_ backend: GuestCPUBackend?) {
         activeCPULock.lock()
         activeCPU = backend
+        let shouldStop = backend != nil && pendingStopRequested
+        if backend != nil { pendingStopRequested = false }
+        activeCPULock.unlock()
+        if shouldStop { backend?.requestStop() }
+    }
+
+    private func clearPendingStopRequest() {
+        activeCPULock.lock()
+        pendingStopRequested = false
         activeCPULock.unlock()
     }
 
     /// Requests interruption without waiting for executionLock, which is held
-    /// for the duration of runBatch. The lock protects the backend reference
-    /// while installCPUBackend swaps it between batches.
+    /// for the duration of runBatch. A pending request is consumed if the CPU
+    /// enters its active window immediately after this check.
     @discardableResult
     private func requestActiveStop() -> Bool {
         activeCPULock.lock()
         let backend = activeCPU
+        if backend == nil { pendingStopRequested = true }
         activeCPULock.unlock()
         backend?.requestStop()
         return backend != nil
@@ -284,6 +295,7 @@ final class GuestMachine {
             if state == .configured {
                 state = .paused
             }
+            clearPendingStopRequest()
         }
     }
 
@@ -299,6 +311,7 @@ final class GuestMachine {
             initialStackBase = nil
             state = .stopped
             lastExit = nil
+            clearPendingStopRequest()
         }
     }
 

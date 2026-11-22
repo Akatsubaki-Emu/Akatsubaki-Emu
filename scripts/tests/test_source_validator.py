@@ -49,6 +49,19 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("requestActiveStop()", source)
         self.assertIn("memory.clear()", source)
 
+    def test_pause_request_cannot_miss_the_cpu_activation_window(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        activation = source.split("private func setActiveCPU", 1)[1].split("private func clearPendingStopRequest", 1)[0]
+        interruption = source.split("private func requestActiveStop", 1)[1].split("init(configuration:", 1)[0]
+        pause = source.split("func pause()", 1)[1].split("func stop()", 1)[0]
+        stop = source.split("func stop()", 1)[1].split("func resume()", 1)[0]
+        self.assertIn("pendingStopRequested", activation)
+        self.assertIn("if shouldStop { backend?.requestStop() }", activation)
+        self.assertIn("if backend == nil { pendingStopRequested = true }", interruption)
+        self.assertIn("clearPendingStopRequest()", pause)
+        self.assertIn("clearPendingStopRequest()", stop)
+
     def test_qemu_packager_has_one_complete_candidate_scan(self):
         root = Path(__file__).resolve().parents[2]
         package = (root / "scripts" / "package-utm-qemu-runtime.sh").read_text(encoding="utf-8")
