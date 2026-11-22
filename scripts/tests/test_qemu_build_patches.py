@@ -275,6 +275,30 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
             self.assertEqual(source.count("      - name: " + name), 1)
 
 
+    def test_qemu_build_rechecks_push_freshness_after_runner_queue(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        freshness = source.split("      - name: Check push freshness before expensive QEMU build", 1)[1]
+        freshness = freshness.split("      - name: Checkout UTM with submodules", 1)[0]
+        self.assertIn('if [ "$GITHUB_REF" = "refs/heads/main" ]; then', freshness)
+        self.assertIn('git ls-remote --exit-code origin refs/heads/main', freshness)
+        self.assertIn('echo "build=false" >> "$GITHUB_OUTPUT"', freshness)
+        self.assertIn('echo "build=true" >> "$GITHUB_OUTPUT"', freshness)
+        for name in (
+            "Checkout UTM with submodules",
+            "Select Xcode",
+            "Verify Objective-C class-selector stub compatibility",
+            "Install UTM build dependencies",
+            "Cache UTM dependency build and sysroot",
+            "Build UTM dependencies for physical iOS arm64",
+            "Build UTM iOS archive",
+            "Package and verify in-process QEMU runtime",
+            "Upload verified QEMU runtime artifact",
+        ):
+            step = source.split("      - name: " + name, 1)[1].split("\n      - name:", 1)[0]
+            self.assertIn("steps.freshness.outputs.build == 'true'", step)
+
+
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):
         root = Path(__file__).resolve().parents[2]
         configuration = (root / "src/Core/VMConfiguration.swift").read_text(encoding="utf-8")
