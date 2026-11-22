@@ -42,6 +42,16 @@ enum GameLibraryQueryTests {
         precondition(favorites.count == 1)
         precondition(favorites[0].name == "Another Portal")
 
+        let zeroLimit = store.query(GameLibraryQuery(limit: 0))
+        precondition(zeroLimit.isEmpty)
+
+        let singleBest = store.query(GameLibraryQuery(sortOrder: .recentlyPlayed, limit: 1))
+        precondition(singleBest.count == 1)
+        precondition(singleBest[0].name == "Another Portal")
+
+        let negativeLimit = store.query(GameLibraryQuery(limit: -1))
+        precondition(negativeLimit.count == games.count)
+
         let recent = store.recentlyPlayed
         precondition(recent.first?.name == "Another Portal")
         print("Game library query and single-pass tag collection tests passed")

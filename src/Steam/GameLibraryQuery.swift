@@ -16,6 +16,7 @@ struct GameLibraryQuery {
     var limit: Int?
 
     func apply(to source: [GameEntry]) -> [GameEntry] {
+        if limit == 0 || source.isEmpty { return [] }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let tag = requiredTag?.trimmingCharacters(in: .whitespacesAndNewlines)
         var result = source
@@ -34,7 +35,7 @@ struct GameLibraryQuery {
                 && !(game.notes?.localizedCaseInsensitiveContains(query) ?? false)
         }
 
-        result.sort { lhs, rhs in
+        let orderedBefore: (GameEntry, GameEntry) -> Bool = { lhs, rhs in
             if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
             switch sortOrder {
             case .title:
@@ -50,7 +51,15 @@ struct GameLibraryQuery {
             }
         }
 
-        if let limit, limit >= 0, result.count > limit {
+        if limit == 1 {
+            guard let best = result.min(by: orderedBefore) else { return [] }
+            return [best]
+        }
+
+        if result.count > 1 {
+            result.sort(by: orderedBefore)
+        }
+        if let limit, limit > 1, result.count > limit {
             result.removeLast(result.count - limit)
         }
         return result
