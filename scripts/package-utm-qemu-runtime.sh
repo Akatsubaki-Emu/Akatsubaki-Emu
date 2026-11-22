@@ -35,8 +35,11 @@ if [ -L "$OUT" ]; then
     echo "Refusing to replace a symlink output directory: $OUT" >&2
     exit 2
 fi
-APP="$ARCHIVE/Products/Applications/UTM.app"
-test -d "$APP" || { echo "UTM.app missing from archive: $APP" >&2; exit 1; }
+case "$MODE" in
+  jit) APP="$ARCHIVE/Products/Applications/UTM.app" ;;
+  tci) APP="$ARCHIVE/Products/Applications/UTM SE.app" ;;
+esac
+test -d "$APP" || { echo "UTM app product missing from archive for mode $MODE: $APP" >&2; exit 1; }
 
 rm -rf "$OUT"
 MODE_DIR="$OUT/QEMU/$MODE_DIRECTORY"
@@ -134,7 +137,7 @@ case "$candidate" in
     fi
     ;;
   *)
-    [ "$MODE" = "jit" ] || { echo "TCI QEMU candidate is outside UTM.app/Frameworks: $candidate" >&2; exit 3; }
+    [ "$MODE" = "jit" ] || { echo "TCI QEMU candidate is outside the selected UTM app product/Frameworks: $candidate" >&2; exit 3; }
     runtime_relative="Frameworks/$(basename "$candidate")"
     cp "$candidate" "$OUT/$runtime_relative"
     ;;
@@ -174,7 +177,7 @@ while IFS= read -r firmware_file; do
   case "$source_dir" in
     "$APP") relative_dir="root" ;;
     "$APP"/*) relative_dir="${source_dir#"$APP"/}" ;;
-    *) echo "Refusing firmware path outside UTM.app: $firmware_file" >&2; exit 5 ;;
+    *) echo "Refusing firmware path outside the selected UTM app product: $firmware_file" >&2; exit 5 ;;
   esac
   case "/$relative_dir/" in
     *"/../"*|*"/./"*) echo "Refusing unsafe firmware directory: $relative_dir" >&2; exit 5 ;;
