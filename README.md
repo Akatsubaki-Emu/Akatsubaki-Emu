@@ -25,6 +25,12 @@
 > [!WARNING]
 > **Akatsubaki Emu is experimental and is not yet a working PC emulator.** It does not currently boot arbitrary Windows/Linux images through a fully integrated emulator or promise that Steam games will run. The tvOS interface is a prototype, not a game launcher. CI IPAs are unsigned; installation requires a compatible signing method, and packaging success does not prove the app works on a device.
 
+## Development timeline (estimate)
+
+- **First playable physical iOS build: February–May 2027.** This is an ambitious planning estimate, not a promised release date. It depends on completing and integrating the Kenran Butō execution path, the required AOT/runtime and ABI work, a reproducible physical-device build, and basic guest display/input. The estimate must be revised as real integration, CI and device-test evidence becomes available.
+- **Full emulator completion: not yet estimable.** Broad Windows/Linux compatibility, graphics translation and other production features remain outside the first-playable milestone; there is not enough verified progress to give them a reliable completion date.
+
+
 ## Downloads
 
 Choose the build channel and platform below. Nightly builds contain recent changes and may be unstable; Main is the project's main release channel.
