@@ -87,10 +87,19 @@ required = {
     "iSteam/JITCoordinator.swift": [
         "if #available(iOS 26.0, *)",
         "return iSteamJITIsSupported()",
+        "var isJITProtocolKnown: Bool",
+        "iSteamJITGetProtocolMode() >= 0",
+        "guard isJITProtocolKnown else",
         "scheme = \"stikdebug\"",
         "host = \"enable-jit\"",
         "script-name",
         "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)",
+    ],
+    "scripts/patch_qemu_stikjit_ios.py": [
+        "iSteamJITGetProtocolMode",
+        "jit_protocol_mode < 0",
+        "jit_protocol_mode > 0",
+        "alloc_code_gen_buffer_splitwx_stikdebug",
     ],
     "iSteam/CrashLogger.swift": [
         "queueKey = DispatchSpecificKey<UInt8>()",
