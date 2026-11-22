@@ -3,6 +3,22 @@ import Foundation
 @main
 struct ExecutionBackendRouterTests {
     static func main() {
+        let diagnosticRequest = RuntimeExecutionRequest(format: .linuxX64ELF)
+        let diagnosticPlan = RuntimeBackendRouter.plan(
+            for: diagnosticRequest,
+            availability: RuntimeBackendAvailability(installed: [.x86Interpreter])
+        )
+        precondition(diagnosticPlan.diagnosticFallback == .x86Interpreter)
+        precondition(diagnosticPlan.missingRequiredLayers == [.linuxSyscallABI])
+        precondition(diagnosticPlan.isRunnableAsDiagnosticBringUp)
+        precondition(!diagnosticPlan.isExecutableWithInstalledBackends)
+
+        let noDiagnosticPlan = RuntimeBackendRouter.plan(
+            for: diagnosticRequest,
+            availability: RuntimeBackendAvailability()
+        )
+        precondition(!noDiagnosticPlan.isRunnableAsDiagnosticBringUp)
+
         let arm32Request = RuntimeExecutionRequest(format: .linuxARM32ELF)
         let translatorOnly = RuntimeBackendAvailability(installed: [.a32rt])
         let translatorOnlyPlan = RuntimeBackendRouter.plan(
