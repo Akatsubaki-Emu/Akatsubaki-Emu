@@ -155,6 +155,9 @@ def patch_source(source: str) -> str:
         "    }\n"
         "#endif\n"
     )
+    if "\\n" in replacement or "\\\"" in replacement:
+        raise ValueError("StikDebug allocator patch contains escaped C source delimiters")
+
     source = source.replace(FUNCTION_ANCHOR, replacement, 1)
     required = [
         "#include <TargetConditionals.h>",

@@ -166,6 +166,8 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         once = patch_qemu_stikjit_ios.patch_source(source)
         twice = patch_qemu_stikjit_ios.patch_source(once)
         self.assertEqual(once, twice)
+        self.assertNotIn(r'\\n', once)
+        self.assertNotIn(r'\\\"', once)
         self.assertIn("#include <mach/mach_vm.h>", once)
         self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")', once)
         self.assertIn("jit_protocol_mode < 0", once)
@@ -313,6 +315,35 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn('if grep -Fq \'_objc_msgSendClass\' <<<"$SYMBOLS"; then', source)
         self.assertNotIn('nm -u "$PROBE_OBJECT" | grep', source)
         self.assertNotIn("\n; then\n", source)
+
+    def test_release_tag_is_created_from_the_workflow_commit(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("tag_name: ${{ steps.meta.outputs.tag }}", source)
+        self.assertIn("target_commitish: ${{ github.sha }}", source)
+
+
+    def test_main_release_dispatch_is_limited_to_main_branch(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("validate-release-channel:", source)
+        self.assertIn("needs: validate-release-channel", source)
+        self.assertIn("inputs.channel == 'Main'", source)
+        self.assertIn("github.ref != 'refs/heads/main'", source)
+        self.assertIn("The Main release channel can only be dispatched from refs/heads/main", source)
+
+
+    def test_visionos_release_channel_uses_distinct_bundle_identifiers(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        step = source.split("- name: Build and package visionOS app", 1)[1].split("- name: Upload build artifact", 1)[0]
+        self.assertIn('if [ "$RELEASE_CHANNEL" = "main" ]; then', step)
+        self.assertIn('EXPECTED_BUNDLE="com.xthrx.isteam.visionos"', step)
+        self.assertIn('EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"', step)
+        self.assertIn('PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE"', step)
+        self.assertIn('grep -Fx "$EXPECTED_BUNDLE"', step)
+        self.assertIn('bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"', step)
+
 
     def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects

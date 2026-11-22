@@ -171,6 +171,12 @@ jobs:
               "actions/download-artifact@",
               "name: iSteam-qemu-runtime-ios-arm64",
               "if-no-files-found: error",
+    "validate-release-channel:",
+    "needs: validate-release-channel",
+    "target_commitish: ${{ github.sha }}",
+    "EXPECTED_BUNDLE=\"com.xthrx.isteam.visionos.nightly\"",
+    "github.ref != 'refs/heads/main'",
+
           ]
           missing = [item for item in required_release if item not in release]
           if missing:
