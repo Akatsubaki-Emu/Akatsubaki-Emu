@@ -1,11 +1,35 @@
 #!/usr/bin/env python3
-"""Patch QEMU's iOS feature and emulator-specific link configuration before configure."""
+"""Patch QEMU iOS features, Objective-C compilation, and emulator link configuration."""
 from pathlib import Path
 import os
 import sys
 
 MARKER_COMMENT = "# i-Steam iOS: force-load Apple's compiler runtime into the emulator dylib."
 LEGACY_MARKER_COMMENT = "# i-Steam iOS: put compiler-rt on the actual emulator library link edge."
+
+OBJC_BLOCK_MARKER = "if 'objc' in all_languages"
+OBJC_ARGUMENT = "objc.get_supported_arguments(qemu_common_flags + warn_flags)"
+OBJC_PATCHED_ARGUMENT = (
+    "objc.get_supported_arguments(qemu_common_flags + warn_flags + "
+    "['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')"
+)
+
+
+def patch_objc_compile_flag(source: str) -> str:
+    if OBJC_PATCHED_ARGUMENT in source:
+        if source.count(OBJC_PATCHED_ARGUMENT) != 1:
+            raise SystemExit("QEMU meson.build changed: duplicate Objective-C compiler flag patch")
+        return source
+    block_start = source.find(OBJC_BLOCK_MARKER)
+    if block_start < 0:
+        return source
+    block_end = source.find("endif", block_start)
+    if block_end < 0:
+        raise SystemExit("QEMU meson.build changed: Objective-C compiler block is unterminated")
+    position = source.find(OBJC_ARGUMENT, block_start, block_end)
+    if position < 0 or source.find(OBJC_ARGUMENT, position + len(OBJC_ARGUMENT), block_end) >= 0:
+        raise SystemExit("QEMU meson.build changed: Objective-C compiler argument anchor not found exactly once")
+    return source[:position] + OBJC_PATCHED_ARGUMENT + source[position + len(OBJC_ARGUMENT):]
 
 
 def patch_source(source: str, runtime_path: str) -> str:
@@ -16,6 +40,7 @@ def patch_source(source: str, runtime_path: str) -> str:
             raise SystemExit("QEMU meson.build changed: POSIX_MEMALIGN feature probe not found")
         source = source.replace(old_probe, new_probe, 1)
 
+    source = patch_objc_compile_flag(source)
     if not runtime_path or "\n" in runtime_path or "\r" in runtime_path:
         raise SystemExit("A valid IOS_COMPILER_RT path is required")
     meson_path = runtime_path.replace("\\", "\\\\").replace("'", "\\'")
@@ -67,6 +92,8 @@ def patch_source(source: str, runtime_path: str) -> str:
     patched = "\n".join(lines) + ("\n" if source.endswith("\n") else "")
     if new_probe not in patched or marker not in patched:
         raise SystemExit("QEMU meson.build patch verification failed")
+    if OBJC_BLOCK_MARKER in patched and OBJC_PATCHED_ARGUMENT not in patched:
+        raise SystemExit("QEMU meson.build patch verification failed: Objective-C compiler flag was not applied")
     if "add_project_link_arguments('-Wl,-force_load,'" in patched:
         raise SystemExit("Obsolete project-level compiler-runtime patch remains")
     return patched
@@ -82,7 +109,7 @@ def main() -> None:
     source = path.read_text(encoding="utf-8")
     patched = patch_source(source, str(runtime))
     path.write_text(patched, encoding="utf-8")
-    print(f"Patched QEMU emulator Objective-C stub/runtime and compiler-runtime link arguments: {runtime}")
+    print(f"Patched QEMU Objective-C compiler flags and emulator link arguments: {runtime}")
 
 
 if __name__ == "__main__":

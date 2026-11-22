@@ -69,3 +69,8 @@ Run `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` for the deter
 
 
 The host JIT protocol is now tri-state and uses StikJIT's IOKit memory-map query. Standard devices use the existing split-WX allocator; confirmed TXM devices use the exported QEMU callback setter and StikDebug breakpoint allocator; unknown devices fail closed. The IOKit-linked host changes and QEMU selector still require a fresh macOS/Xcode build and physical-device validation.
+
+
+## Objective-C class-selector compile verification
+
+The Meson patcher now adds `-fno-objc-msgsend-class-selector-stubs` directly to QEMU's Objective-C project arguments with `checked: 'require'`. This is separate from the existing `OBJCFLAGS` environment fallback and the emulator link flags. The generated Ninja file is checked before compilation: the `spice-display-metal.m.o` Objective-C compile edge must contain the flag, and the QEMU dylib link edge must still contain `-objc_stubs_fast`, `-lobjc`, and the forced iOS compiler runtime. The build fails before the expensive compile if either edge is missing its required flags.
