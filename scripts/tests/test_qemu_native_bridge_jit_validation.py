@@ -25,6 +25,20 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         )
         self.assertIn("isteam_qemu_set_jit_callbacks", source)
         self.assertIn("required lifecycle/JIT exports", source)
+        self.assertIn(
+            "typedef void (*qemu_set_jit_callbacks_fn)(bool (*)(void), void *(*)(void *, size_t), void (*)(void));",
+            source,
+        )
+        self.assertIn(
+            "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
+            source,
+        )
+        patcher = (root / "scripts" / "patch_qemu_stikjit_ios.py").read_text(encoding="utf-8")
+        self.assertIn("void isteam_qemu_set_jit_callbacks(", patcher)
+        self.assertIn("g_jit_ready = ready;", patcher)
+        self.assertIn("g_jit_prepare_region = prepare;", patcher)
+        self.assertIn("g_jit_detach = detach;", patcher)
+        self.assertIn('__attribute__((used, visibility("default")))', patcher)
 
 
 if __name__ == "__main__":
