@@ -20,6 +20,7 @@ swift-runtime-tests:
         - src/Runtime/**/*.swift
         - src/Performance/*.swift
         - src/GPU/*.swift
+        - src/Display/ControllerMappingStore.swift
         - src/QEMU/VNCKeyState.swift
         - scripts/tests/*.swift
         - scripts/tests/**/*.swift
@@ -43,6 +44,8 @@ swift-runtime-tests:
     - /tmp/test-backend-router
     - swiftc -parse-as-library -swift-version 5 src/GPU/GPUBackend.swift scripts/tests/test_gpu_frame_region.swift -o /tmp/test-gpu-frame-region
     - /tmp/test-gpu-frame-region
+    - swiftc -parse-as-library -swift-version 5 src/Display/ControllerMappingStore.swift scripts/tests/test_controller_deadzone_math.swift -o /tmp/test-controller-deadzone
+    - /tmp/test-controller-deadzone
 
 native-memory-tests:
   stage: validate

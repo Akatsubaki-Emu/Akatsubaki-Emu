@@ -109,18 +109,20 @@ final class ControllerInputManager {
     private func configure(_ controller: GCController) {
         guard let pad = controller.extendedGamepad else { return }
         let profile = ControllerMappingStore.shared.profile
+        let leftDeadzone = ControllerDeadzone(profile.leftDeadzone)
+        let rightDeadzone = ControllerDeadzone(profile.rightDeadzone)
         let source = sourceID(for: controller)
         let leftSource = source + ":left"
         let rightSource = source + ":right"
         pad.leftThumbstick.valueChangedHandler = { [weak self] _, x, y in
             guard let self else { return }
-            let point = Self.applyDeadzone(x: x, y: y, deadzone: profile.leftDeadzone)
+            let point = leftDeadzone.apply(x: x, y: y)
             if profile.swapSticks { self.onLook?(point.0, point.1) }
             else { self.onMove?(point.0, point.1, leftSource) }
         }
         pad.rightThumbstick.valueChangedHandler = { [weak self] _, x, y in
             guard let self else { return }
-            var point = Self.applyDeadzone(x: x, y: y, deadzone: profile.rightDeadzone)
+            var point = rightDeadzone.apply(x: x, y: y)
             if profile.invertLookY { point.1 = -point.1 }
             if profile.swapSticks { self.onMove?(point.0, point.1, rightSource) }
             else { self.onLook?(point.0, point.1) }
@@ -155,12 +157,4 @@ final class ControllerInputManager {
         return buttons
     }
 
-    private static func applyDeadzone(x: Float, y: Float, deadzone: Float) -> (Float, Float) {
-        let magnitudeSquared = x * x + y * y
-        guard magnitudeSquared > deadzone * deadzone else { return (0, 0) }
-        let magnitude = min(1, magnitudeSquared.squareRoot())
-        let scaled = min(1, (magnitude - deadzone) / max(0.0001, 1 - deadzone))
-        let factor = scaled / magnitude
-        return (x * factor, y * factor)
-    }
 }

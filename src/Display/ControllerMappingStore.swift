@@ -40,6 +40,29 @@ struct ControllerMappingProfile: Codable, Equatable {
     }
 }
 
+struct ControllerDeadzone {
+    private let deadzone: Float
+    private let deadzoneSquared: Float
+    private let inverseRange: Float
+
+    init(_ deadzone: Float) {
+        let normalized = min(max(deadzone, 0), 0.8)
+        self.deadzone = normalized
+        deadzoneSquared = normalized * normalized
+        inverseRange = 1 / (1 - normalized)
+    }
+
+    @inline(__always)
+    func apply(x: Float, y: Float) -> (Float, Float) {
+        let magnitudeSquared = x * x + y * y
+        guard magnitudeSquared > deadzoneSquared else { return (0, 0) }
+        let magnitude = min(1, magnitudeSquared.squareRoot())
+        let scaled = min(1, (magnitude - deadzone) * inverseRange)
+        let factor = scaled / magnitude
+        return (x * factor, y * factor)
+    }
+}
+
 final class ControllerMappingStore {
     static let shared = ControllerMappingStore()
     static let profileDidChangeNotification = Notification.Name("iSteam.controllerMapping.profileDidChange")
