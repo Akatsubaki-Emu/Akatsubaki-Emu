@@ -1,0 +1,81 @@
+name: One-time safe main-history reconciliation
+
+on:
+  push:
+    branches:
+      - 'reconcile/gitlab-main-20261122-1642'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-main-histories
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out GitHub main with full history
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Reconcile GitHub and GitLab main without force-pushing
+        shell: bash
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git remote add gitlab https://gitlab.com/chantinlongxthrx/I-steam.git
+          git fetch origin main
+          git fetch gitlab main
+
+          github_sha="$(git rev-parse origin/main)"
+          gitlab_sha="$(git rev-parse gitlab/main)"
+          echo "GitHub main: $github_sha"
+          echo "GitLab main: $gitlab_sha"
+
+          if [ "$github_sha" = "$gitlab_sha" ]; then
+            echo "Main histories are already synchronized."
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor "$gitlab_sha" "$github_sha"; then
+            echo "GitHub is ahead; pushing the safe fast-forward to GitLab."
+            if [ -z "${GITLAB_TOKEN:-}" ]; then
+              echo "::error::GITLAB_TOKEN is required to update the downstream mirror."
+              exit 1
+            fi
+            git remote set-url gitlab "https://oauth2:${GITLAB_TOKEN}@gitlab.com/chantinlongx/I-steam.git"
+            git push gitlab "$github_sha:refs/heads/main"
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor "$github_sha" "$gitlab_sha"; then
+            echo "GitLab is ahead; advancing GitHub by a safe fast-forward."
+            git push origin "$gitlab_sha:refs/heads/main"
+            exit 0
+          fi
+
+          merge_base="$(git merge-base "$github_sha" "$gitlab_sha")"
+          if [ -z "$merge_base" ]; then
+            echo "::error::No common ancestor exists. Refusing to combine unrelated histories."
+            exit 1
+          fi
+          echo "Common ancestor: $merge_base"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B reconcile-main "$github_sha"
+
+          if ! git merge --no-ff --no-commit "$gitlab_sha"; then
+            echo "::error::Merge conflicts detected. Aborting without changing either main branch."
+            git status --short
+            git merge --abort
+            exit 1
+          fi
+
+          git commit -m "merge: reconcile GitLab main into GitHub main"
+          git push origin HEAD:refs/heads/main
