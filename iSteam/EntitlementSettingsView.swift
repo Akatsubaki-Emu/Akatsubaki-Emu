@@ -8,6 +8,7 @@ final class EntitlementViewModel: ObservableObject {
     @Published var appleID = ""
     @Published var password = ""
     @Published var verificationCode = ""
+    @Published var anisetteServerURL: String
     @Published private(set) var needsVerificationCode = false
     @Published private(set) var isBusy = false
     @Published private(set) var accountEmail: String?
@@ -15,7 +16,12 @@ final class EntitlementViewModel: ObservableObject {
     @Published private(set) var selectedTeam: Team?
     @Published var status = "Sign in with the Apple account used to install this build."
 
+    private var session: AppleAPISession?
     private var verificationCodeHandler: ((String?) -> Void)?
+
+    init() {
+        anisetteServerURL = UserDefaults.standard.string(forKey: "iSteam.anisetteServerURL") ?? "https://ani.sidestore.io"
+    }
 
     var bundleIdentifier: String {
         Bundle.main.bundleIdentifier ?? "Unknown bundle identifier"
@@ -23,6 +29,13 @@ final class EntitlementViewModel: ObservableObject {
 
     func signIn() async {
         guard !isBusy else { return }
+        guard let anisetteURL = URL(string: anisetteServerURL.trimmingCharacters(in: .whitespacesAndNewlines)),
+              anisetteURL.scheme == "https",
+              anisetteURL.host != nil else {
+            status = "Enter a valid HTTPS Anisette server URL."
+            return
+        }
+
         isBusy = true
         status = "Connecting to Apple Developer Services…"
         defer {
@@ -31,9 +44,11 @@ final class EntitlementViewModel: ObservableObject {
         }
 
         do {
+            AnisetteDataHelper.shared.url = anisetteURL
+            UserDefaults.standard.set(anisetteURL.absoluteString, forKey: "iSteam.anisetteServerURL")
             let anisetteData = try await AnisetteDataHelper.shared.getAnisetteData()
-            let (account, session) = try await AppleAPI.shared.authenticate(
-                appleID: appleID,
+            let (account, authenticatedSession) = try await AppleAPI.shared.authenticate(
+                appleID: appleID.trimmingCharacters(in: .whitespacesAndNewlines),
                 password: password,
                 anisetteData: anisetteData
             ) { [weak self] completionHandler in
@@ -44,10 +59,9 @@ final class EntitlementViewModel: ObservableObject {
                 self.prepareForVerification(using: completionHandler)
             }
 
-            DataManager.shared.model.account = account
-            DataManager.shared.model.session = session
-            let teams = try await AppleAPI.shared.fetchTeamsForAccount(account: account, session: session)
+            session = authenticatedSession
             accountEmail = account.appleID
+            let teams = try await AppleAPI.shared.fetchTeamsForAccount(account: account, session: authenticatedSession)
             availableTeams = teams
             if teams.count == 1, let team = teams.first {
                 selectTeam(team)
@@ -71,13 +85,11 @@ final class EntitlementViewModel: ObservableObject {
 
     func selectTeam(_ team: Team) {
         selectedTeam = team
-        DataManager.shared.model.team = team
     }
 
     func enableIncreasedMemoryLimit() async {
         guard !isBusy else { return }
-        guard let team = selectedTeam,
-              let session = DataManager.shared.model.session else {
+        guard let team = selectedTeam, let session else {
             status = "Sign in and select your Apple Developer team first."
             return
         }
@@ -89,7 +101,7 @@ final class EntitlementViewModel: ObservableObject {
         do {
             let appIDs = try await AppleAPI.shared.fetchAppIDsForTeam(team: team, session: session)
             guard let appID = appIDs.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
-                status = "No App ID for \(bundleIdentifier) was found in this team. Install this build with the same Apple account first, then refresh and try again."
+                status = "No App ID for \(bundleIdentifier) was found in this team. Install this build with the same Apple account first, then try again."
                 return
             }
 
@@ -99,16 +111,14 @@ final class EntitlementViewModel: ObservableObject {
                 team: team,
                 session: session
             )
-            status = "Apple accepted the Increased Memory Limit capability update for \(bundleIdentifier). Reinstall this app through SideStore or AltStore using the same account so the provisioning profile is regenerated. The running installation cannot update its own code signature."
+            status = "Apple accepted the Increased Memory Limit capability update for \(bundleIdentifier). Reinstall or re-provision this app through SideStore or AltStore using the same account so the new provisioning profile includes the capability. The running installation cannot update its own code signature."
         } catch {
             status = error.localizedDescription
         }
     }
 
     func signOut() {
-        DataManager.shared.model.session = nil
-        DataManager.shared.model.account = nil
-        DataManager.shared.model.team = nil
+        session = nil
         accountEmail = nil
         appleID = ""
         availableTeams = []
@@ -117,7 +127,7 @@ final class EntitlementViewModel: ObservableObject {
         needsVerificationCode = false
         password = ""
         verificationCode = ""
-        status = "Signed out."
+        status = "Signed out. The device Anisette provisioning data is retained in Keychain."
     }
 
     private func prepareForVerification(using handler: @escaping (String?) -> Void) {
@@ -140,35 +150,38 @@ struct EntitlementSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Anisette server") {
+                TextField("HTTPS server URL", text: $model.anisetteServerURL)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Text("Defaults to https://ani.sidestore.io. A compatible HTTPS Anisette server is required for Apple authentication.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Apple Developer account") {
                 if let email = model.accountEmail {
                     LabeledContent("Account", value: email)
                     if !model.availableTeams.isEmpty {
                         ForEach(model.availableTeams, id: \.identifier) { team in
-                            Button {
-                                model.selectTeam(team)
-                            } label: {
+                            Button { model.selectTeam(team) } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(team.name)
-                                        Text(team.identifier)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        Text(team.identifier).font(.caption).foregroundStyle(.secondary)
                                     }
                                     Spacer()
                                     if model.selectedTeam?.identifier == team.identifier {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(.tint)
+                                        Image(systemName: "checkmark").foregroundStyle(.tint)
                                     }
                                 }
                             }
                             .disabled(model.isBusy)
                         }
                     }
-                    Button("Sign Out", role: .destructive) {
-                        model.signOut()
-                    }
-                    .disabled(model.isBusy)
+                    Button("Sign Out", role: .destructive) { model.signOut() }
+                        .disabled(model.isBusy)
                 } else {
                     TextField("Apple Account email", text: $model.appleID)
                         .keyboardType(.emailAddress)
@@ -178,45 +191,32 @@ struct EntitlementSettingsView: View {
                     SecureField("Apple Account password", text: $model.password)
                         .textContentType(.password)
                         .disabled(model.isBusy)
-                    Button("Sign In") {
-                        Task { await model.signIn() }
-                    }
-                    .disabled(model.isBusy || model.appleID.isEmpty || model.password.isEmpty)
+                    Button("Sign In") { Task { await model.signIn() } }
+                        .disabled(model.isBusy || model.appleID.isEmpty || model.password.isEmpty)
                 }
 
                 if model.needsVerificationCode {
                     TextField("Two-factor verification code", text: $model.verificationCode)
                         .keyboardType(.numberPad)
-                    Button("Submit Verification Code") {
-                        model.submitVerificationCode()
-                    }
-                    .disabled(model.verificationCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Submit Verification Code") { model.submitVerificationCode() }
+                        .disabled(model.verificationCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
 
             Section("Entitlement") {
-                Button {
-                    Task { await model.enableIncreasedMemoryLimit() }
-                } label: {
-                    if model.isBusy {
-                        HStack {
-                            ProgressView()
-                            Text("Working…")
-                        }
-                    } else {
-                        Text("Enable Increased Memory Limit for Akatsubaki Emu")
-                    }
+                Button { Task { await model.enableIncreasedMemoryLimit() } } label: {
+                    if model.isBusy { HStack { ProgressView(); Text("Working…") } }
+                    else { Text("Enable Increased Memory Limit for Akatsubaki Emu") }
                 }
                 .disabled(model.isBusy || model.selectedTeam == nil)
-                Text("This uses the GetMoreRam/StosSign Apple Developer Services flow. Apple account access and an existing App ID are required.")
+                Text("This requests Apple INCREASED_MEMORY_LIMIT for the current app ID using GetMoreRam’s StosSign workflow.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             Section("Status and next step") {
-                Text(model.status)
-                    .textSelection(.enabled)
-                Text("After Apple accepts the change, reinstall this app with SideStore or AltStore. Apple invalidates profiles when App ID capabilities change; the app cannot grant entitlements to its already-running signature.")
+                Text(model.status).textSelection(.enabled)
+                Text("Apple must authorize the capability. After approval, reinstall or re-provision the app with SideStore or AltStore so the installed provisioning profile includes it.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
