@@ -1015,7 +1015,7 @@ if r"\n" in builder:
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
 repository_validation = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
-if "utm-ios-arm64-deps-v13-" not in repository_validation or "utm-ios-arm64-deps-v12-" in repository_validation:
+if "utm-ios-arm64-deps-v14-" not in repository_validation or "utm-ios-arm64-deps-v13-" in repository_validation:
     print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
     failed = True
 for step in (
@@ -1034,7 +1034,10 @@ for step in (
     if qemu_workflow.count(marker) != 1:
         print(f"QEMU workflow: expected exactly one {marker!r} step", file=sys.stderr)
         failed = True
-if "grep -Fq '_objc_msgSendClass'; then" not in qemu_workflow:
+if 'SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"' not in qemu_workflow:
+    print("QEMU workflow: Objective-C symbol inspection command is missing", file=sys.stderr)
+    failed = True
+if "if grep -Fq '_objc_msgSendClass' <<<\"$SYMBOLS\"; then" not in qemu_workflow:
     print("QEMU workflow: Objective-C class-selector stub probe is malformed", file=sys.stderr)
     failed = True
 if "\n; then\n" in qemu_workflow:
@@ -1048,14 +1051,14 @@ for token in [
     "-fno-objc-msgsend-class-selector-stubs",
     "export OBJCFLAGS=",
     "grep -Fq",
-    "utm-ios-arm64-deps-v13-",
+    "utm-ios-arm64-deps-v14-",
     "spirv-tools",
     "spirv-llvm-translator",
     "steps.xcode.outputs.version",
-    "runs-on: macos-26",
-    'XCODE_APP="/Applications/Xcode_26.2.app"',
+    "runs-on: xcode-27",
+    'XCODE_APP="/Applications/Xcode_27.1.app"',
     'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-    'if [ "$XCODE_VERSION" != "26.2" ]; then',
+    'if [ "$XCODE_VERSION" != "27.1" ]; then',
 ]:
     if token not in qemu_workflow:
         print(f"QEMU workflow: missing build-integrity step {token!r}", file=sys.stderr)
