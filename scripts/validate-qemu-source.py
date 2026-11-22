@@ -920,6 +920,26 @@ required = {
         "jit_protocol_supported()",
         "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
     ],
+    "iSteam/JIT26Protocol.c": [
+        "IORegistryEntryFromPath(",
+        '"IODeviceTree:/chosen/memory-map"',
+        "ISTEAM_JIT_PROTOCOL_UNKNOWN",
+        "iSteamJITGetProtocolMode",
+    ],
+    "iSteam/JIT26Protocol.h": [
+        "ISTEAM_JIT_PROTOCOL_UNKNOWN",
+        "ISTEAM_JIT_PROTOCOL_STANDARD",
+        "ISTEAM_JIT_PROTOCOL_STIKDEBUG",
+        "iSteamJITGetProtocolMode",
+    ],
+    "iSteam/JITCoordinator.swift": [
+        "isJITProtocolKnown",
+        "guard isJITProtocolKnown else",
+    ],
+    "project.yml": [
+        "- sdk: IOKit.framework",
+        "-Wl,-exported_symbol,_iSteamJITGetProtocolMode",
+    ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",

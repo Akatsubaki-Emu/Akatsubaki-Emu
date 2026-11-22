@@ -59,3 +59,7 @@ Launch Setup accepts a boot disk or installer/live ISO and an optional writable 
 - tvOS and visionOS require separately built and validated platform runtimes.
 
 A successful source check or artifact inspection is not evidence that a physical-device guest boots.
+
+## JIT protocol detection
+
+Physical iOS 26+ devices are classified through the same IOKit memory-map TXM query used by StikJIT. The host exposes UNKNOWN, STANDARD, and STIKDEBUG modes. UNKNOWN fails closed in the launch coordinator and QEMU patcher. STANDARD uses QEMU's normal split-WX allocator; STIKDEBUG uses the exported callback setter and the StikDebug executable-region protocol.

@@ -66,3 +66,6 @@ The normal workflow invokes the Meson patcher only after UTM has downloaded the 
 ## Validation
 
 Run `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` for the deterministic patcher tests. The full CI workflow additionally validates YAML with duplicate-key rejection, checks the release/runtime artifact contract, validates QEMU source integration, and compiles the iOS/tvOS/visionOS simulator schemes. A successful simulator or source-validation job is not evidence of a physical iPad guest boot.
+
+
+The host JIT protocol is now tri-state and uses StikJIT's IOKit memory-map query. Standard devices use the existing split-WX allocator; confirmed TXM devices use the exported QEMU callback setter and StikDebug breakpoint allocator; unknown devices fail closed. The IOKit-linked host changes and QEMU selector still require a fresh macOS/Xcode build and physical-device validation.

@@ -58,3 +58,8 @@ The helper apps are not embedded in Akatsubaki. They remain external dependencie
 - **Not tested:** Python unittest execution, Xcode compilation, IPA packaging, installation, JIT activation on hardware, QEMU guest boot or persistent guest state.
 
 Do not treat source-level integration as proof of a working JIT session until a physical-device build and VM launch have been tested.
+
+
+## Fail-closed TXM detection
+
+On physical iOS 26+ devices, Akatsubaki reads `IODeviceTree:/chosen/memory-map` through IOKit, matching StikJIT's protocol detection. A valid registry result without `TXM` selects standard attach-only JIT; `TXM` selects the StikDebug breakpoint allocator; unreadable, malformed, or empty registry data is UNKNOWN and blocks launch. The QEMU patcher uses the tri-state protocol export and refuses unknown devices.
