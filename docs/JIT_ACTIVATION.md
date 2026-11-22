@@ -24,7 +24,7 @@
 - Sign Akatsubaki with a profile that preserves `get-task-allow`.
 - When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
 
-The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM hardware classification independently follows the public model/version rules in [StikDebug's ProcessInfo+TXM implementation](https://github.com/StikDebug/StikDebug/blob/main/StikDebug/Support/ProcessInfo+TXM.swift).
+The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM hardware classification uses the same I/O Registry query as [StikJIT's ProcessInfo+TXM implementation](https://github.com/StikDebug/StikJIT/blob/main/Sources/ProcessInfo%2BTXM.swift): it inspects `IODeviceTree:/chosen/memory-map` for the `TXM` key and validates the returned key list. A failed or malformed query remains `UNKNOWN`; Akatsubaki blocks helper activation and QEMU refuses startup instead of guessing the allocator.
 
 The **Increased Memory Limit** capability is separate from `get-task-allow`. Requesting that memory capability does not grant `get-task-allow` or make the process debuggable; the development provisioning profile must still provide `get-task-allow=true`.
 
@@ -44,7 +44,7 @@ The **Increased Memory Limit** capability is separate from `get-task-allow`. Req
 - `iSteam/LaunchSetupViewController.swift` — waits for the coordinator's success/failure callback before presenting the VM.
 - `src/Display/VMDisplayViewController.swift` — repeats the readiness gate and starts QEMU only once.
 - `iSteam/SettingsViewController.swift` — describes the automatic helper sequence.
-- `project.yml` — links Security for the stable and nightly iOS targets.
+- `project.yml` — links Security and IOKit for the stable and nightly iOS targets.
 - `scripts/patch_qemu_stikjit_ios.py` — selects the breakpoint allocator only on TXM devices; non-TXM iOS 26 devices retain the upstream split-W^X allocator.
 - `scripts/tests/test_jit_protocol.py` — source-contract regression coverage for known/unknown TXM modes, live-debugger gating, exported mode callbacks, and QEMU allocator routing.
 - `scripts/tests/test_jit_coordinator.py` — verifies that an unknown iOS 26 protocol blocks helper handoff and VM startup.
