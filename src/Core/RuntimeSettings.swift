@@ -25,11 +25,23 @@ enum VMAccelerationBackend: String, CaseIterable {
     case qemuJIT = "QEMU TCG + JIT"
     case qemuInterpreter = "QEMU TCI (no JIT)"
     case hypervisor = "Hypervisor.framework"
+    var isAvailable: Bool {
+        switch self {
+        case .automatic:
+            return true
+        case .qemuJIT:
+            return QEMURuntimeStatus.isPackaged(requiresJIT: true)
+        case .qemuInterpreter:
+            return QEMURuntimeStatus.isPackaged(requiresJIT: false)
+        case .hypervisor:
+            return false
+        }
+    }
     var detail: String {
         switch self {
-        case .automatic: return "Prefers QEMU TCG + JIT when available and falls back to the TCI interpreter"
-        case .qemuJIT: return "TCG with a 128 MiB translation-block cache and split-WX enabled"
-        case .qemuInterpreter: return "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG"
+        case .automatic: return "Uses QEMU JIT when a supported JIT session is ready; otherwise selects the packaged no-JIT TCI interpreter"
+        case .qemuJIT: return "JIT-backed QEMU TCG; requires a physical iOS 26+ device, get-task-allow entitlement and supported StikDebug session"
+        case .qemuInterpreter: return "QEMU TCG threaded interpreter (TCI); no executable-memory JIT or StikDebug session required"
         case .hypervisor: return "Unavailable on standard iOS; stored selections fall back to QEMU TCI (no JIT)"
         }
     }
@@ -117,8 +129,14 @@ final class RuntimeSettings {
         set { defaults.set(newValue.rawValue, forKey: "iSteam.vmMode") }
     }
     var acceleration: VMAccelerationBackend {
-        get { VMAccelerationBackend(rawValue: defaults.string(forKey: "iSteam.acceleration") ?? "") ?? .automatic }
-        set { defaults.set(newValue.rawValue, forKey: "iSteam.acceleration") }
+        get {
+            let stored = VMAccelerationBackend(rawValue: defaults.string(forKey: "iSteam.acceleration") ?? "") ?? .automatic
+            return stored.isAvailable ? stored : .qemuInterpreter
+        }
+        set {
+            guard newValue.isAvailable else { return }
+            defaults.set(newValue.rawValue, forKey: "iSteam.acceleration")
+        }
     }
     var resolution: DisplayResolution {
         get { DisplayResolution(rawValue: defaults.string(forKey: "iSteam.resolution") ?? "") ?? .p1080 }
