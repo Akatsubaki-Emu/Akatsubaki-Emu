@@ -12,6 +12,10 @@ class X86InstructionWindowTests(unittest.TestCase):
         self.assertIn("memory.readPrefix(offset: address, into: &instructionWindow)", interpreter)
         self.assertIn("instructionWindowCursor <= instructionWindowLength", interpreter)
         self.assertIn("instructionWindowCursor = 0", interpreter)
+        self.assertIn("instructionBytesConsumed = 0", interpreter)
+        self.assertIn("instructionLengthExceeded = false", interpreter)
+        self.assertIn("private func consumeInstructionBytes(_ byteCount: Int) -> Bool", interpreter)
+        self.assertIn("byteCount <= 15", interpreter)
 
         fetch_byte = interpreter.split("private func fetchByte()", 1)[1].split("private func fetchUInt16()", 1)[0]
         fetch16 = interpreter.split("private func fetchUInt16()", 1)[1].split("private func fetchUInt32()", 1)[0]

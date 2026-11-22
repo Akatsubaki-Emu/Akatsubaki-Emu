@@ -16,6 +16,9 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset, const
 bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset, uint64_t length);
 void isteam_guest_memory_clear(ISteamGuestMemory *memory);
 size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory);
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+void isteam_guest_memory_test_fail_page_allocation_after(int64_t successfulAllocations);
+#endif
 #ifdef __cplusplus
 }
 #endif

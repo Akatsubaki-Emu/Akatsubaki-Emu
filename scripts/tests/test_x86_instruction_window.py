@@ -15,6 +15,10 @@ class X86InstructionWindowTests(unittest.TestCase):
         self.assertIn("instructionWindowCursor <= instructionWindowLength", ensure)
         self.assertIn("instructionWindowLength - instructionWindowCursor >= byteCount", ensure)
         self.assertIn("instructionWindowLength == instructionWindow.count", ensure)
+        self.assertIn("byteCount <= 15", interpreter)
+        self.assertIn("instructionBytesConsumed <= 15 - byteCount", interpreter)
+        self.assertIn("instructionLengthExceeded = true", interpreter)
+        self.assertIn("instructionFetchFailure(at: instructionAddress)", interpreter)
         self.assertIn("refillInstructionWindow(at: rip, generation: memory.mutationGeneration)", ensure)
 
         fetch_byte = interpreter.split("private func fetchByte()", 1)[1].split("private func fetchUInt16()", 1)[0]

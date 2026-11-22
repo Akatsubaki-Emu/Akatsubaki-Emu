@@ -409,6 +409,29 @@ struct InterpreterTests {
         precondition(truncatedRetMemory.readPrefixCalls == 1)
         precondition(truncatedRetMemory.readByteCalls == 0)
 
+        // Fourteen REX prefixes plus a 64-bit immediate exceed x86's
+        // architectural 15-byte maximum even though the immediate is mapped.
+        let overlongMemory = GuestMemory(size: 64)
+        var overlongInstruction = Data(repeating: 0x48, count: 14)
+        overlongInstruction.append(0xB8)
+        overlongInstruction.append(contentsOf: [1, 2, 3, 4, 5, 6, 7, 8])
+        precondition(overlongMemory.write(overlongInstruction, offset: 0))
+        let overlong = X86_64Interpreter(memory: overlongMemory)
+        try overlong.reset(entryPoint: 0)
+        let overlongExit = try overlong.run(maxInstructions: 1)
+        precondition(overlongExit == .unsupportedInstruction(address: 0))
+        precondition(overlong.rip == 0)
+
+        // Fifteen bytes total is valid: fourteen prefixes plus the HLT opcode.
+        let maximumLengthMemory = GuestMemory(size: 64)
+        var maximumLengthInstruction = Data(repeating: 0x48, count: 14)
+        maximumLengthInstruction.append(0xF4)
+        precondition(maximumLengthMemory.write(maximumLengthInstruction, offset: 0))
+        let maximumLength = X86_64Interpreter(memory: maximumLengthMemory)
+        try maximumLength.reset(entryPoint: 0)
+        let maximumLengthExit = try maximumLength.run(maxInstructions: 1)
+        precondition(maximumLengthExit == .halted)
+
         let indirectFaultMemory = GuestMemory(size: 64)
         precondition(indirectFaultMemory.write(Data([0xFF, 0x25, 0x00, 0x10, 0x00, 0x00]), offset: 0))
         let indirectFault = X86_64Interpreter(memory: indirectFaultMemory)
