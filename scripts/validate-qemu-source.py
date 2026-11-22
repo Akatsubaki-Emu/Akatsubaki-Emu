@@ -1054,10 +1054,10 @@ required = {
         "CODE_SIGNING_ALLOWED=NO",
         "Test VNC key-state source arbitration",
         "scripts/tests/test_vnc_key_state.swift",
-        "runs-on: macos-26",
-        'XCODE_APP="/Applications/Xcode_26.2.app"',
-        'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-        'if [ "$XCODE_VERSION" != "26.2" ]; then',
+        "runs-on: xcode-27",
+        'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
+        'case "$XCODE_VERSION" in',
+        "27.1*|27.[2-9]*) ;;",
     ],
     "scripts/check-build-freshness.sh": [
         "git fetch --no-tags --unshallow origin main",
@@ -1330,10 +1330,10 @@ if release_build_start < 0 or release_publish_start < 0:
 else:
     release_build_job = release_workflow[release_build_start:release_publish_start]
     for token in [
-        "runs-on: macos-26",
-        'XCODE_APP="/Applications/Xcode_26.2.app"',
-        'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-        'if [ "$XCODE_VERSION" != "26.2" ]; then',
+        "runs-on: xcode-27",
+        'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
+        'case "$XCODE_VERSION" in',
+        "27.1*|27.[2-9]*) ;;",
     ]:
         if token not in release_build_job:
             print(f"release workflow: Apple build job missing {token!r}", file=sys.stderr)
