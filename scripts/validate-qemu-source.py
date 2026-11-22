@@ -901,6 +901,8 @@ required = {
         "static_cast<uint64_t>(amount) == pageLength",
     ],
     ".gitlab-ci.yml": [
+        "stages: [validate]",
+        """- if: '$CI_PIPELINE_SOURCE == "api"'""",
         "apt-get install -y --no-install-recommends bash build-essential",
         "test_execution_backend_router.swift",
         "test_static_elf_execution.swift",

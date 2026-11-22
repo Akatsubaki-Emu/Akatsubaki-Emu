@@ -515,5 +515,13 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertNotIn("applyDefaultLayout()\n            } else if", layout)
 
 
+
+    def test_gitlab_ci_allows_api_runs_and_declares_one_stage(self):
+        root = Path(__file__).resolve().parents[2]
+        ci = (root / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        self.assertEqual(ci.count("\\nstages:"), 1)
+        self.assertIn("stages: [validate]", ci)
+        self.assertIn("""- if: '$CI_PIPELINE_SOURCE == "api"'""", ci)
+
 if __name__ == "__main__":
     unittest.main()
