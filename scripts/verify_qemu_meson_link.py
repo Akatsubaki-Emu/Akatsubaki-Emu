@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail before QEMU compilation unless its actual Meson link edge uses iOS compiler-rt."""
+"""Verify Objective-C stub linkage and iOS compiler-rt on QEMU's actual Meson link edge."""
 from pathlib import Path
 import sys
 
@@ -20,6 +20,10 @@ def verify_link(ninja_text: str, runtime_path: str) -> None:
     link_edge = "\n".join(block)
     if "LINK_ARGS =" not in link_edge:
         raise SystemExit("QEMU Ninja target has no explicit LINK_ARGS entry to validate")
+    if "-Wl,-objc_stubs_fast" not in link_edge:
+        raise SystemExit("QEMU link configuration is missing Objective-C message-stub generation on the emulator link edge")
+    if "-lobjc" not in link_edge:
+        raise SystemExit("QEMU link configuration is missing the Objective-C runtime on the emulator link edge")
     expected = "-Wl,-force_load," + runtime_path
     if expected not in link_edge:
         raise SystemExit(
@@ -39,7 +43,7 @@ def main() -> None:
     if not runtime.is_file():
         raise SystemExit(f"Apple iOS compiler runtime not found: {runtime}")
     verify_link(ninja.read_text(encoding="utf-8"), str(runtime))
-    print("Verified: QEMU's x86_64 system-emulator dylib link edge includes Apple's iOS compiler runtime.")
+    print("Verified: QEMU's x86_64 system-emulator dylib link edge includes Objective-C stubs, libobjc, and Apple's iOS compiler runtime.")
 
 
 if __name__ == "__main__":

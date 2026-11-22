@@ -28,7 +28,7 @@ class QEMUBuildPatchTests(unittest.TestCase):
         twice = patch_qemu_meson_ios.patch_source(once, runtime)
         self.assertEqual(once, twice)
         self.assertIn("config_host_data.set('CONFIG_POSIX_MEMALIGN', true)", twice)
-        self.assertIn("emulator_link_args += ['-Wl,-force_load," + runtime + "']", twice)
+        self.assertIn("emulator_link_args += ['-Wl,-objc_stubs_fast', '-lobjc', '-Wl,-force_load," + runtime + "']", twice)
         self.assertLess(twice.index("emulator_link_args = []"), twice.index("emulator_link_args +="))
         self.assertIn("link_args = emulator_link_args", twice)
         self.assertIn("emulator_link_args += ['-Wl,-force_load,libqemuutil.a']", twice)
@@ -51,6 +51,8 @@ class QEMUBuildPatchTests(unittest.TestCase):
         self.assertNotIn(patch_qemu_meson_ios.LEGACY_MARKER_COMMENT, updated)
         self.assertNotIn("/old/libclang_rt.ios.a", updated)
         self.assertIn("-Wl,-force_load,/new/libclang_rt.ios.a", updated)
+        self.assertIn("-Wl,-objc_stubs_fast", updated)
+        self.assertIn("'-lobjc'", updated)
         self.assertIn("emulator_link_args += ['-Wl,-force_load,libqemuutil.a']", updated)
         self.assertEqual(updated.count("emulator_link_args += "), 2)
 
@@ -177,7 +179,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
 
     def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
-  LINK_ARGS = -Wl,-force_load,/toolchain/libclang_rt.ios.a
+  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a
 build unrelated.dylib: c_LINKER other
   LINK_ARGS = -lm
 '''
@@ -185,9 +187,23 @@ build unrelated.dylib: c_LINKER other
 
     def test_link_verifier_rejects_runtime_missing_from_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
-  LINK_ARGS = -lm
+  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -lm
 '''
         with self.assertRaisesRegex(SystemExit, "emulator-specific link arguments"):
+            verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
+
+    def test_link_verifier_rejects_missing_objc_stub_generation(self):
+        ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
+  LINK_ARGS = -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a
+'''
+        with self.assertRaisesRegex(SystemExit, "Objective-C message-stub generation"):
+            verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
+
+    def test_link_verifier_rejects_missing_libobjc(self):
+        ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
+  LINK_ARGS = -Wl,-objc_stubs_fast -Wl,-force_load,/toolchain/libclang_rt.ios.a
+'''
+        with self.assertRaisesRegex(SystemExit, "Objective-C runtime"):
             verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
 
 

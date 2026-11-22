@@ -19,14 +19,14 @@ def patch_source(source: str, runtime_path: str) -> str:
     if not runtime_path or "\n" in runtime_path or "\r" in runtime_path:
         raise SystemExit("A valid IOS_COMPILER_RT path is required")
     meson_path = runtime_path.replace("\\", "\\\\").replace("'", "\\'")
-    marker = "emulator_link_args += ['-Wl,-force_load," + meson_path + "']"
+    marker = "emulator_link_args += ['-Wl,-objc_stubs_fast', '-lobjc', '-Wl,-force_load," + meson_path + "']"
     anchor = "emulator_link_args = []"
 
     lines = source.splitlines()
     owned_comments = [i for i, line in enumerate(lines) if line.strip() == MARKER_COMMENT]
     owned_runtime_lines = [
         i for i, line in enumerate(lines)
-        if line.strip().startswith("emulator_link_args += ['-Wl,-force_load,")
+        if line.strip().startswith("emulator_link_args += ")
         and "libclang_rt.ios.a" in line
     ]
 
@@ -82,7 +82,7 @@ def main() -> None:
     source = path.read_text(encoding="utf-8")
     patched = patch_source(source, str(runtime))
     path.write_text(patched, encoding="utf-8")
-    print(f"Patched QEMU emulator link arguments for iOS compiler runtime: {runtime}")
+    print(f"Patched QEMU emulator Objective-C stub/runtime and compiler-runtime link arguments: {runtime}")
 
 
 if __name__ == "__main__":

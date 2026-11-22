@@ -175,6 +175,8 @@ required = {
         "test_qemu_runtime_does_not_cancel_in_progress_release_build",
         "cancel-in-progress: false",
         "def test_windows_and_steamos_profiles_select_uefi_firmware",
+        "test_link_verifier_rejects_missing_objc_stub_generation",
+        "test_link_verifier_rejects_missing_libobjc",
     ],
     "scripts/tests/test_jit_coordinator.py": [
         "test_stikdebug_availability_is_limited_to_physical_ios_devices",
@@ -884,13 +886,15 @@ required = {
     ],
     "scripts/patch_qemu_meson_ios.py": [
         "CONFIG_POSIX_MEMALIGN', true)",
-        "emulator_link_args += ['-Wl,-force_load,",
+        "emulator_link_args += ['-Wl,-objc_stubs_fast', '-lobjc', '-Wl,-force_load,",
         "A valid IOS_COMPILER_RT path is required",
     ],
     "scripts/verify_qemu_meson_link.py": [
         "build libqemu-x86_64-softmmu.dylib:",
         "LINK_ARGS",
         "emulator-specific link arguments",
+        "-Wl,-objc_stubs_fast",
+        "-lobjc",
         "-Wl,-force_load,",
     ],
     "scripts/tests/test_x86_condition_dispatch.py": [
