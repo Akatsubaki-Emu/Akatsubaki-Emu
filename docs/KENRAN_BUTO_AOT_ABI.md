@@ -42,7 +42,8 @@ Unsupported instructions resume at `blockStartRIP + guestBytesConsumed`.
 Standard JIT mode maps writable pages and seals them read/execute before invocation.
 StikDebug/TXM mode uses an executable mapping plus a separate writable alias. Both
 mappings are released on remap/protection failure. The executable block cache is
-bounded to 64 entries and keyed by exact guest bytes, translator version, ABI and
+bounded to 64 entries and 16 MiB of actual OS-mapped executable memory (page-rounded
+by the native allocator), and keyed by exact guest bytes, translator version, ABI and
 instruction budget. Persistent translation artifacts are re-decoded and compared
 with canonical output before a cache hit is trusted.
 

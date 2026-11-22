@@ -1414,14 +1414,14 @@ aot_execution = Path("src/Runtime/KenranButoAOTExecution.swift").read_text(encod
 aot_interpreter = Path("src/Runtime/X86_64Interpreter.swift").read_text(encoding="utf-8")
 aot_guest_machine = Path("src/Runtime/GuestMachine.swift").read_text(encoding="utf-8")
 aot_translator = Path("src/Runtime/X86_64AOTTranslator.swift").read_text(encoding="utf-8")
-for token in ("KENRAN_BUTO_AOT_ABI_VERSION","KenranButoAOTGuestState","KenranButoAOTMemoryCallbacks","iSteamAOTExecutableMemoryInvoke","iSteamAOTGuestMemoryRead","iSteamAOTGuestMemoryWrite"):
+for token in ("KENRAN_BUTO_AOT_ABI_VERSION","KenranButoAOTGuestState","KenranButoAOTMemoryCallbacks","iSteamAOTExecutableMemoryInvoke","iSteamAOTExecutableMemoryMappedSize","iSteamAOTGuestMemoryRead","iSteamAOTGuestMemoryWrite"):
     if token not in aot_header: print(f"AOT ABI missing {token!r}",file=sys.stderr); failed=True
-for token in ("_Static_assert(offsetof(KenranButoAOTGuestState,gpr)==8","iSteamAOTGuestStateIsValid(state)","iSteamAOTGuestMemoryRead","iSteamAOTGuestMemoryWrite","mprotect(r->execute_address","r->finalized=true"):
+for token in ("_Static_assert(offsetof(KenranButoAOTGuestState,gpr)==8","iSteamAOTGuestStateIsValid(state)","iSteamAOTGuestMemoryRead","iSteamAOTGuestMemoryWrite","iSteamAOTExecutableMemoryMappedSize","r->mapped_size","mprotect(r->execute_address","r->finalized=true"):
     if token not in aot_memory: print(f"AOT memory provider missing {token!r}",file=sys.stderr); failed=True
 guard=aot_memory.find("if(status!=KERN_SUCCESS||(maximum&VM_PROT_WRITE)==0)")
 if guard<0 or "deallocate_mach_address(write,mapped)" not in aot_memory[guard:aot_memory.find("return NULL;",guard)]:
     print("AOT TXM remap failure path does not release writable alias",file=sys.stderr); failed=True
-for token in ("KenranButoAOTGuestState","makeMemoryCallbacks(for:memory)","iSteamAOTExecutableMemoryInvoke","maximumCachedBlocks=64"):
+for token in ("KenranButoAOTGuestState","makeMemoryCallbacks(for:memory)","iSteamAOTExecutableMemoryInvoke","maximumCachedBlocks=64","iSteamAOTExecutableMemoryMappedSize(created)","state.gpr==gpr","state.memory==cb","state.rflags==rflags","state.instructions_executed<=UInt64(t.instructionCount)","candidate.allocatedBytes"):
     if token not in aot_execution: print(f"AOT executor missing {token!r}",file=sys.stderr); failed=True
 for token in ("aotExecutor.execute(","rip = result.exitRip","aotExecutor?.invalidateAll()"):
     if token not in aot_interpreter: print(f"AOT interpreter integration missing {token!r}",file=sys.stderr); failed=True
@@ -1430,7 +1430,7 @@ if "aotExecutor: KenranButoAOTExecutor()" not in aot_guest_machine:
 for token in ("maximumInstructions","maximumOutputBytes","maximumGuestBytes","inputLimit"):
     if token not in aot_translator: print(f"AOT translator missing bounded contract {token!r}",file=sys.stderr); failed=True
 aot_tests=Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
-for token in ("iSteamAOTGuestMemoryRead","iSteamAOTGuestMemoryWrite","sideExit!.exitRip == 0x100A","Kenran Butō AOT native block execution"):
+for token in ("iSteamAOTGuestMemoryRead","iSteamAOTGuestMemoryWrite","sideExit!.exitRip == 0x100A","Kenran Butō AOT native block execution","cachedBlockCount","cachedExecutableBytes"):
     if token not in aot_tests: print(f"AOT runtime regression missing {token!r}",file=sys.stderr); failed=True
 aot_workflow=Path(".github/workflows/validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
 for token in ("KenranButoAOTExecutableMemory.c","KenranButoAOTExecution.swift","test_x86_64_interpreter.swift"):

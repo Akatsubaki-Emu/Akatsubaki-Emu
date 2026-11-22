@@ -7,12 +7,14 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
     private var blocks:[BlockKey:KenranButoAOTExecutableBlock]=[:]
     private var order:[BlockKey]=[]
     private var executionCount=0
-    private var cachedCodeBytes=0
+    private var cachedExecutableBytesStorage:UInt64=0
     private let maximumCachedBlocks=64
-    private let maximumCachedCodeBytes=16*1024*1024
+    private let maximumCachedExecutableBytes:UInt64=16*1024*1024
     private let guestABI="sysv-linux-x86_64"
     init(compiler:KenranButoAOTCompiler=KenranButoAOTCompiler()){self.compiler=compiler}
     var blocksExecuted:Int{lock.lock();defer{lock.unlock()};return executionCount}
+    var cachedBlockCount:Int{lock.lock();defer{lock.unlock()};return blocks.count}
+    var cachedExecutableBytes:UInt64{lock.lock();defer{lock.unlock()};return cachedExecutableBytesStorage}
     private var isAvailable:Bool{
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         let mode=iSteamJITGetProtocolMode()
@@ -22,7 +24,7 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
         return iSteamAOTExecutableMemoryIsAvailable()
         #endif
     }
-    func invalidateAll(){lock.lock();blocks.removeAll(keepingCapacity:true);order.removeAll(keepingCapacity:true);cachedCodeBytes=0;lock.unlock()}
+    func invalidateAll(){lock.lock();blocks.removeAll(keepingCapacity:true);order.removeAll(keepingCapacity:true);cachedExecutableBytesStorage=0;lock.unlock()}
     static func makeMemoryCallbacks(for memory:GuestMemory)->KenranButoAOTMemoryCallbacks{
         var c=KenranButoAOTMemoryCallbacks();c.abi_version=1;c.struct_size=UInt32(MemoryLayout<KenranButoAOTMemoryCallbacks>.size)
         c.context=Unmanaged.passUnretained(memory).toOpaque();c.read_memory=readCallback;c.write_memory=writeCallback;return c
@@ -53,9 +55,20 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
             return withUnsafePointer(to:&callbacks){cb in
                 var state=KenranButoAOTGuestState()
                 guard iSteamAOTGuestStateInitialize(&state,gpr,rip,rflags,fsBase,gsBase,cb,UInt64(budget)) else{return nil}
-                guard block.invoke(&state) else{return nil}
-                guard iSteamAOTGuestStateIsValid(&state),state.rip==rip,
-                      state.instructions_executed<=UInt64(budget),state.exit_rip>=rip,
+                guard block.invoke(&state) else {
+                    for index in rb.indices { rb[index]=originalRegisters[index] }
+                    return nil
+                }
+                guard iSteamAOTGuestStateIsValid(&state),
+                      state.abi_version==KENRAN_BUTO_AOT_ABI_VERSION,
+                      state.struct_size>=UInt32(MemoryLayout<KenranButoAOTGuestState>.size),
+                      state.gpr==gpr,state.memory==cb,
+                      state.instruction_budget==UInt64(budget),
+                      state.rip==rip,state.rflags==rflags,
+                      state.fs_base==fsBase,state.gs_base==gsBase,
+                      state.instructions_executed<=UInt64(budget),
+                      state.instructions_executed<=UInt64(t.instructionCount),
+                      state.exit_rip>=rip,
                       state.exit_rip-rip<=UInt64(t.guestBytesConsumed) else {
                     for index in rb.indices { rb[index]=originalRegisters[index] }
                     return nil
@@ -77,14 +90,26 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
                     return nil
                 }
                 let count=Int(state.instructions_executed)
-                guard count>=0&&count<=budget else {
+                guard count>=0&&count<=budget&&count<=t.instructionCount else {
                     for index in rb.indices { rb[index]=originalRegisters[index] }
                     return nil
                 }
-                let consumed=(reason == .memoryReadFault || reason == .memoryWriteFault) ? Int(state.exit_rip-rip) : t.guestBytesConsumed
-                guard consumed>=0&&consumed<=t.guestBytesConsumed else {
-                    for index in rb.indices { rb[index]=originalRegisters[index] }
-                    return nil
+                let consumed:Int
+                if reason == .memoryReadFault || reason == .memoryWriteFault {
+                    let delta=state.exit_rip-rip
+                    guard delta<=UInt64(t.guestBytesConsumed),delta<=UInt64(Int.max) else {
+                        for index in rb.indices { rb[index]=originalRegisters[index] }
+                        return nil
+                    }
+                    consumed=Int(delta)
+                } else {
+                    let (expected,overflow)=rip.addingReportingOverflow(UInt64(t.guestBytesConsumed))
+                    guard !overflow,state.exit_rip==expected,state.exit_address==0,
+                          state.instructions_executed==UInt64(t.instructionCount) else {
+                        for index in rb.indices { rb[index]=originalRegisters[index] }
+                        return nil
+                    }
+                    consumed=t.guestBytesConsumed
                 }
                 lock.lock();executionCount+=1;lock.unlock()
                 return KenranButoAOTExecutionResult(guestBytesConsumed:consumed,instructionCount:count,exitReason:reason,exitRip:state.exit_rip,exitAddress:state.exit_address)
@@ -99,12 +124,12 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
               result.translation.isCacheable,
               result.translation.isValid(for:key.code,maximumOutputBytes:key.outputByteBudget),
               let candidate=try? KenranButoAOTExecutableBlock(translation:result.translation),
-              candidate.codeByteCount<=maximumCachedCodeBytes else{return nil}
+              candidate.allocatedBytes<=maximumCachedExecutableBytes else{return nil}
         lock.lock();if let hit=blocks[key]{lock.unlock();return hit}
-        blocks[key]=candidate;order.append(key);cachedCodeBytes+=candidate.codeByteCount
-        while order.count>maximumCachedBlocks || cachedCodeBytes>maximumCachedCodeBytes {
+        blocks[key]=candidate;order.append(key);cachedExecutableBytesStorage+=candidate.allocatedBytes
+        while order.count>maximumCachedBlocks || cachedExecutableBytesStorage>maximumCachedExecutableBytes {
             let evicted=order.removeFirst()
-            if let removed=blocks.removeValue(forKey:evicted){cachedCodeBytes-=removed.codeByteCount}
+            if let removed=blocks.removeValue(forKey:evicted){cachedExecutableBytesStorage=cachedExecutableBytesStorage>=removed.allocatedBytes ? cachedExecutableBytesStorage-removed.allocatedBytes:0}
         }
         lock.unlock();return candidate
     }
@@ -114,7 +139,7 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
 }
 private final class KenranButoAOTExecutableBlock{
     let translation:X86_64AOTTranslation
-    let codeByteCount:Int
+    let allocatedBytes:UInt64
     private let region:OpaquePointer
     init(translation:X86_64AOTTranslation)throws{
         guard !translation.machineCode.isEmpty,translation.machineCode.count.isMultiple(of:4),
@@ -129,7 +154,12 @@ private final class KenranButoAOTExecutableBlock{
             let detail=error.withUnsafeBufferPointer{$0.baseAddress.map{String(cString:$0)} ?? "AOT executable allocation failed."}
             throw NSError(domain:"KenranButoAOT",code:2,userInfo:[NSLocalizedDescriptionKey:detail])
         }
-        region=created;self.translation=translation;codeByteCount=((code.count+4095)/4096)*4096
+        let mappedBytes=iSteamAOTExecutableMemoryMappedSize(created)
+        guard mappedBytes>0 else {
+            iSteamAOTExecutableMemoryDestroy(created)
+            throw NSError(domain:"KenranButoAOT",code:3,userInfo:[NSLocalizedDescriptionKey:"Unable to verify mapped executable memory size."])
+        }
+        region=created;self.translation=translation;allocatedBytes=UInt64(mappedBytes)
     }
     deinit{iSteamAOTExecutableMemoryDestroy(region)}
     func invoke(_ state:inout KenranButoAOTGuestState)->Bool{iSteamAOTExecutableMemoryInvoke(region,&state)}

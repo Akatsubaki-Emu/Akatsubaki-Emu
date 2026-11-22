@@ -1309,6 +1309,21 @@ struct InterpreterTests {
             let multiExit=try multiInterpreter.run(maxInstructions:8)
             precondition(multiExit == .unsupportedInstruction(address:0x1014))
             precondition(multiInterpreter.instructionCount==4)
+            precondition(executor.cachedBlockCount<=64)
+            precondition(executor.cachedExecutableBytes<=16*1024*1024)
+            // Force cache eviction with unique translated blocks and verify the
+            // budget uses the operating system's actual page-rounded mappings.
+            for index in 0..<96 {
+                let value=UInt32(index)
+                let code=Data([0xB8,UInt8(truncatingIfNeeded:value),0,0,0])
+                var cacheRegisters=[UInt64](repeating:0,count:16)
+                let cacheResult=executor.execute(guestCode:code,registers:&cacheRegisters,
+                    rip:0x1000+UInt64(index)*16,rflags:0x202,fsBase:0,gsBase:0,
+                    memory:multiMemory,maximumInstructions:4)
+                precondition(cacheResult != nil)
+            }
+            precondition(executor.cachedBlockCount<=64)
+            precondition(executor.cachedExecutableBytes<=16*1024*1024)
 
             let baselineMemory=GuestMemory(size:8192)
             precondition(baselineMemory.write(program,offset:0x1000))

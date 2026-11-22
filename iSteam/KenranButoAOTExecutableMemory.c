@@ -81,6 +81,7 @@ iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate(const void *code,size
  if(!r->split_mapping&&mprotect(r->execute_address,mapped,PROT_READ|PROT_EXEC)!=0){(void)munmap(r->write_address,mapped);free(r);set_error(error,capacity,"AOT mapping could not be sealed RX.");return NULL;}
  r->finalized=true;set_error(error,capacity,"");return r;
 }
+size_t iSteamAOTExecutableMemoryMappedSize(const iSteamAOTExecutableRegion *r){return r?r->mapped_size:0;}
 bool iSteamAOTExecutableMemoryInvoke(iSteamAOTExecutableRegion *r,KenranButoAOTGuestState *s){
  typedef void(*Entry)(KenranButoAOTGuestState *);if(!r||!r->finalized||!r->execute_address||!iSteamAOTGuestStateIsValid(s))return false;
  s->instructions_executed=0;s->exit_reason=KENRAN_BUTO_AOT_EXIT_NONE;s->exit_address=0;s->exit_rip=s->rip;Entry entry=(Entry)r->execute_address;entry(s);return true;
