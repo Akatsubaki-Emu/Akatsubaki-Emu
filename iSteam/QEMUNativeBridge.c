@@ -166,7 +166,8 @@ bool isteam_qemu_start(int argc, const char * const *argv,
             if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "QEMU argument %d is null", i);
             return false;
         }
-        const size_t argument_length = strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u);
+        const char *argument = argv[i] ? argv[i] : "";
+        const size_t argument_length = strnlen(argument, ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u);
         if (argument_length > ISTEAM_QEMU_MAX_ARGUMENT_BYTES
             || total_argument_bytes > ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES - (argument_length + 1u)) {
             if (error_buffer && error_capacity > 0) snprintf(error_buffer, (size_t)error_capacity, "QEMU arguments exceed the configured size limits");
@@ -242,7 +243,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
             return false;
         }
         copied_argv[i] = argument_storage + argument_offset;
-        memcpy(copied_argv[i], argv[i], argument_length + 1u);
+        memcpy(copied_argv[i], argument, argument_length + 1u);
         argument_offset += argument_length + 1u;
     }
 

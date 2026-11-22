@@ -13,6 +13,7 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertNotIn("free(g_argv[i])", release)
         self.assertIn("malloc(total_argument_bytes)", start)
         self.assertIn("copied_argv[i] = argument_storage + argument_offset", start)
+        self.assertIn('const char *argument = argv[i] ? argv[i] : "";', start)
         self.assertNotIn("malloc(argument_length + 1)", start)
         self.assertIn("g_argument_storage = argument_storage", start)
 
