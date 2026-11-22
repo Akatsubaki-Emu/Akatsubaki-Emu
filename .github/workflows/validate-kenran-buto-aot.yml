@@ -15,6 +15,10 @@ on:
       - "iSteam/KenranButoAOTExecutableMemory.c"
       - "scripts/tests/test_x86_64_interpreter.swift"
       - "scripts/validate-qemu-source.py"
+      - "scripts/tests/test_static_elf_execution.swift"
+      - "src/Runtime/ELF64Loader.swift"
+      - "src/Runtime/LinuxProcessStackBuilder.swift"
+      - "src/Runtime/RuntimeCapabilityRegistry.swift"
       - "docs/KENRAN_BUTO_AOT_ABI.md"
       - "src/Performance/TranslationCache.swift"
       - "scripts/tests/test_kenran_buto_aot_*.swift"
@@ -32,6 +36,10 @@ on:
       - "iSteam/KenranButoAOTExecutableMemory.c"
       - "scripts/tests/test_x86_64_interpreter.swift"
       - "scripts/validate-qemu-source.py"
+      - "scripts/tests/test_static_elf_execution.swift"
+      - "src/Runtime/ELF64Loader.swift"
+      - "src/Runtime/LinuxProcessStackBuilder.swift"
+      - "src/Runtime/RuntimeCapabilityRegistry.swift"
       - "docs/KENRAN_BUTO_AOT_ABI.md"
       - "src/Performance/TranslationCache.swift"
       - "scripts/tests/test_kenran_buto_aot_*.swift"
@@ -95,3 +103,23 @@ jobs:
             "$RUNNER_TEMP/kenran-buto-aot-memory.o" \
             -o "$RUNNER_TEMP/test-x86-64-interpreter-aot"
           "$RUNNER_TEMP/test-x86-64-interpreter-aot"
+
+      - name: Run a real static ELF guest through the hybrid interpreter/AOT path
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            -import-objc-header iSteam/JIT26Protocol.h \
+            src/Performance/TranslationCache.swift \
+            src/Runtime/X86_64AOTTranslator.swift \
+            src/Runtime/KenranButoAOTCompiler.swift \
+            src/Runtime/KenranButoAOTExecution.swift \
+            src/Runtime/X86_64ALU.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            src/Runtime/ELF64Loader.swift \
+            src/Runtime/LinuxProcessStackBuilder.swift \
+            src/Runtime/X86_64Interpreter.swift \
+            scripts/tests/test_static_elf_execution.swift \
+            "$RUNNER_TEMP/kenran-buto-aot-memory.o" \
+            -o "$RUNNER_TEMP/test-static-elf-aot"
+          "$RUNNER_TEMP/test-static-elf-aot"

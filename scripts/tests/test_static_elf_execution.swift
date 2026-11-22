@@ -327,7 +327,12 @@ struct StaticELFExecutionTests {
             randomBytes: Data(repeating: 0xA5, count: 16)
         )
 
-        let interpreter = X86_64Interpreter(memory: memory)
+        let aotCacheDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KenranButoStaticELF-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: aotCacheDirectory) }
+        let aotCompiler = KenranButoAOTCompiler(cache: TranslationCache(directory: aotCacheDirectory))
+        let aotExecutor = KenranButoAOTExecutor(compiler: aotCompiler)
+        let interpreter = X86_64Interpreter(memory: memory, aotExecutor: aotExecutor)
         try interpreter.reset(entryPoint: image.entryPoint)
         try interpreter.setInitialStackPointer(stack.stackPointer)
         let (programBreak, overflow) = image.maximumGuestAddress.addingReportingOverflow(4095)
@@ -337,6 +342,7 @@ struct StaticELFExecutionTests {
         let exit = try interpreter.run(maxInstructions: 64)
         precondition(exit == .halted)
         precondition(EmulationLog.shared.messages.contains { $0.contains(expectedOutput) })
+        precondition(aotExecutor.blocksExecuted > 0, "Static ELF smoke test did not execute a native AOT block.")
         let pieURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pie")
         try makePIE().write(to: pieURL)
         defer { try? FileManager.default.removeItem(at: pieURL) }
@@ -348,6 +354,6 @@ struct StaticELFExecutionTests {
         precondition(rejectsPIE(makePIE(includeDependency: true)))
         precondition(rejectsPIE(makePIE(relocationType: 1)))
         precondition(rejectsPIE(makePIE(loadAlignment: 8 * 1024 * 1024)))
-        print("Static ET_EXEC execution and static PIE load-bias/relative-relocation checks passed")
+        print("Static ET_EXEC execution, AOT block dispatch, and static PIE load-bias/relative-relocation checks passed")
     }
 }

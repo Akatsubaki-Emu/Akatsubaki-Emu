@@ -1452,6 +1452,7 @@ aot_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encodi
 for token in ("iSteamAOTGuestMemoryRead", "iSteamAOTGuestMemoryWrite",
               "sideExit!.exitRip == 0x100A", "Kenran Butō AOT native block execution",
               "CorruptingAOTExecutor", "Kenran Butō AOT invalid side-exit rejection preserved interpreter state",
+              "DecliningAOTExecutor", "Kenran Butō AOT declined block is not retried within the same execution batch",
               "ARM64 CI must execute native AOT blocks", "invalidEmptyRead", "invalidEmptyWrite"):
     if token not in aot_tests:
         print(f"AOT runtime regression missing {token!r}", file=sys.stderr)
@@ -1475,6 +1476,16 @@ if "The no-JIT TCI runtime is not packaged yet" in qemu_runtime:
     failed = True
 if "QEMU-TCI runtime" not in qemu_runtime:
     print("QEMU JIT fallback guidance does not mention the packaged TCI runtime", file=sys.stderr)
+    failed = True
+
+static_elf_tests = Path("scripts/tests/test_static_elf_execution.swift").read_text(encoding="utf-8")
+for token in ("KenranButoAOTExecutor", "aotExecutor.blocksExecuted > 0",
+              "hello from static ELF"):
+    if token not in static_elf_tests:
+        print(f"Static ELF hybrid regression missing {token!r}", file=sys.stderr)
+        failed = True
+if "test-static-elf-aot" not in aot_workflow:
+    print("AOT workflow does not execute the static ELF guest smoke test", file=sys.stderr)
     failed = True
 
 if failed:

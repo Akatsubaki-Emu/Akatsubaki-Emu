@@ -42,7 +42,7 @@ struct RuntimeCapabilityRegistry {
 
         records[.x86Interpreter] = RuntimeCapabilityRecord(
             level: .validatedSubset,
-            detail: "The bounded static-ELF diagnostic interpreter has a synthetic end-to-end smoke test; it is not a general Linux execution backend."
+            detail: "The bounded static-ELF diagnostic interpreter includes the register-only AOT fast path and an ARM64 CI guest-execution smoke test; it is still not a general Linux execution backend."
         )
 
         if probeQEMU {
