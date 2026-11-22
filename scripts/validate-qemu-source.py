@@ -1007,6 +1007,9 @@ for step in (
 if "grep -Fq '_objc_msgSendClass'; then" not in qemu_workflow:
     print("QEMU workflow: Objective-C class-selector stub probe is malformed", file=sys.stderr)
     failed = True
+if "\n; then\n" in qemu_workflow:
+    print("QEMU workflow: Objective-C class-selector probe contains a stray shell terminator", file=sys.stderr)
+    failed = True
 for token in [
     "scripts/patch_utm_qemu_ios.py",
     "scripts/patch_qemu_meson_ios.py",

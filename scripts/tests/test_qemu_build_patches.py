@@ -209,6 +209,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("-fno-objc-msgsend-class-selector-stubs", source)
         self.assertIn("export OBJCFLAGS=", source)
         self.assertIn("grep -Fq", source)
+        self.assertNotIn("\n; then\n", source)
 
     def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
