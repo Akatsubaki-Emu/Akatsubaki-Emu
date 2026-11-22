@@ -95,6 +95,7 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("case 11:", self.settings)
         self.assertIn('"Entitlements"', self.settings)
         self.assertIn("EntitlementSettingsView()", self.settings)
+        self.assertEqual(self.settings.count("#if os(iOS) && !os(visionOS)"), 2)
 
     def test_stossign_is_only_attached_to_ios_targets(self):
         self.assertEqual(self.project.count("product: StosSign_API"), 2)
