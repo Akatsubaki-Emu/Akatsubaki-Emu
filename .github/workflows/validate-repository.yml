@@ -13,7 +13,6 @@ on:
   pull_request:
     paths:
       - .github/workflows/**
-      - .gitlab-ci.yml
       - .gitmodules
       - project.yml
       - src/**
