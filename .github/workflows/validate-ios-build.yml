@@ -74,6 +74,27 @@ jobs:
             scripts/tests/test_kenran_buto_aot_cache.swift \
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
+      - name: Test Kenran Butō x86-64 to ARM64 AOT decoder
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/X86_64AOTTranslator.swift \
+            scripts/tests/test_kenran_buto_aot_translator.swift \
+            -o "$RUNNER_TEMP/test-kenran-buto-aot"
+          "$RUNNER_TEMP/test-kenran-buto-aot"
+      - name: Test Kenran Butō AOT translation-cache integration
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Core/EmulationLog.swift \
+            src/Performance/TranslationCache.swift \
+            src/Runtime/X86_64AOTTranslator.swift \
+            src/Runtime/KenranButoAOTCompiler.swift \
+            scripts/tests/test_kenran_buto_aot_cache.swift \
+            -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
+          "$RUNNER_TEMP/test-kenran-buto-aot-cache"
       - name: Test ELF program-header table mapping
         if: matrix.scheme == 'iSteam'
         run: |
