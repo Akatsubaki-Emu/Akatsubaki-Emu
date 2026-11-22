@@ -16,13 +16,13 @@
 #include <stdatomic.h>
 #include <string.h>
 
-extern char **environ;
 #define ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI 4
 #define ISTEAM_QEMU_MAX_ARGUMENTS 4096
 #define ISTEAM_QEMU_MAX_ARGUMENT_BYTES (1024u * 1024u)
 #define ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES (8u * 1024u * 1024u)
 
-typedef int (*qemu_init_fn)(int, const char *[], const char *[]);
+/* QEMU 10.0.12 declares qemu_init(int, char **) as void. */
+typedef void (*qemu_init_fn)(int, char **);
 typedef void (*qemu_main_loop_fn)(void);
 typedef void (*qemu_cleanup_fn)(void);
 typedef void (*qemu_shutdown_request_fn)(int);
@@ -47,13 +47,7 @@ static qemu_main_loop_fn g_qemu_main_loop = NULL;
 static qemu_cleanup_fn g_qemu_cleanup = NULL;
 static qemu_shutdown_request_fn g_qemu_shutdown = NULL;
 
-static void set_error(const char *message) {
-    pthread_mutex_lock(&g_lock);
-    snprintf(g_error, sizeof(g_error), "%s", message ? message : "Unknown QEMU error");
-    pthread_mutex_unlock(&g_lock);
-}
-
-static void clear_starting(void) {
+remove unused set_errorstatic void clear_starting(void) {
     pthread_mutex_lock(&g_lock);
     g_starting = false;
     pthread_mutex_unlock(&g_lock);
@@ -69,29 +63,23 @@ static void release_arguments(void) {
 
 static void *qemu_thread_main(void *unused) {
     (void)unused;
-    int init_result = g_qemu_init(g_argc, (const char **)g_argv,
-                                  (const char **)environ);
-    if (init_result != 0) {
-        char message[128];
-        snprintf(message, sizeof(message), "QEMU initialization failed with status %d", init_result);
-        set_error(message);
-    } else {
-        pthread_mutex_lock(&g_lock);
-        g_running = true;
-        atomic_store(&g_main_loop_active, true);
-        bool stop_after_init = g_stop_requested;
-        qemu_shutdown_request_fn shutdown_fn = g_qemu_shutdown;
-        pthread_mutex_unlock(&g_lock);
-        if (stop_after_init && shutdown_fn) shutdown_fn(ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI);
-        g_qemu_main_loop();
+    g_qemu_init(g_argc, g_argv);
 
-        // Clear the callable state before waiting on the lifecycle mutex.
-        atomic_store(&g_main_loop_active, false);
-        pthread_mutex_lock(&g_lock);
-        g_running = false;
-        pthread_mutex_unlock(&g_lock);
-        if (g_qemu_cleanup) g_qemu_cleanup();
-    }
+    pthread_mutex_lock(&g_lock);
+    g_running = true;
+    atomic_store(&g_main_loop_active, true);
+    bool stop_after_init = g_stop_requested;
+    qemu_shutdown_request_fn shutdown_fn = g_qemu_shutdown;
+    pthread_mutex_unlock(&g_lock);
+    if (stop_after_init && shutdown_fn) shutdown_fn(ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI);
+    g_qemu_main_loop();
+
+    // Clear the callable state before waiting on the lifecycle mutex.
+    atomic_store(&g_main_loop_active, false);
+    pthread_mutex_lock(&g_lock);
+    g_running = false;
+    pthread_mutex_unlock(&g_lock);
+    if (g_qemu_cleanup) g_qemu_cleanup();
 
     pthread_mutex_lock(&g_lock);
     g_running = false;
