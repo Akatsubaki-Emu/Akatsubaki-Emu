@@ -230,8 +230,7 @@ private final class StickControl: UIView {
     private let knob = UIView()
     private var touchOrigin: CGPoint = .zero
     private var tracking = false
-    private var movementRadius: CGFloat = 1
-    private var movementRadiusSquared: CGFloat = 1
+    private var stickMath = TouchStickMath(radius: 1)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -248,8 +247,7 @@ private final class StickControl: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        movementRadius = max(1, min(bounds.width, bounds.height) * 0.36)
-        movementRadiusSquared = movementRadius * movementRadius
+        stickMath = TouchStickMath(radius: max(1, min(bounds.width, bounds.height) * 0.36))
         if !tracking { knob.frame = CGRect(x: bounds.midX - 18, y: bounds.midY - 18, width: 36, height: 36) }
     }
 
@@ -278,13 +276,10 @@ private final class StickControl: UIView {
     private func update(_ point: CGPoint) {
         let dx = point.x - touchOrigin.x
         let dy = point.y - touchOrigin.y
-        let distanceSquared = dx * dx + dy * dy
-        let scale = distanceSquared <= movementRadiusSquared
-            ? 1
-            : movementRadius / sqrt(distanceSquared)
-        knob.center = CGPoint(x: touchOrigin.x + dx * scale, y: touchOrigin.y + dy * scale)
-        onChange?(CGPoint(x: (knob.center.x - touchOrigin.x) / movementRadius,
-                          y: (knob.center.y - touchOrigin.y) / movementRadius))
+        let movement = stickMath.transform(dx: dx, dy: dy)
+        knob.center = CGPoint(x: touchOrigin.x + movement.offsetX,
+                              y: touchOrigin.y + movement.offsetY)
+        onChange?(CGPoint(x: movement.normalizedX, y: movement.normalizedY))
     }
 }
 
