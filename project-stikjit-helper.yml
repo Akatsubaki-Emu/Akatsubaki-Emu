@@ -1,0 +1,72 @@
+name: AkatsubakiJITHelpers
+options:
+  xcodeVersion: "27.1"
+  minimumXcodeGenVersion: "2.40.0"
+  bundleIdPrefix: com.xthrx.isteam
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    ARCHS: arm64
+    CODE_SIGNING_ALLOWED: NO
+targets:
+  AkatsubakiJITHelper:
+    type: extensionkit-extension
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: JITHelperExtension/JITHelperExtension.swift
+      - path: JITHelperExtension/JITHelperService.swift
+      - path: iSteam/JITHelperIPC.swift
+    dependencies:
+      - framework: Vendor/StikJIT.xcframework
+        embed: true
+      - sdk: ExtensionFoundation.framework
+      - sdk: XPC.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.jit-helper
+        PRODUCT_NAME: AkatsubakiJITHelper
+        INFOPLIST_FILE: JITHelperExtension/Info.plist
+        AKATSUBAKI_HOST_BUNDLE_IDENTIFIER: com.xthrx.isteam
+        EX_ENABLE_EXTENSION_POINT_GENERATION: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: NO
+        GENERATE_INFOPLIST_FILE: NO
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGNING_ALLOWED: NO
+  AkatsubakiJITHelperNightly:
+    type: extensionkit-extension
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: JITHelperExtension/JITHelperExtension.swift
+      - path: JITHelperExtension/JITHelperService.swift
+      - path: iSteam/JITHelperIPC.swift
+    dependencies:
+      - framework: Vendor/StikJIT.xcframework
+        embed: true
+      - sdk: ExtensionFoundation.framework
+      - sdk: XPC.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.nightly.jit-helper
+        PRODUCT_NAME: AkatsubakiJITHelperNightly
+        INFOPLIST_FILE: JITHelperExtension/Info.plist
+        AKATSUBAKI_HOST_BUNDLE_IDENTIFIER: com.xthrx.isteam.nightly
+        EX_ENABLE_EXTENSION_POINT_GENERATION: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: NO
+        GENERATE_INFOPLIST_FILE: NO
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGNING_ALLOWED: NO
+schemes:
+  AkatsubakiJITHelpers:
+    build:
+      targets:
+        AkatsubakiJITHelper: all
+        AkatsubakiJITHelperNightly: all
