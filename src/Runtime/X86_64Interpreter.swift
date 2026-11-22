@@ -93,6 +93,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             guard var opcode = fetchByte() else { return .memoryFault(address: rip) }
             var rex: UInt8 = 0
             activeSegmentBase = 0
+            var endbrPrefix = false
             var prefixCount = 0
             while true {
                 if opcode == 0x64 {
@@ -100,6 +101,9 @@ final class X86_64Interpreter: GuestCPUBackend {
                     rex = 0
                 } else if opcode == 0x65 {
                     activeSegmentBase = gsBase
+                    rex = 0
+                } else if opcode == 0xF3 {
+                    endbrPrefix = true
                     rex = 0
                 } else if opcode >= 0x40 && opcode <= 0x4F {
                     rex = opcode
@@ -113,6 +117,11 @@ final class X86_64Interpreter: GuestCPUBackend {
                 }
                 guard let next = fetchByte() else { return .memoryFault(address: rip) }
                 opcode = next
+            }
+
+            if endbrPrefix && opcode != 0x0F {
+                rip = instructionAddress
+                return .unsupportedInstruction(address: instructionAddress)
             }
 
             switch opcode {
@@ -215,13 +224,14 @@ final class X86_64Interpreter: GuestCPUBackend {
                 registers[4] = nextStackPointer
                 rip = target
             case 0xC9: // LEAVE
-                registers[4] = registers[5]
-                guard let value = readUInt64(at: registers[4]) else {
-                    return .memoryFault(address: registers[4])
+                let framePointer = registers[5]
+                guard let value = readUInt64(at: framePointer) else {
+                    return .memoryFault(address: framePointer)
                 }
-                guard registers[4] <= UInt64.max - 8 else { return .memoryFault(address: registers[4]) }
+                let (nextStackPointer, overflow) = framePointer.addingReportingOverflow(8)
+                guard !overflow else { return .memoryFault(address: framePointer) }
+                registers[4] = nextStackPointer
                 registers[5] = value
-                registers[4] += 8
             case 0xF6: // TEST, NOT and NEG r/m8
                 guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
                 let group = (modrm >> 3) & 7
@@ -344,11 +354,12 @@ final class X86_64Interpreter: GuestCPUBackend {
                     }
                     if group == 2 || group == 6 {
                         guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
-                        registers[4] -= 8
+                        let nextStackPointer = registers[4] - 8
                         let value = group == 2 ? rip : target
-                        guard memory.writeUInt64(value, offset: registers[4]) else {
-                            return .memoryFault(address: registers[4])
+                        guard memory.writeUInt64(value, offset: nextStackPointer) else {
+                            return .memoryFault(address: nextStackPointer)
                         }
+                        registers[4] = nextStackPointer
                     }
                     if group != 6 { rip = target }
                 }
@@ -655,7 +666,17 @@ final class X86_64Interpreter: GuestCPUBackend {
                 if takeBranch { rip = addSigned(Int8(bitPattern: raw), to: rip) }
             case 0x0F: // Two-byte opcode map
                 guard let second = fetchByte() else { return .memoryFault(address: rip) }
-                if second == 0x05 {
+                if endbrPrefix {
+                    guard second == 0x1E, rex == 0, activeSegmentBase == 0 else {
+                        rip = instructionAddress
+                        return .unsupportedInstruction(address: instructionAddress)
+                    }
+                    guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
+                    guard modrm == 0xFA else {
+                        rip = instructionAddress
+                        return .unsupportedInstruction(address: instructionAddress)
+                    }
+                } else if second == 0x05 {
                     // SYSCALL saves the post-instruction RIP and guest flags in RCX/R11.
                     registers[1] = rip
                     registers[11] = flags
