@@ -83,6 +83,18 @@ class MergeQEMURuntimeVariantsTests(unittest.TestCase):
         self.assertTrue((jit / "QEMU/bios.bin").is_file())
         self.assertTrue((tci / "QEMU/bios.bin").is_file())
 
+    def test_rejects_output_equal_to_jit_input_without_deleting_it(self):
+        result = self.run_merge("build/jit")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.jit / "QEMU/bios.bin").read_text(encoding="utf-8"), "jit bios\n")
+        self.assertEqual((self.tci / "QEMU/bios.bin").read_text(encoding="utf-8"), "tci bios\n")
+
+    def test_rejects_output_equal_to_tci_input_without_deleting_it(self):
+        result = self.run_merge("build/tci")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.jit / "QEMU/bios.bin").read_text(encoding="utf-8"), "jit bios\n")
+        self.assertEqual((self.tci / "QEMU/bios.bin").read_text(encoding="utf-8"), "tci bios\n")
+
     def test_rejects_missing_lifecycle_export_from_tci(self):
         tci = make_package(self.build / "bad-tci", "tci", missing_symbol="qemu_system_shutdown_request")
         result = self.run_merge(tci=tci)
