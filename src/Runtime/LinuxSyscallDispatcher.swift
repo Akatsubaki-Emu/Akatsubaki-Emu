@@ -142,29 +142,48 @@ final class LinuxSyscallDispatcher {
         guard count <= Self.maximumVectorCount else { return errno(22) }
         if count == 0 { return 0 }
 
-        var output = Data()
-        var total: UInt64 = 0
-        for index in 0..<count {
-            let (entryOffset, offsetOverflow) = vectors.addingReportingOverflow(index * 16)
-            guard !offsetOverflow,
-                  let pair = memory.readUInt64Pair(offset: entryOffset) else {
-                return errno(14)
-            }
-            let base = pair.0
-            let length = pair.1
-            let (nextTotal, lengthOverflow) = total.addingReportingOverflow(length)
-            guard !lengthOverflow, nextTotal <= Self.maximumVectorBytes,
-                  length <= UInt64(Int.max) else {
-                return errno(22)
-            }
-            if length == 0 { continue }
-            guard let bytes = memory.read(offset: base, length: Int(length)) else {
-                return errno(14)
-            }
-            output.append(bytes)
-            total = nextTotal
+        let (tableByteCount, tableOverflow) = count.multipliedReportingOverflow(by: 16)
+        guard !tableOverflow, tableByteCount <= UInt64(Int.max) else { return errno(22) }
+        guard let vectorTable = memory.read(offset: vectors, length: Int(tableByteCount)) else {
+            return errno(14)
         }
 
+        var segments: [(base: UInt64, length: Int)] = []
+        segments.reserveCapacity(Int(count))
+        var total: UInt64 = 0
+        let tableError = vectorTable.withUnsafeBytes { raw -> UInt64? in
+            guard raw.count == Int(tableByteCount) else { return errno(14) }
+            for index in 0..<count {
+                let entryOffset = Int(index) * 16
+                let base = UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: entryOffset, as: UInt64.self))
+                let length = UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: entryOffset + 8, as: UInt64.self))
+                let (nextTotal, lengthOverflow) = total.addingReportingOverflow(length)
+                guard !lengthOverflow, nextTotal <= Self.maximumVectorBytes,
+                      length <= UInt64(Int.max) else {
+                    return errno(22)
+                }
+                if length > 0 {
+                    guard base <= memory.size, length <= memory.size - base else {
+                        return errno(14)
+                    }
+                    segments.append((base, Int(length)))
+                }
+                total = nextTotal
+            }
+            return nil
+        }
+        if let tableError { return tableError }
+
+        var output = Data(count: Int(total))
+        var destinationOffset = 0
+        for segment in segments {
+            guard memory.read(offset: segment.base, length: segment.length,
+                              into: &output, destinationOffset: destinationOffset) else {
+                return errno(14)
+            }
+            destinationOffset += segment.length
+        }
+        guard destinationOffset == output.count else { return errno(14) }
         logGuestOutput(output, descriptor: descriptor)
         return total
     }
