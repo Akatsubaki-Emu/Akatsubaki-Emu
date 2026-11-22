@@ -225,6 +225,12 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertNotIn("export OBJCFLAGS=", source)
         self.assertNotIn("\n; then\n", source)
 
+    def test_release_tag_is_created_from_the_workflow_commit(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("tag_name: ${{ steps.meta.outputs.tag }}", source)
+        self.assertIn("target_commitish: ${{ github.sha }}", source)
+
     def test_main_release_dispatch_is_limited_to_main_branch(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
         source = workflow.read_text(encoding="utf-8")
