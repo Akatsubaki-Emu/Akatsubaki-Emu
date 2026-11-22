@@ -27,7 +27,8 @@ printf '%s\n' "$listing" | grep -Fx "Payload/$app_name/Info.plist" >/dev/null ||
 
 plist="$(mktemp)"
 executable="$(mktemp)"
-trap 'rm -f "$plist" "$executable" "$TMPDIR/akatsubaki-JIT-manifest" "$TMPDIR/akatsubaki-JIT-exports" "$TMPDIR/akatsubaki-JIT-library" "$TMPDIR/akatsubaki-TCI-manifest" "$TMPDIR/akatsubaki-TCI-exports" "$TMPDIR/akatsubaki-TCI-library"' EXIT
+runtime_tmpdir="$(mktemp -d)"
+trap 'rm -f "$plist" "$executable"; rm -rf "$runtime_tmpdir"' EXIT
 unzip -p "$archive" "Payload/$app_name/Info.plist" > "$plist"
 
 actual_bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")"
@@ -78,9 +79,11 @@ validate_runtime_variant() {
   local exports_path="$3"
   local expected_prefix="$4"
   local require_jit_callback="$5"
-  local manifest_tmp="$TMPDIR/akatsubaki-${mode,,}-manifest"
-  local exports_tmp="$TMPDIR/akatsubaki-${mode,,}-exports"
-  local library_tmp="$TMPDIR/akatsubaki-${mode,,}-library"
+  local mode_lower
+  mode_lower="$(printf '%s' "$mode" | tr '[:upper:]' '[:lower:]')"
+  local manifest_tmp="$runtime_tmpdir/$mode_lower-manifest"
+  local exports_tmp="$runtime_tmpdir/$mode_lower-exports"
+  local library_tmp="$runtime_tmpdir/$mode_lower-library"
   local relative_path
 
   printf '%s\n' "$listing" | grep -Fx "Payload/$app_name/$manifest_path" >/dev/null || {
