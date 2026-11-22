@@ -282,9 +282,12 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
         write_case = source.split("case 1:", 1)[1].split("case 3:", 1)[0]
-        self.assertIn("for scalar in text.unicodeScalars", write_case)
-        self.assertIn("chunkBytes + scalarByteCount > 4096", write_case)
-        self.assertIn("log.write(\"[guest stdout] \" + text[start..<end])", write_case)
+        output = source.split("private func logGuestOutput", 1)[1].split("private func writeTimespec", 1)[0]
+        self.assertIn("logGuestOutput(bytes, descriptor: descriptor)", write_case)
+        self.assertIn("let stream = descriptor == 2 ? \"stderr\" : \"stdout\"", output)
+        self.assertIn("for scalar in text.unicodeScalars", output)
+        self.assertIn("chunkBytes + scalarByteCount > 4096", output)
+        self.assertIn('log.write("[guest \\(stream)] " + chunk)', output)
 
 
     def test_gitlab_ci_runs_all_runtime_and_python_regression_suites(self):
@@ -298,6 +301,11 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("scripts/tests/test_vnc_key_state.swift", workflow)
         self.assertIn("scripts/tests/test_native_guest_memory.cpp", workflow)
         self.assertIn("g++ -std=c++17 -Wall -Wextra -Werror", workflow)
+        self.assertIn("apt-get install -y --no-install-recommends bash build-essential", workflow)
+        self.assertLess(
+            workflow.index("apt-get install -y --no-install-recommends bash build-essential"),
+            workflow.index("cc -std=c11"),
+        )
         self.assertIn("python -m unittest discover -s scripts/tests -p 'test_*.py'", workflow)
 
 
