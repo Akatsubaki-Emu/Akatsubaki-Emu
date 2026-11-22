@@ -347,12 +347,16 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("private func validateRange(address: UInt64, length: UInt64) -> UInt64", source)
         self.assertIn("cursor = min(end, range.upperBound)", source)
 
-    def test_guest_image_load_resets_old_syscall_state_before_replacing_memory(self):
+    def test_guest_image_load_resets_cpu_and_clears_memory_once_in_loader(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        loader = (root / "src" / "Runtime" / "ELF64Loader.swift").read_text(encoding="utf-8")
         load = source.split("func loadELFImage", 1)[1].split("func reset", 1)[0]
-        self.assertLess(load.index("memory.clear()"), load.index("ELF64Loader().load"))
+        loader_body = loader.split("func load(", 1)[1].split("private func", 1)[0]
+        before_loader = load.split("ELF64Loader().load", 1)[0]
+        self.assertNotIn("memory.clear()", before_loader)
         self.assertLess(load.index("try cpu.reset(entryPoint: 0)"), load.index("ELF64Loader().load"))
+        self.assertLess(loader_body.index("memory.clear()"), loader_body.index("for segment in loadSegments"))
         self.assertIn("memory.clear()", load.split("} catch {", 1)[1])
         self.assertIn("_ = try? cpu.reset(entryPoint: 0)", load.split("} catch {", 1)[1])
         self.assertNotIn("cpu?.reset(entryPoint: 0)", load.split("} catch {", 1)[1])
