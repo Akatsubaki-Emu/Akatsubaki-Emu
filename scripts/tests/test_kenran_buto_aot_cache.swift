@@ -24,12 +24,14 @@ struct KenranButoAOTCacheTests {
         // Guest ABI is part of the cache identity and cannot alias another ABI.
         let otherABI = try compiler.compile(guest, guestABI: "custom-x86_64")
         precondition(!otherABI.cacheHit)
-        precondition(try cache.statistics().entryCount == 2)
+        let statisticsAfterABI = try cache.statistics()
+        precondition(statisticsAfterABI.entryCount == 2)
 
         // A block with no supported instructions is not stored as an empty artifact.
         let unsupported = try compiler.compile(Data([0x01, 0xD8]), guestABI: "sysv-linux-x86_64")
         precondition(!unsupported.translation.isCacheable)
-        precondition(try cache.statistics().entryCount == 2)
+        let statisticsAfterFallback = try cache.statistics()
+        precondition(statisticsAfterFallback.entryCount == 2)
 
         print("Kenran Butō AOT artifact cache round-trip, ABI isolation and fallback passed")
     }
