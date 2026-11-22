@@ -80,7 +80,8 @@ jobs:
           EOF
           "$CLANG" -target arm64-apple-ios15.0 -isysroot "$SDKROOT" \
             -fno-objc-msgsend-class-selector-stubs -c "$PROBE_SOURCE" -o "$PROBE_OBJECT"
-          if xcrun --sdk iphoneos nm -u "$PROBE_OBJECT" | grep -Fq '_objc_msgSendClass'; then
+          SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"
+          if grep -Fq '_objc_msgSendClass' <<< "$SYMBOLS"; then
             echo "Xcode still emitted an Objective-C class-selector stub that the selected linker cannot resolve." >&2
             exit 1
           fi

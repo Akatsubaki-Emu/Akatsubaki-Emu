@@ -225,6 +225,8 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("export OBJCFLAGS=", source)
         self.assertIn("grep -Fq", source)
         self.assertNotIn("\n; then\n", source)
+        self.assertIn('SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"', source)
+        self.assertIn("if grep -Fq '_objc_msgSendClass' <<< \"$SYMBOLS\"; then", source)
 
     def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
