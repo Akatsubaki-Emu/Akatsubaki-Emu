@@ -15,6 +15,20 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertIn("values?.isRegularFile == true", resolver)
         self.assertNotIn("isDirectory", resolver)
 
+
+    def test_runtime_library_candidates_must_be_contained_regular_files(self):
+        root = Path(__file__).resolve().parents[2]
+        status = (root / "src" / "QEMU" / "QEMURuntimeStatus.swift").read_text(encoding="utf-8")
+        locate = status.split("static func locate", 1)[1].split(
+            "private static func validateLoadableLibrary", 1
+        )[0]
+        self.assertIn("func validatedRegularLibrary", locate)
+        self.assertIn("resolved.path.hasPrefix(bundlePrefix)", locate)
+        self.assertIn("resourceValues(forKeys: [.isRegularFileKey])", locate)
+        self.assertIn("values?.isRegularFile == true", locate)
+        self.assertIn("compactMap(validatedRegularLibrary)", locate)
+        self.assertNotIn("isDirectory", locate)
+
     def test_start_path_uses_location_only_and_native_start_validates_load(self):
         root = Path(__file__).resolve().parents[2]
         status = (root / "src" / "QEMU" / "QEMURuntimeStatus.swift").read_text(encoding="utf-8")

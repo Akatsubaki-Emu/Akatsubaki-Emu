@@ -28,6 +28,14 @@ enum QEMURuntimeStatus {
             return .unavailable("The QEMU data directory is missing or unsafe in the app bundle.")
         }
 
+        func validatedRegularLibrary(_ candidate: URL) -> URL? {
+            let resolved = candidate.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+            let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey])
+            guard resolved.path.hasPrefix(bundlePrefix),
+                  values?.isRegularFile == true else { return nil }
+            return resolved
+        }
+
         // Prefer the build-generated manifest. Resolve it before reading so a
         // bundle symlink cannot redirect manifest inspection outside the bundle.
         let dataPrefix = dataDirectory.path.hasSuffix("/") ? dataDirectory.path : dataDirectory.path + "/"
@@ -44,12 +52,7 @@ enum QEMURuntimeStatus {
                !relativePath.contains("\\"),
                !relativePath.split(separator: "/").contains(".."),
                !relativePath.split(separator: "/").contains(".") {
-                let library = bundle.bundleURL.appendingPathComponent(relativePath)
-                    .standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
-                var isDirectory: ObjCBool = false
-                if library.path.hasPrefix(bundlePrefix),
-                   fm.fileExists(atPath: library.path, isDirectory: &isDirectory),
-                   !isDirectory.boolValue {
+                if let library = validatedRegularLibrary(bundle.bundleURL.appendingPathComponent(relativePath)) {
                     return .ready(libraryURL: library, dataDirectory: dataDirectory)
                 }
             }
@@ -81,13 +84,7 @@ enum QEMURuntimeStatus {
             }
         }
 
-        guard let library = candidates.first(where: {
-            let resolved = $0.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
-            var isDirectory: ObjCBool = false
-            return resolved.path.hasPrefix(bundlePrefix)
-                && fm.fileExists(atPath: resolved.path, isDirectory: &isDirectory)
-                && !isDirectory.boolValue
-        })?.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL else {
+        guard let library = candidates.compactMap(validatedRegularLibrary).first else {
             return .unavailable("No embedded x86_64 QEMU device library was found. Run the UTM runtime packaging workflow, embed its Frameworks and QEMU directories, and code-sign nested code.")
         }
         return .ready(libraryURL: library, dataDirectory: dataDirectory)
