@@ -19,9 +19,7 @@
 [**GitHub**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu) · [**All releases**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases) · [**Nightly builds**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) · [**GitLab mirror**](https://gitlab.com/chantinlongxthrx/I-steam) · [**AltStore source**](https://altdirect.app/?url=https://akatsubaki-emu.github.io/AltSource.json)
 
 
-| Project Activity & Code Diffs | Contributors & Languages |
-| :---: | :---: |
-| ![Overview](docs/metrics-overview.svg) | ![Team](docs/metrics-team.svg) |
+![Overview](docs/metrics-overview.svg)
 
 
 
