@@ -1,5 +1,9 @@
 import Foundation
 
+extension Notification.Name {
+    static let emulationLogDidWrite = Notification.Name("com.xthrx.akatsubaki.emulation-log.did-write")
+}
+
 final class EmulationLog {
     static let shared = EmulationLog()
     private let queue = DispatchQueue(label: "com.chantinlongx.iSteam.emulation-log")
@@ -25,6 +29,11 @@ final class EmulationLog {
             let line = "[\(self.timestampFormatter.string(from: Date()))] \(safeMessage)\n"
             guard let data = line.data(using: .utf8) else { return }
             self.append(data)
+            NotificationCenter.default.post(
+                name: .emulationLogDidWrite,
+                object: self,
+                userInfo: ["message": safeMessage]
+            )
         }
     }
 

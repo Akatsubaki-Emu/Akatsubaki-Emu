@@ -271,7 +271,7 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
                 try ExternalDriveStore.shared.copyDocument(at: source, to: destination)
                 UserDefaults.standard.set(destination.path, forKey: "iSteam.customOSPath")
                 updateOSStatus()
-                showMessage("OS image imported", "Saved \(destination.lastPathComponent). The current VM engine does not yet boot imported ISO/disk images.")
+                showMessage("OS image imported", "Saved \(destination.lastPathComponent). Launch Setup will preselect it as boot media. Choose the matching guest profile; for an ISO installer, also choose or create a writable VM disk. A compatible bundled QEMU runtime and UEFI firmware are required.")
             } catch { showMessage("Import failed", error.localizedDescription) }
             return
         }

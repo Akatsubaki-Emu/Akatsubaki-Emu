@@ -116,6 +116,10 @@ required = {
         "SteamOS Gaming Mode",
         "VMConfiguration.defaultSteamOS",
     ],
+    "scripts/tests/test_imported_os_selection.py": [
+        "test_imported_os_image_is_preselected_in_launch_setup",
+        "Launch Setup will preselect it as boot media",
+    ],
     "src/Performance/TranslationCache.swift": [
         "SHA256.hash(data: Data(key.utf8))",
     ],
@@ -926,6 +930,8 @@ required = {
         "iSteamJITGetProtocolMode",
     ],
     "src/Core/EmulationLog.swift": [
+        "static let emulationLogDidWrite",
+        "NotificationCenter.default.post(",
         "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",
         "String(decoding: message.utf8.prefix(8192), as: UTF8.self)",
         "guard byteCount <= maximumLogBytes, openLogIfNeeded() else { return }",
@@ -1120,6 +1126,11 @@ required = {
         "GameLauncher.shared.launch(",
         "GameStore.shared.recordLaunchAccepted(id: game.id)",
         "LinuxELFRuntime.shared.stop()",
+        "forName: .emulationLogDidWrite",
+        'let stdoutPrefix = "[guest stdout] "',
+        'let stderrPrefix = "[guest stderr] "',
+        "maximumConsoleCharacters = 128 * 1024",
+        "NotificationCenter.default.removeObserver(logObserver)",
     ],
     "iSteam/LibraryViewController.swift": [
         "GameLibraryViewController()",
@@ -1127,8 +1138,12 @@ required = {
         "ConsoleViewController(game: games[indexPath.row])",
         "super.init(style: .insetGrouped)",
         "required init?(coder: NSCoder)",
+        "UserDefaults.standard.set(destination.path, forKey: \"iSteam.customOSPath\")",
+        "Launch Setup will preselect it as boot media",
     ],
     "scripts/tests/test_source_validator.py": [
+        "def test_console_displays_only_guest_stdout_and_stderr(self):",
+        "def test_imported_os_image_is_preselected_in_launch_setup(self):",
         "def test_native_bridge_enables_strict_c11_strnlen_and_covers_cleanup_race(self):",
         "int qemu_exit_status = g_qemu_main_loop();",
         "g_qemu_cleanup(qemu_exit_status)",

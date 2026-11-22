@@ -6,6 +6,7 @@ final class ConsoleViewController: UIViewController {
     private let fpsLabel = UILabel()
 
     private var displayLink: CADisplayLink?
+    private var logObserver: NSObjectProtocol?
     private var lastFrameTime: CFTimeInterval = 0
     private var frameCount = 0
 
@@ -78,12 +79,27 @@ final class ConsoleViewController: UIViewController {
         Runtime router
 
         Display:
-        UI frame monitor only; guest rendering is not connected to this console.
+        Guest stdout/stderr text console; graphical rendering is not connected.
 
         Scope:
         Linux static ELF bring-up is supported by the diagnostic interpreter.
         Windows PE still requires a verified compatibility backend.
         """
+
+        logObserver = NotificationCenter.default.addObserver(
+            forName: .emulationLogDidWrite,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let message = notification.userInfo?["message"] as? String else { return }
+            let stdoutPrefix = "[guest stdout] "
+            let stderrPrefix = "[guest stderr] "
+            if message.hasPrefix(stdoutPrefix) {
+                self?.appendGuestOutput(String(message.dropFirst(stdoutPrefix.count)))
+            } else if message.hasPrefix(stderrPrefix) {
+                self?.appendGuestOutput("[stderr] " + String(message.dropFirst(stderrPrefix.count)))
+            }
+        }
 
         let executable = URL(fileURLWithPath: game.executablePath)
         let workingDirectory = URL(fileURLWithPath: game.workingDirectory)
@@ -110,6 +126,22 @@ final class ConsoleViewController: UIViewController {
         } else {
             appendStatus("\n\nNo verified runtime accepted this executable. See the emulation log.")
         }
+    }
+
+    deinit {
+        if let logObserver {
+            NotificationCenter.default.removeObserver(logObserver)
+        }
+    }
+
+    private func appendGuestOutput(_ output: String) {
+        guard !output.isEmpty else { return }
+        textView.text.append(output)
+        let maximumConsoleCharacters = 128 * 1024
+        if textView.text.utf16.count > maximumConsoleCharacters {
+            textView.text = String(textView.text.suffix(maximumConsoleCharacters))
+        }
+        textView.scrollRangeToVisible(NSRange(location: textView.text.utf16.count, length: 0))
     }
 
     private func appendStatus(_ message: String) {
