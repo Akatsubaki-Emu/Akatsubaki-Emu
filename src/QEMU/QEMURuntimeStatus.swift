@@ -39,10 +39,20 @@ enum QEMURuntimeStatus {
                 : "The no-JIT QEMU TCI runtime is not packaged. Build and embed the ios-tci-arm64 runtime.")
         }
 
+        func matchesRuntimeMode(_ candidate: URL) -> Bool {
+            let path = candidate.path.lowercased()
+            let name = candidate.lastPathComponent.lowercased()
+            let isTCI = path.contains("/tci/")
+                || path.contains("qemu-tci.framework")
+                || name.contains("-tci")
+            return requiresJIT ? !isTCI : isTCI
+        }
+
         func validatedRegularLibrary(_ candidate: URL) -> URL? {
             let resolved = candidate.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
             let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey])
-            guard resolved.path.hasPrefix(bundlePrefix),
+            guard matchesRuntimeMode(candidate),
+                  resolved.path.hasPrefix(bundlePrefix),
                   values?.isRegularFile == true else { return nil }
             return resolved
         }
@@ -91,9 +101,11 @@ enum QEMURuntimeStatus {
            ) {
             for case let url as URL in enumerator {
                 let name = url.lastPathComponent.lowercased()
-                if name.contains("qemu-x86_64-softmmu")
-                    || name == "libqemu-system-x86_64.dylib"
-                    || (name == "qemu" && url.path.contains("/QEMU.framework/")) {
+                if matchesRuntimeMode(url) &&
+                    (name.contains("qemu-x86_64-softmmu")
+                     || name == "libqemu-system-x86_64.dylib"
+                     || name == "libqemu-system-x86_64-tci.dylib"
+                     || (name == "qemu" && url.path.contains("/QEMU.framework/"))) {
                     candidates.append(url)
                 }
             }
