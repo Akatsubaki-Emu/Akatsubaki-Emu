@@ -511,14 +511,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("framebuffer no larger than 64 MiB", settings)
         self.assertIn("self?.showInvalidResolutionAlert(); return", settings)
 
-    def test_entitlement_settings_are_hidden_on_non_ios_targets(self):
+    def test_entitlement_settings_are_hidden_on_non_ios_and_visionos_targets(self):
         root = Path(__file__).resolve().parents[2]
         settings = (root / "iSteam" / "SettingsViewController.swift").read_text(encoding="utf-8")
         project = (root / "project.yml").read_text(encoding="utf-8")
-        self.assertIn("#if os(iOS)\n        return 12\n#else\n        return 11\n#endif", settings)
+        self.assertIn("#if os(iOS) && !os(visionOS)\n        return 12\n#else\n        return 11\n#endif", settings)
         action = settings.split("case 11:", 1)[1].split("default:", 1)[0]
         reference = action.index("EntitlementSettingsView()")
-        guard = action.rfind("#if os(iOS)", 0, reference)
+        guard = action.rfind("#if os(iOS) && !os(visionOS)", 0, reference)
         end = action.find("#endif", reference)
         self.assertGreater(guard, -1)
         self.assertGreater(end, reference)
