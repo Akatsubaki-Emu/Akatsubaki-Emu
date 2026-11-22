@@ -18,6 +18,12 @@ on:
       - scripts/validate-qemu-source.py
   schedule:
     - cron: "0 2 * * *"
+  # Reconciliation may push a merge commit with GITHUB_TOKEN, which does not
+  # generate a second push-triggered workflow. Re-run against the new main tip.
+  workflow_run:
+    workflows: ["Reconcile GitLab mirror history"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       channel:
@@ -37,6 +43,9 @@ permissions:
 jobs:
   validate-release-channel:
     name: Validate release channel
+    # For workflow_run, only build when reconciliation succeeded and created a
+    # newer main commit; this avoids duplicate QEMU builds on no-op reconciliations.
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha != github.sha)
     runs-on: ubuntu-latest
     steps:
       - name: Require main ref for Main channel
