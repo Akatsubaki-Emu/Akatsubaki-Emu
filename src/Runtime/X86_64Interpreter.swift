@@ -197,10 +197,11 @@ final class X86_64Interpreter: GuestCPUBackend {
                 guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
                 let target = addSigned(Int32(bitPattern: raw), to: rip)
                 guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
-                registers[4] -= 8
-                guard memory.writeUInt64(rip, offset: registers[4]) else {
-                    return .memoryFault(address: registers[4])
+                let nextStackPointer = registers[4] - 8
+                guard memory.writeUInt64(rip, offset: nextStackPointer) else {
+                    return .memoryFault(address: nextStackPointer)
                 }
+                registers[4] = nextStackPointer
                 rip = target
             case 0xC2: // RET imm16
                 guard let adjustment = fetchUInt16() else {
@@ -214,13 +215,14 @@ final class X86_64Interpreter: GuestCPUBackend {
                 registers[4] = nextStackPointer
                 rip = target
             case 0xC9: // LEAVE
-                registers[4] = registers[5]
-                guard let value = readUInt64(at: registers[4]) else {
-                    return .memoryFault(address: registers[4])
+                let framePointer = registers[5]
+                guard let value = readUInt64(at: framePointer) else {
+                    return .memoryFault(address: framePointer)
                 }
-                guard registers[4] <= UInt64.max - 8 else { return .memoryFault(address: registers[4]) }
+                let (nextStackPointer, overflow) = framePointer.addingReportingOverflow(8)
+                guard !overflow else { return .memoryFault(address: framePointer) }
+                registers[4] = nextStackPointer
                 registers[5] = value
-                registers[4] += 8
             case 0xF6: // TEST, NOT and NEG r/m8
                 guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
                 let group = (modrm >> 3) & 7
@@ -343,11 +345,12 @@ final class X86_64Interpreter: GuestCPUBackend {
                     }
                     if group == 2 || group == 6 {
                         guard registers[4] >= 8 else { return .memoryFault(address: registers[4]) }
-                        registers[4] -= 8
+                        let nextStackPointer = registers[4] - 8
                         let value = group == 2 ? rip : target
-                        guard memory.writeUInt64(value, offset: registers[4]) else {
-                            return .memoryFault(address: registers[4])
+                        guard memory.writeUInt64(value, offset: nextStackPointer) else {
+                            return .memoryFault(address: nextStackPointer)
                         }
+                        registers[4] = nextStackPointer
                     }
                     if group != 6 { rip = target }
                 }

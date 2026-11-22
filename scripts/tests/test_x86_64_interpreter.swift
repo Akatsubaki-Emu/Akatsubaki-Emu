@@ -1102,6 +1102,56 @@ struct InterpreterTests {
         precondition(stackUnderflowExit == .memoryFault(address: 0))
         precondition(stackUnderflow.registerValue(4) == 0)
 
+        let relativeCallFaultMemory = GuestMemory(size: 64)
+        let relativeCallFaultProgram: [UInt8] = [
+            0x48, 0xBC, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xE8, 0x00, 0x00, 0x00, 0x00
+        ]
+        precondition(relativeCallFaultMemory.write(Data(relativeCallFaultProgram), offset: 0))
+        let relativeCallFault = X86_64Interpreter(memory: relativeCallFaultMemory)
+        try relativeCallFault.reset(entryPoint: 0)
+        let relativeCallFaultExit = try relativeCallFault.run(maxInstructions: 2)
+        precondition(relativeCallFaultExit == .memoryFault(address: 64))
+        precondition(relativeCallFault.registerValue(4) == 72)
+
+        let indirectCallFaultMemory = GuestMemory(size: 64)
+        let indirectCallFaultProgram: [UInt8] = [
+            0x48, 0xBC, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x48, 0xB8, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFF, 0xD0
+        ]
+        precondition(indirectCallFaultMemory.write(Data(indirectCallFaultProgram), offset: 0))
+        let indirectCallFault = X86_64Interpreter(memory: indirectCallFaultMemory)
+        try indirectCallFault.reset(entryPoint: 0)
+        let indirectCallFaultExit = try indirectCallFault.run(maxInstructions: 3)
+        precondition(indirectCallFaultExit == .memoryFault(address: 64))
+        precondition(indirectCallFault.registerValue(4) == 72)
+
+        let indirectPushFaultMemory = GuestMemory(size: 64)
+        let indirectPushFaultProgram: [UInt8] = [
+            0x48, 0xBC, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x48, 0xB8, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xFF, 0xF0
+        ]
+        precondition(indirectPushFaultMemory.write(Data(indirectPushFaultProgram), offset: 0))
+        let indirectPushFault = X86_64Interpreter(memory: indirectPushFaultMemory)
+        try indirectPushFault.reset(entryPoint: 0)
+        let indirectPushFaultExit = try indirectPushFault.run(maxInstructions: 3)
+        precondition(indirectPushFaultExit == .memoryFault(address: 64))
+        precondition(indirectPushFault.registerValue(4) == 72)
+
+        let leaveFaultMemory = GuestMemory(size: 64)
+        precondition(leaveFaultMemory.write(Data([
+            0x48, 0xBD, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xC9
+        ]), offset: 0))
+        let leaveFault = X86_64Interpreter(memory: leaveFaultMemory)
+        try leaveFault.reset(entryPoint: 0)
+        let leaveFaultExit = try leaveFault.run(maxInstructions: 2)
+        precondition(leaveFaultExit == .memoryFault(address: 72))
+        precondition(leaveFault.registerValue(4) == 56)
+        precondition(leaveFault.registerValue(5) == 72)
+
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
