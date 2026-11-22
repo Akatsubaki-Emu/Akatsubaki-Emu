@@ -13,11 +13,8 @@
 #endif
 
 #if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR
-__attribute__((noinline, optnone, naked))
 void iSteamJITDetach(void) {
-    __asm__ volatile("mov x16, #0\n"
-                     "brk #0xf00d\n"
-                     "ret\n");
+    /* Intentionally empty: keep TXM executable mappings valid. */
 }
 __attribute__((noinline, optnone, naked))
 void *iSteamJITPrepareRegion(void *address, size_t length) {

@@ -46,6 +46,8 @@ swift-runtime-tests:
     - /tmp/test-windows-pe
     - swiftc -parse-as-library -swift-version 5 src/Runtime/ELF64Loader.swift src/Runtime/X86_64ALU.swift src/Runtime/LinuxProcessStackBuilder.swift src/Runtime/LinuxSyscallDispatcher.swift src/Runtime/X86_64Interpreter.swift scripts/tests/test_static_elf_execution.swift -o /tmp/test-static-elf
     - /tmp/test-static-elf
+    - swiftc -parse-as-library -swift-version 5 src/Core/EmulationLog.swift scripts/tests/test_emulation_log_observer.swift -o /tmp/test-emulation-log-observer
+    - /tmp/test-emulation-log-observer
     - swiftc -parse-as-library -swift-version 5 src/Runtime/X86_64AOTTranslator.swift scripts/tests/test_kenran_buto_aot_translator.swift -o /tmp/test-kenran-buto-aot
     - /tmp/test-kenran-buto-aot
     - swiftc -parse-as-library -swift-version 5 src/Runtime/X86_64ALU.swift src/Runtime/LinuxSyscallDispatcher.swift src/Runtime/X86_64Interpreter.swift scripts/tests/test_x86_64_interpreter.swift -o /tmp/test-x86-interpreter
@@ -56,8 +58,10 @@ swift-runtime-tests:
     - /tmp/test-linux-syscalls
     - swiftc -parse-as-library -swift-version 5 src/Runtime/ExecutionBackendRouter.swift scripts/tests/test_execution_backend_router.swift -o /tmp/test-backend-router
     - /tmp/test-backend-router
-    - swiftc -parse-as-library -swift-version 5 src/Runtime/KenranButoAOT.swift scripts/tests/test_kenran_buto_aot.swift -o /tmp/test-kenran-buto-aot
+    - swiftc -parse-as-library -swift-version 5 src/Runtime/X86_64AOTTranslator.swift scripts/tests/test_kenran_buto_aot_translator.swift -o /tmp/test-kenran-buto-aot
     - /tmp/test-kenran-buto-aot
+    - swiftc -parse-as-library -swift-version 5 src/Core/EmulationLog.swift src/Performance/TranslationCache.swift src/Runtime/X86_64AOTTranslator.swift src/Runtime/KenranButoAOTCompiler.swift scripts/tests/test_kenran_buto_aot_cache.swift -o /tmp/test-kenran-buto-aot-cache
+    - /tmp/test-kenran-buto-aot-cache
     - swiftc -parse-as-library -swift-version 5 src/GPU/GPUBackend.swift scripts/tests/test_gpu_frame_region.swift -o /tmp/test-gpu-frame-region
     - /tmp/test-gpu-frame-region
     - swiftc -parse-as-library -swift-version 5 src/Display/TouchStickMath.swift scripts/tests/test_touch_stick_math.swift -o /tmp/test-touch-stick

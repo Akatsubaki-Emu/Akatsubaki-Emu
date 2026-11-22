@@ -27,6 +27,8 @@ struct ISteamGuestMemory {
     std::vector<std::unique_ptr<Page>> densePages;
     std::vector<uint64_t> denseAllocatedPageIndices;
     std::unordered_map<uint64_t, std::unique_ptr<Page>> pages;
+    bool permissionsEnabled = false;
+    std::unordered_map<uint64_t, uint8_t> pagePermissions;
     mutable std::mutex mutex;
 };
 
@@ -56,6 +58,23 @@ void removeDensePage(ISteamGuestMemory *memory, uint64_t pageIndex) {
     if (movedPageIndex != pageIndex) {
         memory->densePages[static_cast<size_t>(movedPageIndex)]->allocatedIndex = allocatedIndex;
     }
+}
+
+constexpr uint8_t permissionRead = 1;
+constexpr uint8_t permissionWrite = 2;
+constexpr uint8_t permissionExecute = 4;
+
+bool hasPermissionLocked(const ISteamGuestMemory *memory, uint64_t offset,
+                         size_t length, uint8_t required) {
+    if (!memory->permissionsEnabled || length == 0) return true;
+    const uint64_t firstPage = offset / pageSize;
+    const uint64_t lastPage = (offset + static_cast<uint64_t>(length) - 1) / pageSize;
+    for (uint64_t page = firstPage; page <= lastPage; ++page) {
+        const auto found = memory->pagePermissions.find(page);
+        if (found == memory->pagePermissions.end()
+            || (found->second & required) != required) return false;
+    }
+    return true;
 }
 }
 
@@ -93,6 +112,7 @@ bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
 
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!hasPermissionLocked(memory, offset, length, permissionRead)) return false;
         const uint64_t lastAddress = offset + length - 1;
         if (memory->usesDensePages) {
             if (offset / pageSize == lastAddress / pageSize) {
@@ -149,6 +169,26 @@ bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
     }
 }
 
+bool isteam_guest_memory_read_execute(ISteamGuestMemory *memory, uint64_t offset,
+                                      uint8_t *destination, size_t length) {
+    if (!memory || (length && !destination)
+        || offset > memory->size || length > memory->size - offset) {
+        return false;
+    }
+    if (!length) return true;
+    try {
+        {
+            std::lock_guard<std::mutex> guard(memory->mutex);
+            if (!hasPermissionLocked(memory, offset, length, permissionExecute)) return false;
+        }
+        // x86-64 executable mappings are readable as well; callers preserve
+        // that property when translating ELF and mmap protection flags.
+        return isteam_guest_memory_read(memory, offset, destination, length);
+    } catch (...) {
+        return false;
+    }
+}
+
 bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
                                const uint8_t *source, size_t length) {
     if (!memory || (length && !source)
@@ -159,6 +199,7 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
 
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!hasPermissionLocked(memory, offset, length, permissionWrite)) return false;
         const uint64_t lastAddress = offset + length - 1;
         if (memory->usesDensePages) {
             if (offset / pageSize == lastAddress / pageSize) {
@@ -224,6 +265,86 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
         return true;
     } catch (...) {
         // No C++ allocation/locking exception may escape into Swift/C callers.
+        return false;
+    }
+}
+
+bool isteam_guest_memory_begin_mapping(ISteamGuestMemory *memory) {
+    if (!memory) return false;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        memory->pagePermissions.clear();
+        memory->permissionsEnabled = true;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool isteam_guest_memory_map(ISteamGuestMemory *memory, uint64_t offset,
+                             uint64_t length, uint8_t permissions, bool merge) {
+    if (!memory || (permissions & static_cast<uint8_t>(~7u))
+        || offset > memory->size || !length || length > memory->size - offset) {
+        return false;
+    }
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        const uint64_t firstPage = offset / pageSize;
+        const uint64_t lastPage = (offset + length - 1) / pageSize;
+        for (uint64_t page = firstPage; page <= lastPage; ++page) {
+            const auto found = memory->pagePermissions.find(page);
+            const uint8_t current = found == memory->pagePermissions.end() ? 0 : found->second;
+            memory->pagePermissions[page] = merge
+                ? static_cast<uint8_t>(current | permissions)
+                : permissions;
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool isteam_guest_memory_protect(ISteamGuestMemory *memory, uint64_t offset,
+                                 uint64_t length, uint8_t permissions) {
+    if (!memory || (permissions & static_cast<uint8_t>(~7u)) || !length
+        || offset % pageSize != 0 || offset > memory->size
+        || length > memory->size - offset) {
+        return false;
+    }
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!memory->permissionsEnabled) return false;
+        const uint64_t firstPage = offset / pageSize;
+        const uint64_t lastPage = (offset + length - 1) / pageSize;
+        for (uint64_t page = firstPage; page <= lastPage; ++page) {
+            if (memory->pagePermissions.find(page) == memory->pagePermissions.end()) return false;
+        }
+        for (uint64_t page = firstPage; page <= lastPage; ++page) {
+            memory->pagePermissions[page] = permissions;
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool isteam_guest_memory_unmap(ISteamGuestMemory *memory, uint64_t offset,
+                               uint64_t length) {
+    if (!memory || !length || offset % pageSize != 0
+        || offset > memory->size || length > memory->size - offset) return false;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!memory->permissionsEnabled) return false;
+        const uint64_t firstPage = offset / pageSize;
+        const uint64_t lastPage = (offset + length - 1) / pageSize;
+        for (uint64_t page = firstPage; page <= lastPage; ++page) {
+            if (memory->pagePermissions.find(page) == memory->pagePermissions.end()) return false;
+        }
+        for (uint64_t page = firstPage; page <= lastPage; ++page) {
+            memory->pagePermissions.erase(page);
+        }
+        return true;
+    } catch (...) {
         return false;
     }
 }
@@ -352,6 +473,8 @@ void isteam_guest_memory_clear(ISteamGuestMemory *memory) {
         } else {
             memory->pages.clear();
         }
+        memory->pagePermissions.clear();
+        memory->permissionsEnabled = false;
     } catch (...) {
         // This void API has no error channel; keep exceptions inside C++.
     }

@@ -26,7 +26,7 @@ This note documents the iOS device-arm64 QEMU runtime build in `.github/workflow
 
 ## Runtime integration constraints
 
-The in-app QEMU command builder uses an explicit q35 device graph rather than relying on implicit devices disabled by `-nodefaults`. Both acceleration profiles request split-WX: the 128 MiB profile uses the larger translation buffer, while the 64 MiB profile is still TCG JIT, not a JIT-less interpreter.
+The in-app QEMU command builder uses an explicit q35 device graph rather than relying on implicit devices disabled by `-nodefaults`. Only the JIT-backed QEMU runtime is currently built and packaged. The no-JIT TCI runtime is not currently built or packaged: its separate UTM build target, mode-specific packaging layout, runtime manifest and release artifact have not been integrated end to end. Do not treat a smaller TCG translation-block cache or `-accel tcg` as a no-JIT fallback; TCG requires executable memory unless QEMU is built with its TCI interpreter. The Settings UI disables the unsupported TCI option and migrates saved TCI/Hypervisor selections to Automatic until a validated no-JIT artifact exists.
 
 - An explicit ICH9 AHCI controller carries the guest disk and CD-ROM. Windows guests use the broadly supported AHCI path rather than requiring VirtIO storage drivers during installation.
 - Windows guests use standard VGA and E1000E networking; Linux guests use the configured VirtIO GPU and VirtIO networking.

@@ -1,6 +1,20 @@
-#if !os(tvOS)
 import Foundation
+
+#if !os(tvOS)
 import CoreMotion
+#endif
+
+private func normalizedMotionSensitivity(_ value: Double) -> Double {
+    guard value.isFinite else { return 1 }
+    return min(max(value, 0.1), 5)
+}
+
+private func storedMotionSensitivity() -> Double {
+    let stored = UserDefaults.standard.double(forKey: "iSteam.motionSensitivity")
+    return stored > 0 ? normalizedMotionSensitivity(stored) : 1
+}
+
+#if !os(tvOS)
 
 final class MotionInputManager {
     static let shared = MotionInputManager()
@@ -17,15 +31,12 @@ final class MotionInputManager {
     var isAvailable: Bool { motion.isDeviceMotionAvailable }
     var isRunning: Bool { motion.isDeviceMotionActive }
     private let stateLock = NSLock()
-    private var cachedSensitivity: Double = {
-        let stored = UserDefaults.standard.double(forKey: "iSteam.motionSensitivity")
-        return stored > 0 ? min(stored, 5) : 1
-    }()
+    private var cachedSensitivity: Double = storedMotionSensitivity()
 
     var sensitivity: Double {
         get { withStateLock { cachedSensitivity } }
         set {
-            let normalized = min(max(newValue, 0.1), 5)
+            let normalized = normalizedMotionSensitivity(newValue)
             withStateLock { cachedSensitivity = normalized }
             UserDefaults.standard.set(normalized, forKey: "iSteam.motionSensitivity")
         }
@@ -98,8 +109,6 @@ final class MotionInputManager {
     }
 }
 #else
-import Foundation
-
 /// CoreMotion is unavailable on tvOS; retain the shared API as a no-op so the
 /// common display controller can build for Apple TV without device-motion input.
 final class MotionInputManager {
@@ -110,11 +119,10 @@ final class MotionInputManager {
     var isRunning: Bool { false }
     var sensitivity: Double {
         get {
-            let stored = UserDefaults.standard.double(forKey: "iSteam.motionSensitivity")
-            return stored > 0 ? min(stored, 5) : 1
+            storedMotionSensitivity()
         }
         set {
-            UserDefaults.standard.set(min(max(newValue, 0.1), 5), forKey: "iSteam.motionSensitivity")
+            UserDefaults.standard.set(normalizedMotionSensitivity(newValue), forKey: "iSteam.motionSensitivity")
         }
     }
     var onOrientation: ((Double, Double, Double) -> Void)?

@@ -25,14 +25,29 @@ enum VMAccelerationBackend: String, CaseIterable {
     case qemuJIT = "QEMU TCG + JIT"
     case qemuInterpreter = "QEMU TCI (no JIT)"
     case hypervisor = "Hypervisor.framework"
-    var detail: String {
+
+    /// Only the JIT-backed QEMU runtime is currently packaged for iOS.
+    /// Keep unsupported choices visible for migration, but do not offer them.
+    var isAvailable: Bool {
         switch self {
-        case .automatic: return "Prefers QEMU TCG + JIT when available and falls back to the TCI interpreter"
-        case .qemuJIT: return "TCG with a 128 MiB translation-block cache and split-WX enabled"
-        case .qemuInterpreter: return "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG"
-        case .hypervisor: return "Unavailable on standard iOS; stored selections fall back to QEMU TCI (no JIT)"
+        case .automatic, .qemuJIT: return true
+        case .qemuInterpreter, .hypervisor: return false
         }
     }
+
+    var detail: String {
+        switch self {
+        case .automatic:
+            return "Uses the packaged QEMU TCG + JIT runtime; requires physical-device JIT readiness. A no-JIT TCI runtime is not packaged yet."
+        case .qemuJIT:
+            return "TCG with a 128 MiB translation-block cache and split-WX; requires physical iOS 26+ and a supported StikDebug JIT session."
+        case .qemuInterpreter:
+            return "Unavailable: the separate no-JIT TCI runtime has not been built and packaged."
+        case .hypervisor:
+            return "Unavailable on standard iOS; Hypervisor.framework is not exposed to ordinary iOS apps."
+        }
+    }
+
     static var hypervisorAvailable: Bool { false }
 }
 
@@ -117,7 +132,10 @@ final class RuntimeSettings {
         set { defaults.set(newValue.rawValue, forKey: "iSteam.vmMode") }
     }
     var acceleration: VMAccelerationBackend {
-        get { VMAccelerationBackend(rawValue: defaults.string(forKey: "iSteam.acceleration") ?? "") ?? .automatic }
+        get {
+            let stored = VMAccelerationBackend(rawValue: defaults.string(forKey: "iSteam.acceleration") ?? "") ?? .automatic
+            return stored.isAvailable ? stored : .automatic
+        }
         set { defaults.set(newValue.rawValue, forKey: "iSteam.acceleration") }
     }
     var resolution: DisplayResolution {

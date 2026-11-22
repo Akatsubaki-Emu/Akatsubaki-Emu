@@ -78,6 +78,7 @@ enum QEMURuntimeStatus {
             frameworks?.appendingPathComponent("qemu-x86_64-softmmu.dylib"),
             bundle.bundleURL.appendingPathComponent("QEMU/libqemu-system-x86_64.dylib")
         ] : [
+            frameworks?.appendingPathComponent("TCI/QEMU-TCI.framework/QEMU"),
             frameworks?.appendingPathComponent("QEMU-TCI.framework/QEMU"),
             frameworks?.appendingPathComponent("libqemu-system-x86_64-tci.dylib"),
             frameworks?.appendingPathComponent("qemu-x86_64-softmmu-tci")
@@ -93,7 +94,10 @@ enum QEMURuntimeStatus {
                 let name = url.lastPathComponent.lowercased()
                 if name.contains("qemu-x86_64-softmmu")
                     || name == "libqemu-system-x86_64.dylib"
-                    || (name == "qemu" && url.path.contains("/QEMU.framework/")) {
+                    || (name == "qemu" && (
+                        url.path.contains("/QEMU.framework/")
+                        || url.path.contains("/QEMU-TCI.framework/")
+                    )) {
                     candidates.append(url)
                 }
             }

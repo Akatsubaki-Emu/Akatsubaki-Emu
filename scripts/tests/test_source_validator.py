@@ -125,10 +125,10 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "scripts" / "validate-qemu-runtime.sh").read_text(encoding="utf-8")
         self.assertEqual(source.count("for tool in file lipo nm codesign vtool; do"), 1)
-        self.assertEqual(
-            source.count("for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request isteam_qemu_set_jit_callbacks; do"),
-            1,
-        )
+        self.assertEqual(source.count("required_symbols=(qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request)"), 1)
+        self.assertEqual(source.count('if [[ "$mode" == "jit" ]]; then'), 1)
+        self.assertEqual(source.count("required_symbols+=(isteam_qemu_set_jit_callbacks)"), 1)
+        self.assertEqual(source.count('for symbol in "${required_symbols[@]}"; do'), 1)
         self.assertEqual(source.count("codesign --verify --strict"), 1)
         self.assertNotIn("optional graceful-shutdown export", source)
         self.assertNotIn("for tool in file lipo nm codesign; do", source)
@@ -136,17 +136,22 @@ class SourceValidatorTests(unittest.TestCase):
     def test_native_runtime_probes_loadability_before_start(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
-        self.assertIn("switch QEMURuntimeStatus.inspect()", source)
+        self.assertIn("let requiresJIT = configuration.accelerator == .jit", source)
+        self.assertIn("switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", source)
         self.assertNotIn("switch QEMURuntimeStatus.locate()", source)
 
     def test_repository_validation_checks_runtime_validator_shell_syntax(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "validate-repository.yml").read_text(encoding="utf-8")
         self.assertIn("bash -n scripts/package-utm-qemu-runtime.sh", workflow)
+        self.assertIn("bash -n scripts/package-utm-qemu-tci-runtime.sh", workflow)
+        self.assertIn("bash -n scripts/merge-qemu-runtime-variants.sh", workflow)
         self.assertIn("bash -n scripts/validate-qemu-runtime.sh", workflow)
         self.assertIn("bash -n scripts/validate-apple-package.sh", workflow)
         for script in (
             "scripts/package-utm-qemu-runtime.sh",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+            "scripts/merge-qemu-runtime-variants.sh",
             "scripts/validate-qemu-runtime.sh",
             "scripts/validate-apple-package.sh",
         ):
@@ -166,12 +171,26 @@ class SourceValidatorTests(unittest.TestCase):
             "qemu_main_loop",
             "qemu_cleanup",
             "qemu_system_shutdown_request",
-            "isteam_qemu_set_jit_callbacks",
         ):
             self.assertIn(f"`{symbol}`", readme)
+        self.assertIn("Only JIT mode additionally requires", readme)
+        self.assertIn("TCI validation checks lifecycle/shutdown exports", readme)
+        self.assertIn("Build verification: a successful hosted JIT+TCI UTM build and combined artifact have not yet been recorded", readme)
         self.assertNotIn("qemu_system_shutdown_request` is optional", readme)
         self.assertEqual(readme.count("The runtime library must be built for **physical iOS arm64**"), 1)
         self.assertEqual(readme.count("Physical-device runtime startup"), 1)
+
+    def test_tci_packager_and_merge_keep_mode_specific_artifacts(self):
+        root = Path(__file__).resolve().parents[2]
+        tci = (root / "scripts" / "package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
+        merge = (root / "scripts" / "merge-qemu-runtime-variants.sh").read_text(encoding="utf-8")
+        self.assertIn("has_jit_callbacks=false", tci)
+        self.assertIn("QEMU-TCI.framework", tci)
+        self.assertIn('bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci)
+        self.assertIn("StikJIT callback export: absent by design", tci)
+        self.assertIn("grep -q 'isteam_qemu_set_jit_callbacks' \"$JIT_DIR/exports.txt\"", merge)
+        self.assertIn("if grep -q 'isteam_qemu_set_jit_callbacks' \"$TCI_DIR/exports.txt\"; then", merge)
+        self.assertIn('mkdir -p "$OUT/Frameworks" "$OUT/QEMU/JIT" "$OUT/QEMU/TCI"', merge)
 
     def test_qemu_ios_platform_guard_rejects_simulator_platforms(self):
         pattern = "platform[[:space:]]+IOS([[:space:]]|$)"
@@ -527,12 +546,16 @@ class SourceValidatorTests(unittest.TestCase):
         settings = (root / "src" / "Core" / "RuntimeSettings.swift").read_text(encoding="utf-8")
         builder = (root / "src" / "QEMU" / "QEMUCommandBuilder.swift").read_text(encoding="utf-8")
         docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
-        self.assertIn("TCG with a 64 MiB split-WX translation buffer; still requires JIT executable memory", settings)
+        self.assertIn("QEMU TCG + JIT", settings)
+        self.assertIn("QEMU TCI (no JIT)", settings)
+        self.assertIn("Threaded TCG interpreter (TCI); does not require executable-memory JIT", settings)
         self.assertIn("?? .linuxVM", settings)
         self.assertNotIn("Slower compatibility fallback", settings)
-        self.assertIn("tcg,tb-size=128,split-wx=on", builder)
-        self.assertIn("tcg,tb-size=64,split-wx=on", builder)
+        self.assertIn('configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg"', builder)
+        self.assertNotIn("tcg,tb-size=64,split-wx=on", builder)
         self.assertIn("QEMU TCG uses JIT code generation", docs)
+        self.assertIn("The runtime workflow now builds the `iOS` and `iOS-TCI` archives and packages both under `QEMU/JIT` and `QEMU/TCI`", docs)
+        self.assertIn("successful hosted dual-runtime build and physical guest boot remain unverified", docs)
 
     def test_linux_arm32_translator_requires_linux_syscall_abi(self):
         root = Path(__file__).resolve().parents[2]
