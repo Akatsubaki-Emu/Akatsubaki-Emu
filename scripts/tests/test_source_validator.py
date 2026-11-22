@@ -187,6 +187,8 @@ class SourceValidatorTests(unittest.TestCase):
     def test_controller_button_release_uses_the_press_time_mapping(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Display" / "ControllerInputManager.swift").read_text(encoding="utf-8")
+        self.assertIn("private func mappedAction(for name: String, source: String, pressed: Bool,", source)
+        self.assertIn("profile: ControllerMappingProfile) -> String {", source)
         self.assertIn("activeButtonActions[source] = action", source)
         self.assertIn("activeButtonActions.removeValue(forKey: source)", source)
         self.assertIn('let buttonSource = source + ":button:" + name', source)
@@ -370,6 +372,23 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn('XCODE_APP="/Applications/Xcode_26.2.app"', workflow)
         self.assertIn('sudo xcode-select --switch "$XCODE_APP/Contents/Developer"', workflow)
         self.assertIn('if [ "$XCODE_VERSION" != "26.2" ]; then', workflow)
+
+
+    def test_release_and_platform_validation_pin_xcode_26_2(self):
+        root = Path(__file__).resolve().parents[2]
+        release = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        release_build = release.split("\n  build:\n", 1)[1].split("\n  release:\n", 1)[0]
+        release_publish = release.split("\n  release:\n", 1)[1]
+        validation = (root / ".github" / "workflows" / "validate-ios-build.yml").read_text(encoding="utf-8")
+        validation_build = validation.split("\n  build-platform-simulators:\n", 1)[1]
+        for name, job in (("release build", release_build), ("platform validation", validation_build)):
+            with self.subTest(workflow=name):
+                self.assertIn("runs-on: macos-26", job)
+                self.assertIn('XCODE_APP="/Applications/Xcode_26.2.app"', job)
+                self.assertIn('sudo xcode-select --switch "$XCODE_APP/Contents/Developer"', job)
+                self.assertIn('if [ "$XCODE_VERSION" != "26.2"; then', job)
+        self.assertIn("runs-on: ubuntu-24.04", release_publish)
+        self.assertIn("sha256sum -c", release_publish)
 
 
     def test_qemu_acceleration_profiles_describe_actual_tcg_behavior(self):

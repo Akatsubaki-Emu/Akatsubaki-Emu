@@ -856,6 +856,10 @@ required = {
         "src/Runtime/LinuxSyscallDispatcher.swift",
         "Test VNC key-state source arbitration",
         "scripts/tests/test_vnc_key_state.swift",
+        "runs-on: macos-26",
+        'XCODE_APP="/Applications/Xcode_26.2.app"',
+        'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
+        'if [ "$XCODE_VERSION" != "26.2"; then',
     ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
@@ -961,6 +965,28 @@ for token in [
     if token not in release_workflow:
         print(f"release workflow: validation-only path should not trigger QEMU release builds: {token}", file=sys.stderr)
         failed = True
+release_build_start = release_workflow.find("\n  build:\n")
+release_publish_start = release_workflow.find("\n  release:\n", release_build_start)
+if release_build_start < 0 or release_publish_start < 0:
+    print("release workflow: Apple build and publishing jobs are missing", file=sys.stderr)
+    failed = True
+else:
+    release_build_job = release_workflow[release_build_start:release_publish_start]
+    for token in [
+        "runs-on: macos-26",
+        'XCODE_APP="/Applications/Xcode_26.2.app"',
+        'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
+        'if [ "$XCODE_VERSION" != "26.2"; then',
+    ]:
+        if token not in release_build_job:
+            print(f"release workflow: Apple build job missing {token!r}", file=sys.stderr)
+            failed = True
+    release_publish_job = release_workflow[release_publish_start:]
+    for token in ["runs-on: ubuntu-24.04", "sha256sum -c"]:
+        if token not in release_publish_job:
+            print(f"release workflow: publishing job missing {token!r}", file=sys.stderr)
+            failed = True
+
 release_concurrency_start = release_workflow.find("\nconcurrency:\n")
 release_concurrency_end = release_workflow.find("\njobs:", release_concurrency_start)
 if release_concurrency_start < 0 or release_concurrency_end < 0:
