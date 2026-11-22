@@ -970,6 +970,38 @@ struct InterpreterTests {
         precondition(secondMutationBatch == .halted)
         precondition(externalCodeMutationMemory.readPrefixCalls == 2)
 
+        // Deterministic refill-count microbenchmark: equal-sized sequential
+        // instruction streams, with and without guest data writes. This exposes
+        // the conservative global-generation invalidation cost without relying
+        // on noisy wall-clock timings.
+        let sequentialBenchmarkMemory = GuestMemory(size: 8192)
+        var sequentialBenchmarkProgram = Data(repeating: 0x90, count: 170)
+        sequentialBenchmarkProgram.append(0xF4)
+        precondition(sequentialBenchmarkMemory.write(sequentialBenchmarkProgram, offset: 0))
+        let sequentialBenchmark = X86_64Interpreter(memory: sequentialBenchmarkMemory)
+        try sequentialBenchmark.reset(entryPoint: 0)
+        let sequentialBenchmarkExit = try sequentialBenchmark.run(maxInstructions: 171)
+        precondition(sequentialBenchmarkExit == .halted)
+        precondition(sequentialBenchmarkMemory.readPrefixCalls == 3)
+
+        let storeHeavyBenchmarkMemory = GuestMemory(size: 8192)
+        var storeHeavyBenchmarkProgram = Data([
+            0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+            0x48, 0xBF, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ])
+        for _ in 0..<50 {
+            storeHeavyBenchmarkProgram.append(contentsOf: [0x48, 0x89, 0x07])
+        }
+        storeHeavyBenchmarkProgram.append(0xF4)
+        precondition(storeHeavyBenchmarkMemory.write(storeHeavyBenchmarkProgram, offset: 0))
+        let storeHeavyBenchmark = X86_64Interpreter(memory: storeHeavyBenchmarkMemory)
+        try storeHeavyBenchmark.reset(entryPoint: 0)
+        let storeHeavyBenchmarkExit = try storeHeavyBenchmark.run(maxInstructions: 53)
+        precondition(storeHeavyBenchmarkExit == .halted)
+        precondition(storeHeavyBenchmark.instructionCount == 53)
+        precondition(storeHeavyBenchmarkMemory.readPrefixCalls >= sequentialBenchmarkMemory.readPrefixCalls)
+        print("instruction-window refill-count microbenchmark: sequential=\(sequentialBenchmarkMemory.readPrefixCalls), store-heavy=\(storeHeavyBenchmarkMemory.readPrefixCalls)")
+
         let zeroExtendMemory = GuestMemory(size: 256)
         precondition(zeroExtendMemory.write(Data([0x0F, 0xB7, 0x05, 0x79, 0x00, 0x00, 0x00, 0xF4]), offset: 0))
         precondition(zeroExtendMemory.write(Data([0xFF, 0x80]), offset: 0x80))
