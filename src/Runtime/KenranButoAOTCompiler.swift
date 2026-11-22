@@ -18,7 +18,15 @@ final class KenranButoAOTCompiler {
         self.translator = translator
     }
 
-    func compile(_ guestCode: Data, guestABI: String) throws -> Compilation {
+    func compile(
+        _ guestCode: Data,
+        guestABI: String,
+        maximumInstructions: Int = X86_64AOTTranslator.maximumInstructionBudget
+    ) throws -> Compilation {
+        let instructionBudget = max(1, min(maximumInstructions, X86_64AOTTranslator.maximumInstructionBudget))
+        // The budget is part of the cache identity: a 4,096-instruction
+        // artifact must never be reused for a 16-instruction dispatch slice.
+        let cacheABI = "\(guestABI)|maxInstructions=\(instructionBudget)"
         let identity = TranslationCacheIdentity(
             guestCodeSHA256: Self.sha256(guestCode),
             guestArchitecture: "x86_64",
@@ -26,19 +34,30 @@ final class KenranButoAOTCompiler {
             translatorVersion: X86_64AOTTranslator.translatorVersion,
             hostArchitecture: X86_64AOTTranslator.hostArchitecture,
             cpuFeatures: X86_64AOTTranslator.cpuFeatures,
-            guestABI: guestABI
+            guestABI: cacheABI
         )
 
-        if let cached = try cache.load(identity) {
-            if let translation = try? JSONDecoder().decode(X86_64AOTTranslation.self, from: cached),
-               translation.isCacheable,
-               translation.isValid(for: guestCode) {
-                return Compilation(translation: translation, cacheHit: true)
+        var verifiedTranslation: X86_64AOTTranslation?
+        if let cached = try cache.load(identity),
+           let cachedTranslation = try? JSONDecoder().decode(X86_64AOTTranslation.self, from: cached),
+           cachedTranslation.isCacheable,
+           cachedTranslation.isValid(for: guestCode),
+           cachedTranslation.instructionCount <= instructionBudget {
+            // Re-decode and compare the complete artifact before executable use.
+            // A valid checksum and structurally valid JSON do not prove that
+            // cached ARM64 words correspond to the current guest instruction stream.
+            let redecoded = translator.translate(guestCode, maximumInstructions: instructionBudget)
+            if redecoded.isCacheable,
+               redecoded.isValid(for: guestCode),
+               redecoded == cachedTranslation {
+                return Compilation(translation: cachedTranslation, cacheHit: true)
             }
-            try cache.invalidate(identity)
+            verifiedTranslation = redecoded
         }
 
-        let translation = translator.translate(guestCode)
+        try? cache.invalidate(identity)
+        let translation = verifiedTranslation
+            ?? translator.translate(guestCode, maximumInstructions: instructionBudget)
         if translation.isCacheable {
             try cache.store(try JSONEncoder().encode(translation), for: identity)
         }
