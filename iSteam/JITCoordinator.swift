@@ -11,6 +11,7 @@ final class JITCoordinator {
     private init() {}
 
     private weak var presentationController: UIViewController?
+    private weak var activeAlert: UIAlertController?
     private var onJITReady: (() -> Void)?
     private var waitingForStikDebugReturn = false
     private var waitingForLocalDevVPN = false
@@ -86,6 +87,7 @@ final class JITCoordinator {
             waitingForStikDebugReturn = true
             readinessChecksRemaining = 30
             show("Waiting for a compatible debugger to attach. Return to Akatsubaki Emu after enabling JIT.", title: "Waiting for debugger")
+            checkReadiness()
         case .stikDebug:
             enableLocalDevVPN()
         }
@@ -195,10 +197,12 @@ final class JITCoordinator {
         readinessCheckScheduled = false
         let completion = onJITReady
         onJITReady = nil
-        if let completion {
-            completion()
-        } else {
-            show("JIT is enabled for this process. You can now launch your emulation session.", title: "JIT ready")
+        dismissActiveAlert { [weak self] in
+            if let completion {
+                completion()
+            } else {
+                self?.show("JIT is enabled for this process. You can now launch your emulation session.", title: "JIT ready")
+            }
         }
     }
 
@@ -211,11 +215,28 @@ final class JITCoordinator {
         show(message, title: title)
     }
 
+    private func dismissActiveAlert(completion: (() -> Void)? = nil) {
+        guard let alert = activeAlert else {
+            completion?()
+            return
+        }
+        activeAlert = nil
+        guard alert.presentingViewController != nil else {
+            completion?()
+            return
+        }
+        alert.dismiss(animated: false, completion: completion)
+    }
+
     private func show(_ message: String, title: String) {
         guard let controller = presentationController,
               controller.viewIfLoaded?.window != nil else { return }
-        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        controller.present(alert, animated: true)
+        dismissActiveAlert { [weak self, weak controller] in
+            guard let self, let controller, controller.viewIfLoaded?.window != nil else { return }
+            let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.activeAlert = alert
+            controller.present(alert, animated: true)
+        }
     }
 }

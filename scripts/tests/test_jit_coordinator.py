@@ -71,6 +71,21 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertLess(source.index("JITCoordinator.shared.requestJIT(from: self)"), source.index("private func startEngine()"))
         self.assertIn("guard !engineStartRequested else { return }", source)
 
+
+    def test_wait_for_debugger_polls_immediately_and_closes_alerts(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        wait_case = source.split("case .waitForDebugger:", 1)[1].split("case .stikDebug:", 1)[0]
+        complete = source.split("private func completeJITRequest()", 1)[1].split("private func failRequest", 1)[0]
+        dismiss = source.split("private func dismissActiveAlert", 1)[1].split("private func show(", 1)[0]
+        show = source.split("private func show(", 1)[1]
+        self.assertLess(wait_case.index("show("), wait_case.index("checkReadiness()"))
+        self.assertIn("private weak var activeAlert: UIAlertController?", source)
+        self.assertIn("dismissActiveAlert", complete)
+        self.assertIn("alert.dismiss(animated: false", dismiss)
+        self.assertIn("dismissActiveAlert", show)
+        self.assertIn("show(message, title: title)", source)
+
     def test_app_registers_localdevvpn_and_its_callback_scheme(self):
         root = Path(__file__).resolve().parents[2]
         info = (root / "iSteam" / "Info.plist").read_text(encoding="utf-8")
