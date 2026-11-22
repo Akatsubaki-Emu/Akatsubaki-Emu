@@ -52,6 +52,22 @@ class MetalPartialFramebufferUploadTests(unittest.TestCase):
         self.assertIn("bytesPerRow: pending.width * 4", drain)
         self.assertIn("pending.sequence == nextFrameSequence && pendingFullFrame == nil", drain)
 
+    def test_pending_frame_drain_is_coalesced_until_the_active_drain_finishes(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "GPU" / "MetalGPUBackend.swift").read_text(encoding="utf-8")
+        schedule = source.split("private func schedulePendingFrameDrain()", 1)[1].split(
+            "private func drainPendingFrame()", 1
+        )[0]
+        drain = source.split("private func drainPendingFrame()", 1)[1].split(
+            "private func makeTexture", 1
+        )[0]
+
+        self.assertIn("private var pendingFrameDrainScheduled = false", source)
+        self.assertIn("guard pendingFullFrame != nil, !pendingFrameDrainScheduled else", schedule)
+        self.assertIn("pendingFrameDrainScheduled = true", schedule)
+        self.assertIn("pendingFrameDrainScheduled = false", drain)
+        self.assertIn("if shouldDrainPending { schedulePendingFrameDrain() }", drain)
+
 
 if __name__ == "__main__":
     unittest.main()
