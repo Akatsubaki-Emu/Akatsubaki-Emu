@@ -859,7 +859,7 @@ required = {
         "runs-on: macos-26",
         'XCODE_APP="/Applications/Xcode_26.2.app"',
         'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-        'if [ "$XCODE_VERSION" != "26.2"; then',
+        'if [ "$XCODE_VERSION" != "26.2" ]; then',
     ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
@@ -976,7 +976,7 @@ else:
         "runs-on: macos-26",
         'XCODE_APP="/Applications/Xcode_26.2.app"',
         'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-        'if [ "$XCODE_VERSION" != "26.2"; then',
+        'if [ "$XCODE_VERSION" != "26.2" ]; then',
     ]:
         if token not in release_build_job:
             print(f"release workflow: Apple build job missing {token!r}", file=sys.stderr)

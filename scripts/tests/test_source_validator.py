@@ -386,7 +386,7 @@ class SourceValidatorTests(unittest.TestCase):
                 self.assertIn("runs-on: macos-26", job)
                 self.assertIn('XCODE_APP="/Applications/Xcode_26.2.app"', job)
                 self.assertIn('sudo xcode-select --switch "$XCODE_APP/Contents/Developer"', job)
-                self.assertIn('if [ "$XCODE_VERSION" != "26.2"; then', job)
+                self.assertIn('if [ "$XCODE_VERSION" != "26.2" ]; then', job)
         self.assertIn("runs-on: ubuntu-24.04", release_publish)
         self.assertIn("sha256sum -c", release_publish)
 
