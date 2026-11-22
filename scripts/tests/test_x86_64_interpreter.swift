@@ -970,6 +970,24 @@ struct InterpreterTests {
         let truncatedEndbr64Exit = try truncatedEndbr64.run(maxInstructions: 1)
         precondition(truncatedEndbr64Exit == .memoryFault(address: 3))
 
+        // ENDBR64 without its mandatory F3 prefix is not the landing-pad opcode.
+        let unprefixedEndbr64Memory = GuestMemory(size: 16)
+        precondition(unprefixedEndbr64Memory.write(Data([0x0F, 0x1E, 0xFA]), offset: 0))
+        let unprefixedEndbr64 = X86_64Interpreter(memory: unprefixedEndbr64Memory)
+        try unprefixedEndbr64.reset(entryPoint: 0)
+        let unprefixedEndbr64Exit = try unprefixedEndbr64.run(maxInstructions: 1)
+        precondition(unprefixedEndbr64Exit == .unsupportedInstruction(address: 0))
+        precondition(unprefixedEndbr64.instructionPointer == 0)
+
+        // F3 must not be silently ignored on unrelated two-byte instructions.
+        let invalidF3Memory = GuestMemory(size: 16)
+        precondition(invalidF3Memory.write(Data([0xF3, 0x0F, 0x05]), offset: 0))
+        let invalidF3 = X86_64Interpreter(memory: invalidF3Memory)
+        try invalidF3.reset(entryPoint: 0)
+        let invalidF3Exit = try invalidF3.run(maxInstructions: 1)
+        precondition(invalidF3Exit == .unsupportedInstruction(address: 0))
+        precondition(invalidF3.instructionPointer == 0)
+
         let shortParityMemory = GuestMemory(size: 64)
         precondition(shortParityMemory.write(Data([
             0x31, 0xC0, 0x7A, 0x05,
