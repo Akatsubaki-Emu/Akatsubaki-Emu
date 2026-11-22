@@ -143,7 +143,9 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         complete_method = launch.split("private func completeLaunch", 1)[1].split("@objc private func chooseGuestImage()", 1)[0]
         self.assertIn("guard !launchInProgress", launch_method)
         self.assertIn("JITCoordinator.shared.requestJIT(from: self, onFailure:", launch_method)
-        self.assertIn("self?.completeLaunch(configuration: config, diskURL: diskURL)", launch_method)
+        self.assertIn("let writableDiskURL = selectedWritableDiskURL", launch_method)
+        self.assertIn("self?.completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)", launch_method)
+        self.assertIn("completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)", launch_method)
         self.assertLess(launch_method.index("JITCoordinator.shared.requestJIT"), launch_method.index("completeLaunch"))
         self.assertIn("self.launchInProgress = false", launch_method)
         self.assertNotIn("waitForJIT", launch)

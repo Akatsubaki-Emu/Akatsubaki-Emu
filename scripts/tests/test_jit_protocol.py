@@ -46,7 +46,9 @@ class JITProtocolSourceTests(unittest.TestCase):
     def test_qemu_uses_breakpoint_allocator_only_when_txm_is_present(self):
         root = Path(__file__).resolve().parents[2]
         patcher = (root / "scripts" / "patch_qemu_stikjit_ios.py").read_text(encoding="utf-8")
-        self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")', patcher)
+        self.assertIn("JITProtocolSupportedFunction jit_protocol_supported =", patcher)
+        self.assertIn("iSteamJITIsSupported", patcher)
+        self.assertIn("if (jit_protocol_supported == NULL)", patcher)
         self.assertIn("if (jit_protocol_supported())", patcher)
         self.assertIn("return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);", patcher)
 
