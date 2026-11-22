@@ -91,6 +91,8 @@ jobs:
         run: |
           set -euo pipefail
           bash -n scripts/package-utm-qemu-runtime.sh
+          bash -n scripts/package-utm-qemu-tci-runtime.sh
+          bash -n scripts/merge-qemu-runtime-variants.sh
           bash -n scripts/validate-qemu-runtime.sh
           bash -n scripts/validate-apple-package.sh
 
