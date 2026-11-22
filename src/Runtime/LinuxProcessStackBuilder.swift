@@ -92,11 +92,22 @@ struct LinuxProcessStackBuilder {
             return stackBase + UInt64(cursor)
         }
 
+        func reserveEnvironmentEntry(_ key: String) throws -> UInt64 {
+            let value = environment[key] ?? ""
+            let (keyBytes, keyOverflow) = key.utf8.count.addingReportingOverflow(1)
+            let (valueBytes, valueOverflow) = value.utf8.count.addingReportingOverflow(1)
+            let (required, requiredOverflow) = keyBytes.addingReportingOverflow(valueBytes)
+            guard !keyOverflow, !valueOverflow, !requiredOverflow, required <= cursor else {
+                throw BuildError.insufficientSpace
+            }
+            cursor -= required
+            return stackBase + UInt64(cursor)
+        }
+
         var environmentPointers: [UInt64] = []
         environmentPointers.reserveCapacity(environmentKeys.count)
         for key in environmentKeys.reversed() {
-            let value = "\(key)=\(environment[key] ?? "")"
-            environmentPointers.append(try reserveString(value))
+            environmentPointers.append(try reserveEnvironmentEntry(key))
         }
         environmentPointers.reverse()
 

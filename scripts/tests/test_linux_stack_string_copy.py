@@ -12,6 +12,10 @@ class LinuxStackStringCopyTests(unittest.TestCase):
         self.assertIn("let bytes = value.utf8", write)
         self.assertIn("let offset = writeCursor - vectorStart", write)
         self.assertIn("buffer.replaceSubrange", write)
+        reserve_environment = source.split("func reserveEnvironmentEntry", 1)[1].split("var environmentPointers", 1)[0]
+        self.assertIn("key.utf8.count", reserve_environment)
+        self.assertIn("value.utf8.count", reserve_environment)
+        self.assertNotIn('"\\(key)=', reserve_environment)
         self.assertNotIn("Array(value.utf8)", source)
         self.assertNotIn("func pushString", source)
 
