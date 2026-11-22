@@ -19,6 +19,7 @@ final class VMDisplayViewController: UIViewController {
     private var lastReportedGuestFrameWidth = 0
     private var lastReportedGuestFrameHeight = 0
     private var engineStartRequested = false
+    private var startupFlowStarted = false
 
     init(configuration: VMConfiguration, diskImage: URL) {
         self.configuration = configuration
@@ -114,6 +115,12 @@ final class VMDisplayViewController: UIViewController {
                 }
             }
         }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !startupFlowStarted else { return }
+        startupFlowStarted = true
         #if os(iOS)
         if #available(iOS 17.4, *), JITCoordinator.shared.isStikDebugAvailable,
            !JITCoordinator.shared.isJITReady {

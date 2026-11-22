@@ -35,7 +35,8 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
         self.assertIn("if #available(iOS 26.0, *), isJITProtocolSupported", source)
         self.assertIn('queryItems.append(URLQueryItem(name: "script-name", value: "universal.js"))', source)
-        self.assertNotIn('URLQueryItem(name: "script-name", value: "universal.js")\\n        ]', source)
+        before_protocol = source.split("if #available(iOS 26.0, *), isJITProtocolSupported", 1)[0]
+        self.assertNotIn('URLQueryItem(name: "script-name"', before_protocol)
 
     def test_ios_targets_link_security_exactly_once(self):
         root = Path(__file__).resolve().parents[2]
@@ -64,6 +65,8 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
         self.assertIn("JITCoordinator.shared.requestJIT(from: self)", source)
+        self.assertIn("override func viewDidAppear", source)
+        self.assertIn("guard !startupFlowStarted else { return }", source)
         self.assertIn("self?.startEngine()", source)
         self.assertLess(source.index("JITCoordinator.shared.requestJIT(from: self)"), source.index("private func startEngine()"))
         self.assertIn("guard !engineStartRequested else { return }", source)
