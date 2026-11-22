@@ -127,7 +127,8 @@ final class LinuxELFRuntime {
             guard let self else { return }
             let machine = GuestMachine(
                 configuration: .defaultLinux,
-                memorySize: Self.guestMemorySize
+                memorySize: Self.guestMemorySize,
+                aotExecutor: KenranButoAOTExecutor()
             )
             guard machine.state == .configured else {
                 let initializationError = machine.initializationError
