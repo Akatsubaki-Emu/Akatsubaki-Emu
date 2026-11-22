@@ -46,10 +46,41 @@ jobs:
           echo "The Main release channel can only be dispatched from refs/heads/main (got $GITHUB_REF)." >&2
           exit 1
 
+  # Skip commits that were already superseded before a runner is allocated
+  # for the expensive QEMU build. This does not serialize current builds.
+  check-push-freshness:
+    name: Check whether this push is still current
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.freshness.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Skip superseded push commits
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 {print $1}')"
+            if [ -z "$latest_main" ]; then
+              echo "Unable to determine the current main commit." >&2
+              exit 1
+            fi
+            if [ "$latest_main" != "$GITHUB_SHA" ]; then
+              echo "Skipping stale build from $GITHUB_SHA; main is now $latest_main."
+              echo "build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
   # This reusable workflow runs inside this run and uploads the artifact here.
   # App jobs cannot start until the runtime is successfully compiled and packaged.
   qemu-runtime:
-    needs: validate-release-channel
+    needs: [validate-release-channel, check-push-freshness]
+    if: needs.check-push-freshness.outputs.build == 'true'
     uses: ./.github/workflows/build-qemu-runtime.yml
     with:
       rebuild_dependencies: false
