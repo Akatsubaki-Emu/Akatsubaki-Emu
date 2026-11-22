@@ -6,6 +6,7 @@ enum ELFValidator {
         case not64Bit
         case notX86_64
         case unsupportedFileType
+        case tooLarge
 
         var errorDescription: String? {
             switch self {
@@ -13,13 +14,21 @@ enum ELFValidator {
             case .not64Bit: return "Only 64-bit ELF executables are supported."
             case .notX86_64: return "Only x86-64 ELF executables are currently supported."
             case .unsupportedFileType: return "Only ET_EXEC and self-contained static PIE ELF images are supported; dynamic linking is not implemented."
+            case .tooLarge: return "The selected ELF executable exceeds the 512 MiB inspection limit."
             }
         }
     }
 
+    static let maximumFileSize = 512 * 1024 * 1024
+
     static func validate(url: URL) throws {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+        guard values.isRegularFile == true, let fileSize = values.fileSize else {
+            throw ValidationError.notELF
+        }
+        guard fileSize <= Self.maximumFileSize else { throw ValidationError.tooLarge }
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
 
