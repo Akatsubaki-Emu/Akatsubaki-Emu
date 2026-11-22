@@ -988,6 +988,25 @@ if r"\n" in builder:
 # The QEMU dependency build must patch Meson and verify the actual link edge
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+for step in (
+    "Checkout i-Steam",
+    "Checkout UTM with submodules",
+    "Select Xcode",
+    "Verify Objective-C class-selector stub compatibility",
+    "Install UTM build dependencies",
+    "Cache UTM dependency build and sysroot",
+    "Build UTM dependencies for physical iOS arm64",
+    "Build UTM iOS archive",
+    "Package and verify in-process QEMU runtime",
+    "Upload verified QEMU runtime artifact",
+):
+    marker = "- name: " + step
+    if qemu_workflow.count(marker) != 1:
+        print(f"QEMU workflow: expected exactly one {marker!r} step", file=sys.stderr)
+        failed = True
+if "grep -Fq '_objc_msgSendClass'; then" not in qemu_workflow:
+    print("QEMU workflow: Objective-C class-selector stub probe is malformed", file=sys.stderr)
+    failed = True
 for token in [
     "scripts/patch_utm_qemu_ios.py",
     "scripts/patch_qemu_meson_ios.py",
