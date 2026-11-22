@@ -1,16 +1,22 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// Host-side random-access disk-image storage. Uses bounded sector reads/writes;
 /// this is not yet attached to a guest-visible SATA or virtio controller.
 final class GuestBlockDevice {
     enum DeviceError: LocalizedError {
-        case invalidGeometry, outOfBounds, readOnly, shortRead
+        case invalidGeometry, outOfBounds, readOnly, shortRead, shortWrite
         var errorDescription: String? {
             switch self {
             case .invalidGeometry: return "Invalid disk image geometry."
             case .outOfBounds: return "Disk request is outside the image."
             case .readOnly: return "Disk image is read-only."
             case .shortRead: return "Disk image returned fewer bytes than requested."
+            case .shortWrite: return "Disk image accepted fewer bytes than requested."
             }
         }
     }
@@ -59,9 +65,27 @@ final class GuestBlockDevice {
         guard byteCount <= UInt64(Self.maximumTransferBytes) else { throw DeviceError.invalidGeometry }
         lock.lock()
         defer { lock.unlock() }
-        try handle.seek(toOffset: lba * sectorSize)
-        let data = try handle.read(upToCount: Int(byteCount)) ?? Data()
-        guard data.count == Int(byteCount) else { throw DeviceError.shortRead }
+        let offset = off_t(lba * sectorSize)
+        let descriptor = handle.fileDescriptor
+        var data = Data(count: Int(byteCount))
+        try data.withUnsafeMutableBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            var completed = 0
+            while completed < buffer.count {
+                let amount = pread(
+                    descriptor,
+                    baseAddress.advanced(by: completed),
+                    buffer.count - completed,
+                    offset + off_t(completed)
+                )
+                if amount < 0 {
+                    if errno == EINTR { continue }
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
+                guard amount > 0 else { throw DeviceError.shortRead }
+                completed += amount
+            }
+        }
         return data
     }
 
@@ -73,8 +97,26 @@ final class GuestBlockDevice {
         guard lba <= sectorCount, count <= sectorCount - lba else { throw DeviceError.outOfBounds }
         lock.lock()
         defer { lock.unlock() }
-        try handle.seek(toOffset: lba * sectorSize)
-        try handle.write(contentsOf: data)
+        let offset = off_t(lba * sectorSize)
+        let descriptor = handle.fileDescriptor
+        try data.withUnsafeBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            var completed = 0
+            while completed < buffer.count {
+                let amount = pwrite(
+                    descriptor,
+                    baseAddress.advanced(by: completed),
+                    buffer.count - completed,
+                    offset + off_t(completed)
+                )
+                if amount < 0 {
+                    if errno == EINTR { continue }
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
+                guard amount > 0 else { throw DeviceError.shortWrite }
+                completed += amount
+            }
+        }
     }
 
     func synchronize() throws {
