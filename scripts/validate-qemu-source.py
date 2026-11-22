@@ -181,6 +181,10 @@ required = {
         "min(UInt64(999_999)",
 
             ],
+    "scripts/tests/test_qemu_runtime_lookup.py": [
+        "test_start_path_uses_loadability_preflight_before_native_start",
+        "test_start_path_falls_back_to_tci_when_jit_is_unavailable",
+    ],
     ".github/workflows/build-qemu-runtime.yml": [
     ],
     "scripts/tests/test_qemu_build_patches.py": [
@@ -536,7 +540,9 @@ required = {
         "Self.escapeDriveValue(diskImage.path)",
         "replacingOccurrences(of: \",\", with: \",,\")",
         "tcg,tb-size=128,split-wx=on",
-        "configuration.accelerator == .jit ? \"tcg,tb-size=128,split-wx=on\" : \"tcg\"",
+        "requiresJIT: Bool? = nil",
+        "let useSplitWX = requiresJIT ?? (configuration.accelerator == .jit)",
+        "useSplitWX ? \"tcg,tb-size=128,split-wx=on\" : \"tcg\"",
     ],
     "src/Core/VMEngine.swift": [
         "var onStateChange: ((State) -> Void)?",
@@ -546,8 +552,13 @@ required = {
         "backend = candidate",
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
-        "let requiresJIT = configuration.accelerator == .jit",
-        "switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)",
+        "let requestedJIT = configuration.accelerator == .jit",
+        "var requiresJIT = requestedJIT",
+        "QEMU JIT is unavailable; falling back to the TCI no-JIT runtime.",
+        "QEMURuntimeStatus.inspect(requiresJIT: false)",
+        "var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)",
+        "switch runtimeStatus",
+        "requiresJIT: requiresJIT",
         "isteam_qemu_start",
         "isteam_qemu_request_stop",
         "findUEFIFirmwarePair(in directory: URL)",
