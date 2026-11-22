@@ -8,23 +8,24 @@ This document describes the QEMU runtime artifact used by Akatsubaki Emu. It doe
 
 The iOS release workflow downloads the runtime artifact and embeds its complete `Frameworks/` and `QEMU/` directories into the app. The manifest is authoritative; do not assume a fixed QEMU library filename or internal UTM layout.
 
+The runtime locator also understands a separate `QEMU/TCI` artifact (or `QEMU-TCI.framework/QEMU`). The current release workflow packages only the JIT runtime; a TCI artifact is not yet built or packaged, so the no-JIT fallback is not operational yet. The app fails closed with a clear unavailable status rather than loading the JIT library as TCI.
+
 The runtime library must be built for **physical iOS arm64** and runs an **x86_64 system guest**. An arm64 slice alone is insufficient: macOS, Mac Catalyst, and iOS Simulator builds are rejected.
 
 ## Native bridge contract
 
-`iSteam/QEMUNativeBridge.c` requires all five exports below and registers the JIT callbacks before calling `qemu_init`:
+`iSteam/QEMUNativeBridge.c` requires these lifecycle exports in both modes:
 
 - `qemu_init`
 - `qemu_main_loop`
 - `qemu_cleanup`
 - `qemu_system_shutdown_request`
-- `isteam_qemu_set_jit_callbacks`
 
-Graceful shutdown and StikDebug JIT callback registration are mandatory. A library missing either export is rejected by the packager, preflight loader, and native bridge.
+The JIT callback `isteam_qemu_set_jit_callbacks` is required only for JIT mode. TCI mode does not require executable-memory JIT or the StikDebug callback. The packager and preflight validator enforce the selected mode's export contract.
 
 ## Startup and validation
 
-`src/QEMU/QEMURuntimeStatus.swift` resolves the library path from the generated manifest. `QEMURuntimeStatus.inspect()` then asks the native bridge to load the library with `RTLD_NOW` and resolve the required exports. `QEMUNativeRuntime` performs this preflight before starting QEMU, so missing dependent libraries and missing exports are reported before guest startup.
+`src/QEMU/QEMURuntimeStatus.swift` resolves the library path from the generated manifest. `QEMURuntimeStatus.inspect(requiresJIT:)` selects the JIT or TCI directory and asks the native bridge to load the library with `RTLD_NOW` and resolve the mode-specific exports. `QEMUNativeRuntime` performs this preflight before starting QEMU, so missing dependent libraries and missing exports are reported before guest startup.
 
 The package script validates the artifact's Mach-O type, physical iOS platform, arm64 architecture, and required exports. For a signed library, the standalone validator can additionally verify the code signature:
 
@@ -36,7 +37,7 @@ The standalone validator requires Apple tooling (`file`, `lipo`, `nm`, `vtool`, 
 
 ## JIT requirements
 
-On physical iOS 17.4 and later, QEMU TCG startup requires an active StikDebug debugger/JIT session and the app's `get-task-allow` entitlement. On supported iOS 26+ TXM devices, the patched TCG allocator uses the StikDebug executable-region protocol. Simulator, tvOS, and visionOS builds do not use this physical-iOS JIT path.
+On physical iOS 17.4 and later, JIT mode requires an active StikDebug debugger/JIT session and the app's `get-task-allow` entitlement. On supported iOS 26+ TXM devices, the patched TCG allocator uses the StikDebug executable-region protocol. TCI mode uses a separately built threaded TCG interpreter and does not require executable-memory JIT; that separate artifact is not yet built or packaged. Simulator, tvOS, and visionOS builds do not use this physical-iOS JIT path.
 
 ## Firmware and writable disks
 
