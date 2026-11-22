@@ -401,7 +401,12 @@ required = {
         "includeSegmentBase: Bool = true",
         "if number == 158",
         "registers[1] = rip",
-        "registers[11] = flags",
+        "registers[11] = flags",        "var endbrPrefix = false",
+        "if opcode == 0xF3",
+        "if endbrPrefix && opcode != 0x0F",
+        "second == 0x1E",
+        "modrm == 0xFA",
+
     ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ET_EXEC execution and static PIE load-bias/relative-relocation checks passed",
@@ -494,7 +499,11 @@ required = {
         "precondition(fsSegmentMemory.readByte(offset: 0x1020) == 0x5A)",
         "precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)",
         "precondition(syscallInterpreter.registerValue(1) == 21)",
-        "precondition(syscallInterpreter.registerValue(11) == 0x46)",
+        "precondition(syscallInterpreter.registerValue(11) == 0x46)",        "ENDBR64",
+        "0xF3, 0x0F, 0x1E, 0xFA",
+        "unsupportedInstruction(address: 0)",
+        "memoryFault(address: 3)",
+
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
