@@ -91,6 +91,8 @@ required = {
         "host = \"enable-jit\"",
         "script-name",
         "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)",
+        "isJITProtocolKnown",
+        "guard isJITProtocolKnown else",
     ],
     "iSteam/CrashLogger.swift": [
         "queueKey = DispatchSpecificKey<UInt8>()",
@@ -833,6 +835,10 @@ required = {
     "iSteam/JIT26Protocol.c": [
         "#if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR",
         "iSteamJITIsSupported",
+        "IORegistryEntryFromPath(",
+        '"IODeviceTree:/chosen/memory-map"',
+        "ISTEAM_JIT_PROTOCOL_UNKNOWN",
+        "iSteamJITGetProtocolMode",
     ],
     "src/Core/EmulationLog.swift": [
         "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",
@@ -922,21 +928,11 @@ required = {
         "jit_protocol_mode > 0",
         "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
     ],
-    "iSteam/JIT26Protocol.c": [
-        "IORegistryEntryFromPath(",
-        '"IODeviceTree:/chosen/memory-map"',
-        "ISTEAM_JIT_PROTOCOL_UNKNOWN",
-        "iSteamJITGetProtocolMode",
-    ],
     "iSteam/JIT26Protocol.h": [
         "ISTEAM_JIT_PROTOCOL_UNKNOWN",
         "ISTEAM_JIT_PROTOCOL_STANDARD",
         "ISTEAM_JIT_PROTOCOL_STIKDEBUG",
         "iSteamJITGetProtocolMode",
-    ],
-    "iSteam/JITCoordinator.swift": [
-        "isJITProtocolKnown",
-        "guard isJITProtocolKnown else",
     ],
     "project.yml": [
         "- sdk: IOKit.framework",
