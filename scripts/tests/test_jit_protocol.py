@@ -72,6 +72,16 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertEqual(project.count("- sdk: IOKit.framework"), 2)
         self.assertEqual(project.count("-Wl,-exported_symbol,_iSteamJITGetProtocolMode"), 2)
 
+    def test_non_device_builds_export_unknown_protocol_mode(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
+        fallback = source.split("\n#else\n", 1)[1].split("\n#endif", 1)[0]
+        self.assertIn(
+            "int iSteamJITGetProtocolMode(void) {",
+            fallback,
+        )
+        self.assertIn("return ISTEAM_JIT_PROTOCOL_UNKNOWN;", fallback)
+
     def test_launch_refuses_unknown_jit_protocol(self):
         root = Path(__file__).resolve().parents[2]
         coordinator = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
