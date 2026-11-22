@@ -14,7 +14,7 @@ class EntitlementManagementSourceTests(unittest.TestCase):
 
     def test_only_the_current_bundle_id_is_modified(self):
         self.assertIn("$0.bundleIdentifier == bundleIdentifier", self.view)
-        self.assertIn('capabilities: ["INCREASED_MEMORY_LIMIT"]', self.view)
+        self.assertIn('"INCREASED_MEMORY_LIMIT"', self.view)
         self.assertIn("No App ID for \\(bundleIdentifier) was found", self.view)
 
     def test_uses_getmoreram_stossign_developer_api(self):
@@ -22,10 +22,18 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("AppleAPI.shared.authenticate", self.view)
         self.assertIn("AppleAPI.shared.fetchTeamsForAccount", self.view)
         self.assertIn("AppleAPI.shared.fetchAppIDsForTeam", self.view)
-        self.assertIn("AppleAPI.shared.updateAppID", self.view)
+        self.assertIn("AppleAPI.shared.sendEditRequest", self.view)
         self.assertIn("prepareForVerification(using:", self.view)
         self.assertIn("await self.prepareForVerification", self.view)
         self.assertIn("private func prepareForVerification(using handler: @escaping (String?) -> Void) async", self.view)
+
+
+    def test_existing_capabilities_and_settings_are_preserved(self):
+        self.assertIn("fetchExistingCapabilities", self.view)
+        self.assertIn('"capabilityType"', self.view)
+        self.assertIn('"settings"', self.view)
+        self.assertIn("capabilities.count == records.count", self.view)
+        self.assertIn("Existing App ID capabilities and their settings were preserved", self.view)
 
     def test_anisette_helper_is_vendored_and_uses_secure_device_state(self):
         self.assertIn("class AnisetteDataHelper", self.anisette)
