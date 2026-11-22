@@ -29,16 +29,19 @@ final class KenranButoAOTCompiler {
             guestABI: guestABI
         )
 
+        // The cache is an optimization, never an authority for native code.
+        // Re-decode the guest bytes and compare the complete artifact before a
+        // cached translation can be handed to an executable-memory provider.
+        let translation = translator.translate(guestCode)
         if let cached = try cache.load(identity) {
-            if let translation = try? JSONDecoder().decode(X86_64AOTTranslation.self, from: cached),
-               translation.isCacheable,
-               translation.isValid(for: guestCode) {
-                return Compilation(translation: translation, cacheHit: true)
+            if let cachedTranslation = try? JSONDecoder().decode(X86_64AOTTranslation.self, from: cached),
+               cachedTranslation == translation,
+               cachedTranslation.isCacheable,
+               cachedTranslation.isValid(for: guestCode) {
+                return Compilation(translation: cachedTranslation, cacheHit: true)
             }
             try cache.invalidate(identity)
         }
-
-        let translation = translator.translate(guestCode)
         if translation.isCacheable {
             try cache.store(try JSONEncoder().encode(translation), for: identity)
         }
