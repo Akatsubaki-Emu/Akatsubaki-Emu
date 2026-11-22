@@ -125,7 +125,22 @@ cp -R "$data_dir"/. "$OUT/QEMU/"
 printf '%s\n' "$runtime_relative" > "$OUT/QEMU/runtime-library-path.txt"
 while IFS= read -r firmware_file; do
   [ -n "$firmware_file" ] || continue
-  cp "$firmware_file" "$OUT/QEMU/$(basename "$firmware_file")"
+  source_dir="$(dirname "$firmware_file")"
+  # The primary data directory was already copied to QEMU/ above. Keep every
+  # other firmware bundle in its own relative directory: flattening these files
+  # can pair a code image with a variable store from an unrelated UTM bundle.
+  [ "$source_dir" = "$data_dir" ] && continue
+  case "$source_dir" in
+    "$APP") relative_dir="root" ;;
+    "$APP"/*) relative_dir="${source_dir#"$APP"/}" ;;
+    *) echo "Refusing firmware path outside UTM.app: $firmware_file" >&2; exit 5 ;;
+  esac
+  case "/$relative_dir/" in
+    *"/../"*|*"/./"*) echo "Refusing unsafe firmware directory: $relative_dir" >&2; exit 5 ;;
+  esac
+  target_dir="$OUT/QEMU/firmware/$relative_dir"
+  mkdir -p "$target_dir"
+  cp "$firmware_file" "$target_dir/"
 done < <(find "$APP" -type f \( \
   -name 'OVMF_CODE.fd' -o -name 'OVMF_CODE_4M.fd' \
   -o -name 'OVMF_VARS.fd' -o -name 'OVMF_VARS_4M.fd' \
