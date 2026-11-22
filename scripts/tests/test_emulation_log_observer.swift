@@ -3,7 +3,7 @@ import Foundation
 @main
 struct EmulationLogObserverTests {
     static func main() {
-        let marker = "[guest stdout] observer-smoke-\\(UUID().uuidString)"
+        let marker = "[guest stdout] observer-smoke-\(UUID().uuidString)"
         let delivered = DispatchSemaphore(value: 0)
         let observer = NotificationCenter.default.addObserver(
             forName: .emulationLogDidWrite,

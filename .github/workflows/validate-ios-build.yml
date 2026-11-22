@@ -62,10 +62,7 @@ jobs:
         if: matrix.scheme == 'iSteam'
         run: |
           set -euo pipefail
-          swiftc -parse-as-library -swift-version 5 \\
-            src/Core/EmulationLog.swift \\
-            scripts/tests/test_emulation_log_observer.swift \\
-            -o "$RUNNER_TEMP/test-emulation-log-observer"
+          swiftc -parse-as-library -swift-version 5 src/Core/EmulationLog.swift scripts/tests/test_emulation_log_observer.swift -o "$RUNNER_TEMP/test-emulation-log-observer"
           "$RUNNER_TEMP/test-emulation-log-observer"
       - name: Test Kenran Buto x86-64 to ARM64 AOT translation
         if: matrix.scheme == 'iSteam'

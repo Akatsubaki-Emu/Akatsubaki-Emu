@@ -86,7 +86,6 @@ final class ConsoleViewController: UIViewController {
         Windows PE still requires a verified compatibility backend.
         """
 
-
         logObserver = NotificationCenter.default.addObserver(
             forName: .emulationLogDidWrite,
             object: nil,
@@ -128,7 +127,6 @@ final class ConsoleViewController: UIViewController {
             appendStatus("\n\nNo verified runtime accepted this executable. See the emulation log.")
         }
     }
-
 
     deinit {
         if let logObserver {
