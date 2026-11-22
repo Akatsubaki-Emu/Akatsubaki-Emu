@@ -6,6 +6,12 @@ OUT_REQUEST="${2:?usage: package-utm-qemu-tci-runtime.sh /path/to/UTM.xcarchive 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 
+if [ ! -d "$ARCHIVE" ]; then
+  echo "UTM archive directory missing: $ARCHIVE" >&2
+  exit 1
+fi
+ARCHIVE_ROOT="$(cd "$ARCHIVE" && pwd -P)"
+
 # The next step removes OUT recursively, so accept only a single named child of
 # the real repository build/ directory. No absolute paths, traversal or symlinks.
 case "$OUT_REQUEST" in
@@ -29,7 +35,17 @@ if [ -L "$OUT" ]; then
     echo "Refusing to replace a symlink output directory: $OUT" >&2
     exit 2
 fi
-APP="$ARCHIVE/Products/Applications/UTM.app"
+path_is_within() {
+  local candidate="$1" parent="$2"
+  [[ "$candidate" == "$parent" ]] && return 0
+  case "$candidate/" in "$parent/"*) return 0 ;; esac
+  return 1
+}
+if path_is_within "$OUT" "$ARCHIVE_ROOT" || path_is_within "$ARCHIVE_ROOT" "$OUT"; then
+  echo "Refusing output directory that overlaps the input UTM archive: $OUT" >&2
+  exit 2
+fi
+APP="$ARCHIVE_ROOT/Products/Applications/UTM.app"
 test -d "$APP" || { echo "UTM.app missing from archive: $APP" >&2; exit 1; }
 
 rm -rf "$OUT"
@@ -136,7 +152,7 @@ bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci
 # The app resolves the runtime through this manifest rather than assuming
 # that every UTM revision names its loadable library the same way.
 printf '%s\n' "$runtime_relative" > "$OUT/QEMU/runtime-library-path.txt"
-printf '%s\n' "$exports" | grep -E ' _?qemu_(init|main_loop|cleanup)$| _?qemu_system_shutdown_request
+printf '%s\\n' "$exports" | grep -E ' _?qemu_(init|main_loop|cleanup)$| _?qemu_system_shutdown_request$' > "$OUT/exports.txt" || true
 
 data_dir=""
 found="$(find "$APP" -type f \( \
@@ -186,83 +202,6 @@ Architectures: $ARCHS
 Runtime mode: UTM TCI threaded interpreter (no executable-memory JIT)
 Lifecycle and graceful-shutdown exports: verified by nm before packaging
 StikJIT callback export: absent by design
-Data source: $data_dir
-Package layout: Frameworks/ (UTM dependencies), QEMU/ (QEMU data files and runtime manifest)
-Important: embed and code-sign nested code in Akatsubaki Emu and boot-test on a physical device before claiming runtime support.
-EOF
-
-# Record the actual Mach-O linkage and runtime search paths. This report helps
-# distinguish a missing symbol from a missing @rpath dependency on-device.
-REPORT="$OUT/dependency-report.txt"
-: > "$REPORT"
-for root in "$OUT/Frameworks" "$OUT/QEMU"; do
-  [ -d "$root" ] || continue
-  while IFS= read -r -d '' binary; do
-    if file "$binary" | grep -q 'Mach-O'; then
-      {
-        printf '\n===== %s =====\n' "${binary#"$OUT/"}"
-        printf '%s\n' '-- architectures --'
-        lipo -archs "$binary" 2>&1 || true
-        printf '%s\n' '-- linked libraries --'
-        otool -L "$binary" 2>&1 || true
-        printf '%s\n' '-- LC_RPATH entries --'
-        otool -l "$binary" 2>/dev/null | awk '/cmd LC_RPATH/{getline; getline; print}' || true
-      } >> "$REPORT"
-    fi
-  done < <(find "$root" -type f -print0)
-done
-
-test -s "$REPORT"
-find "$OUT/Frameworks" -type f -size +0c -print -quit | grep -q .
-find "$OUT/QEMU" -type f -size +0c -print -quit | grep -q .
- > "$OUT/exports.txt" || true
-
-data_dir=""
-found="$(find "$APP" -type f \( \
-  -name 'bios-256k.bin' -o -name 'vgabios-stdvga.bin' \
-  -o -name 'edk2-x86_64-code.fd' -o -name 'edk2-x86_64-code.secboot.fd' \
-  -o -name 'OVMF_CODE.fd' -o -name 'OVMF_CODE_4M.fd' \) -print -quit 2>/dev/null || true)"
-if [ -n "$found" ]; then data_dir="$(dirname "$found")"; fi
-if [ -z "$data_dir" ]; then
-  echo "QEMU lifecycle library was found, but no recognizable QEMU BIOS/firmware data files were found." >&2
-  exit 4
-fi
-cp -R "$data_dir"/. "$OUT/QEMU/"
-
-# Preserve the generated path manifest if the source data directory happened
-# to contain a file with the same name.
-printf '%s\n' "$runtime_relative" > "$OUT/QEMU/runtime-library-path.txt"
-while IFS= read -r firmware_file; do
-  [ -n "$firmware_file" ] || continue
-  source_dir="$(dirname "$firmware_file")"
-  # The primary data directory was already copied to QEMU/ above. Keep every
-  # other firmware bundle in its own relative directory: flattening these files
-  # can pair a code image with a variable store from an unrelated UTM bundle.
-  [ "$source_dir" = "$data_dir" ] && continue
-  case "$source_dir" in
-    "$APP") relative_dir="root" ;;
-    "$APP"/*) relative_dir="${source_dir#"$APP"/}" ;;
-    *) echo "Refusing firmware path outside UTM.app: $firmware_file" >&2; exit 5 ;;
-  esac
-  case "/$relative_dir/" in
-    *"/../"*|*"/./"*) echo "Refusing unsafe firmware directory: $relative_dir" >&2; exit 5 ;;
-  esac
-  target_dir="$OUT/QEMU/firmware/$relative_dir"
-  mkdir -p "$target_dir"
-  cp "$firmware_file" "$target_dir/"
-done < <(find "$APP" -type f \( \
-  -name 'OVMF_CODE.fd' -o -name 'OVMF_CODE_4M.fd' \
-  -o -name 'OVMF_VARS.fd' -o -name 'OVMF_VARS_4M.fd' \
-  -o -name 'edk2-x86_64-code.fd' -o -name 'edk2-x86_64-code.secboot.fd' \
-  -o -name 'edk2-x86_64-vars.fd' \) -print 2>/dev/null || true)
-
-cat > "$OUT/BUILD-INFO.txt" <<EOF
-Source: utmapp/UTM at the revision checked out by the workflow
-Target: physical iOS arm64
-Library source: $candidate
-Packaged library path: $runtime_relative
-Architectures: $ARCHS
-Lifecycle, graceful-shutdown and StikDebug JIT callback exports: verified by nm before packaging
 Data source: $data_dir
 Package layout: Frameworks/ (UTM dependencies), QEMU/ (QEMU data files and runtime manifest)
 Important: embed and code-sign nested code in Akatsubaki Emu and boot-test on a physical device before claiming runtime support.
