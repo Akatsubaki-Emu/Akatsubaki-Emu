@@ -68,6 +68,27 @@ jobs:
             echo "Skipping this build because a newer build-relevant main commit exists."
           fi
 
+  # This reusable workflow runs inside this run and uploads the artifact here.
+  # App jobs cannot start until the runtime is successfully compiled and packaged.
+  qemu-runtime:
+    needs: [validate-release-channel, check-push-freshness]
+    if: needs.check-push-freshness.outputs.build == 'true'
+    uses: ./.github/workflows/build-qemu-runtime.yml
+    with:
+      rebuild_dependencies: false
+
+  # QEMU can take hours to compile. Re-check after it finishes so platform
+  # builds are not spent on a commit that became stale while QEMU was building.
+  check-platform-build-freshness:
+    name: Check freshness before platform builds
+    needs: qemu-runtime
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.freshness.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
       - name: Skip platform builds for superseded pushes
         id: freshness
         shell: bash
@@ -76,8 +97,26 @@ jobs:
           build_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
           echo "build=$build_current" >> "$GITHUB_OUTPUT"
           if [ "$build_current" != "true" ]; then
-            echo "Skipping this build because a newer build-relevant main commit exists."
+            echo "Skipping platform builds because a newer build-relevant main commit exists."
           fi
+
+  build:
+    needs: [qemu-runtime, check-platform-build-freshness]
+    if: needs.check-platform-build-freshness.outputs.build == 'true'
+    name: Build ${{ matrix.platform }} (${{ matrix.channel }})
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [iOS, tvOS, visionOS]
+        channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
+    env:
+      RELEASE_CHANNEL: ${{ matrix.channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Select and verify Xcode 26.2
         shell: bash
