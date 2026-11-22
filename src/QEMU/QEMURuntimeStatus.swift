@@ -7,25 +7,36 @@ enum QEMURuntimeStatus {
     case unavailable(String)
     case ready(libraryURL: URL, dataDirectory: URL)
 
-    static func inspect(bundle: Bundle = .main) -> QEMURuntimeStatus {
-        switch locate(bundle: bundle) {
+    static func inspect(bundle: Bundle = .main, requiresJIT: Bool = true) -> QEMURuntimeStatus {
+        switch locate(bundle: bundle, requiresJIT: requiresJIT) {
         case .unavailable(let reason): return .unavailable(reason)
         case .ready(let libraryURL, let dataDirectory):
-            return validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory)
+            return validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory,
+                                            requiresJIT: requiresJIT)
         }
     }
 
-    static func locate(bundle: Bundle = .main) -> QEMURuntimeStatus {
+    static func locate(bundle: Bundle = .main, requiresJIT: Bool = true) -> QEMURuntimeStatus {
         let fm = FileManager.default
         let bundleRoot = bundle.bundleURL.resolvingSymlinksInPath().standardizedFileURL
         let bundlePrefix = bundleRoot.path.hasSuffix("/") ? bundleRoot.path : bundleRoot.path + "/"
-        let dataDirectory = bundle.bundleURL.appendingPathComponent("QEMU", isDirectory: true)
+        let qemuRoot = bundle.bundleURL.appendingPathComponent("QEMU", isDirectory: true)
             .resolvingSymlinksInPath().standardizedFileURL
+        let modeDirectory = qemuRoot.appendingPathComponent(requiresJIT ? "JIT" : "TCI", isDirectory: true)
+            .resolvingSymlinksInPath().standardizedFileURL
+        var dataDirectory = modeDirectory
         var dataIsDirectory: ObjCBool = false
+        if !fm.fileExists(atPath: dataDirectory.path, isDirectory: &dataIsDirectory), requiresJIT {
+            // Older releases stored the JIT data directly in QEMU/.
+            dataDirectory = qemuRoot
+            dataIsDirectory = ObjCBool(false)
+        }
         guard dataDirectory.path.hasPrefix(bundlePrefix),
               fm.fileExists(atPath: dataDirectory.path, isDirectory: &dataIsDirectory),
               dataIsDirectory.boolValue else {
-            return .unavailable("The QEMU data directory is missing or unsafe in the app bundle.")
+            return .unavailable(requiresJIT
+                ? "The QEMU JIT data directory is missing or unsafe in the app bundle."
+                : "The no-JIT QEMU TCI runtime is not packaged. Build and embed the ios-tci-arm64 runtime.")
         }
 
         func validatedRegularLibrary(_ candidate: URL) -> URL? {
@@ -60,13 +71,17 @@ enum QEMURuntimeStatus {
 
         // Backward-compatible fallback for previously packaged runtime artifacts.
         let frameworks = bundle.privateFrameworksURL
-        var candidates = [
+        var candidates = (requiresJIT ? [
             frameworks?.appendingPathComponent("QEMU.framework/QEMU"),
             frameworks?.appendingPathComponent("libqemu-system-x86_64.dylib"),
             frameworks?.appendingPathComponent("qemu-x86_64-softmmu"),
             frameworks?.appendingPathComponent("qemu-x86_64-softmmu.dylib"),
             bundle.bundleURL.appendingPathComponent("QEMU/libqemu-system-x86_64.dylib")
-        ].compactMap { $0 }
+        ] : [
+            frameworks?.appendingPathComponent("QEMU-TCI.framework/QEMU"),
+            frameworks?.appendingPathComponent("libqemu-system-x86_64-tci.dylib"),
+            frameworks?.appendingPathComponent("qemu-x86_64-softmmu-tci")
+        ]).compactMap { $0 }
 
         if let frameworks,
            let enumerator = fm.enumerator(
@@ -85,7 +100,9 @@ enum QEMURuntimeStatus {
         }
 
         guard let library = candidates.compactMap(validatedRegularLibrary).first else {
-            return .unavailable("No embedded x86_64 QEMU device library was found. Run the UTM runtime packaging workflow, embed its Frameworks and QEMU directories, and code-sign nested code.")
+            return .unavailable(requiresJIT
+                ? "No embedded x86_64 QEMU JIT device library was found. Run the UTM runtime packaging workflow and code-sign nested code."
+                : "No embedded x86_64 QEMU TCI device library was found. Build the ios-tci-arm64 runtime and embed its TCI framework and data.")
         }
         return .ready(libraryURL: library, dataDirectory: dataDirectory)
     }
@@ -95,13 +112,14 @@ enum QEMURuntimeStatus {
     /// dlsym verifies the lifecycle exports required by our native bridge.
     /// This does not boot a guest or prove firmware/device support.
     private static func validateLoadableLibrary(_ library: URL,
-                                                dataDirectory: URL) -> QEMURuntimeStatus {
+                                                dataDirectory: URL,
+                                                requiresJIT: Bool) -> QEMURuntimeStatus {
         var errorBuffer = [CChar](repeating: 0, count: 512)
         let valid = library.path.withCString { libraryPath in
             errorBuffer.withUnsafeMutableBufferPointer { buffer -> Bool in
                 guard let baseAddress = buffer.baseAddress else { return false }
                 return isteam_qemu_validate_library(
-                    libraryPath, baseAddress, Int32(buffer.count)
+                    libraryPath, requiresJIT, baseAddress, Int32(buffer.count)
                 )
             }
         }
