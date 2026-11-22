@@ -8,16 +8,13 @@ final class GameArtworkStore {
     private let fm = FileManager.default
     private let maxBytes = 12 * 1024 * 1024
     private static let supportedExtensions = ["jpg", "png", "heic", "webp", "gif"]
-    private let directory: URL
+    private init() {}
 
-    private init() {
+    private var directory: URL {
         let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        directory = base.appendingPathComponent("GameArtwork", isDirectory: true)
-        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
-    }
-
-    private func ensureDirectory() throws {
-        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        let folder = base.appendingPathComponent("GameArtwork", isDirectory: true)
+        try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
     }
 
     private func artworkFiles(for gameID: UUID) -> [URL] {
@@ -64,7 +61,6 @@ final class GameArtworkStore {
         case "public.webp", "org.webmproject.webp": ext = "webp"
         default: ext = "gif"
         }
-        try ensureDirectory()
         let destination = directory.appendingPathComponent(gameID.uuidString).appendingPathExtension(ext)
         try data.write(to: destination, options: .atomic)
         // Keep one canonical artwork file per game. Otherwise changing format
