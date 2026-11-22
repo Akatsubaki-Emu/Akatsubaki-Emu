@@ -59,10 +59,18 @@ final class GuestMemory {
         return true
     }
 
-    func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int? {
+    private(set) var readPrefixMaximumLengths: [Int] = []
+
+    func readPrefix(
+        offset: UInt64,
+        maximumLength: Int? = nil,
+        into buffer: inout [UInt8]
+    ) -> Int? {
         readPrefixCalls += 1
         guard offset <= size else { return nil }
-        let count = Int(min(UInt64(buffer.count), size - offset))
+        let requestedLength = min(buffer.count, max(0, maximumLength ?? buffer.count))
+        readPrefixMaximumLengths.append(requestedLength)
+        let count = Int(min(UInt64(requestedLength), size - offset))
         if count > 0 {
             let start = Int(offset)
             for index in 0..<count { buffer[index] = bytes[start + index] }
@@ -142,6 +150,8 @@ final class EmulationLog {
 }
 
 private final class CorruptingAOTExecutor: KenranButoAOTExecuting {
+    var isAvailable: Bool { true }
+    func refreshAvailability() -> Bool { true }
     private(set) var calls = 0
     private(set) var invalidations = 0
     func invalidateAll() { invalidations += 1 }
@@ -158,6 +168,8 @@ private final class CorruptingAOTExecutor: KenranButoAOTExecuting {
 }
 
 private final class DecliningAOTExecutor: KenranButoAOTExecuting {
+    var isAvailable: Bool { true }
+    func refreshAvailability() -> Bool { true }
     private(set) var calls = 0
     private(set) var invalidations = 0
 
@@ -167,6 +179,26 @@ private final class DecliningAOTExecutor: KenranButoAOTExecuting {
                  rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
                  memory: GuestMemory, maximumInstructions: Int) -> KenranButoAOTExecutionResult? {
         calls += 1
+        return nil
+    }
+}
+
+private final class TestAOTExecutor: KenranButoAOTExecuting {
+    let isAvailable: Bool
+    private(set) var executeCalls = 0
+    private(set) var guestCodeLengths: [Int] = []
+    private(set) var instructionBudgets: [Int] = []
+
+    init(isAvailable: Bool) { self.isAvailable = isAvailable }
+    func refreshAvailability() -> Bool { isAvailable }
+    func invalidateAll() {}
+
+    func execute(guestCode: Data, registers: inout [UInt64], rip: UInt64,
+                 rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
+                 memory: GuestMemory, maximumInstructions: Int) -> KenranButoAOTExecutionResult? {
+        executeCalls += 1
+        guestCodeLengths.append(guestCode.count)
+        instructionBudgets.append(maximumInstructions)
         return nil
     }
 }
@@ -1342,6 +1374,20 @@ struct InterpreterTests {
             precondition(hybrid.instructionCount == baseline.instructionCount)
             for r in 0..<16 { precondition(hybrid.registerValue(r) == baseline.registerValue(r)) }
             precondition(executor.blocksExecuted >= 2)
+
+            // More unique blocks than the LRU entry cap must remain within both limits.
+            for index in 0..<96 {
+                let code = Data([0xB8, UInt8(truncatingIfNeeded: index), 0, 0, 0])
+                var cacheRegisters = [UInt64](repeating: 0, count: 16)
+                let result = executor.execute(
+                    guestCode: code, registers: &cacheRegisters,
+                    rip: 0x1000 + UInt64(index) * 16, rflags: 0x202,
+                    fsBase: 0, gsBase: 0, memory: hybridMemory, maximumInstructions: 4
+                )
+                precondition(result != nil)
+            }
+            precondition(executor.cachedBlockCount <= 64)
+            precondition(executor.cachedExecutableBytes <= 16 * 1024 * 1024)
             print("Kenran Butō AOT native block execution, exact-RIP side exit and differential passed")
         let fallbackProgram = Data([0xB8, 0x2A, 0, 0, 0, 0xF4])
         let fallbackBaselineMemory = GuestMemory(size: 8192)
@@ -1372,6 +1418,44 @@ struct InterpreterTests {
         precondition(decliningInterpreter.instructionCount == 3)
         precondition(decliningExecutor.calls == 1 && decliningExecutor.invalidations == 1)
         print("Kenran Butō AOT declined block is not retried within the same execution batch")
+
+        let noJITMemory = GuestMemory(size: 8192)
+        precondition(noJITMemory.write(Data([0xB8, 0x2A, 0, 0, 0, 0xF4]), offset: 0x1000))
+        let unavailableAOT = TestAOTExecutor(isAvailable: false)
+        let noJITInterpreter = X86_64Interpreter(memory: noJITMemory, aotExecutor: unavailableAOT)
+        try noJITInterpreter.reset(entryPoint: 0x1000)
+        let noJITExit = try noJITInterpreter.run(maxInstructions: 4)
+        precondition(noJITExit == .halted)
+        precondition(unavailableAOT.executeCalls == 0)
+        precondition(noJITMemory.readPrefixCalls == 2)
+        print("Kenran Butō no-JIT path skips AOT translation-window reads")
+
+        let unsupportedMemory = GuestMemory(size: 8192)
+        precondition(unsupportedMemory.write(Data([0xCC]), offset: 0x1000))
+        let readyAOT = TestAOTExecutor(isAvailable: true)
+        let unsupportedInterpreter = X86_64Interpreter(memory: unsupportedMemory, aotExecutor: readyAOT)
+        try unsupportedInterpreter.reset(entryPoint: 0x1000)
+        let unsupportedExit = try unsupportedInterpreter.run(maxInstructions: 1)
+        precondition(unsupportedExit == .unsupportedInstruction(address: 0x1000))
+        precondition(readyAOT.executeCalls == 0)
+        precondition(unsupportedMemory.readPrefixCalls == 1)
+        print("Kenran Butō preflight skips unsupported first instructions")
+
+        let boundaryMemory = GuestMemory(size: 8192)
+        precondition(boundaryMemory.write(Data([0xB8, 0x78, 0x56]), offset: 0x1FFD))
+        precondition(boundaryMemory.write(Data([0x34, 0x12, 0xF4]), offset: 0x2000))
+        let boundaryAOT = TestAOTExecutor(isAvailable: true)
+        let boundaryInterpreter = X86_64Interpreter(memory: boundaryMemory, aotExecutor: boundaryAOT)
+        try boundaryInterpreter.reset(entryPoint: 0x1FFD)
+        let boundaryExit = try boundaryInterpreter.run(maxInstructions: 1000)
+        precondition(boundaryExit == .halted)
+        precondition(boundaryInterpreter.registerValue(0) == 0x12345678)
+        precondition(boundaryInterpreter.instructionCount == 2)
+        precondition(boundaryAOT.executeCalls == 1)
+        precondition(boundaryAOT.guestCodeLengths == [3])
+        precondition(boundaryAOT.instructionBudgets == [256])
+        precondition(Array(boundaryMemory.readPrefixMaximumLengths.prefix(2)) == [3, 3])
+        print("Kenran Butō page-bounded AOT prefetch and cross-page interpreter fallback passed")
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }

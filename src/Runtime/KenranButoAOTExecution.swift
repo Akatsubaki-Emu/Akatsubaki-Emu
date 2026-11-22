@@ -9,6 +9,8 @@ struct KenranButoAOTExecutionResult {
  let exitRip:UInt64; let exitAddress:UInt64
 }
 protocol KenranButoAOTExecuting:AnyObject {
+ var isAvailable: Bool { get }
+ func refreshAvailability() -> Bool
  func execute(guestCode:Data,registers:inout [UInt64],rip:UInt64,rflags:UInt64,
               fsBase:UInt64,gsBase:UInt64,memory:GuestMemory,maximumInstructions:Int)->KenranButoAOTExecutionResult?
  func invalidateAll()
@@ -23,24 +25,24 @@ final class KenranButoAOTExecutor:KenranButoAOTExecuting {
  private var blocks:[BlockKey:KenranButoAOTExecutableBlock]=[:]
  private var order:[BlockKey]=[]
  private var executionCount=0
- private var cachedExecutableBytes:UInt64=0
+ private var cachedExecutableBytesStorageStorage:UInt64=0
  private let maximumCachedBlocks=64
  private let maximumCachedExecutableBytes:UInt64=16*1024*1024
- private let maximumGuestBytes=64
+ private let maximumGuestBytes=4096
  private let maximumOutputBytes=X86_64AOTTranslator.maximumOutputBudget
  private let guestABI="sysv-linux-x86_64"
  init(compiler:KenranButoAOTCompiler=KenranButoAOTCompiler()){self.compiler=compiler}
  var blocksExecuted:Int{lock.lock();defer{lock.unlock()};return executionCount}
- private var isAvailable:Bool{
-  #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
-  let mode=iSteamJITGetProtocolMode()
-  let ready=mode == ISTEAM_JIT_PROTOCOL_STIKDEBUG ? JITCoordinator.shared.isQEMUJITReady : JITCoordinator.shared.isJITReady
-  return ready && iSteamAOTExecutableMemoryIsAvailable()
-  #else
-  return iSteamAOTExecutableMemoryIsAvailable()
-  #endif
+ var cachedBlockCount:Int{lock.lock();defer{lock.unlock()};return blocks.count}
+ var cachedExecutableBytes:UInt64{lock.lock();defer{lock.unlock()};return cachedExecutableBytesStorage}
+ private var availabilitySnapshot=false
+ var isAvailable:Bool{lock.lock();defer{lock.unlock()};return availabilitySnapshot}
+ func refreshAvailability()->Bool{
+  let ready=iSteamAOTExecutableMemoryIsAvailable()
+  lock.lock();availabilitySnapshot=ready;lock.unlock()
+  return ready
  }
- func invalidateAll(){lock.lock();blocks.removeAll(keepingCapacity:true);order.removeAll(keepingCapacity:true);cachedExecutableBytes=0;lock.unlock()}
+ func invalidateAll(){lock.lock();blocks.removeAll(keepingCapacity:true);order.removeAll(keepingCapacity:true);cachedExecutableBytesStorage=0;lock.unlock()}
  static func makeMemoryCallbacks(for memory:GuestMemory)->KenranButoAOTMemoryCallbacks{
   var c=KenranButoAOTMemoryCallbacks();c.abi_version=KENRAN_BUTO_AOT_ABI_VERSION
   c.struct_size=UInt32(MemoryLayout<KenranButoAOTMemoryCallbacks>.size)
@@ -126,13 +128,13 @@ final class KenranButoAOTExecutor:KenranButoAOTExecuting {
   if let hit=blocks[key]{order.removeAll{$0==key};order.append(key);lock.unlock();return hit}
   guard candidate.allocatedBytes<=maximumCachedExecutableBytes else{lock.unlock();return nil}
   while !order.isEmpty && (order.count>=maximumCachedBlocks ||
-    cachedExecutableBytes>maximumCachedExecutableBytes-candidate.allocatedBytes){
+    cachedExecutableBytesStorage>maximumCachedExecutableBytes-candidate.allocatedBytes){
    let old=order.removeFirst()
    if let removed=blocks.removeValue(forKey:old){
-    cachedExecutableBytes=cachedExecutableBytes>=removed.allocatedBytes ? cachedExecutableBytes-removed.allocatedBytes:0
+    cachedExecutableBytesStorage=cachedExecutableBytesStorage>=removed.allocatedBytes ? cachedExecutableBytesStorage-removed.allocatedBytes:0
    }
   }
-  blocks[key]=candidate;order.append(key);cachedExecutableBytes+=candidate.allocatedBytes
+  blocks[key]=candidate;order.append(key);cachedExecutableBytesStorage+=candidate.allocatedBytes
   lock.unlock();return candidate
  }
  private static func exitReason(_ r:X86_64AOTTranslation.StopReason)->KenranButoAOTExitReason{
