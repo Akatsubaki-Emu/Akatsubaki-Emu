@@ -84,5 +84,23 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertNotIn("switch QEMURuntimeStatus.locate()", runtime)
 
 
+    def test_explicit_firmware_uses_only_its_same_directory_variable_store(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        finder = runtime.split("private static func findUEFIVariables", 1)[1].split(
+            "private static func makeWritableUEFIVariables", 1
+        )[0]
+        self.assertIn("resolvedFirmware.path.hasPrefix(rootPrefix)", finder)
+        self.assertIn("let firmwareDirectory = resolvedFirmware.deletingLastPathComponent()", finder)
+        self.assertIn("firmwareDirectory.appendingPathComponent(variablesName)", finder)
+        self.assertIn(
+            "resolvedVariables.deletingLastPathComponent().path == firmwareDirectory.path",
+            finder,
+        )
+        self.assertIn("variablesValues?.isRegularFile == true", finder)
+        self.assertNotIn("containedRegularFile(named: [variablesName], in: directory)", finder)
+
+
+
 if __name__ == "__main__":
     unittest.main()

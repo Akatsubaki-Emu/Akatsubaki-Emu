@@ -219,7 +219,28 @@ final class QEMUNativeRuntime {
         default:
             return nil
         }
-        return containedRegularFile(named: [variablesName], in: directory)
+
+        // A caller-supplied code image must be paired with the variable store
+        // from that exact firmware bundle. A recursive name-only lookup can
+        // silently combine unrelated OVMF/EDK2 releases.
+        let root = directory.resolvingSymlinksInPath().standardizedFileURL
+        let rootPrefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        let resolvedFirmware = firmware.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let firmwareValues = try? resolvedFirmware.resourceValues(forKeys: [.isRegularFileKey])
+        guard resolvedFirmware.path.hasPrefix(rootPrefix),
+              firmwareValues?.isRegularFile == true else { return nil }
+
+        let firmwareDirectory = resolvedFirmware.deletingLastPathComponent().standardizedFileURL
+        guard firmwareDirectory.path == root.path || firmwareDirectory.path.hasPrefix(rootPrefix) else {
+            return nil
+        }
+        let candidate = firmwareDirectory.appendingPathComponent(variablesName)
+        let resolvedVariables = candidate.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+        let variablesValues = try? resolvedVariables.resourceValues(forKeys: [.isRegularFileKey])
+        guard resolvedVariables.path.hasPrefix(rootPrefix),
+              resolvedVariables.deletingLastPathComponent().path == firmwareDirectory.path,
+              variablesValues?.isRegularFile == true else { return nil }
+        return resolvedVariables
     }
 
     /// UEFI variable stores are writable guest state. Keep one persistent copy
