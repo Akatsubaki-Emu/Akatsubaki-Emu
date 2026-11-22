@@ -1,6 +1,9 @@
 #include "NativeGuestMemory.h"
 
 #include <algorithm>
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+#include <atomic>
+#endif
 #include <array>
 #include <cstring>
 #include <memory>
@@ -76,33 +79,17 @@ bool hasPermissionLocked(const ISteamGuestMemory *memory, uint64_t offset,
     }
     return true;
 }
-}
 
-extern "C" {
-
-ISteamGuestMemory *isteam_guest_memory_create(uint64_t size) {
-    try {
-        auto memory = std::make_unique<ISteamGuestMemory>(size);
-        const uint64_t pageCount = size / pageSize + (size % pageSize == 0 ? 0 : 1);
-        if (pageCount <= densePageLimit) {
-            memory->densePages.resize(static_cast<size_t>(pageCount));
-            memory->usesDensePages = true;
-        }
-        return memory.release();
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-void isteam_guest_memory_destroy(ISteamGuestMemory *memory) {
-    delete memory;
-}
-
-uint64_t isteam_guest_memory_size(const ISteamGuestMemory *memory) {
-    return memory ? memory->size : 0;
-}
-
-bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
+bool copyReadLocked(ISteamGuestMemory *memory, uint64_t offset,
+                    uint8_t *destination, size_t length) {
+    const uint64_t lastAddress = offset + length - 1;
+    if (memory->usesDensePages) {
+        if (offset / pageSize == lastAddress / pageSize) {
+            const size_t pageIndex = static_cast<size_t>(offset / pageSize);
+            const size_t pageOffset = static_cast<size_t>(offset % pageSize);
+            const Page *page = memory->densePages[pageIndex].get();
+            if (!page) std::fill_n(destination, length, uint8_t{0});
+            else std::copy_n(page->bytes.data() + pageOffset, lebool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
                               uint8_t *destination, size_t length) {
     if (!memory || (length && !destination)
         || offset > memory->size || length > memory->size - offset) {
@@ -113,19 +100,37 @@ bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
         if (!hasPermissionLocked(memory, offset, length, permissionRead)) return false;
-        const uint64_t lastAddress = offset + length - 1;
-        if (memory->usesDensePages) {
-            if (offset / pageSize == lastAddress / pageSize) {
-                const size_t pageIndex = static_cast<size_t>(offset / pageSize);
-                const size_t pageOffset = static_cast<size_t>(offset % pageSize);
-                const Page *page = memory->densePages[pageIndex].get();
-                if (!page) std::fill_n(destination, length, uint8_t{0});
-                else std::copy_n(page->bytes.data() + pageOffset, length, destination);
-                return true;
-            }
-            size_t completed = 0;
-            while (completed < length) {
-                const uint64_t address = offset + completed;
+        return copyReadLocked(memory, offset, destination, length);
+    } catch (...) {
+        return false;
+    }
+}
+
+bool isteam_guest_memory_read_execute(ISteamGuestMemory *memory, uint64_t offset,
+                                      uint8_t *destination, size_t length) {
+    if (!memory || (length && !destination)
+        || offset > memory->size || length > memory->size - offset) {
+        return false;
+    }
+    if (!length) return true;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        // Execute and read permissions must be checked under the same lock as
+        // the copy. Otherwise protect() can revoke execute between two locks.
+        if (!hasPermissionLocked(memory, offset, length, permissionExecute)
+            || !hasPermissionLocked(memory, offset, length, permissionRead)) return false;
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+        if (auto hook = readExecuteTestHook.load(std::memory_order_acquire)) {
+            hook(readExecuteTestContext.load(std::memory_order_acquire));
+        }
+#endif
+        return copyReadLocked(memory, offset, destination, length);
+    } catch (...) {
+        return false;
+    }
+}
+
+onst uint64_t address = offset + completed;
                 const size_t pageIndex = static_cast<size_t>(address / pageSize);
                 const size_t pageOffset = static_cast<size_t>(address % pageSize);
                 const size_t amount = std::min(length - completed,

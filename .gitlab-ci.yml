@@ -81,7 +81,7 @@ native-memory-tests:
         - scripts/tests/test_native_guest_memory.cpp
     - when: never
   script:
-    - g++ -std=c++17 -Wall -Wextra -Werror -IiSteam iSteam/NativeGuestMemory.cpp scripts/tests/test_native_guest_memory.cpp -o /tmp/test-native-memory
+    - g++ -std=c++17 -Wall -Wextra -Werror -pthread -D ISTEAM_GUEST_MEMORY_TESTING -IiSteam iSteam/NativeGuestMemory.cpp scripts/tests/test_native_guest_memory.cpp -o /tmp/test-native-memory
     - /tmp/test-native-memory
 
 python-source-contracts:

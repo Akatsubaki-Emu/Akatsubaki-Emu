@@ -3,9 +3,31 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <cstdint>
 #include <random>
 #include <vector>
+
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+struct ReadExecuteBarrier {
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool entered = false;
+    bool release = false;
+};
+
+static void blockReadExecute(void *context) {
+    auto *barrier = static_cast<ReadExecuteBarrier *>(context);
+    std::unique_lock<std::mutex> lock(barrier->mutex);
+    barrier->entered = true;
+    barrier->condition.notify_all();
+    barrier->condition.wait(lock, [&] { return barrier->release; });
+}
+#endif
 
 int main() {
     constexpr uint64_t pageSize = 4096;
@@ -114,6 +136,57 @@ int main() {
     assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
     assert(isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
     isteam_guest_memory_destroy(protectedMemory);
+
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+    // Hold read_execute after permission validation. protect() must not be able
+    // to revoke execute permission until the bytes have been copied.
+    ISteamGuestMemory *atomicReadMemory = isteam_guest_memory_create(pageSize);
+    assert(atomicReadMemory != nullptr);
+    const std::array<uint8_t, 4> atomicInstruction{0x90, 0x90, 0x90, 0xC3};
+    assert(isteam_guest_memory_write(atomicReadMemory, 0,
+                                    atomicInstruction.data(), atomicInstruction.size()));
+    assert(isteam_guest_memory_begin_mapping(atomicReadMemory));
+    assert(isteam_guest_memory_map(atomicReadMemory, 0, pageSize, 5, false));
+
+    ReadExecuteBarrier readBarrier;
+    isteam_guest_memory_set_read_execute_test_hook(blockReadExecute, &readBarrier);
+    std::atomic<bool> readSucceeded{false};
+    std::atomic<bool> protectStarted{false};
+    std::atomic<bool> protectSucceeded{false};
+    std::thread reader([&] {
+        std::array<uint8_t, 4> bytes{};
+        readSucceeded.store(
+            isteam_guest_memory_read_execute(atomicReadMemory, 0, bytes.data(), bytes.size()),
+            std::memory_order_release);
+    });
+    {
+        std::unique_lock<std::mutex> lock(readBarrier.mutex);
+        readBarrier.condition.wait(lock, [&] { return readBarrier.entered; });
+    }
+    std::thread protector([&] {
+        protectStarted.store(true, std::memory_order_release);
+        protectSucceeded.store(
+            isteam_guest_memory_protect(atomicReadMemory, 0, pageSize, 3),
+            std::memory_order_release);
+    });
+    while (!protectStarted.load(std::memory_order_acquire)) std::this_thread::yield();
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    assert(!protectSucceeded.load(std::memory_order_acquire));
+    {
+        std::lock_guard<std::mutex> lock(readBarrier.mutex);
+        readBarrier.release = true;
+    }
+    readBarrier.condition.notify_all();
+    reader.join();
+    protector.join();
+    isteam_guest_memory_set_read_execute_test_hook(nullptr, nullptr);
+    assert(readSucceeded.load(std::memory_order_acquire));
+    assert(protectSucceeded.load(std::memory_order_acquire));
+    std::array<uint8_t, 4> revokedBytes{};
+    assert(!isteam_guest_memory_read_execute(
+        atomicReadMemory, 0, revokedBytes.data(), revokedBytes.size()));
+    isteam_guest_memory_destroy(atomicReadMemory);
+#endif
 
     // Clearing the final partial page should release its backing allocation too.
     constexpr uint64_t partialSize = pageSize + 17;

@@ -20,6 +20,12 @@ bool isteam_guest_memory_unmap(ISteamGuestMemory *memory, uint64_t offset, uint6
 bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset, uint64_t length);
 void isteam_guest_memory_clear(ISteamGuestMemory *memory);
 size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory);
+
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+typedef void (*ISteamGuestMemoryReadExecuteTestHook)(void *context);
+void isteam_guest_memory_set_read_execute_test_hook(
+    ISteamGuestMemoryReadExecuteTestHook hook, void *context);
+#endif
 #ifdef __cplusplus
 }
 #endif
