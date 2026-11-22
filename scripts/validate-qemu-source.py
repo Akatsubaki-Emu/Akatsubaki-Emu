@@ -193,11 +193,19 @@ required = {
         "def test_windows_and_steamos_profiles_select_uefi_firmware",
         "test_link_verifier_rejects_missing_objc_stub_generation",
         "test_link_verifier_rejects_missing_libobjc",
+        "test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed",
     ],
     "scripts/tests/test_jit_coordinator.py": [
         "test_stikdebug_availability_is_limited_to_physical_ios_devices",
+        "test_unknown_ios_26_jit_protocol_blocks_helper_and_vm_start",
         "targetEnvironment(simulator)",
         "targetEnvironment(macCatalyst)",
+    ],
+    "scripts/tests/test_jit_protocol.py": [
+        "test_txm_detection_matches_stikdebug_hardware_rules",
+        "test_live_debugger_is_required_only_for_txm_breakpoint_protocol",
+        "test_qemu_uses_breakpoint_allocator_only_when_txm_is_present",
+        "test_qemu_can_resolve_host_jit_callbacks_from_main_and_nightly_apps",
     ],
     "scripts/tests/test_guest_time_pair.py": [
         "func writeUInt64Pair",

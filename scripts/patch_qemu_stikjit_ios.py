@@ -84,7 +84,6 @@ def patch_source(source: str) -> str:
     if MARKER in source:
         required = [
             "iSteamJITGetProtocolMode",
-            "iSteamJITIsSupported",
             "iSteamJITIsReady",
             "iSteamJITPrepareRegion",
             "iSteamJITDetach",
@@ -130,7 +129,6 @@ def patch_source(source: str) -> str:
         "#include <TargetConditionals.h>",
         "#include <dlfcn.h>",
         "iSteamJITGetProtocolMode",
-        "iSteamJITIsSupported",
         "iSteamJITIsReady",
         "iSteamJITPrepareRegion",
         "iSteamJITDetach",
