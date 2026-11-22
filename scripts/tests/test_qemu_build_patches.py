@@ -286,10 +286,14 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("bootWindows: false, bootUEFI: true", configuration)
         self.assertIn("configuration.requiresUEFI", runtime)
 
-    def test_qemu_runtime_does_not_cancel_in_progress_release_build(self):
-        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
-        source = workflow.read_text(encoding="utf-8")
-        self.assertIn("cancel-in-progress: false", source)
+    def test_build_workflows_do_not_serialize_or_cancel_runs(self):
+        root = Path(__file__).resolve().parents[2]
+        for relative in (
+            ".github/workflows/build-qemu-runtime.yml",
+            ".github/workflows/release.yml",
+        ):
+            source = (root / relative).read_text(encoding="utf-8")
+            self.assertNotIn("\\nconcurrency:\\n", source, relative)
 
     def test_qemu_workflow_installs_both_spirv_dependencies(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
