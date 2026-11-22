@@ -224,7 +224,8 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertEqual(source.count('data_dir=""'), 1)
         self.assertEqual(source.count('cat > "$OUT/BUILD-INFO.txt"'), 1)
         self.assertEqual(source.count('REPORT="$OUT/dependency-report.txt"'), 1)
-        self.assertNotIn('\\n > "$OUT/exports.txt" || true\\n', source)
+        self.assertNotIn('\n > "$OUT/exports.txt" || true\n', source)
+
     def test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed(self):
         source = """#ifdef CONFIG_DARWIN
 #include <mach/mach.h>
