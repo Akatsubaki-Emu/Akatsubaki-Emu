@@ -147,6 +147,26 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn('"tcg",', source)
         self.assertNotIn('"tcg,tb-size=64,split-wx=on"', source)
 
+
+    def test_qemu_dependency_cache_version_matches_validation_contracts(self):
+        root = Path(__file__).resolve().parents[2]
+        qemu = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        repository = (root / ".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
+        validator = (root / "scripts/validate-qemu-source.py").read_text(encoding="utf-8")
+        self.assertIn("utm-ios-arm64-deps-v15-", qemu)
+        self.assertIn("utm-ios-arm64-deps-v15-", repository)
+        self.assertIn("utm-ios-arm64-deps-v15-", validator)
+        self.assertNotIn("utm-ios-arm64-deps-v14-", repository)
+        self.assertNotIn("utm-ios-arm64-deps-v14-", validator)
+
+    def test_qemu_runtime_pr_workflow_calls_reusable_build(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github/workflows/validate-qemu-runtime-pr.yml").read_text(encoding="utf-8")
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("uses: ./.github/workflows/build-qemu-runtime.yml", workflow)
+        self.assertIn("src/QEMU/**", workflow)
+        self.assertIn("iSteam/JIT26Protocol.c", workflow)
+
     def test_launch_setup_uses_jit_callbacks_before_presenting_vm(self):
         root = Path(__file__).resolve().parents[2]
         launch = (root / "iSteam/LaunchSetupViewController.swift").read_text(encoding="utf-8")

@@ -194,7 +194,17 @@ required = {
             ],
     ".github/workflows/build-qemu-runtime.yml": [
     ],
+    ".github/workflows/validate-qemu-runtime-pr.yml": [
+        "pull_request:",
+        "branches: [main]",
+        "uses: ./.github/workflows/build-qemu-runtime.yml",
+        "rebuild_dependencies: false",
+        "src/QEMU/**",
+        "iSteam/JIT26Protocol.c",
+    ],
     "scripts/tests/test_qemu_build_patches.py": [
+        "test_qemu_dependency_cache_version_matches_validation_contracts",
+        "test_qemu_runtime_pr_workflow_calls_reusable_build",
         "test_qemu_stikjit_patcher_exports_required_runtime_symbols",
         "test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed",
         "test_qemu_stikjit_patcher_updates_region_and_export_list_together",
@@ -1210,7 +1220,7 @@ if r"\n" in builder:
 # before running the expensive QEMU compile.
 qemu_workflow = Path(".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
 repository_validation = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
-if "utm-ios-arm64-deps-v15-" not in repository_validation or "utm-ios-arm64-deps-v14-" in repository_validation:
+if "utm-ios-arm64-deps-v15-" not in repository_validation or "utm-ios-arm64-deps-v15-" in repository_validation:
     print("Repository validation workflow cache contract does not match the QEMU runtime workflow.", file=sys.stderr)
     failed = True
 for step in (
