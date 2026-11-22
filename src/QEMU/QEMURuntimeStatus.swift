@@ -16,6 +16,13 @@ enum QEMURuntimeStatus {
         }
     }
 
+    static func isPackaged(bundle: Bundle = .main, requiresJIT: Bool = true) -> Bool {
+        if case .ready = locate(bundle: bundle, requiresJIT: requiresJIT) {
+            return true
+        }
+        return false
+    }
+
     static func locate(bundle: Bundle = .main, requiresJIT: Bool = true) -> QEMURuntimeStatus {
         let fm = FileManager.default
         let bundleRoot = bundle.bundleURL.resolvingSymlinksInPath().standardizedFileURL
