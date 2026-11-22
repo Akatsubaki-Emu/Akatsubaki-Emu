@@ -209,7 +209,7 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
             "scripts/package-utm-qemu-runtime.sh",
             "scripts/package-utm-qemu-tci-runtime.sh",
         ):
-            with tempfile.TemporaryDirectory(prefix="qemu-output-overlap-", dir=build_root) as temporary:
+            with TemporaryDirectory(prefix="qemu-output-overlap-", dir=build_root) as temporary:
                 archive = Path(temporary)
                 marker = archive / "keep.txt"
                 marker.write_text("keep", encoding="utf-8")
