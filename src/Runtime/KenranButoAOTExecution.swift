@@ -25,7 +25,7 @@ final class KenranButoAOTExecutor:KenranButoAOTExecuting {
  private var blocks:[BlockKey:KenranButoAOTExecutableBlock]=[:]
  private var order:[BlockKey]=[]
  private var executionCount=0
- private var cachedExecutableBytesStorageStorage:UInt64=0
+ private var cachedExecutableBytesStorage:UInt64=0
  private let maximumCachedBlocks=64
  private let maximumCachedExecutableBytes:UInt64=16*1024*1024
  private let maximumGuestBytes=4096
