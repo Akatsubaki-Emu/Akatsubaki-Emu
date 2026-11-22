@@ -123,6 +123,7 @@ void *iSteamJITPrepareRegion(void *address, size_t length) {
     (void)length;
     return NULL;
 }
+int iSteamJITGetProtocolMode(void) { return ISTEAM_JIT_PROTOCOL_UNKNOWN; }
 bool iSteamJITIsSupported(void) { return false; }
 bool iSteamJITIsReady(void) { return false; }
 #endif
