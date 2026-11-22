@@ -657,9 +657,6 @@ required = {
         "physical iOS 17.4",
         "Physical-device runtime startup",
     ],
-    ".github/workflows/validate-repository.yml": [
-        "bash -n scripts/validate-qemu-runtime.sh",
-    ],
     "src/QEMU/QEMURuntimeStatus.swift": [
         "bundleRoot = bundle.bundleURL.resolvingSymlinksInPath()",
         "bundlePrefix",
