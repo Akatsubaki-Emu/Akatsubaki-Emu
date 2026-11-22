@@ -101,6 +101,19 @@ struct KenranButoAOTTranslatorTests {
         let instructionLimited = translator.translate(Data([0x90, 0x90]), maximumInstructions: 1)
         precondition(instructionLimited.stopReason == .instructionLimit)
         precondition(instructionLimited.guestBytesConsumed == 1)
+
+        // Public budgets are hard-capped even when a caller supplies huge values.
+        let oversizedGuest = Data(repeating: 0x90, count: 4097)
+        let oversizedBudgets = translator.translate(
+            oversizedGuest,
+            maximumInstructions: Int.max,
+            maximumOutputBytes: Int.max - 3,
+            maximumGuestBytes: Int.max
+        )
+        precondition(oversizedBudgets.stopReason == .instructionLimit)
+        precondition(oversizedBudgets.instructionCount == X86_64AOTTranslator.maximumInstructionBudget)
+        precondition(oversizedBudgets.guestBytesConsumed == X86_64AOTTranslator.maximumInstructionBudget)
+        precondition(oversizedBudgets.isValid(for: oversizedGuest))
         let outputLimited = translator.translate(
             Data([0x48, 0xB8, 0xEF, 0xCD, 0xAB, 0x90, 0x78, 0x56, 0x34, 0x12]),
             maximumOutputBytes: 4
