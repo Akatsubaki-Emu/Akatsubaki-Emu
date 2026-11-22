@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
             latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 {print $1}')"
             if [ -z "$latest_main" ]; then
               echo "Unable to determine the current main commit." >&2
@@ -273,6 +273,10 @@ jobs:
   release:
     name: Publish combined ${{ matrix.channel }} release
     needs: build
+    concurrency:
+      # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
+      group: isteam-release-publish-${{ matrix.channel }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -286,25 +290,48 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check that this run still targets the latest main commit
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            latest_main="$(git ls-remote --exit-code origin refs/heads/main | awk 'NR == 1 {print $1}')"
+            if [ -z "$latest_main" ]; then
+              echo "Unable to determine the current main commit." >&2
+              exit 1
+            fi
+            if [ "$latest_main" != "$GITHUB_SHA" ]; then
+              echo "Skipping stale release from $GITHUB_SHA; main is now $latest_main."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
       - name: Download iOS build
+        if: steps.freshness.outputs.publish == 'true'
         uses: actions/download-artifact@v8
         with:
           name: iSteam-iOS-${{ matrix.channel }}
           path: build
 
       - name: Download tvOS build
+        if: steps.freshness.outputs.publish == 'true'
         uses: actions/download-artifact@v8
         with:
           name: iSteam-tvOS-${{ matrix.channel }}
           path: build
 
       - name: Download visionOS build
+        if: steps.freshness.outputs.publish == 'true'
         uses: actions/download-artifact@v8
         with:
           name: iSteam-visionOS-${{ matrix.channel }}
           path: build
 
       - name: Verify combined release assets
+        if: steps.freshness.outputs.publish == 'true'
         run: |
           set -euo pipefail
           for asset in iSteam-ios iSteam-tvOS iSteam-visionOS; do
@@ -315,6 +342,7 @@ jobs:
           done
 
       - name: Set release metadata
+        if: steps.freshness.outputs.publish == 'true'
         id: meta
         shell: bash
         run: |
@@ -329,6 +357,7 @@ jobs:
           fi
 
       - name: Publish combined release
+        if: steps.freshness.outputs.publish == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
