@@ -87,6 +87,16 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("JITCoordinator.shared.handleCallback(url)", app)
         self.assertIn("JITCoordinator.shared.applicationDidBecomeActive()", app)
 
+    def test_localdevvpn_callback_timeout_invalidates_stale_requests(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("private var localDevVPNRequestGeneration: UInt64 = 0", source)
+        self.assertIn("private let localDevVPNCallbackTimeout: TimeInterval = 120", source)
+        self.assertIn("DispatchQueue.main.asyncAfter(deadline: .now() + self.localDevVPNCallbackTimeout)", source)
+        self.assertGreaterEqual(source.count("self.localDevVPNRequestGeneration == requestGeneration"), 2)
+        self.assertGreaterEqual(source.count("localDevVPNRequestGeneration &+= 1"), 4)
+
+
 
 if __name__ == "__main__":
     unittest.main()
