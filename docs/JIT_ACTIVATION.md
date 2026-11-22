@@ -25,16 +25,15 @@
 - When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
 
 The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM hardware classification independently follows the public model/version rules in [StikDebug's ProcessInfo+TXM implementation](https://github.com/StikDebug/StikDebug/blob/main/StikDebug/Support/ProcessInfo+TXM.swift).
-The **Increased Memory Limit** capability is separate from `get-task-allow`. Requesting that memory capability does not grant `get-task-allow` or make the process debuggable; the development provisioning profile must still provide `get-task-allow=true`.
 
-The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user.
+The **Increased Memory Limit** capability is separate from `get-task-allow`. Requesting that memory capability does not grant `get-task-allow` or make the process debuggable; the development provisioning profile must still provide `get-task-allow=true`.
 
 ## Failure handling and security
 
 - Missing LocalDevVPN, missing StikDebug, an unavailable callback, or a missing `get-task-allow` entitlement prevents QEMU startup.
 - LocalDevVPN's callback confirms that the tunnel-start request was submitted; it does **not** confirm that the VPN is connected. The readiness check is separate. If acquisition fails, verify the VPN is connected, StikDebug pairing is valid, Developer Mode is enabled, and the signing entitlement is present.
 - The entitlement query uses Security task SPI. This is a sideload/developer workflow and is not suitable for App Store submission.
-- The coordinator owns one foreground readiness poll and reports completion through callbacks; Launch Setup does not run a second polling loop. Every supported JIT path requires `CS_DEBUGGED`. On iOS 26+ TXM/SPTM devices, readiness additionally requires a live `P_TRACED` debugger because QEMU must complete the universal breakpoint protocol before detaching. Non-TXM devices use the normal split-W^X allocator and do not require a live debugger after JIT is enabled. A successful helper handoff alone is not treated as proof of a usable VM session.
+- The coordinator owns one foreground readiness poll and reports completion through callbacks; Launch Setup does not run a second polling loop. Every supported JIT path requires `CS_DEBUGGED`. On iOS 26+ TXM/SPTM devices, readiness additionally requires a live `P_TRACED` debugger because QEMU must complete the universal breakpoint protocol before detaching. Known non-TXM devices use the normal split-W^X allocator and do not require a live debugger after JIT is enabled. Unknown hardware identifiers or a failed hardware query conservatively select the TXM path and fail closed if StikDebug cannot service the breakpoint protocol. A successful helper handoff alone is not treated as proof of a usable VM session.
 
 ## Build integration
 

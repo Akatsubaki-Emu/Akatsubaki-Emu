@@ -46,7 +46,7 @@ bool iSteamJITHasGetTaskAllow(void) {
 
 static bool iSteamJITHardwareSupportsTXM(const char *hardwareIdentifier, bool isIOS27OrNewer) {
     if (hardwareIdentifier == NULL || hardwareIdentifier[0] == '\0') {
-        return false;
+        return true;
     }
 
     if (isIOS27OrNewer) {
@@ -62,19 +62,21 @@ static bool iSteamJITHardwareSupportsTXM(const char *hardwareIdentifier, bool is
     if (sscanf(hardwareIdentifier, "iPad%d,%d", &major, &minor) == 2) {
         return major > 14 || (major == 14 && minor >= 5);
     }
-    return false;
+    return true;
 }
 
 bool iSteamJITIsSupported(void) {
     struct utsname systemInfo;
-    if (uname(&systemInfo) != 0) {
-        return false;
-    }
-
     if (__builtin_available(iOS 27.0, *)) {
+        if (uname(&systemInfo) != 0) {
+            return true;
+        }
         return iSteamJITHardwareSupportsTXM(systemInfo.machine, true);
     }
     if (__builtin_available(iOS 26.0, *)) {
+        if (uname(&systemInfo) != 0) {
+            return true;
+        }
         return iSteamJITHardwareSupportsTXM(systemInfo.machine, false);
     }
     return false;

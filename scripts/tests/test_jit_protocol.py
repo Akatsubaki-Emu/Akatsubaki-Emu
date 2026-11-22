@@ -32,6 +32,9 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn('sscanf(hardwareIdentifier, "iPad%d,%d"', source)
         self.assertIn("minor >= 2", source)
         self.assertIn("minor >= 5", source)
+        hardware_check = source.split("static bool iSteamJITHardwareSupportsTXM", 1)[1].split("bool iSteamJITIsSupported", 1)[0]
+        self.assertIn("return true;", hardware_check)
+        self.assertIn("if (uname(&systemInfo) != 0) {\n            return true;", source)
         self.assertIn("if (__builtin_available(iOS 27.0, *))", source)
         self.assertIn("if (__builtin_available(iOS 26.0, *))", source)
 
