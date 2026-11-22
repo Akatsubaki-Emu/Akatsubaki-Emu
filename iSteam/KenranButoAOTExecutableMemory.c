@@ -203,6 +203,19 @@ void *iSteamAOTExecutableMemoryEntry(iSteamAOTExecutableRegion *region) {
     return region == NULL ? NULL : region->executeAddress;
 }
 
+bool iSteamAOTExecutableMemoryInvoke(iSteamAOTExecutableRegion *region, uint64_t *guestRegisters) {
+    if (region == NULL || region->executeAddress == NULL || guestRegisters == NULL) {
+        return false;
+    }
+
+    // Keep the indirect branch in C so arm64e's function-pointer
+    // authentication is handled by the platform compiler ABI.
+    typedef void (*iSteamAOTEntryPoint)(uint64_t *);
+    iSteamAOTEntryPoint entry = (iSteamAOTEntryPoint)region->executeAddress;
+    entry(guestRegisters);
+    return true;
+}
+
 void iSteamAOTExecutableMemoryDestroy(iSteamAOTExecutableRegion *region) {
     if (region == NULL) return;
 #if defined(__APPLE__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
