@@ -231,5 +231,4 @@ done
 test -s "$REPORT"
 find "$OUT/Frameworks" -type f -size +0c -print -quit | grep -q .
 find "$OUT/QEMU" -type f -size +0c -print -quit | grep -q .
- > "$OUT/exports.txt" || true
 
