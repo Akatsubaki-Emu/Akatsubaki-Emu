@@ -1,7 +1,7 @@
 # Kenran Butō (絢爛舞踏) — Hybrid runtime composition
 
 - **System name:** Kenran Butō (絢爛舞踏).
-- **Status:** composable execution-policy prototype; the translation-cache artifact layer and a bounded x86-64 to AArch64 AOT translation/cache bring-up are implemented, alongside a limited static Linux process-entry stack. No executable AOT dispatcher or full Windows/Linux userspace stack is integrated.
+- **Status:** composable execution-policy prototype; a bounded x86-64 to AArch64 AOT fast path is integrated on the current AOT feature branch through a versioned guest-state ABI, JIT-gated executable memory and exact-RIP interpreter fallback. It is not yet merged into `main` or verified on a physical iOS device. The Linux process-entry stack remains a limited bring-up; full Windows/Linux userspace stacks are not integrated.
 - **Component naming:** Kenran Butō AOT is a bounded static x86-64 → ARM64 translator bring-up; Kenran Butō Cache stores validated translated-code artifacts; Kenran Butō Router selects backends and fallback; Kenran Butō Runtime orchestrates execution; Kenran Butō Graphics owns graphics translation. These names do not imply that missing implementations are complete.
 - **Planner:** `src/Runtime/ExecutionBackendRouter.swift`
 - **Cache:** `src/Performance/TranslationCache.swift`
@@ -33,9 +33,9 @@
 
 ## What is actually integrated today
 
-- **Translation cache:** stores versioned translated-code artifacts using a cache identity that includes guest-code SHA-256, guest architecture, translator identity/version, host architecture, CPU features and guest ABI. Each artifact has an integrity digest, is written atomically, is rejected and removed if corrupt or mismatched, and is bounded to 8 MiB per code artifact, 512 entries and 256 MiB total. Cache entries can be explicitly invalidated. The cache returns bytes only; it does not allocate executable memory, invoke JIT, or execute code. `KenranButoAOTCompiler` now produces and validates bounded translation artifacts, but no executable dispatcher consumes them.
+- **Translation cache:** stores versioned translated-code artifacts using a cache identity that includes guest-code SHA-256, guest architecture, translator identity/version, host architecture, CPU features and guest ABI. Each artifact has an integrity digest, is written atomically, is rejected and removed if corrupt or mismatched, and is bounded to 8 MiB per code artifact, 512 entries and 256 MiB total. Cache entries can be explicitly invalidated. The cache stores validated artifacts. On the current AOT feature branch, `KenranButoAOTExecutor` consumes them through a versioned C ABI, BTI C trampoline, JIT/TXM-aware W^X allocation, a page-bounded 4 KiB input window and a 64-entry/16 MiB page-rounded executable cache. `GuestMachine` injects it into the x86-64 interpreter; unsupported instructions side-exit at the exact guest RIP. Hosted native tests are pending, and physical iOS execution remains unverified.
 - **Windows PE:** `WindowsPEImage` performs bounded metadata inspection; `WindowsPELoader` is read-only inspection. No PE image mapping, executable memory, import resolver, AOT translator or Windows process execution engine is integrated.
-- **Static AOT:** `X86_64AOTTranslator` currently translates a deliberately small subset (NOP, exact ENDBR64 fallback until guest CET policy is represented, MOV immediate and register-only MOV) and stops at the first unsupported instruction with an exact fallback offset. `KenranButoAOTCompiler` keys and caches the validated artifact. This is not a complete decoder/IR/code generator/relinker and the emitted ARM64 bytes are not executable or dispatched.
+- **Static AOT:** `X86_64AOTTranslator` v3 translates a deliberately small subset (NOP, MOV immediate and register-only MOV) with a no-copy bounded input path, fixed-width instruction emission buffer and explicit instruction/guest-byte/output-byte budgets. `KenranButoAOTExecutor` executes only validated supported blocks through native AArch64 code; all unsupported operations return to the interpreter at an exact guest RIP. This is not a complete x86-64 decoder/IR/code generator or general-purpose Linux userspace backend. The AOT integration remains a draft PR and is not yet operational on physical iOS.
 - **FEXCore:** not integrated or packaged.
 - **Box64:** a C/Swift bridge can look for an already-loaded Box64 entry point. It does not bundle Box64, provide a Linux rootfs/syscall ABI, or prove game execution.
 - **Wine/Proton:** not integrated.
@@ -82,3 +82,39 @@ The current conservative translator is a bounded bring-up subset, not an executa
 The focused regression harness is `scripts/tests/test_kenran_buto_aot_translator.swift`. It checks AArch64 MOVZ/MOVK encodings, register moves, both REX.B exchange forms, legal 15-byte and rejected 16-byte instructions, input limits, ENDBR64 fallback, unsupported/truncated boundaries, and output/instruction budgets. `.github/workflows/validate-kenran-buto-aot.yml` compiles and runs both the decoder harness and translation-cache integration harness on macOS.
 
 These changes improve decoder safety and regression coverage only. The emitter still produces standalone instruction words rather than a versioned guest-state block ABI; it does not yet save/restore guest registers and flags, allocate executable memory, dispatch translated blocks, or resume the interpreter after side exits. Do not mark `.staticAOT` operational or route real guest processes through it until those execution and differential-correctness layers are implemented and tested on device.
+
+## Kenran Butō AOT execution adapter — ABI v1
+
+The AOT path now has an executable, interpreter-cooperative adapter. ABI v1 passes
+a versioned guest-state structure with the 16 GPRs, RIP/RFLAGS, FS/GS bases, an
+instruction budget and explicit GuestMemory read/write callbacks. Generated blocks
+receive the state pointer, not an unversioned bare register-array pointer.
+
+The adapter uses a bounded 64-block cache. Persistent translation-cache hits are
+re-decoded and compared with canonical translator output before being trusted.
+Executable memory is W^X: standard mode seals writable mappings read/execute, while
+StikDebug/TXM mode uses separate executable and writable aliases. Both aliases are
+released on every remap/protection failure path.
+
+The current translator emits only register-only NOP/MOV instructions. Unsupported,
+truncated and budget-limited blocks return to the interpreter at the exact next guest
+RIP; memory callbacks and explicit fault metadata are ready for subsequent memory-op
+lowering. The diagnostic `GuestMachine` installs this fast path. QEMU remains the
+full-system execution route.
+
+**Verification boundary:** the ARM64 native harness executes generated AArch64 blocks
+and compares interpreter state. This does not prove StikDebug/TXM execution on a
+physical iPad. Do not advertise the AOT backend as generally operational until a
+physical iOS ARM64 run is independently recorded.
+
+
+### Kenran Butō AOT dispatch hardening
+
+The diagnostic x86-64 interpreter retains its 15-byte per-instruction decode
+buffer and uses a separate page-bounded AOT input buffer (maximum 4 KiB) for
+multi-instruction translation. AOT cache keys include translator and ABI versions
+and all translation budgets. Executable code is limited to 16 MiB across at most
+64 cached blocks; each generated entry begins with `BTI C`. The ABI and exit
+metadata are checked after execution, with GPR restoration before interpreter
+fallback on invalid native state. These controls improve the execution adapter;
+they do not make the limited translator a complete x86-64 implementation.

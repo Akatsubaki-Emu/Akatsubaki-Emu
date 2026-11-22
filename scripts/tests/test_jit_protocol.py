@@ -23,7 +23,21 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn('dlsym(RTLD_DEFAULT, "csops")', source)
         self.assertIn("queryStatus(getpid(), 0, &status, sizeof(status)) == 0", source)
         self.assertIn("status & UINT32_C(0x10000000)", source)
+        self.assertIn("if (!iSteamJITHasGetTaskAllow()) return false;", source)
         self.assertIn("bool iSteamJITIsReady(void) { return false; }", source)
+
+    def test_aot_standard_ios_uses_split_wx_and_rechecks_jit_readiness(self):
+        root = Path(__file__).resolve().parents[2]
+        memory = (root / "iSteam" / "KenranButoAOTExecutableMemory.c").read_text(encoding="utf-8")
+        execution = (root / "src" / "Runtime" / "KenranButoAOTExecution.swift").read_text(encoding="utf-8")
+        create = memory.split("iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate", 1)[1].split("size_t iSteamAOTExecutableMemoryMappedSize", 1)[0]
+        invoke = memory.split("bool iSteamAOTExecutableMemoryInvoke", 1)[1].split("void iSteamAOTExecutableMemoryDestroy", 1)[0]
+        self.assertIn("vm_remap(", create)
+        self.assertIn("mprotect((void *)execute,mapped,PROT_READ|PROT_EXEC)", create)
+        self.assertIn("r->mach_mapping=false", create)
+        self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", invoke)
+        self.assertIn("coordinator.hasGetTaskAllow", execution)
+        self.assertIn("mode == ISTEAM_JIT_PROTOCOL_STANDARD || mode == ISTEAM_JIT_PROTOCOL_STIKDEBUG", execution)
 
     def test_txm_detection_uses_stikjit_ioregistry_query_and_fails_closed(self):
         root = Path(__file__).resolve().parents[2]

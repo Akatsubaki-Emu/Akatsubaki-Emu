@@ -95,6 +95,9 @@ static bool iSteamJITDebuggerIsAttached(void) {
 }
 
 bool iSteamJITIsReady(void) {
+    // CS_DEBUGGED is not sufficient: require the signing entitlement too.
+    if (!iSteamJITHasGetTaskAllow()) return false;
+
     typedef int (*CSOpsFunction)(pid_t, unsigned int, void *, size_t);
     CSOpsFunction queryStatus = (CSOpsFunction)dlsym(RTLD_DEFAULT, "csops");
     uint32_t status = 0;
