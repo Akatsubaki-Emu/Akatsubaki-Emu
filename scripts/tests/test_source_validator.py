@@ -627,6 +627,12 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn('git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"', update)
         self.assertIn('git push --force origin "refs/tags/$RELEASE_CHANNEL"', update)
         self.assertIn("contents: write", workflow)
+        verify = workflow.index("- name: Verify combined release assets")
+        final_check = workflow.index("- name: Re-check freshness immediately before publishing")
+        publish = workflow.index("- name: Publish combined release")
+        self.assertLess(verify, final_check)
+        self.assertLess(final_check, publish)
+        self.assertIn("if: steps.final-freshness.outputs.publish == 'true'", workflow)
 
     def test_mirror_reconciliation_only_changes_do_not_trigger_release_builds(self):
         root = Path(__file__).resolve().parents[2]
