@@ -29,6 +29,7 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertIn("library = g_preflight_library", start)
         self.assertIn("strcmp(g_preflight_path, library_path)", start)
         self.assertIn("FAKE_QEMU_LIFECYCLE_FILE", fake)
+        self.assertRegex(fake, r'fprintf\(file, "%s\\n", event\);')
         self.assertIn('count_lifecycle_event(lifecycle_path, "load") == 1', harness)
         self.assertIn('count_lifecycle_event(lifecycle_path, "unload") == 1', harness)
 

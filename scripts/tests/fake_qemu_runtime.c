@@ -13,7 +13,7 @@ static void record_lifecycle_event(const char *event) {
     if (!path || !path[0]) return;
     FILE *file = fopen(path, "a");
     if (!file) return;
-    fprintf(file, "%s\\n", event);
+    fprintf(file, "%s\n", event);
     fclose(file);
 }
 
