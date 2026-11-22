@@ -3,6 +3,14 @@ from pathlib import Path
 
 
 class ELFLoaderCopyTests(unittest.TestCase):
+    def test_static_pie_relocations_batch_data_access(self):
+        root = Path(__file__).resolve().parents[2]
+        loader = (root / "src" / "Runtime" / "ELF64Loader.swift").read_text(encoding="utf-8")
+        relocations = loader.split("let relocationCount = Int(relaSize / 24)", 1)[1].split("private func u16", 1)[0]
+        self.assertEqual(relocations.count("data.withUnsafeBytes"), 1)
+        self.assertIn("raw.loadUnaligned(fromByteOffset: offset, as: UInt64.self)", relocations)
+        self.assertNotIn("u64(data, offset", relocations)
+
     def test_load_segments_use_bounded_zero_copy_guest_memory_write(self):
         root = Path(__file__).resolve().parents[2]
         memory = (root / "src" / "Runtime" / "GuestMemory.swift").read_text(encoding="utf-8")

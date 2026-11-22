@@ -326,31 +326,34 @@ final class ELF64Loader {
         }
 
         let relocationCount = Int(relaSize / 24)
-        for index in 0..<relocationCount {
-            let offset = Int(relaFileOffset) + index * 24
-            guard let target = u64(data, offset),
-                  let information = u64(data, offset + 8),
-                  let addendBits = u64(data, offset + 16) else {
-                throw LoadError.unsupportedDynamicImage
+        let relocationsApplied = data.withUnsafeBytes { raw -> Bool in
+            guard raw.baseAddress != nil else { return false }
+            for index in 0..<relocationCount {
+                let offset = Int(relaFileOffset) + index * 24
+                let target = UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt64.self))
+                let information = UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: offset + 8, as: UInt64.self))
+                let addendBits = UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: offset + 16, as: UInt64.self))
+                let relocationType = UInt32(truncatingIfNeeded: information)
+                let symbolIndex = UInt32(information >> 32)
+                guard relocationType == 8, symbolIndex == 0,
+                      loadSegments.contains(where: { segment in
+                          guard target >= segment.virtualAddress else { return false }
+                          let delta = target - segment.virtualAddress
+                          return delta <= segment.memorySize && 8 <= segment.memorySize - delta
+                      }) else {
+                    return false
+                }
+                let (targetAddress, targetOverflow) = target.addingReportingOverflow(loadBias)
+                let (relocatedValue, valueOverflow) = Int64(bitPattern: loadBias)
+                    .addingReportingOverflow(Int64(bitPattern: addendBits))
+                guard !targetOverflow, !valueOverflow, relocatedValue >= 0,
+                      memory.writeUInt64(UInt64(relocatedValue), offset: targetAddress) else {
+                    return false
+                }
             }
-            let relocationType = UInt32(truncatingIfNeeded: information)
-            let symbolIndex = UInt32(information >> 32)
-            guard relocationType == 8, symbolIndex == 0,
-                  loadSegments.contains(where: { segment in
-                      guard target >= segment.virtualAddress else { return false }
-                      let delta = target - segment.virtualAddress
-                      return delta <= segment.memorySize && 8 <= segment.memorySize - delta
-                  }) else {
-                throw LoadError.unsupportedDynamicImage
-            }
-            let (targetAddress, targetOverflow) = target.addingReportingOverflow(loadBias)
-            let (relocatedValue, valueOverflow) = Int64(bitPattern: loadBias)
-                .addingReportingOverflow(Int64(bitPattern: addendBits))
-            guard !targetOverflow, !valueOverflow, relocatedValue >= 0,
-                  memory.writeUInt64(UInt64(relocatedValue), offset: targetAddress) else {
-                throw LoadError.unsupportedDynamicImage
-            }
+            return true
         }
+        guard relocationsApplied else { throw LoadError.unsupportedDynamicImage }
     }
 
     private func u16(_ data: Data, _ offset: Int) -> UInt16? {
