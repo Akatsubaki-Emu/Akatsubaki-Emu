@@ -47,8 +47,10 @@ def patch_script(source: str) -> str:
 
     qemu_build = 'build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS'
     qemu_patch_call = (
-        ': "${ISTEAM_QEMU_JIT_PATCHER:?ISTEAM_QEMU_JIT_PATCHER is required}"\n'
-        'python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"\n'
+        'if [ "$PLATFORM" = "ios" ]; then\n'
+        '    : "${ISTEAM_QEMU_JIT_PATCHER:?ISTEAM_QEMU_JIT_PATCHER is required for JIT builds}"\n'
+        '    python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"\n'
+        'fi\n'
         ': "${ISTEAM_QEMU_MESON_PATCHER:?ISTEAM_QEMU_MESON_PATCHER is required}"\n'
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"\n'
         + qemu_build
@@ -77,6 +79,7 @@ def patch_script(source: str) -> str:
         'https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}',
         cross_override,
         "--target-list=x86_64-softmmu",
+        'if [ "$PLATFORM" = "ios" ]; then',
         'python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"',
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
         'python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"',
