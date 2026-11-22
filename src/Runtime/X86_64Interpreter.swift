@@ -960,8 +960,19 @@ final class X86_64Interpreter: GuestCPUBackend {
     }
 
     private func fetchUInt16() -> UInt16? {
-        guard let low = fetchByte(), let high = fetchByte() else { return nil }
-        return UInt16(low) | UInt16(high) << 8
+        if instructionWindowCursor <= instructionWindowLength,
+           instructionWindowLength - instructionWindowCursor >= 2 {
+            let offset = instructionWindowCursor
+            let value = UInt16(instructionWindow[offset])
+                | UInt16(instructionWindow[offset + 1]) << 8
+            instructionWindowCursor += 2
+            rip &+= 2
+            return value
+        }
+        guard let value = memory.readUInt16(offset: rip) else { return nil }
+        instructionWindowCursor = instructionWindowLength
+        rip &+= 2
+        return value
     }
 
     private func fetchUInt32() -> UInt32? {

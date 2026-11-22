@@ -10,6 +10,8 @@ class X86InstructionWindowTests(unittest.TestCase):
         self.assertIn("prepareInstructionWindow(at: instructionAddress)", interpreter)
         self.assertIn("memory.readPrefix(offset: address, into: &instructionWindow)", interpreter)
         self.assertIn("instructionWindowCursor < instructionWindowLength", interpreter)
+        self.assertIn("instructionWindowLength - instructionWindowCursor >= 2", interpreter)
+        self.assertIn("memory.readUInt16(offset: rip)", interpreter)
         self.assertIn("instructionWindowLength - instructionWindowCursor >= 4", interpreter)
         self.assertIn("instructionWindowLength - instructionWindowCursor >= 8", interpreter)
         self.assertIn("func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int?", memory)

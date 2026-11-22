@@ -358,6 +358,8 @@ required = {
         "case 0x29, 0x2B, 0x39, 0x3B:",
         "case 0x68: // PUSH sign-extended imm32",
         "case 0x6A: // PUSH sign-extended imm8",
+        "instructionWindowLength - instructionWindowCursor >= 2",
+        "memory.readUInt16(offset: rip)",
         "private func fetchUInt16() -> UInt16?",
         "private func decodeRM(_ modrm: UInt8, rex: UInt8, trailingImmediateBytes: UInt8 = 0, includeSegmentBase: Bool = true)",
         "let addressBase = usesRIPRelative ? rip &+ UInt64(trailingImmediateBytes) : base",
