@@ -42,22 +42,36 @@ struct RuntimeCapabilityRegistry {
 
         records[.x86Interpreter] = RuntimeCapabilityRecord(
             level: .validatedSubset,
-            detail: "The bounded static-ELF diagnostic interpreter has a synthetic end-to-end smoke test; it is not a general Linux execution backend."
+            detail: "The bounded static-ELF diagnostic interpreter has repository smoke tests; physical iOS guest execution is not yet verified and it is not a general Linux backend."
         )
 
         if probeQEMU {
-            switch QEMURuntimeStatus.inspect(bundle: bundle) {
+            let jitStatus = QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: true)
+            let tciStatus = QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: false)
+            let jitReady: Bool
+            let tciReady: Bool
+            let jitDetail: String
+            let tciDetail: String
+            switch jitStatus {
             case .ready:
-                records[.qemuTCG] = RuntimeCapabilityRecord(
-                    level: .loadable,
-                    detail: "The bundled library loads and required lifecycle exports resolve; guest boot and device operation are not yet verified."
-                )
+                jitReady = true
+                jitDetail = "JIT runtime loads and required exports resolve"
             case .unavailable(let reason):
-                records[.qemuTCG] = RuntimeCapabilityRecord(
-                    level: .missing,
-                    detail: reason
-                )
+                jitReady = false
+                jitDetail = "JIT unavailable: \(reason)"
             }
+            switch tciStatus {
+            case .ready:
+                tciReady = true
+                tciDetail = "no-JIT TCI runtime loads and required exports resolve"
+            case .unavailable(let reason):
+                tciReady = false
+                tciDetail = "TCI unavailable: \(reason)"
+            }
+            records[.qemuTCG] = RuntimeCapabilityRecord(
+                level: (jitReady || tciReady) ? .loadable : .missing,
+                detail: "\(jitDetail); \(tciDetail). Guest boot and device operation remain unverified."
+            )
         } else {
             records[.qemuTCG] = RuntimeCapabilityRecord(
                 level: .notProbed,
