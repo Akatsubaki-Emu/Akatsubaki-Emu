@@ -189,6 +189,7 @@ required = {
         "test_link_verifier_rejects_missing_objc_stub_generation",
         "test_link_verifier_rejects_missing_libobjc",
         "test_qemu_runtime_packager_preserves_firmware_bundle_directories",
+        "test_build_freshness_script_ignores_only_non_build_paths",
         "#include <mach/vm_map.h>",
         "#define mach_vm_remap vm_remap",
         "#define mach_vm_protect vm_protect",
@@ -949,6 +950,13 @@ required = {
         'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
         'if [ "$XCODE_VERSION" != "26.2" ]; then',
     ],
+    "scripts/check-build-freshness.sh": [
+        "git fetch --no-tags --unshallow origin main",
+        "git diff --name-only -z",
+        "scripts/tests/*",
+        "scripts/validate-qemu-source.py",
+        "build_relevant_change",
+    ],
     "scripts/patch_qemu_stikjit_ios.py": [
         "def patch_exported_symbols(source: str) -> str",
         "def patch_qemu_sources(region_path: Path) -> None",
@@ -988,6 +996,7 @@ required = {
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
+        "scripts/check-build-freshness.sh",
         'python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"',
     ],
     "scripts/patch_qemu_meson_ios.py": [
