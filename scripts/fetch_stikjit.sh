@@ -10,9 +10,9 @@ TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/akatsubaki-stikjit.XXXXXX")"
 trap 'rm -rf "${TEMP_DIR}" "${ARCHIVE}"' EXIT
 mkdir -p "${DEPENDENCIES_DIR}"
 curl --fail --location --retry 3 --retry-delay 2 "${URL}" --output "${ARCHIVE}"
-printf '%s  %s\n' "${SHA256}" "${ARCHIVE}" | shasum -a 256 --check
+printf '%s  %s\n' "${SHA256}" "${ARCHIVE}" | shasum -a 256 -c
 unzip -q "${ARCHIVE}" -d "${TEMP_DIR}"
-FRAMEWORK_PATH="$(find "${TEMP_DIR}" -maxdepth 3 -type d -name StikJIT.xcframework -print -quit)"
+FRAMEWORK_PATH="$(find "${TEMP_DIR}" -type d -name StikJIT.xcframework -print -quit)"
 test -n "${FRAMEWORK_PATH}" || { echo "StikJIT XCFramework archive did not contain StikJIT.xcframework." >&2; exit 1; }
 test -f "${FRAMEWORK_PATH}/Info.plist" || { echo "StikJIT XCFramework is missing Info.plist." >&2; exit 1; }
 rm -rf "${DESTINATION}"

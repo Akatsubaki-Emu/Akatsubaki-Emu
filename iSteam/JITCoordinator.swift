@@ -8,6 +8,7 @@ enum JITMethod: String, CaseIterable {
     case builtInStikJIT = "Built-in StikJIT"
 }
 
+@MainActor
 final class JITCoordinator: NSObject, UIDocumentPickerDelegate {
     static let shared = JITCoordinator()
     private override init() { super.init() }
@@ -99,7 +100,7 @@ final class JITCoordinator: NSObject, UIDocumentPickerDelegate {
     }
 
     private var pairingFileURL: URL? {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("StikJIT", isDirectory: true)
             .appendingPathComponent("pairingFile.plist")
     }
@@ -134,11 +135,11 @@ final class JITCoordinator: NSObject, UIDocumentPickerDelegate {
                 at: destination.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try data.write(to: destination, options: .atomic)
+            try data.write(to: destination, options: [.atomic, .completeFileProtection])
             let completion = pairingImportCompletion
             pairingImportCompletion = nil
             completion?()
-            show("The device pairing file is stored in Documents/StikJIT/pairingFile.plist. Its contents are not logged.", title: "Pairing file imported")
+            show("The device pairing file is stored in the app's protected Application Support container. Its contents are not logged.", title: "Pairing file imported")
         } catch {
             show("Could not import the pairing file: \(error.localizedDescription)", title: "Pairing file error")
         }

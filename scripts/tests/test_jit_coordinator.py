@@ -119,14 +119,15 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("private static let workQueue = DispatchQueue", helper)
         self.assertIn("defer { try? FileManager.default.removeItem(at: pairingFile) }", helper)
 
-    def test_pairing_file_is_imported_into_documents_without_logging_its_contents(self):
+    def test_pairing_file_is_imported_into_protected_application_support(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("applicationSupportDirectory", source)
         self.assertIn('appendingPathComponent("StikJIT", isDirectory: true)', source)
         self.assertIn('appendingPathComponent("pairingFile.plist")', source)
         self.assertIn("startAccessingSecurityScopedResource()", source)
         self.assertIn("PropertyListSerialization.propertyList", source)
-        self.assertIn("data.write(to: destination, options: .atomic)", source)
+        self.assertIn("data.write(to: destination, options: [.atomic, .completeFileProtection])", source)
 
     def test_embedded_helper_is_available_for_stable_and_nightly_ios_targets(self):
         root = Path(__file__).resolve().parents[2]

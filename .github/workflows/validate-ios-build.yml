@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-platform-simulators:
+  build-platform-targets:
     runs-on: macos-26
     timeout-minutes: 45
     strategy:

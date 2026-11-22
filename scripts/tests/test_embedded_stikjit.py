@@ -14,7 +14,7 @@ class EmbeddedStikJITIntegrationTests(unittest.TestCase):
         script = self.read("scripts/fetch_stikjit.sh")
         self.assertIn('VERSION="2.0.1"', script)
         self.assertIn("c376687326a785f5ed1da8caca08adc709b56919019dd751bca059b92b175d95", script)
-        self.assertIn("shasum -a 256 --check", script)
+        self.assertIn("shasum -a 256 -c", script)
         self.assertIn("StikJIT.xcframework", script)
 
     def test_release_and_device_validation_fetch_framework_before_xcodegen(self):

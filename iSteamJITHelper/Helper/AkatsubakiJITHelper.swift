@@ -13,7 +13,7 @@ private struct AkatsubakiJITMessageHandler: XPCPeerHandler {
             let pairingFile = root.appendingPathComponent("pairingFile.plist")
             do {
                 try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-                try message.pairingData.write(to: pairingFile, options: .atomic)
+                try message.pairingData.write(to: pairingFile, options: [.atomic, .completeFileProtection])
                 defer { try? FileManager.default.removeItem(at: pairingFile) }
 
                 let paths = DDIPaths.default(in: root.appendingPathComponent("DDI", isDirectory: true))

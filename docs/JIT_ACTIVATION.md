@@ -8,7 +8,7 @@
 
 The iOS app embeds an ExtensionKit helper, not a second runnable app. The helper contains the pinned StikJIT 2.0.1 XCFramework and runs outside the host process so it can attach a debugger to Akatsubaki without self-attach deadlocking.
 
-1. Import a device pairing file in Settings → JIT. Akatsubaki validates it as a property-list dictionary and stores it at `Documents/StikJIT/pairingFile.plist`. The file contents are never logged.
+1. Import a device pairing file in Settings → JIT. Akatsubaki validates it as a property-list dictionary and stores it at `Application Support/StikJIT/pairingFile.plist`. The file contents are never logged.
 2. Start LocalDevVPN through its documented `localdevvpn://enable?scheme=<bundle-id>` URL. Its callback means the start request was submitted, not that the tunnel is connected.
 3. Akatsubaki sends the current PID and pairing-file bytes over an ExtensionFoundation XPC session to the embedded helper.
 4. The helper writes a temporary extension-local pairing file, then synchronously calls `StikJIT.enableJIT` on one serial queue. StikJIT checks RSD reachability, downloads/mounts/verifies the appropriate Developer Disk Image, and starts the selected universal script.
@@ -40,7 +40,7 @@ The helper's persistent DDI cache lives under its own Library container. The tem
 - LocalDevVPN's URL callback does not prove the tunnel is connected. StikJIT's RSD reachability check is authoritative for its next step.
 - StikJIT's DDI download, mount, pairing, and debugger errors are returned to Akatsubaki and shown to the user.
 - The host's entitlement check uses Security task SPI and is a sideload/developer workflow, not an App Store-safe design.
-- Pairing data crosses the XPC boundary only for the active request; the helper's temporary copy is deleted after completion. The imported host copy is kept in the app's Documents folder for reuse.
+- Pairing data crosses the XPC boundary only for the active request; the helper's temporary copy is deleted after completion. The imported host copy is kept in the app's protected Application Support container for reuse.
 - Built-in StikJIT runs only on a physical iOS 26+ device and is hidden from the usable method path in LiveContainer. The app keeps the external StikDebug and Wait for Debugger choices.
 
 ## Build integration
