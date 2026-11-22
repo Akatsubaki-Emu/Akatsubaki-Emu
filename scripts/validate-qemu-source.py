@@ -1141,9 +1141,16 @@ required = {
         "UserDefaults.standard.set(destination.path, forKey: \"iSteam.customOSPath\")",
         "Launch Setup will preselect it as boot media",
     ],
+    "scripts/tests/test_guest_console_output.py": [
+        "test_emulation_log_publishes_sanitized_messages",
+        "test_console_displays_only_guest_stdout_and_stderr",
+        "test_console_output_is_bounded_and_scrolls_to_latest_output",
+    ],
+    "scripts/tests/test_imported_os_selection.py": [
+        "test_imported_os_image_is_preselected_in_launch_setup",
+        "test_import_action_persists_image_and_explains_boot_requirements",
+    ],
     "scripts/tests/test_source_validator.py": [
-        "def test_console_displays_only_guest_stdout_and_stderr(self):",
-        "def test_imported_os_image_is_preselected_in_launch_setup(self):",
         "def test_native_bridge_enables_strict_c11_strnlen_and_covers_cleanup_race(self):",
         "int qemu_exit_status = g_qemu_main_loop();",
         "g_qemu_cleanup(qemu_exit_status)",
