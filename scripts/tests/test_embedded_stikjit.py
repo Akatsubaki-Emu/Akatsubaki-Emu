@@ -60,5 +60,15 @@ class EmbeddedStikJITIntegrationTests(unittest.TestCase):
         self.assertIn("engine.stop()", display)
         self.assertIn("virtioGPU.stop()", display)
 
+
+    def test_xcode_27_1_is_pinned_for_the_stikjit_release_framework(self):
+        project = self.read("project.yml")
+        self.assertIn('xcodeVersion: "27.1"', project)
+        for path in (".github/workflows/release.yml", ".github/workflows/validate-ios-build.yml"):
+            workflow = self.read(path)
+            self.assertIn("runs-on: xcode-27", workflow)
+            self.assertIn("/Applications/Xcode_27.1.app", workflow)
+            self.assertIn('!= "27.1"', workflow)
+
 if __name__ == "__main__":
     unittest.main()

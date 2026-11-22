@@ -2,7 +2,7 @@ name: iSteam
 options:
   minimumXcodeGenVersion: 2.40.0
   bundleIdPrefix: com.Xthrx
-  xcodeVersion: "26.0"
+  xcodeVersion: "27.1"
   deploymentTarget:
     iOS: "16.0"
     tvOS: "17.0"

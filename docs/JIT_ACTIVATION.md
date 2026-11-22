@@ -66,6 +66,6 @@ The helper's persistent DDI cache lives under its own Library container. The tem
 - **Source integration:** written on a feature branch based on the current TXM fail-closed JIT branch.
 - **Static source checks:** pending execution after commit; the new regression tests cover helper target wiring, pairing-file handling, XPC session lifetime, SHA pinning, workflow ordering, and the LocalDevVPN entitlement boundary.
 - **Hosted CI:** not yet run for this branch. The project has recent GitLab runner-quota failures before job startup.
-- **Not verified:** XcodeGen project generation, Xcode 26.2 compilation of the StikJIT 2.0.1 module, IPA packaging/signing, extension installation, LocalDevVPN tunnel activation, RSD pairing/DDI mount, TXM breakpoint handshake, QEMU guest boot or persistence.
+- **Not verified:** XcodeGen project generation, Xcode 27.1 compilation of the StikJIT 2.0.1 module, IPA packaging/signing, extension installation, LocalDevVPN tunnel activation, RSD pairing/DDI mount, TXM breakpoint handshake, QEMU guest boot or persistence.
 
 Do not describe this integration as device-working until the iOS 26 extension is built, installed with a valid signing profile, and a physical QEMU guest completes the JIT breakpoint handshake.
