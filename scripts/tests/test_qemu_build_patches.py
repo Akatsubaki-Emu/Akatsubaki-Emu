@@ -2,9 +2,26 @@
 import subprocess
 import sys
 import unittest
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
+QEMU_SYMBOLS = """qemu_init;
+qemu_main_loop;
+qemu_cleanup;
+bql_lock_impl;
+bql_unlock;
+g_assertion_message_expr;
+qemu_thread_create;
+replay_mutex_lock;
+replay_mutex_unlock;
+"""
+QEMU_EXPORTS = """_qemu_init
+_qemu_main_loop
+_qemu_cleanup
+_qemu_system_shutdown_request
+_isteam_qemu_set_jit_callbacks
+"""
 sys.path.insert(0, str(SCRIPTS))
 
 import patch_qemu_meson_ios
@@ -171,8 +188,17 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertEqual(once, twice)
         self.assertIn("#include <mach/mach_vm.h>", once)
         self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")', once)
-        self.assertIn("jit_protocol_mode < 0", once)
-        self.assertIn("jit_protocol_mode > 0", once)
+        self.assertIn("ISTEAM_QEMU_JIT_PROTOCOL_UNKNOWN = -1", once)
+        self.assertIn("ISTEAM_QEMU_JIT_PROTOCOL_STANDARD = 0", once)
+        self.assertIn("ISTEAM_QEMU_JIT_PROTOCOL_STIKDEBUG = 1", once)
+        self.assertIn("ISTEAMJITProtocolModeFunction", once)
+        self.assertIn("jit_protocol_mode == ISTEAM_QEMU_JIT_PROTOCOL_UNKNOWN", once)
+        self.assertIn("jit_protocol_mode == ISTEAM_QEMU_JIT_PROTOCOL_STIKDEBUG", once)
+        self.assertIn("jit_protocol_mode != ISTEAM_QEMU_JIT_PROTOCOL_STANDARD", once)
+        self.assertNotIn("jit_protocol_mode < 0", once)
+        self.assertNotIn("jit_protocol_mode > 0", once)
+        self.assertNotIn(r"\n", once)
+        self.assertNotIn(r'\"', once)
         self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITIsReady")', once)
         self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")', once)
         self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITDetach")', once)
@@ -191,7 +217,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
             "typedef void (*qemu_set_jit_callbacks_fn)(bool (*)(void), void *(*)(void *, size_t), void (*)(void));",
             bridge,
         )
-        with self.assertRaisesRegex(SystemExit, "unexpected host-symbol lookup"):
+        with self.assertRaisesRegex(SystemExit, "unexpected legacy protocol check"):
             patch_qemu_stikjit_ios.patch_source(
                 once + '\\nvoid *invalid_callback = dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion");'
             )
@@ -199,6 +225,64 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
         with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
             patch_qemu_stikjit_ios.patch_source("#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n#endif\n")
+
+    def test_qemu_export_list_patch_is_idempotent_and_fails_closed(self):
+        once = patch_qemu_stikjit_ios.patch_export_symbols(QEMU_SYMBOLS)
+        twice = patch_qemu_stikjit_ios.patch_export_symbols(once)
+        self.assertEqual(once, twice)
+        self.assertEqual(once.count("qemu_system_shutdown_request;"), 1)
+        self.assertEqual(once.count("isteam_qemu_set_jit_callbacks;"), 1)
+        self.assertIn("qemu_init;", once)
+        self.assertIn("qemu_main_loop;", once)
+        self.assertIn("qemu_cleanup;", once)
+        with self.assertRaisesRegex(SystemExit, "missing expected anchors"):
+            patch_qemu_stikjit_ios.patch_export_symbols("qemu_init;\n")
+        with self.assertRaisesRegex(SystemExit, "duplicate required exports"):
+            patch_qemu_stikjit_ios.patch_export_symbols(
+                QEMU_SYMBOLS + "qemu_system_shutdown_request;\n"
+            )
+
+    def test_qemu_patch_file_updates_region_and_export_list_together(self):
+        region_source = """#ifdef CONFIG_DARWIN
+#include <mach/mach.h>
+static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
+{
+    return 0;
+}
+#endif
+"""
+        with TemporaryDirectory() as temporary_directory:
+            qemu_root = Path(temporary_directory)
+            (qemu_root / "tcg").mkdir()
+            (qemu_root / "system").mkdir()
+            region_path = qemu_root / "tcg" / "region.c"
+            symbols_path = qemu_root / "system" / "qemu.symbols"
+            region_path.write_text(region_source, encoding="utf-8")
+            symbols_path.write_text(QEMU_SYMBOLS, encoding="utf-8")
+
+            patch_qemu_stikjit_ios.patch_file(region_path)
+            patched_region = region_path.read_text(encoding="utf-8")
+            patched_symbols = symbols_path.read_text(encoding="utf-8")
+            self.assertIn("iSteamJITGetProtocolMode", patched_region)
+            self.assertIn("jit_protocol_mode == ISTEAM_QEMU_JIT_PROTOCOL_UNKNOWN", patched_region)
+            self.assertIn("qemu_system_shutdown_request;", patched_symbols)
+            self.assertIn("isteam_qemu_set_jit_callbacks;", patched_symbols)
+
+            patch_qemu_stikjit_ios.patch_file(region_path)
+            self.assertEqual(
+                symbols_path.read_text(encoding="utf-8").count("isteam_qemu_set_jit_callbacks;"),
+                1,
+            )
+
+    def test_ios_targets_link_iokit_and_export_tristate_jit_protocol(self):
+        root = Path(__file__).resolve().parents[2]
+        project = (root / "project.yml").read_text(encoding="utf-8")
+        stable = project.split("  iSteam:", 1)[1].split("  iSteamNightly:", 1)[0]
+        nightly = project.split("  iSteamNightly:", 1)[1].split("  iSteamVision:", 1)[0]
+        for name, target in (("stable", stable), ("nightly", nightly)):
+            with self.subTest(target=name):
+                self.assertIn("- sdk: IOKit.framework", target)
+                self.assertIn("-Wl,-exported_symbol,_iSteamJITGetProtocolMode", target)
 
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):
         root = Path(__file__).resolve().parents[2]
@@ -233,34 +317,73 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn('SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"', source)
         self.assertIn("if grep -Fq '_objc_msgSendClass' <<< \"$SYMBOLS\"; then", source)
 
-    def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
+    def test_link_verifier_requires_runtime_and_exports_on_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
-  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a
+  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a -Wl,-exported_symbols_list,system/qemu-ld64.symbols
 build unrelated.dylib: c_LINKER other
   LINK_ARGS = -lm
 '''
-        verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
+        verify_qemu_meson_link.verify_link(
+            ninja, "/toolchain/libclang_rt.ios.a", QEMU_EXPORTS
+        )
 
     def test_link_verifier_rejects_runtime_missing_from_qemu_target_edge(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
-  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -lm
+  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -lm -Wl,-exported_symbols_list,system/qemu-ld64.symbols
 '''
         with self.assertRaisesRegex(SystemExit, "emulator-specific link arguments"):
-            verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
+            verify_qemu_meson_link.verify_link(
+                ninja, "/toolchain/libclang_rt.ios.a", QEMU_EXPORTS
+            )
 
     def test_link_verifier_rejects_missing_objc_stub_generation(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
-  LINK_ARGS = -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a
+  LINK_ARGS = -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a -Wl,-exported_symbols_list,system/qemu-ld64.symbols
 '''
         with self.assertRaisesRegex(SystemExit, "Objective-C message-stub generation"):
-            verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
+            verify_qemu_meson_link.verify_link(
+                ninja, "/toolchain/libclang_rt.ios.a", QEMU_EXPORTS
+            )
 
     def test_link_verifier_rejects_missing_libobjc(self):
         ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
-  LINK_ARGS = -Wl,-objc_stubs_fast -Wl,-force_load,/toolchain/libclang_rt.ios.a
+  LINK_ARGS = -Wl,-objc_stubs_fast -Wl,-force_load,/toolchain/libclang_rt.ios.a -Wl,-exported_symbols_list,system/qemu-ld64.symbols
 '''
         with self.assertRaisesRegex(SystemExit, "Objective-C runtime"):
-            verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
+            verify_qemu_meson_link.verify_link(
+                ninja, "/toolchain/libclang_rt.ios.a", QEMU_EXPORTS
+            )
+
+    def test_link_verifier_rejects_missing_export_list_link_argument(self):
+        ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
+  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a
+'''
+        with self.assertRaisesRegex(SystemExit, "generated exported-symbol list"):
+            verify_qemu_meson_link.verify_link(
+                ninja, "/toolchain/libclang_rt.ios.a", QEMU_EXPORTS
+            )
+
+    def test_link_verifier_rejects_missing_required_bridge_export(self):
+        ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
+  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a -Wl,-exported_symbols_list,system/qemu-ld64.symbols
+'''
+        exports_without_setter = QEMU_EXPORTS.replace(
+            "_isteam_qemu_set_jit_callbacks\n", ""
+        )
+        with self.assertRaisesRegex(SystemExit, "required bridge exports"):
+            verify_qemu_meson_link.verify_link(
+                ninja, "/toolchain/libclang_rt.ios.a", exports_without_setter
+            )
+
+    def test_link_verifier_rejects_missing_lifecycle_export(self):
+        ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
+  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a -Wl,-exported_symbols_list,system/qemu-ld64.symbols
+'''
+        exports_without_cleanup = QEMU_EXPORTS.replace("_qemu_cleanup\n", "")
+        with self.assertRaisesRegex(SystemExit, "required bridge exports"):
+            verify_qemu_meson_link.verify_link(
+                ninja, "/toolchain/libclang_rt.ios.a", exports_without_cleanup
+            )
 
 
 if __name__ == "__main__":

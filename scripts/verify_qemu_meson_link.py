@@ -1,49 +1,77 @@
 #!/usr/bin/env python3
-"""Verify Objective-C stub linkage and iOS compiler-rt on QEMU's actual Meson link edge."""
+"""Fail early if UTM's QEMU target drops iOS linker inputs or required bridge exports."""
 from pathlib import Path
 import sys
 
+TARGET = "libqemu-x86_64-softmmu.dylib"
+EXPORT_LIST_ARGUMENT = "-Wl,-exported_symbols_list,system/qemu-ld64.symbols"
+REQUIRED_EXPORTS = (
+    "_qemu_init",
+    "_qemu_main_loop",
+    "_qemu_cleanup",
+    "_qemu_system_shutdown_request",
+    "_isteam_qemu_set_jit_callbacks",
+)
 
-def verify_link(ninja_text: str, runtime_path: str) -> None:
+
+def verify_link(ninja_text: str, runtime_path: str, export_symbols_text: str) -> None:
     lines = ninja_text.splitlines()
-    target_prefix = "build libqemu-x86_64-softmmu.dylib:"
-    start = next((i for i, line in enumerate(lines) if line.startswith(target_prefix)), None)
-    if start is None:
-        raise SystemExit("QEMU build.ninja has no libqemu-x86_64-softmmu.dylib link target")
+    starts = [index for index, line in enumerate(lines) if line.startswith(f"build {TARGET}:")]
+    if len(starts) != 1:
+        raise SystemExit(f"expected exactly one Ninja link edge for {TARGET}, found {len(starts)}")
 
-    block = [lines[start]]
-    for line in lines[start + 1:]:
-        if line and not line[0].isspace() and line.startswith(("build ", "rule ", "default ")):
+    edge_lines = [lines[starts[0]]]
+    for line in lines[starts[0] + 1:]:
+        if line.startswith(("build ", "rule ", "default ")):
             break
-        block.append(line)
+        edge_lines.append(line)
+    edge = "\n".join(edge_lines)
 
-    link_edge = "\n".join(block)
-    if "LINK_ARGS =" not in link_edge:
+    if "LINK_ARGS =" not in edge:
         raise SystemExit("QEMU Ninja target has no explicit LINK_ARGS entry to validate")
-    if "-Wl,-objc_stubs_fast" not in link_edge:
-        raise SystemExit("QEMU link configuration is missing Objective-C message-stub generation on the emulator link edge")
-    if "-lobjc" not in link_edge:
-        raise SystemExit("QEMU link configuration is missing the Objective-C runtime on the emulator link edge")
-    expected = "-Wl,-force_load," + runtime_path
-    if expected not in link_edge:
+    if "-Wl,-objc_stubs_fast" not in edge:
+        raise SystemExit("QEMU link edge is missing Objective-C message-stub generation")
+    if "-lobjc" not in edge:
+        raise SystemExit("QEMU link edge is missing the Objective-C runtime")
+    if f"-Wl,-force_load,{runtime_path}" not in edge:
+        raise SystemExit("emulator-specific link arguments are missing the exact iOS compiler-runtime force-load")
+    if EXPORT_LIST_ARGUMENT not in edge:
+        raise SystemExit("QEMU link edge is missing its generated exported-symbol list")
+
+    export_lines = [line.strip() for line in export_symbols_text.splitlines()]
+    invalid_exports = [symbol for symbol in REQUIRED_EXPORTS if export_lines.count(symbol) != 1]
+    if invalid_exports:
         raise SystemExit(
-            "QEMU link configuration is missing Apple's iOS compiler runtime. "
-            "The Meson emulator-specific link arguments did not reach "
-            "libqemu-x86_64-softmmu.dylib; refusing to compile with a known-broken link."
+            "generated QEMU exported-symbol list is missing or duplicates required bridge exports: "
+            + ", ".join(invalid_exports)
         )
+
+    print(
+        f"Verified {TARGET} Objective-C/runtime/compiler-rt link inputs and "
+        "all five QEMU runtime exports."
+    )
 
 
 def main() -> None:
     if len(sys.argv) != 3:
-        raise SystemExit("usage: verify_qemu_meson_link.py /path/to/build.ninja /path/to/libclang_rt.ios.a")
-    ninja = Path(sys.argv[1])
-    runtime = Path(sys.argv[2])
-    if not ninja.is_file():
-        raise SystemExit(f"QEMU Meson build file not found: {ninja}")
-    if not runtime.is_file():
-        raise SystemExit(f"Apple iOS compiler runtime not found: {runtime}")
-    verify_link(ninja.read_text(encoding="utf-8"), str(runtime))
-    print("Verified: QEMU's x86_64 system-emulator dylib link edge includes Objective-C stubs, libobjc, and Apple's iOS compiler runtime.")
+        raise SystemExit("usage: verify_qemu_meson_link.py <build.ninja> <libclang_rt.ios.a>")
+
+    ninja_path = Path(sys.argv[1])
+    runtime_path = Path(sys.argv[2])
+    if not ninja_path.is_file():
+        raise SystemExit(f"QEMU Ninja build file not found: {ninja_path}")
+    if not runtime_path.is_file():
+        raise SystemExit(f"iOS compiler runtime archive not found: {runtime_path}")
+
+    export_symbols_path = ninja_path.parent / "system" / "qemu-ld64.symbols"
+    if not export_symbols_path.is_file():
+        raise SystemExit(f"generated QEMU exported-symbol list not found: {export_symbols_path}")
+
+    verify_link(
+        ninja_path.read_text(encoding="utf-8"),
+        str(runtime_path),
+        export_symbols_path.read_text(encoding="utf-8"),
+    )
 
 
 if __name__ == "__main__":
