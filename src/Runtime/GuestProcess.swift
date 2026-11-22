@@ -30,7 +30,7 @@ final class GuestProcessManager {
             return .failure("The selected executable is not a readable regular file")
         }
         defer { try? handle.close() }
-        let data = (try? handle.read(upToCount: min(4096, size))) ?? Data()
+        let data = (try? handle.read(upToCount: min(4, size))) ?? Data()
         if data.count >= 2 && data[data.startIndex] == 0x4D && data[data.startIndex + 1] == 0x5A {
             return .success(.windowsPE)
         }

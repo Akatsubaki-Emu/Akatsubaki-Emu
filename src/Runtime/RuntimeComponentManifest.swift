@@ -76,11 +76,16 @@ enum RuntimeComponentVerifier {
         defer { stream.close() }
         var hasher = SHA256()
         var buffer = [UInt8](repeating: 0, count: 64 * 1024)
-        while stream.hasBytesAvailable {
-            let count = stream.read(&buffer, maxLength: buffer.count)
+        while true {
+            let count = buffer.withUnsafeMutableBufferPointer { bytes -> Int in
+                guard let base = bytes.baseAddress else { return -1 }
+                return stream.read(base, maxLength: bytes.count)
+            }
             if count < 0 { return .missing(componentID: component.id) }
             if count == 0 { break }
-            hasher.update(data: Data(buffer[0..<count]))
+            buffer.withUnsafeBufferPointer { bytes in
+                hasher.update(bufferPointer: UnsafeRawBufferPointer(start: bytes.baseAddress, count: count))
+            }
         }
         let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
         guard digest.caseInsensitiveCompare(component.sha256) == .orderedSame else {
