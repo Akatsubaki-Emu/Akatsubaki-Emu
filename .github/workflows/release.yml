@@ -5,7 +5,6 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - .github/workflows/release.yml
       - .github/workflows/blank.yml
       - .github/workflows/validate-ios-build.yml
       - .github/workflows/validate-repository.yml
