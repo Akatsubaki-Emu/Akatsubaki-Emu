@@ -916,8 +916,10 @@ required = {
         "__attribute__((visibility(\"default\")))",
         "isteam_jit_prepare_callback",
         "#include <mach/mach_vm.h>",
-        'dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")',
-        "jit_protocol_supported()",
+        "iSteamJITGetProtocolMode",
+        'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
+        "jit_protocol_mode < 0",
+        "jit_protocol_mode > 0",
         "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
     ],
     "iSteam/JIT26Protocol.c": [
