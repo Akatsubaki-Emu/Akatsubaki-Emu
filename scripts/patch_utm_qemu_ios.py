@@ -42,13 +42,22 @@ def patch_script(source: str) -> str:
     )
 
     qemu_flags = 'QEMU_PLATFORM_BUILD_FLAGS="--enable-shared-lib --disable-cocoa --disable-sdl --disable-coreaudio --disable-slirp-smbd --enable-ucontext --with-coroutine=libucontext $HVF_FLAGS $TCI_BUILD_FLAGS"'
-    qemu_flags_with_target = qemu_flags[:-1] + ' --target-list=x86_64-softmmu"'
-    source = replace_once(source, qemu_flags, qemu_flags_with_target, "iOS QEMU target-list configuration")
+    qemu_flags_with_mode = (
+        qemu_flags + "\n"
+        'case "$PLATFORM" in\n'
+        '    *-tci) ;; # TCI_BUILD_FLAGS already selects the threaded interpreter and guest targets.\n'
+        '    *) QEMU_PLATFORM_BUILD_FLAGS="$QEMU_PLATFORM_BUILD_FLAGS --target-list=x86_64-softmmu" ;;\n'
+        'esac'
+    )
+    source = replace_once(source, qemu_flags, qemu_flags_with_mode, "mode-aware iOS QEMU target-list configuration")
 
     qemu_build = 'build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS'
     qemu_patch_call = (
-        ': "${ISTEAM_QEMU_JIT_PATCHER:?ISTEAM_QEMU_JIT_PATCHER is required}"\n'
-        'python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"\n'
+        'case "$PLATFORM" in\n'
+        '    *-tci) echo "TCI mode: skipping the StikJIT executable-region patch." ;;\n'
+        '    *) : "${ISTEAM_QEMU_JIT_PATCHER:?ISTEAM_QEMU_JIT_PATCHER is required for JIT mode}"\n'
+        '       python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c" ;;\n'
+        'esac\n'
         ': "${ISTEAM_QEMU_MESON_PATCHER:?ISTEAM_QEMU_MESON_PATCHER is required}"\n'
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"\n'
         + qemu_build
@@ -76,6 +85,8 @@ def patch_script(source: str) -> str:
         'http://ftp.gnu.org/gnu/libiconv/*',
         'https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}',
         cross_override,
+        '*-tci) ;; # TCI_BUILD_FLAGS already selects the threaded interpreter and guest targets.',
+        "TCI mode: skipping the StikJIT executable-region patch.",
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"',
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
@@ -94,7 +105,7 @@ def main() -> None:
     source = path.read_text(encoding="utf-8")
     patched = patch_script(source)
     path.write_text(patched, encoding="utf-8")
-    print("Installed idempotent iOS QEMU JIT, Meson-link and pre-build verification hooks.")
+    print("Installed idempotent iOS QEMU JIT/TCI, Meson-link and pre-build verification hooks.")
 
 
 if __name__ == "__main__":
