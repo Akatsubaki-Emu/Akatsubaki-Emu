@@ -19,6 +19,11 @@ static ISTEAMJITDetachFunction isteam_jit_detach_callback;
 __attribute__((visibility("default")))
 void isteam_qemu_set_jit_callbacks(ISTEAMJITReadyFunction ready,
                                    ISTEAMJITPrepareFunction prepare,
+                                   ISTEAMJITDetachFunction detach);
+
+__attribute__((visibility("default")))
+void isteam_qemu_set_jit_callbacks(ISTEAMJITReadyFunction ready,
+                                   ISTEAMJITPrepareFunction prepare,
                                    ISTEAMJITDetachFunction detach)
 {
     isteam_jit_ready_callback = ready;
