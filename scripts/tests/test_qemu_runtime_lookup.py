@@ -88,6 +88,7 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertIn("QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: true)", registry)
         self.assertIn("QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: false)", registry)
         self.assertIn("The bundled QEMU TCI no-JIT library loads", registry)
+        self.assertIn('detail: "JIT probe: \\(jitReason) TCI probe: \\(tciReason)"', registry)
 
     def test_start_path_uses_loadability_preflight_before_native_start(self):
         root = Path(__file__).resolve().parents[2]
