@@ -16,6 +16,17 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertNotIn("malloc(argument_length + 1)", start)
         self.assertIn("g_argument_storage = argument_storage", start)
 
+    def test_qemu_init_uses_the_upstream_void_abi(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
+        fake = (root / "scripts" / "tests" / "fake_qemu_runtime.c").read_text(encoding="utf-8")
+        self.assertIn("typedef void (*qemu_init_fn)(int, char **);", source)
+        self.assertIn("g_qemu_init(g_argc, g_argv);", source)
+        self.assertNotIn("init_result", source)
+        self.assertNotIn("environ", source)
+        self.assertIn("void qemu_init(int argc, char *argv[])", fake)
+        self.assertIn("poison_nonzero_return_register();", fake)
+
     def test_jit_callback_export_is_required_during_validation_and_start(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")

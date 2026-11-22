@@ -23,14 +23,23 @@ static void pause_briefly(void) {
     nanosleep(&delay, NULL);
 }
 
-int qemu_init(int argc, const char *argv[], const char *envp[]) {
+static void poison_nonzero_return_register(void) {
+#if defined(__aarch64__)
+    __asm__ volatile("mov x0, #1" ::: "x0");
+#elif defined(__x86_64__)
+    __asm__ volatile("mov $1, %%eax" ::: "eax");
+#else
+#error "The native bridge ABI regression test requires arm64 or x86_64."
+#endif
+}
+
+void qemu_init(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
-    (void)envp;
     atomic_fetch_add(&init_count, 1);
     // Keep initialization open long enough for the competing start caller.
     for (int i = 0; i < 20; ++i) pause_briefly();
-    return 0;
+    poison_nonzero_return_register();
 }
 
 void qemu_main_loop(void) {
