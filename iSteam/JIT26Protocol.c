@@ -20,7 +20,6 @@
  * permission from that mapping. Keep this exported hook as a no-op so older
  * QEMU runtimes retain their callback ABI without detaching the debugger.
  */
-void iSteamJITDetach(void) {}
 void iSteamJITDetach(void) {
     /* Intentionally empty: keep TXM executable mappings valid. */
 }
