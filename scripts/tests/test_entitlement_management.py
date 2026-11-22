@@ -54,6 +54,7 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("AnisetteDataHelper.shared.url = URL(string: anisetteServerURL)", shared)
         self.assertIn("class Keychain", keychain)
         self.assertIn("class AnisetteDataHelper", anisette)
+        self.assertIn("import Security", anisette)
         self.assertIn("_ = DataManager.shared.model", self.view)
         self.assertLess(self.view.index("_ = DataManager.shared.model"), self.view.index("AnisetteDataHelper.shared.getAnisetteData()"))
 

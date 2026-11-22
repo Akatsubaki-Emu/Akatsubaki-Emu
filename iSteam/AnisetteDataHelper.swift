@@ -8,6 +8,7 @@
 
 import Foundation
 import CryptoKit
+import Security
 import StosSign_API
 import StosSign_Auth
 import StosSign_Common
