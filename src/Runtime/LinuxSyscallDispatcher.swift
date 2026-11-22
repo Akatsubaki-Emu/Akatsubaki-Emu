@@ -78,16 +78,25 @@ final class LinuxSyscallDispatcher {
                 for scalar in text.unicodeScalars {
                     let scalarByteCount = scalar.utf8.count
                     if chunkBytes + scalarByteCount > 4096 {
-                        log.write("[guest stdout] " + chunk)
+                        if descriptor == 1 {
+                            log.write("[guest stdout] " + chunk)
+                        } else {
+                            log.write("[guest stderr] " + chunk)
+                        }
                         chunk.removeAll(keepingCapacity: true)
                         chunkBytes = 0
                     }
                     chunk.unicodeScalars.append(scalar)
                     chunkBytes += scalarByteCount
                 }
-                if !chunk.isEmpty { log.write("[guest stdout] " + chunk) }
+                if descriptor == 1 {
+                    if !chunk.isEmpty { log.write("[guest stdout] " + chunk) }
+                } else if !chunk.isEmpty {
+                    log.write("[guest stderr] " + chunk)
+                }
             } else if !bytes.isEmpty {
-                log.write("[guest stdout] <\(bytes.count) non-UTF8 bytes>")
+                let stream = descriptor == 2 ? "stderr" : "stdout"
+                log.write("[guest \(stream)] <\(bytes.count) non-UTF8 bytes>")
             }
             return .returned(requested)
         case 3:

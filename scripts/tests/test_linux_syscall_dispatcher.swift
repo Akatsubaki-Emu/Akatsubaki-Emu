@@ -169,6 +169,18 @@ struct LinuxSyscallDispatcherTests {
         precondition(unicodeWritten == UInt64(unicodeOutput.utf8.count))
         precondition(outputLog.messages.suffix(3).map { $0.replacingOccurrences(of: "[guest stdout] ", with: "") }.joined() == unicodeOutput)
 
+        let stderrLog = EmulationLog()
+        let stderrDispatcher = LinuxSyscallDispatcher(memory: memory, log: stderrLog)
+        try stderrDispatcher.configure(programBreak: 0x41000, stackBase: 0x3F0000)
+        let stderrOutput = Data("stderr output".utf8)
+        precondition(memory.write(stderrOutput, offset: 0x3F3000))
+        let stderrWrite = stderrDispatcher.dispatch(
+            number: 1, arguments: [2, 0x3F3000, UInt64(stderrOutput.count), 0, 0, 0]
+        )!
+        guard case .returned(let stderrWritten) = stderrWrite else { preconditionFailure() }
+        precondition(stderrWritten == UInt64(stderrOutput.count))
+        precondition(stderrLog.messages == ["[guest stderr] stderr output"])
+
         let invalidRandomFlags = dispatcher.dispatch(number: 318, arguments: [0x40800, 8, 8, 0, 0, 0])!
         guard case .returned(let invalidRandomFlagsValue) = invalidRandomFlags else { preconditionFailure() }
         precondition(invalidRandomFlagsValue == UInt64(bitPattern: Int64(-22)))
