@@ -10,9 +10,11 @@ final class X86_64Interpreter: GuestCPUBackend {
     private let syscallDispatcher: LinuxSyscallDispatcher
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
-    private var instructionWindow = [UInt8](repeating: 0, count: 15)
+    private var instructionWindow = [UInt8](repeating: 0, count: 64)
     private var instructionWindowLength = 0
     private var instructionWindowCursor = 0
+    private var instructionWindowAddress: UInt64 = 0
+    private var instructionWindowGeneration: UInt64 = .max
     private var flags: UInt64 = 0x2
     private var fsBase: UInt64 = 0
     private var gsBase: UInt64 = 0
@@ -39,6 +41,9 @@ final class X86_64Interpreter: GuestCPUBackend {
         registers[4] = memory.size >= 8 ? memory.size - 8 : 0 // RSP
         rip = entryPoint
         instructionCount = 0
+        instructionWindowLength = 0
+        instructionWindowCursor = 0
+        instructionWindowGeneration = .max
         halted = false
         stopLock.lock()
         stopRequested = false
@@ -943,6 +948,20 @@ final class X86_64Interpreter: GuestCPUBackend {
     }
 
     private func prepareInstructionWindow(at address: UInt64) {
+        let generation = memory.mutationGeneration
+        if generation == instructionWindowGeneration,
+           address >= instructionWindowAddress {
+            let cachedOffset = address - instructionWindowAddress
+            if cachedOffset < UInt64(instructionWindowLength) {
+                instructionWindowCursor = Int(cachedOffset)
+                return
+            }
+        }
+
+        // Capture the version before copying. If a writer races the copy, the
+        // next instruction observes the new generation and refreshes safely.
+        instructionWindowAddress = address
+        instructionWindowGeneration = generation
         instructionWindowLength = memory.readPrefix(offset: address, into: &instructionWindow) ?? 0
         instructionWindowCursor = 0
     }

@@ -34,6 +34,7 @@ final class GuestMemory {
     private(set) var readByteCalls = 0
     private(set) var readUInt16Calls = 0
     private(set) var readPrefixCalls = 0
+    private(set) var mutationGeneration: UInt64 = 0
 
     init(size: UInt64) {
         self.size = size
@@ -56,6 +57,7 @@ final class GuestMemory {
     func writeByte(_ value: UInt8, offset: UInt64) -> Bool {
         guard offset < size else { return false }
         bytes[Int(offset)] = value
+        mutationGeneration &+= 1
         return true
     }
 
@@ -95,12 +97,14 @@ final class GuestMemory {
         for shift in 0..<4 {
             bytes[index + shift] = UInt8(truncatingIfNeeded: value >> (shift * 8))
         }
+        mutationGeneration &+= 1
         return true
     }
 
     func zero(offset: UInt64, length: UInt64) -> Bool {
         guard offset <= size, length <= size - offset, length <= UInt64(Int.max) else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset + length), with: repeatElement(0, count: Int(length)))
+        if length > 0 { mutationGeneration &+= 1 }
         return true
     }
 
@@ -111,6 +115,7 @@ final class GuestMemory {
             bytes[start + index] = UInt8(truncatingIfNeeded: first >> (index * 8))
             bytes[start + 8 + index] = UInt8(truncatingIfNeeded: second >> (index * 8))
         }
+        mutationGeneration &+= 1
         return true
     }
 
@@ -120,6 +125,7 @@ final class GuestMemory {
         for shift in 0..<8 {
             bytes[index + shift] = UInt8(truncatingIfNeeded: value >> (shift * 8))
         }
+        mutationGeneration &+= 1
         return true
     }
 
@@ -131,6 +137,7 @@ final class GuestMemory {
     func write(_ data: Data, offset: UInt64) -> Bool {
         guard offset <= size, UInt64(data.count) <= size - offset else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset) + data.count, with: data)
+        if !data.isEmpty { mutationGeneration &+= 1 }
         return true
     }
 }
@@ -825,13 +832,15 @@ struct InterpreterTests {
         try unsupported.reset(entryPoint: 0)
         let unsupportedExit = try unsupported.run(maxInstructions: 1)
         precondition(unsupportedExit == .unsupportedInstruction(address: 0))
-        let windowMemory = GuestMemory(size: 64)
-        precondition(windowMemory.write(Data([0x90, 0x90, 0xF4]), offset: 0x20))
+        let windowMemory = GuestMemory(size: 128)
+        let sequentialWindowProgram = [UInt8](repeating: 0x90, count: 40) + [0xF4]
+        precondition(windowMemory.write(Data(sequentialWindowProgram), offset: 0x20))
         let windowInterpreter = X86_64Interpreter(memory: windowMemory)
         try windowInterpreter.reset(entryPoint: 0x20)
-        let windowExit = try windowInterpreter.run(maxInstructions: 8)
+        let windowExit = try windowInterpreter.run(maxInstructions: 64)
         precondition(windowExit == .halted)
-        precondition(windowMemory.readPrefixCalls == 3)
+        precondition(windowMemory.readPrefixCalls == 1)
+        precondition(windowInterpreter.instructionCount == 41)
         precondition(windowMemory.readByteCalls == 0)
 
         let boundaryMemory = GuestMemory(size: 8192)
@@ -860,7 +869,18 @@ struct InterpreterTests {
         let selfModifyingExit = try selfModifyingInterpreter.run(maxInstructions: 8)
         precondition(selfModifyingExit == .halted)
         precondition(selfModifyingMemory.readByte(offset: 11) == 0xF4)
-        precondition(selfModifyingMemory.readPrefixCalls == 3)
+        precondition(selfModifyingMemory.readPrefixCalls == 2)
+
+        let externalCodeMutationMemory = GuestMemory(size: 64)
+        precondition(externalCodeMutationMemory.write(Data([0x90, 0x90]), offset: 0))
+        let externalCodeMutation = X86_64Interpreter(memory: externalCodeMutationMemory)
+        try externalCodeMutation.reset(entryPoint: 0)
+        let firstMutationBatch = try externalCodeMutation.run(maxInstructions: 1)
+        precondition(firstMutationBatch == .instructionLimit)
+        precondition(externalCodeMutationMemory.writeByte(0xF4, offset: 1))
+        let secondMutationBatch = try externalCodeMutation.run(maxInstructions: 1)
+        precondition(secondMutationBatch == .halted)
+        precondition(externalCodeMutationMemory.readPrefixCalls == 2)
 
         let zeroExtendMemory = GuestMemory(size: 256)
         precondition(zeroExtendMemory.write(Data([0x0F, 0xB7, 0x05, 0x79, 0x00, 0x00, 0x00, 0xF4]), offset: 0))
