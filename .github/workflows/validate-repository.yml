@@ -173,7 +173,7 @@ jobs:
               "if-no-files-found: error",
               "validate-release-channel:",
               "needs: validate-release-channel",
-              "target_commitish: ${{ github.sha }}",
+              "target_commitish: " + "$" + "{{ github.sha }}",
               "EXPECTED_BUNDLE=\"com.xthrx.isteam.visionos.nightly\"",
               "github.ref != 'refs/heads/main'",
 
