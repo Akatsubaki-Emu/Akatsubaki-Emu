@@ -10,8 +10,8 @@
 2. `JITCoordinator` checks the running process's actual `get-task-allow` entitlement using `SecTaskCreateFromSelf` and `SecTaskCopyValueForEntitlement` resolved from Security at runtime. If the entitlement is missing, the VM is not started.
 3. The coordinator opens LocalDevVPN with `localdevvpn://enable?scheme=<bundle-id>`. The bundle ID is also registered as Akatsubaki's callback URL scheme, so stable and nightly builds can return to their own app instance.
 4. LocalDevVPN submits its tunnel-start request and calls back to Akatsubaki after its own one-second delay. Akatsubaki waits a further two seconds, then opens StikDebug with the current bundle identifier and process ID using `stikdebug://enable-jit`.
-5. On iOS 26+ devices with TXM/SPTM, the StikDebug request includes `script-name=universal.js`. The QEMU allocator selects the breakpoint-based executable-region protocol only when the host's hardware check reports TXM; non-TXM devices omit the script and retain QEMU's normal Darwin split-W^X allocator.
-6. When Akatsubaki becomes active again, it polls the process debugger/JIT status. QEMU starts only after that state is confirmed. If the request fails or times out, QEMU remains stopped.
+5. On iOS 26+ devices with TXM/SPTM, the StikDebug request includes `script-name=universal.js`. The QEMU allocator selects the breakpoint-based executable-region protocol when the host detects TXM. The host checks StikJIT's IOKit `IODeviceTree:/chosen/memory-map` property keys; an explicit absence selects QEMU's normal Darwin split-W^X allocator, while an unavailable or unknown query conservatively selects the breakpoint protocol.
+6. The wait-for-debugger method begins polling immediately while Akatsubaki is foregrounded; after external helper handoff, polling resumes when Akatsubaki becomes active again. QEMU starts only after that state is confirmed. If the request fails or times out, QEMU remains stopped.
 7. During QEMU initialization, the existing native bridge registers `iSteamJITPrepareRegion` and `iSteamJITDetach` callbacks. The QEMU allocator uses those breakpoints to prepare executable regions and detach at the appropriate point; the bridge's required `isteam_qemu_set_jit_callbacks` export remains part of the runtime contract.
 
 ## First-time setup
@@ -24,7 +24,7 @@
 - Sign Akatsubaki with a profile that preserves `get-task-allow`.
 - When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
 
-The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM hardware classification independently follows the public model/version rules in [StikDebug's ProcessInfo+TXM implementation](https://github.com/StikDebug/StikDebug/blob/main/StikDebug/Support/ProcessInfo+TXM.swift).
+The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM detection follows StikJIT's IOKit memory-map key query. If the property cannot be read or its type is unexpected, the host conservatively selects the breakpoint protocol rather than risking the normal allocator on TXM hardware.
 The **Increased Memory Limit** capability is separate from `get-task-allow`. Requesting that memory capability does not grant `get-task-allow` or make the process debuggable; the development provisioning profile must still provide `get-task-allow=true`.
 
 The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user.
@@ -47,7 +47,7 @@ The helper apps are not embedded in Akatsubaki. They remain external dependencie
 - `iSteam/SettingsViewController.swift` — describes the automatic helper sequence.
 - `project.yml` — links Security for the stable and nightly iOS targets.
 - `scripts/patch_qemu_stikjit_ios.py` — selects the breakpoint allocator only on TXM devices; non-TXM iOS 26 devices retain the upstream split-W^X allocator.
-- `scripts/tests/test_jit_protocol.py` — source-contract regression coverage for TXM model detection, live-debugger gating, and QEMU allocator routing.
+- `scripts/tests/test_jit_protocol.py` — source-contract regression coverage for the IOKit TXM query, conservative unknown handling, live-debugger gating, and QEMU allocator routing.
 - `scripts/tests/test_jit_coordinator.py` — source-contract regression coverage.
 
 ## Validation status

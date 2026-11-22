@@ -166,6 +166,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("iSteamJITPrepareRegion", once)
         self.assertIn("iSteamJITDetach", once)
         self.assertIn("__builtin_available(iOS 26.0, *)", once)
+        self.assertIn("#include <mach/mach_vm.h>", once)
         self.assertIn("mach_vm_remap(mach_task_self(), &buf_rw", once)
         self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
         with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
