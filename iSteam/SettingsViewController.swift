@@ -92,10 +92,18 @@ final class SettingsViewController: UITableViewController {
         case 5:
             if indexPath.row < jitMethods.count {
                 let method = jitMethods[indexPath.row]
+                let unavailableOnTXM = method == .waitForDebugger && JITCoordinator.shared.isJITProtocolSupported
                 c.text = method.rawValue
-                c.secondaryText = method == .stikDebug
-                    ? "Automatically start LocalDevVPN, then request JIT for this process with StikDebug."
-                    : "Wait for a compatible debugger to attach."
+                c.secondaryText = unavailableOnTXM
+                    ? "Unavailable on TXM: StikDebug must load universal.js to complete the breakpoint protocol."
+                    : (method == .stikDebug
+                        ? "Automatically start LocalDevVPN, then request JIT for this process with StikDebug."
+                        : "Wait for a compatible debugger to attach.")
+                if unavailableOnTXM {
+                    c.textProperties.color = .tertiaryLabel
+                    c.secondaryTextProperties.color = .tertiaryLabel
+                }
+                cell.isUserInteractionEnabled = !unavailableOnTXM
                 cell.accessoryType = JITCoordinator.shared.selectedMethod == method ? .checkmark : .none
             } else {
                 c.text = "Request JIT"
@@ -185,7 +193,9 @@ final class SettingsViewController: UITableViewController {
             tableView.reloadSections(IndexSet(integer: 4), with: .automatic)
         case 5:
             if indexPath.row < jitMethods.count {
-                JITCoordinator.shared.selectedMethod = jitMethods[indexPath.row]
+                let method = jitMethods[indexPath.row]
+                guard !(method == .waitForDebugger && JITCoordinator.shared.isJITProtocolSupported) else { return }
+                JITCoordinator.shared.selectedMethod = method
                 tableView.reloadSections(IndexSet(integer: 5), with: .automatic)
             } else {
                 JITCoordinator.shared.requestJIT(from: self)

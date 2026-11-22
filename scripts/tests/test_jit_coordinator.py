@@ -139,5 +139,24 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("presentationController = controller", rejected)
         self.assertNotIn("onJITFailure = onFailure", rejected)
 
+    def test_txm_requires_the_app_initiated_universal_script_handoff(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("guard isQEMUProtocolAvailable else", source)
+        self.assertIn("guard !isQEMUJITReady else", source)
+        self.assertIn("guard !iSteamJITIsDebuggerAttached() else", source)
+        self.assertIn("iSteamJITSetTXMScriptReady(false)", source)
+        self.assertIn("if isJITProtocolSupported && iSteamJITIsDebuggerAttached()", source)
+        self.assertIn("iSteamJITSetTXMScriptReady(true)", source)
+        self.assertIn("return isJITProtocolSupported && stored == .waitForDebugger ? .stikDebug : stored", source)
+
+    def test_wait_for_debugger_is_disabled_on_txm(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "SettingsViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("unavailableOnTXM", source)
+        self.assertIn("StikDebug must load universal.js", source)
+        self.assertIn("guard !(method == .waitForDebugger && JITCoordinator.shared.isJITProtocolSupported) else { return }", source)
+
+
 if __name__ == "__main__":
     unittest.main()

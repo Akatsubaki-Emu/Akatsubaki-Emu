@@ -768,7 +768,8 @@ required = {
         "maximumGuestBytes: UInt64 = 16 * 1024 * 1024 * 1024",
         "guard self.memory.isAvailable",
         "case memoryUnavailable",
-        "backendNotInstalled(configuration.architecture).localizedDescription",
+        "let error = GuestEngineError.backendNotInstalled(configuration.architecture)",
+        "initializationError = error",
         "withExecutionLock",
         "hasLoadedImage",
         "activeCPULock",
@@ -888,11 +889,20 @@ required = {
     ],
     "iSteam/JIT26Protocol.c": [
         "#if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR",
-        "iSteamJITIsSupported",
-        "IORegistryEntryFromPath(",
-        '"IODeviceTree:/chosen/memory-map"',
+        '#include "JITHardwareModel.h"',
+        "uname(&systemInfo)",
+        "iSteamJITHardwareModelTXMModeForOS",
         "ISTEAM_JIT_PROTOCOL_UNKNOWN",
         "iSteamJITGetProtocolMode",
+        "atomic_load_explicit(&g_txm_script_ready, memory_order_acquire)",
+        "iSteamJITPrepareRegionIfReady",
+    ],
+    "iSteam/JITHardwareModel.h": [
+        "iSteamJITHardwareModelTXMModeForOS",
+        '"iPad8,11"',
+        '"iPad8,12"',
+        "14.5",
+        "14.2",
     ],
     "src/Core/EmulationLog.swift": [
         "private let maximumLogBytes: UInt64 = 5 * 1024 * 1024",
@@ -1011,7 +1021,6 @@ required = {
         "iSteamJITGetProtocolMode",
     ],
     "project.yml": [
-        "- sdk: IOKit.framework",
         "-Wl,-exported_symbol,_iSteamJITGetProtocolMode",
     ],
     "scripts/patch_utm_qemu_ios.py": [

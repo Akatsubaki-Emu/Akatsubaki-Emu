@@ -36,7 +36,7 @@ The standalone validator requires Apple tooling (`file`, `lipo`, `nm`, `vtool`, 
 
 ## JIT requirements
 
-On physical iOS 17.4 and later, QEMU TCG startup requires an active StikDebug debugger/JIT session and the app's `get-task-allow` entitlement. On supported iOS 26+ TXM devices, the patched TCG allocator uses the StikDebug executable-region protocol. Simulator, tvOS, and visionOS builds do not use this physical-iOS JIT path.
+On physical iOS 26 and later, QEMU TCG startup requires the app's `get-task-allow` entitlement and a recognised executable-memory protocol. Standard devices use the normal split-W^X allocator; TXM devices require the app-initiated StikDebug universal.js handoff and live debugger state. Simulator, tvOS, and visionOS builds do not use this physical-iOS JIT path.
 
 ## Firmware and writable disks
 
@@ -62,4 +62,4 @@ A successful source check or artifact inspection is not evidence that a physical
 
 ## JIT protocol detection
 
-Physical iOS 26+ devices are classified through the same IOKit memory-map TXM query used by StikJIT. The host exposes UNKNOWN, STANDARD, and STIKDEBUG modes. UNKNOWN fails closed in the launch coordinator and QEMU patcher. STANDARD uses QEMU's normal split-WX allocator; STIKDEBUG uses the exported callback setter and the StikDebug executable-region protocol.
+Physical iOS 26+ devices are classified using StikDebug's hardware-identifier rules: iOS 26 uses the iPhone 14,2 and iPad 14,5 thresholds; iOS 27+ selects TXM except for iPad8,11 and iPad8,12. The host exposes UNKNOWN, STANDARD, and STIKDEBUG modes. UNKNOWN fails closed in the launch coordinator and QEMU patcher. STANDARD uses QEMU's normal split-WX allocator; STIKDEBUG requires the app-initiated universal.js handoff and guarded executable-region callback.
