@@ -70,5 +70,21 @@ class EmbeddedStikJITIntegrationTests(unittest.TestCase):
             self.assertIn("/Applications/Xcode_27.1.app", workflow)
             self.assertIn('!= "27.1"', workflow)
 
+    def test_builtin_stikjit_becomes_default_after_pairing_file_import(self):
+        coordinator = self.read("iSteam/JITCoordinator.swift")
+        settings = self.read("iSteam/SettingsViewController.swift")
+        self.assertIn(
+            "return isBuiltInStikJITAvailable && hasPairingFile ? .builtInStikJIT : .stikDebug",
+            coordinator,
+        )
+        self.assertIn(
+            "Import a StikJIT pairing file before selecting this method.",
+            settings,
+        )
+        self.assertIn(
+            "Application Support/StikJIT/pairingFile.plist",
+            settings,
+        )
+
 if __name__ == "__main__":
     unittest.main()

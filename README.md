@@ -63,7 +63,7 @@ The source includes separate entries for iOS Main, iOS Nightly, tvOS Main, and t
 - Research into app-container and binary-execution approaches used by projects such as LiveContainer.
 - Native DroidDeck-inspired library backup/restore, per-game profile defaults, artwork caching, local compatibility records, and runtime component integrity verification.
 
-These are works in progress. Importing a file or inspecting its metadata does not execute it, and a storage prototype is not a complete virtual storage controller. JIT behavior depends on iOS version, device, signing, entitlements, and supported tooling. Akatsubaki Emu requests JIT only for its QEMU VM process through the LocalDevVPN/StikDebug flow; it does not enable JIT for unrelated apps.
+These are works in progress. Importing a file or inspecting its metadata does not execute it, and a storage prototype is not a complete virtual storage controller. JIT behavior depends on iOS version, device, signing, entitlements, and supported tooling. On iOS 26+ physical devices, Akatsubaki can run StikJIT in an embedded ExtensionKit helper; the separate StikDebug app remains an option for older devices and LiveContainer. Both JIT paths use separately installed LocalDevVPN, whose packet-tunnel provider requires Apple's Network Extension entitlement and user approval. GetMoreRam-derived entitlement management is exposed natively in Settings. JIT is scoped to Akatsubaki's QEMU VM process, not unrelated apps. See [JIT activation](docs/JIT_ACTIVATION.md).
 
 ### tvOS app
 

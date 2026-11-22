@@ -93,19 +93,23 @@ final class SettingsViewController: UITableViewController {
                 case .stikDebug:
                     c.secondaryText = "Start LocalDevVPN, then request JIT from the separate StikDebug app."
                 case .builtInStikJIT:
-                    if JITCoordinator.shared.isBuiltInStikJITAvailable {
-                        c.secondaryText = "Run the embedded StikJIT helper. LocalDevVPN must still be installed and approved."
-                    } else {
+                    if !JITCoordinator.shared.isBuiltInStikJITAvailable {
                         c.secondaryText = "Requires iOS 26+ on a physical device; unavailable inside LiveContainer."
                         cell.isUserInteractionEnabled = false
                         c.textProperties.color = .secondaryLabel
+                    } else if !JITCoordinator.shared.hasPairingFile {
+                        c.secondaryText = "Import a StikJIT pairing file before selecting this method."
+                        cell.isUserInteractionEnabled = false
+                        c.textProperties.color = .secondaryLabel
+                    } else {
+                        c.secondaryText = "Run the embedded StikJIT helper. LocalDevVPN must still be installed and approved."
                     }
                 }
                 cell.accessoryType = JITCoordinator.shared.selectedMethod == method ? .checkmark : .none
             } else if indexPath.row == jitMethods.count {
                 c.text = "Import StikJIT pairing file"
                 c.secondaryText = JITCoordinator.shared.hasPairingFile
-                    ? "Pairing file imported · Documents/StikJIT/pairingFile.plist"
+                    ? "Pairing file imported · Application Support/StikJIT/pairingFile.plist"
                     : "Required for Built-in StikJIT · choose a .plist file"
                 cell.accessoryType = .disclosureIndicator
             } else {
@@ -191,7 +195,7 @@ final class SettingsViewController: UITableViewController {
         case 5:
             if indexPath.row < jitMethods.count {
                 let method = jitMethods[indexPath.row]
-                guard method != .builtInStikJIT || JITCoordinator.shared.isBuiltInStikJITAvailable else { return }
+                guard method != .builtInStikJIT || (JITCoordinator.shared.isBuiltInStikJITAvailable && JITCoordinator.shared.hasPairingFile) else { return }
                 JITCoordinator.shared.selectedMethod = method
                 tableView.reloadSections(IndexSet(integer: 5), with: .automatic)
             } else if indexPath.row == jitMethods.count {

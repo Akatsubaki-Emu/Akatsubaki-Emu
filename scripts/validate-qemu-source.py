@@ -96,6 +96,7 @@ required = {
         "host = \"enable-jit\"",
         "script-name",
         "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)",
+        "return isBuiltInStikJITAvailable && hasPairingFile ? .builtInStikJIT : .stikDebug",
     ],
     "scripts/patch_qemu_stikjit_ios.py": [
         "iSteamJITGetProtocolMode",

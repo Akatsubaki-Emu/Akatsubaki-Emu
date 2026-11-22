@@ -27,7 +27,11 @@ final class JITCoordinator: NSObject, UIDocumentPickerDelegate {
 
     var selectedMethod: JITMethod {
         get {
-            JITMethod(rawValue: UserDefaults.standard.string(forKey: "iSteam.jitMethod") ?? "") ?? .stikDebug
+            if let stored = UserDefaults.standard.string(forKey: "iSteam.jitMethod"),
+               let method = JITMethod(rawValue: stored) {
+                return method
+            }
+            return isBuiltInStikJITAvailable && hasPairingFile ? .builtInStikJIT : .stikDebug
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: "iSteam.jitMethod")
