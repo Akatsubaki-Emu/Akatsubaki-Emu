@@ -73,8 +73,12 @@ jobs:
                 exit 1
               fi
 
-              delay=$((60 * (2 ** (attempt - 1)))
-              if [ "$delay" -gt 300 ]; then delay=300; fi
+              case "$attempt" in
+                1) delay=60 ;;
+                2) delay=120 ;;
+                3) delay=240 ;;
+                *) delay=300 ;;
+              esac
               echo "::warning::GitLab rate limit encountered; retrying in ${delay}s (attempt $((attempt + 1))/5)."
               sleep "$delay"
 
