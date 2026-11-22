@@ -276,6 +276,8 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertLess(load.index("memory.clear()"), load.index("ELF64Loader().load"))
         self.assertLess(load.index("try cpu.reset(entryPoint: 0)"), load.index("ELF64Loader().load"))
         self.assertIn("memory.clear()", load.split("} catch {", 1)[1])
+        self.assertIn("_ = try? cpu.reset(entryPoint: 0)", load.split("} catch {", 1)[1])
+        self.assertNotIn("cpu?.reset(entryPoint: 0)", load.split("} catch {", 1)[1])
 
 
     def test_linux_syscall_write_splits_large_utf8_output_without_truncation(self):

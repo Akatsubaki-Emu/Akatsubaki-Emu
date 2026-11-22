@@ -346,7 +346,7 @@ required = {
         "case 0x70...0x7F:",
         "second >= 0x80 && second <= 0x8F",
         "case 0xF6: // TEST, NOT and NEG r/m8",
-        'self.assertIn("case 0xFE: // INC and DEC r/m8", interpreter)',
+        "case 0xFE: // INC and DEC r/m8",
         "second >= 0x40 && second <= 0x4F",
         "second >= 0x90 && second <= 0x9F",
         "second == 0x1F",
@@ -646,7 +646,7 @@ required = {
         "state == .configured",
         "executionLock.lock()",
         "memory.clear()",
-        "_ = try? cpu?.reset(entryPoint: 0)",
+        "_ = try? cpu.reset(entryPoint: 0)",
     ],
     "src/Steam/GameArtworkStore.swift": [
         "CGImageSourceGetCount(image) <= 200",

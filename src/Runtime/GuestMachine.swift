@@ -217,7 +217,7 @@ final class GuestMachine {
                 return image
             } catch {
                 memory.clear()
-                _ = try? cpu?.reset(entryPoint: 0)
+                _ = try? cpu.reset(entryPoint: 0)
                 state = .failed(error.localizedDescription)
                 throw error
             }
