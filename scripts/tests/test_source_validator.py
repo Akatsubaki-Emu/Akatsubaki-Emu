@@ -616,5 +616,25 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertLess(import_flow.index("var current = GameStore.shared.games"), import_flow.index("for profile in backup.profiles"))
         self.assertLess(import_flow.index("let validGameIDs = existingIDs.union(seen)"), import_flow.index("for profile in backup.profiles"))
 
+    def test_release_tags_are_moved_after_successful_asset_publication(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        publish = workflow.index("- name: Publish combined release")
+        move = workflow.index("- name: Update rolling channel tag")
+        self.assertLess(publish, move)
+        update = workflow[move:]
+        self.assertIn('git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"', update)
+        self.assertIn('git push --force origin "refs/tags/$RELEASE_CHANNEL"', update)
+        self.assertIn("contents: write", workflow)
+
+    def test_mirror_reconciliation_only_changes_do_not_trigger_release_builds(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        freshness = (root / "scripts" / "check-build-freshness.sh").read_text(encoding="utf-8")
+        ignored_path = ".github/workflows/reconcile-gitlab-main.yml"
+        paths_ignore = workflow.split("paths-ignore:", 1)[1].split("schedule:", 1)[0]
+        self.assertIn(ignored_path, paths_ignore)
+        self.assertIn(ignored_path, freshness)
+
 if __name__ == "__main__":
     unittest.main()
