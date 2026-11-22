@@ -1,0 +1,50 @@
+name: Kenran Butō AOT validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/Runtime/X86_64AOTTranslator.swift"
+      - "src/Runtime/KenranButoAOTCompiler.swift"
+      - "src/Performance/TranslationCache.swift"
+      - "scripts/tests/test_kenran_buto_aot_*.swift"
+      - ".github/workflows/validate-kenran-buto-aot.yml"
+  pull_request:
+    paths:
+      - "src/Runtime/X86_64AOTTranslator.swift"
+      - "src/Runtime/KenranButoAOTCompiler.swift"
+      - "src/Performance/TranslationCache.swift"
+      - "scripts/tests/test_kenran_buto_aot_*.swift"
+      - ".github/workflows/validate-kenran-buto-aot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  translator:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Compile and test x86-64 to AArch64 decoder
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/X86_64AOTTranslator.swift \
+            scripts/tests/test_kenran_buto_aot_translator.swift \
+            -o "$RUNNER_TEMP/test-kenran-buto-aot-translator"
+          "$RUNNER_TEMP/test-kenran-buto-aot-translator"
+      - name: Compile and test translation-cache integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Core/EmulationLog.swift \
+            src/Performance/TranslationCache.swift \
+            src/Runtime/X86_64AOTTranslator.swift \
+            src/Runtime/KenranButoAOTCompiler.swift \
+            scripts/tests/test_kenran_buto_aot_cache.swift \
+            -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
+          "$RUNNER_TEMP/test-kenran-buto-aot-cache"
