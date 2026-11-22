@@ -47,9 +47,15 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         validator = (root / "scripts" / "validate-qemu-source.py").read_text(encoding="utf-8")
         machine = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
-        self.assertIn('"GuestEngineError.backendNotInstalled(configuration.architecture)"', validator)
+        self.assertIn('"private(set) var initializationError: GuestEngineError?"', validator)
+        self.assertIn('"let error = GuestEngineError.backendNotInstalled(configuration.architecture)"', validator)
+        self.assertIn('"self.initializationError = error"', validator)
         self.assertIn('"state = .failed(error.localizedDescription)"', validator)
+        self.assertIn('"throw error"', validator)
+        self.assertIn('"initializationError = nil"', validator)
+        self.assertIn('"scripts/tests/test_linux_elf_runtime_initialization.py": [', validator)
         self.assertIn("let error = GuestEngineError.backendNotInstalled(configuration.architecture)", machine)
+        self.assertIn("self.initializationError = error", machine)
         self.assertIn("self.state = .failed(error.localizedDescription)", machine)
         self.assertNotIn("backendNotInstalled(configuration.architecture).localizedDescription", validator)
 
