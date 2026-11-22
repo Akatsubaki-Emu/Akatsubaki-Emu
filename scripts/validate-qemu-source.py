@@ -1440,6 +1440,42 @@ for token in ("endbr64Memory", "malformedEndbr64Memory", "truncatedEndbr64Memory
         print(f"x86-64 interpreter tests: missing ENDBR64 prefix regression {token!r}", file=sys.stderr)
         failed = True
 
+
+# Guest page-permission and execute-fetch contract.
+guest_memory_contract = {
+    "iSteam/NativeGuestMemory.cpp": [
+        "isteam_guest_memory_create(",
+        "isteam_guest_memory_destroy(",
+        "isteam_guest_memory_size(",
+        "isteam_guest_memory_begin_mapping(",
+        "isteam_guest_memory_map(",
+        "isteam_guest_memory_protect(",
+        "isteam_guest_memory_unmap(",
+        "isteam_guest_memory_read_execute_prefix(",
+    ],
+    "iSteam/NativeGuestMemory.h": [
+        "isteam_guest_memory_create",
+        "isteam_guest_memory_destroy",
+        "isteam_guest_memory_size",
+        "isteam_guest_memory_read_execute_prefix",
+    ],
+    "src/Runtime/GuestMemory.swift": [
+        "beginMapping()", "readExecuteByte(", "readPrefix(",
+        "func map(", "func protect(", "func unmap(",
+    ],
+    "src/Runtime/ELF64Loader.swift": ["memory.beginMapping()", "memory.map("],
+    "src/Runtime/LinuxProcessStackBuilder.swift": ["memory.map("],
+    "src/Runtime/LinuxSyscallDispatcher.swift": ["memory.protect(", "memory.unmap(", "memory.map("],
+    "src/Runtime/X86_64Interpreter.swift": ["readExecuteByte(offset: rip)"],
+}
+for contract_path, contract_tokens in guest_memory_contract.items():
+    contract_content = Path(contract_path).read_text(encoding="utf-8")
+    for contract_token in contract_tokens:
+        if contract_token not in contract_content:
+            print(f"guest memory permission contract: {contract_path} missing {contract_token!r}", file=sys.stderr)
+            failed = True
+
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")
