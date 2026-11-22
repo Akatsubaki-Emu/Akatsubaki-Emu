@@ -30,6 +30,30 @@ class ProfileImportInventoryTests(unittest.TestCase):
         self.assertIn("GameRuntimeProfile.ProfileError.corruptStoredProfile", inventory)
 
     def test_import_uses_one_profile_inventory_not_per_entry_lookup(self):
+    def test_import_rolls_back_only_profiles_created_by_this_import(self):
+        importer = section(TRANSFER, "    func importBackup(from source: URL)", "    enum TransferError")
+        self.assertIn("if try GameRuntimeProfileStore.shared.saveIfAbsent(profile)", importer)
+        self.assertIn("savedProfileIDs.append(profile.gameID)", importer)
+        self.assertIn("for gameID in savedProfileIDs", importer)
+        self.assertNotIn("try GameRuntimeProfileStore.shared.save(profile)", importer)
+
+    def test_save_if_absent_preserves_existing_profiles_and_reports_creation(self):
+        save = section(PROFILE_STORE, "    func saveIfAbsent(", "    func profile(for gameID:")
+        self.assertIn("lock.lock()", save)
+        self.assertIn("defer { lock.unlock() }", save)
+        self.assertIn("if fm.fileExists(atPath: destination.path)", save)
+        self.assertIn("return false", save)
+        self.assertIn("return true", save)
+        self.assertIn("GameRuntimeProfile.ProfileError.corruptStoredProfile", save)
+
+    def test_profile_inventory_and_mutations_are_serialized(self):
+        inventory = section(PROFILE_STORE, "    func existingProfileIDs(", "    func removeProfile(")
+        remove = section(PROFILE_STORE, "    func removeProfile(", "    private func profileFiles()")
+        save = section(PROFILE_STORE, "    func save(_ profile:", "    func saveIfAbsent(")
+        self.assertIn("lock.lock()", inventory)
+        self.assertIn("lock.lock()", remove)
+        self.assertIn("lock.lock()", save)
+
         importer = section(TRANSFER, "    func importBackup(from source: URL)", "    enum TransferError")
         self.assertIn("existingProfileIDs(for: incomingProfileIDs)", importer)
         self.assertNotIn("GameRuntimeProfileStore.shared.profile(for:", importer)

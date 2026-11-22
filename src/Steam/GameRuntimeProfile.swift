@@ -106,6 +106,7 @@ final class GameRuntimeProfileStore {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let directory: URL
+    private let lock = NSLock()
 
     private init() {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -122,6 +123,8 @@ final class GameRuntimeProfileStore {
     }
 
     func save(_ profile: GameRuntimeProfile) throws {
+        lock.lock()
+        defer { lock.unlock() }
         try profile.validate()
         try ensureDirectory()
         var value = profile
@@ -162,11 +165,37 @@ final class GameRuntimeProfileStore {
         return profile
     }
 
+    @discardableResult
+    func saveIfAbsent(_ profile: GameRuntimeProfile) throws -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        try profile.validate()
+        try ensureDirectory()
+        let destination = url(for: profile.gameID)
+        if fm.fileExists(atPath: destination.path) {
+            guard readProfile(at: destination) != nil else {
+                throw GameRuntimeProfile.ProfileError.corruptStoredProfile
+            }
+            return false
+        }
+        var value = profile
+        value.updatedAt = Date()
+        let encoded = try encoder.encode(value)
+        guard encoded.count <= 1024 * 1024 else {
+            throw GameRuntimeProfile.ProfileError.invalidEnvironment
+        }
+        try encoded.write(to: destination, options: .atomic)
+        EmulationLog.shared.write("Imported runtime profile for \(value.displayName)")
+        return true
+    }
+
     func profile(for gameID: UUID) -> GameRuntimeProfile? {
         readProfile(at: url(for: gameID))
     }
 
     func existingProfileIDs(for gameIDs: Set<UUID>) throws -> Set<UUID> {
+        lock.lock()
+        defer { lock.unlock() }
         guard !gameIDs.isEmpty else { return [] }
         if gameIDs.count <= 64 {
             var existing = Set<UUID>()
@@ -197,6 +226,8 @@ final class GameRuntimeProfileStore {
     }
 
     func removeProfile(for gameID: UUID) throws {
+        lock.lock()
+        defer { lock.unlock() }
         let file = url(for: gameID)
         if fm.fileExists(atPath: file.path) { try fm.removeItem(at: file) }
     }

@@ -118,8 +118,9 @@ final class GameLibraryTransferStore {
         var savedProfileIDs: [UUID] = []
         do {
             for profile in profilesToSave {
-                try GameRuntimeProfileStore.shared.save(profile)
-                savedProfileIDs.append(profile.gameID)
+                if try GameRuntimeProfileStore.shared.saveIfAbsent(profile) {
+                    savedProfileIDs.append(profile.gameID)
+                }
             }
             guard GameStore.shared.save(current) else {
                 throw TransferError.librarySaveFailed
