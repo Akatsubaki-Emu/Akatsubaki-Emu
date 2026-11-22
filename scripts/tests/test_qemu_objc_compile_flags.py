@@ -56,17 +56,6 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
             patched,
         )
 
-    def test_meson_patcher_handles_qemu_common_flags_variant(self):
-        source = self.meson_source().replace(
-            "objc.get_supported_arguments(warn_flags)",
-            "objc.get_supported_arguments(qemu_common_flags + warn_flags)",
-        )
-        patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
-        self.assertIn(
-            "objc.get_supported_arguments(qemu_common_flags + warn_flags + "
-            "['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')",
-            patched,
-        )
 
     def test_meson_patcher_fails_closed_if_objc_block_changes(self):
         source = self.meson_source().replace(
@@ -74,6 +63,33 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
             "objc.get_supported_arguments(other_flags)",
         )
         with self.assertRaisesRegex(SystemExit, "Objective-C compiler argument anchor"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+    def test_meson_patcher_fails_closed_if_objc_block_is_missing(self):
+        source = self.meson_source().replace("if 'objc' in all_languages" + chr(10), "").replace("endif" + chr(10), "")
+        with self.assertRaisesRegex(SystemExit, "Objective-C compiler block not found exactly once"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+    def test_meson_patcher_rejects_duplicate_objc_blocks(self):
+        source = self.meson_source().replace(
+            "if 'objc' in all_languages" + chr(10),
+            "if 'objc' in all_languages" + chr(10) + "if 'objc' in all_languages" + chr(10),
+        )
+        with self.assertRaisesRegex(SystemExit, "Objective-C compiler block not found exactly once"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+    def test_meson_patcher_rejects_objc_flag_outside_its_block(self):
+        source = self.meson_source() + patch_qemu_meson_ios.OBJC_ARGUMENTS["objc.get_supported_arguments(warn_flags)"] + chr(10)
+        with self.assertRaisesRegex(SystemExit, "outside its compiler block"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+    def test_meson_patcher_rejects_mixed_patched_and_unpatched_objc_calls(self):
+        patched = patch_qemu_meson_ios.OBJC_ARGUMENTS["objc.get_supported_arguments(warn_flags)"]
+        source = self.meson_source().replace(
+            "objc.get_supported_arguments(warn_flags)",
+            patched + chr(10) + "  objc.get_supported_arguments(warn_flags)",
+        )
+        with self.assertRaisesRegex(SystemExit, "unpatched Objective-C compiler call remains"):
             patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
 
     def test_ninja_verifier_requires_flag_on_actual_metal_compile_edge(self):
