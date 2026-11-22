@@ -41,6 +41,27 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         vrSwitch.isOn = VRSettings.shared.mode == .cardboard
         persistSwitch.isOn = UserDefaults.standard.bool(forKey: "iSteam.persistSessionData")
         slotField.text = "My VM"
+        restoreImportedOperatingSystem()
+    }
+
+    private func restoreImportedOperatingSystem() {
+        guard let path = UserDefaults.standard.string(forKey: "iSteam.customOSPath"),
+              !path.isEmpty else { return }
+
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        do {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true, let fileSize = values.fileSize, fileSize > 0 else {
+                statusLabel.text = "The previously imported OS image is not a non-empty regular file. Choose a new boot image."
+                return
+            }
+
+            selectedDiskURL = url
+            diskLabel.text = "Boot media: \(url.lastPathComponent) (imported)"
+            statusLabel.text = "Imported OS image selected. Choose the matching guest profile. For an ISO installer, choose or create a writable VM disk."
+        } catch {
+            statusLabel.text = "Could not restore the imported OS image: \(error.localizedDescription)"
+        }
     }
 
     private func buildForm() {
@@ -71,7 +92,7 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         heading.font = .systemFont(ofSize: 30, weight: .bold)
         stack.addArrangedSubview(heading)
         let intro = UILabel()
-        intro.text = "Choose Ubuntu, SteamOS Gaming Mode, or Windows 10. SteamOS mode applies a game-focused Linux VM profile (4 GB RAM, 4 CPUs, 1280×800 at 60 FPS); it is not Valve’s Steam Deck OS image. Supply a compatible bootable Linux/SteamOS image. Guest boot still requires the bundled QEMU runtime and suitable UEFI firmware."
+        intro.text = "Choose Ubuntu, SteamOS Gaming Mode, or Windows 10. SteamOS mode applies a game-focused Linux VM profile (4 GB RAM, 4 CPUs, 1280×800 at 60 FPS); it is not Valve’s Steam Deck OS image. Supply a compatible bootable ISO or disk image for the selected guest profile. Guest boot still requires the bundled QEMU runtime and suitable UEFI firmware."
         intro.font = .preferredFont(forTextStyle: .subheadline)
         intro.textColor = .secondaryLabel
         intro.numberOfLines = 0
