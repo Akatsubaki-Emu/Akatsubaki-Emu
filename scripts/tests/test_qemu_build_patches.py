@@ -20,6 +20,9 @@ class QEMUBuildPatchTests(unittest.TestCase):
     def test_qemu_meson_patch_is_idempotent_and_targets_emulator_link_args(self):
         source = (
             "project('qemu', 'c')\n"
+            "if 'objc' in all_languages\n"
+            "  objc.get_supported_arguments(warn_flags)\n"
+            "endif\n"
             "config_host_data.set('CONFIG_POSIX_MEMALIGN', "
             "cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
             "emulator_link_args = []\n"
@@ -41,6 +44,9 @@ class QEMUBuildPatchTests(unittest.TestCase):
     def test_qemu_meson_patch_replaces_a_stale_runtime_path(self):
         source = (
             "project('qemu', 'c')\n"
+            "if 'objc' in all_languages\n"
+            "  objc.get_supported_arguments(warn_flags)\n"
+            "endif\n"
             "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
             "emulator_link_args = []\n"
             "emulator_link_args += ['-Wl,-force_load,libqemuutil.a']\n"
@@ -62,6 +68,9 @@ class QEMUBuildPatchTests(unittest.TestCase):
     def test_qemu_meson_patch_fails_if_owned_marker_is_detached(self):
         source = (
             "project('qemu', 'c')\n"
+            "if 'objc' in all_languages\n"
+            "  objc.get_supported_arguments(warn_flags)\n"
+            "endif\n"
             "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
             "emulator_link_args = []\n"
         )
@@ -77,6 +86,9 @@ class QEMUBuildPatchTests(unittest.TestCase):
     def test_qemu_meson_patch_fails_if_emulator_link_anchor_changes(self):
         source = (
             "project('qemu', 'c')\n"
+            "if 'objc' in all_languages\n"
+            "  objc.get_supported_arguments(warn_flags)\n"
+            "endif\n"
             "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
         )
         with self.assertRaisesRegex(SystemExit, "emulator_link_args declaration not found"):
@@ -178,7 +190,6 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("#define mach_vm_protect vm_protect", once)
         self.assertIn("#define mach_vm_deallocate vm_deallocate", once)
         self.assertIn("#else\n#include <mach/mach.h>\n#include <mach/mach_vm.h>\n#endif", once)
-        self.assertIn("#else\\n#include <mach/mach.h>\\n#include <mach/mach_vm.h>\\n#endif", once)
         self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")', once)
         self.assertIn("jit_protocol_mode < 0", once)
         self.assertIn("jit_protocol_mode > 0", once)
