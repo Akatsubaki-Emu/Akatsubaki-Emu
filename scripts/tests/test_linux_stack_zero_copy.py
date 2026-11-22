@@ -18,5 +18,22 @@ class LinuxStackCopyTests(unittest.TestCase):
         self.assertIn("func write(_ data: Data, sourceRange: Range<Int>", test)
 
 
+    def test_stack_builder_avoids_temporary_argument_environment_and_word_arrays(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "LinuxProcessStackBuilder.swift").read_text(encoding="utf-8")
+        self.assertNotIn("let argv =", source)
+        self.assertNotIn("let envp =", source)
+        self.assertNotIn("argv + envp", source)
+        self.assertNotIn("var words: [UInt64]", source)
+        self.assertIn("let argumentCount = arguments.count + 1", source)
+        self.assertIn("let environmentKeys = environment.keys.sorted()", source)
+        self.assertIn("for value in arguments.reversed()", source)
+        self.assertIn("for key in environmentKeys.reversed()", source)
+        self.assertIn("argumentPointers.reserveCapacity(argumentCount)", source)
+        self.assertIn("environmentPointers.reserveCapacity(environmentKeys.count)", source)
+        self.assertIn("let vectorWordCount", source)
+        self.assertIn("writeWord(UInt64(argumentCount))", source)
+
+
 if __name__ == "__main__":
     unittest.main()
