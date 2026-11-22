@@ -90,5 +90,19 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn("var isJITProtocolKnown: Bool", coordinator)
         self.assertIn("guard isJITProtocolKnown else", coordinator)
 
+    def test_qemu_tci_fallback_remains_available_when_jit_is_not_selected(self):
+        root = Path(__file__).resolve().parents[2]
+        launch = (root / "iSteam" / "LaunchSetupViewController.swift").read_text(encoding="utf-8")
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        status = (root / "src" / "QEMU" / "QEMURuntimeStatus.swift").read_text(encoding="utf-8")
+        builder = (root / "src" / "QEMU" / "QEMUCommandBuilder.swift").read_text(encoding="utf-8")
+        self.assertIn("if config.accelerator == .jit && !JITCoordinator.shared.isQEMUJITReady", launch)
+        self.assertIn("fallbackConfiguration.accelerator = .tcg", launch)
+        self.assertIn("QEMURuntimeStatus.inspect(requiresJIT: false)", launch)
+        self.assertIn("let requiresJIT = configuration.accelerator == .jit", runtime)
+        self.assertIn("QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", runtime)
+        self.assertIn('requiresJIT ? "JIT" : "TCI"', status)
+        self.assertIn('configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg"', builder)
+
 if __name__ == "__main__":
     unittest.main()
