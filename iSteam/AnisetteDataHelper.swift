@@ -31,7 +31,6 @@ final class AnisetteDataHelper
     
     static var shared: AnisetteDataHelper = AnisetteDataHelper()
     
-    var loggingFunc: ((String)->Void)?
     
     func resetClientInfo() {
         clientInfo = nil
@@ -436,18 +435,8 @@ final class AnisetteDataHelper
     }
     
     
-    private func printOut(_ text: String?){
-        let isInternalLoggingEnabled = true
-        if(isInternalLoggingEnabled){
-            // logging enabled, so log it
-            if let loggingFunc {
-                loggingFunc(text ?? "\n")
-            } else {
-                text.map{ _ in print(text!) } ?? print()
-            }
+    private func printOut(_ text: String?) {}
 
-        }
-    }
 }
 
 extension URLSessionWebSocketTask {
@@ -469,7 +458,7 @@ extension Data {
     }
     
     // https://stackoverflow.com/a/59127761
-    func object<T>() -> T { self.withUnsafeBytes { $0.load(as: T.self) } }
+    func object<T>() -> T { self.withUnsafeBytes { $0.loadUnaligned(as: T.self) } }
 }
 
 
