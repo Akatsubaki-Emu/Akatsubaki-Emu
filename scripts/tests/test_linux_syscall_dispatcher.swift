@@ -294,6 +294,20 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.readUInt64(offset: 0x1200) != nil)
         precondition(memory.readUInt64(offset: 0x1208)! < 1_000_000)
 
+        let unameResult = dispatcher.dispatch(number: 63, arguments: [0x1300, 0, 0, 0, 0, 0])!
+        guard case .returned(let unameStatus) = unameResult else { preconditionFailure() }
+        precondition(unameStatus == 0)
+        let unameBytes = [UInt8](memory.read(offset: 0x1300, length: 390)!)
+        let unameFields = stride(from: 0, to: 390, by: 65).map { offset -> String in
+            let field = unameBytes[offset..<(offset + 65)]
+            let end = field.firstIndex(of: 0) ?? field.endIndex
+            return String(decoding: field[..<end], as: UTF8.self)
+        }
+        precondition(unameFields == ["Linux", "akatsubaki", "6.0.0-akatsubaki", "Kenran Buto", "x86_64", "localdomain"])
+        let invalidUname = dispatcher.dispatch(number: 63, arguments: [UInt64.max - 100, 0, 0, 0, 0, 0])!
+        guard case .returned(let invalidUnameValue) = invalidUname else { preconditionFailure() }
+        precondition(invalidUnameValue == UInt64(bitPattern: Int64(-14)))
+
         let badTimezone = dispatcher.dispatch(number: 96, arguments: [0x3F0000, UInt64.max, 0, 0, 0, 0])!
         guard case .returned(let badTimezoneValue) = badTimezone else { preconditionFailure() }
         precondition(badTimezoneValue == UInt64(bitPattern: Int64(-14)))
@@ -327,6 +341,6 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let reopenedStdinValue) = reopenedStdinRead else { preconditionFailure() }
         precondition(reopenedStdinValue == 0)
 
-        print("Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/identity and reset tests passed")
+        print("Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/uname/identity and reset tests passed")
     }
 }
