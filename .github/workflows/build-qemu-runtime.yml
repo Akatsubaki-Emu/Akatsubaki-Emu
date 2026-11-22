@@ -217,7 +217,6 @@ jobs:
         shell: bash
         env:
           NCPU: "2"
-          ISTEAM_QEMU_JIT_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_stikjit_ios.py
           ISTEAM_QEMU_MESON_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_meson_ios.py
           ISTEAM_QEMU_LINK_VERIFIER: ${{ github.workspace }}/scripts/verify_qemu_meson_link.py
         run: |
