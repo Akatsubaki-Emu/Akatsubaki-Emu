@@ -35,7 +35,9 @@ struct QEMUCommandBuilder {
     let configuration: VMConfiguration
 
     func arguments(diskImage: URL? = nil, writableDiskImage: URL? = nil,
-                   firmware: URL? = nil, firmwareVariables: URL? = nil) -> [String] {
+                   firmware: URL? = nil, firmwareVariables: URL? = nil,
+                   requiresJIT: Bool? = nil) -> [String] {
+        let useSplitWX = requiresJIT ?? (configuration.accelerator == .jit)
         // -nodefaults disables implicit input devices. VNC keyboard/pointer events
         // therefore need an explicit USB controller, keyboard and tablet for every guest.
         let machine = "q35,usb=on"
@@ -45,7 +47,7 @@ struct QEMUCommandBuilder {
             "-machine", machine, "-nodefaults", "-display", "none",
             "-m", "\(configuration.memoryMB)", "-smp", "\(configuration.cpuCount)",
             "-cpu", "max",
-            "-accel", configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg",
+            "-accel", useSplitWX ? "tcg,tb-size=128,split-wx=on" : "tcg",
             // Windows includes generic VGA/AHCI/E1000 drivers; Linux can use VirtIO.
             "-device", gpu,
             "-device", "ich9-ahci,id=sata0",
