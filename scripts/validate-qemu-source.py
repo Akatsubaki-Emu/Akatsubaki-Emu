@@ -543,6 +543,7 @@ required = {
         "machine.runBatch(maxInstructions: Self.batchInstructionLimit)",
         "queue.asyncAfter",
         "private static let guestMemorySize: UInt64 = 1024 * 1024 * 1024",
+        "completion: ((Result<GuestCPUExit, Error>) -> Void)? = nil",
     ],
     "src/Core/VMSaveSlotStore.swift": [
         "maximumMetadataBytes = 1 * 1024 * 1024",

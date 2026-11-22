@@ -389,6 +389,7 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("withABIPlan.isExecutableWithInstalledBackends", harness)
 
     def test_linux_elf_launch_uses_bounded_guest_machine_batches(self):
+        self.assertNotIn("completion: (@escaping", launcher)
         root = Path(__file__).resolve().parents[2]
         launcher = (root / "src" / "Steam" / "GameLauncher.swift").read_text(encoding="utf-8")
         runtime = launcher.split("final class LinuxELFRuntime", 1)[1]

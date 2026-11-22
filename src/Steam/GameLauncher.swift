@@ -5,7 +5,7 @@ final class GameLauncher {
     private init() {}
 
     @discardableResult
-    func launch(executable: URL, workingDirectory: URL, arguments: [String] = [], completion: (@escaping (Result<GuestCPUExit, Error>) -> Void)? = nil) -> Bool {
+    func launch(executable: URL, workingDirectory: URL, arguments: [String] = [], completion: ((Result<GuestCPUExit, Error>) -> Void)? = nil) -> Bool {
         let result = GuestProcessManager.shared.inspect(executable)
         guard case let .success(format) = result,
               format == .windowsPE || format == .linuxELF else {
@@ -96,7 +96,7 @@ final class LinuxELFRuntime {
     func launch(
         executable: URL,
         arguments: [String],
-        completion: (@escaping (Result<GuestCPUExit, Error>) -> Void)? = nil
+        completion: ((Result<GuestCPUExit, Error>) -> Void)? = nil
     ) -> Bool {
         lock.lock()
         guard activeMachine == nil, !isLaunching else {
