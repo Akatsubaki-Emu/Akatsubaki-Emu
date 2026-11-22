@@ -12,8 +12,10 @@ class ControllerProfileHotPathTests(unittest.TestCase):
     def test_stick_handlers_capture_one_immutable_profile_snapshot(self):
         configure = self.manager.split("private func configure(_ controller:", 1)[1]
         self.assertIn("let profile = ControllerMappingStore.shared.profile", configure)
-        self.assertIn("deadzone: profile.leftDeadzone", configure)
-        self.assertIn("deadzone: profile.rightDeadzone", configure)
+        self.assertIn("let leftDeadzone = ControllerDeadzone(profile.leftDeadzone)", configure)
+        self.assertIn("let rightDeadzone = ControllerDeadzone(profile.rightDeadzone)", configure)
+        self.assertIn("leftDeadzone.apply(x: x, y: y)", configure)
+        self.assertIn("rightDeadzone.apply(x: x, y: y)", configure)
         self.assertNotIn("ControllerMappingStore.shared.profile", configure.split("private func buttonInputs", 1)[0].replace(
             "let profile = ControllerMappingStore.shared.profile", ""
         ))
