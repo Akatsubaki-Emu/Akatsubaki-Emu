@@ -37,7 +37,7 @@ final class GameLibraryTransferStore {
         guard let allProfiles = GameRuntimeProfileStore.shared.validatedProfiles() else {
             throw TransferError.profileStoreUnreadable
         }
-        let gameIDs = Set(games.map(\.id))
+        let gameIDs = Set(games.lazy.map(\.id))
         let profiles = allProfiles.filter { gameIDs.contains($0.gameID) }
         let backup = GameLibraryBackup(games: games, profiles: profiles)
         let data = try encoder.encode(backup)
@@ -86,7 +86,7 @@ final class GameLibraryTransferStore {
         guard let currentSnapshot = GameStore.shared.validatedSnapshot() else {
             throw TransferError.libraryUnreadable
         }
-        let existingIDs = Set(currentSnapshot.map(\.id))
+        let existingIDs = Set(currentSnapshot.lazy.map(\.id))
         let validGameIDs = existingIDs.union(seen)
         var profileGameIDs = Set<UUID>()
         for profile in backup.profiles {
