@@ -17,9 +17,14 @@ for tool in file lipo nm codesign vtool; do
 done
 
 echo "== File type =="
-file "$library"
-if ! file "$library" | grep -q 'Mach-O'; then
+file_description="$(file "$library")"
+printf '%s\n' "$file_description"
+if [[ "$file_description" != *"Mach-O"* ]]; then
   echo "Runtime is not a Mach-O binary." >&2
+  exit 3
+fi
+if [[ "$file_description" != *"dynamically linked shared library"* ]]; then
+  echo "Runtime is not a Mach-O dynamic library." >&2
   exit 3
 fi
 
@@ -57,5 +62,5 @@ done
 echo "== Code signature =="
 codesign --verify --strict "$library"
 
-echo "QEMU runtime iOS platform, arm64 architecture, lifecycle/shutdown exports, and code signature verified."
+echo "QEMU runtime dynamic-library type, iOS platform, arm64 architecture, lifecycle/shutdown exports, and code signature verified."
 echo "This does not prove dependent libraries load or that a guest boots."

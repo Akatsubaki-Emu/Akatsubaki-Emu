@@ -531,11 +531,13 @@ required = {
         "isteam_qemu_set_jit_callbacks",
         "vtool -show-build",
         "platform[[:space:]]+IOS",
+        "dynamically linked shared library",
     ],
     "scripts/validate-qemu-runtime.sh": [
         "for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request isteam_qemu_set_jit_callbacks; do",
         "vtool -show-build",
         "platform[[:space:]]+IOS",
+        "dynamically linked shared library",
     ],
     "src/QEMU/QEMURuntimeStatus.swift": [
         "bundleRoot = bundle.bundleURL.resolvingSymlinksInPath()",

@@ -49,7 +49,8 @@ candidate=""
 exports=""
 while IFS= read -r file; do
   [ -n "$file" ] || continue
-  if file "$file" | grep -q 'Mach-O'; then
+  file_description="$(file "$file")"
+  if [[ "$file_description" == *"Mach-O"* && "$file_description" == *"dynamically linked shared library"* ]]; then
     candidate_exports="$(nm -gU "$file" 2>/dev/null || true)"
     if printf '%s\n' "$candidate_exports" | grep -qE ' _?qemu_init$' &&
        printf '%s\n' "$candidate_exports" | grep -qE ' _?qemu_main_loop$' &&
@@ -64,7 +65,7 @@ while IFS= read -r file; do
 done < "$OUT/runtime-file-inventory.txt"
 
 if [ -z "$candidate" ]; then
-  echo "No UTM in-process QEMU library exporting qemu_init, qemu_main_loop, qemu_cleanup, qemu_system_shutdown_request, and isteam_qemu_set_jit_callbacks was found." >&2
+  echo "No UTM in-process QEMU dynamic library exporting qemu_init, qemu_main_loop, qemu_cleanup, qemu_system_shutdown_request, and isteam_qemu_set_jit_callbacks was found." >&2
   echo "The artifact was rejected rather than pretending an executable is a loadable runtime." >&2
   exit 2
 fi
