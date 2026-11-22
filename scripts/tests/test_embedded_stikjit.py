@@ -82,7 +82,7 @@ class EmbeddedStikJITIntegrationTests(unittest.TestCase):
             settings,
         )
         self.assertIn(
-            "Documents/StikJIT/pairingFile.plist",
+            "Application Support/StikJIT/pairingFile.plist",
             settings,
         )
         self.assertIn("Generate device pairing file", settings)
@@ -97,7 +97,7 @@ class StikPairIntegrationTests(unittest.TestCase):
         self.assertIn("PairableHost::new",r);self.assertIn("mdns_txt_records",r)
     def test_pairing_file_is_protected_and_host_identity_persists(self):
         s=self.read("iSteam/StikJITPairingFileStore.swift")
-        self.assertIn(".documentDirectory",s);self.assertIn("FileProtectionType.complete",s);self.assertIn("host-identity.plist",s)
+        self.assertIn(".applicationSupportDirectory",s);self.assertIn("FileProtectionType.complete",s);self.assertIn("host-identity.plist",s)
     def test_pairing_requires_physical_ios27_and_wildcard_background_registration(self):
         s=self.read("iSteam/StikPairingCoordinator.swift")
         self.assertIn("if #available(iOS 27.0,*)",s);self.assertIn("targetEnvironment(simulator)",s)
@@ -116,7 +116,7 @@ class StikPairIntegrationTests(unittest.TestCase):
     def test_pairing_pin_callback_uses_the_callback_function(self):
         rust=self.read("pairing-ffi/src/lib.rs")
         self.assertIn('let pin_callback=pin.ok_or("Missing pairing PIN callback")?;',rust)
-        self.assertIn("unsafe{pin_callback(ctx,p.as_ptr())}",rust)
+        self.assertIn("pin_callback(callback_context as *mut c_void, p.as_ptr())",rust)
         self.assertNotIn("pin.ok_or(()).unwrap()",rust)
 
 

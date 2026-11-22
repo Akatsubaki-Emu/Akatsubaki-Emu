@@ -37,7 +37,15 @@ async fn run(s:&AtomicBool,id:String,name:String,model:String,udid:String,out:St
  let (stream,_)=tokio::select!{_=cancelled(s)=>return Err("Pairing cancelled".into()),r=listener.accept()=>r.map_err(|e|e.to_string())?};
  let mut host=PairableHost::new(RpPairingSocket::new_device(stream),host);
  let pin_callback=pin.ok_or("Missing pairing PIN callback")?;
- let pin_cb=move|pin:String|async move{if let Ok(p)=CString::new(pin){unsafe{pin_callback(ctx,p.as_ptr())}}};
+ let callback_context = ctx as usize;
+ let pin_cb = move |pin: String| {
+  let callback_context = callback_context;
+  async move {
+   if let Ok(p) = CString::new(pin) {
+    unsafe { pin_callback(callback_context as *mut c_void, p.as_ptr()) }
+   }
+  }
+ };
  tokio::select!{_=cancelled(s)=>return Err("Pairing cancelled".into()),r=host.accept(&mut pairing,pin_cb)=>r.map_err(|e|e.to_string())?}
  pairing.write_to_file(&out).await.map_err(|e|e.to_string())?;
  debug_assert!(PAIRABLE_HOST_SERVICE_TYPE.ends_with(".local."));

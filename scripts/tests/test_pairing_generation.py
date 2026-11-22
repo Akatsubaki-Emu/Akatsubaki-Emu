@@ -18,7 +18,7 @@ class PairingGenerationTests(unittest.TestCase):
         self.assertIn("write_to_file(&out)", source)
         self.assertIn("PAIRABLE_HOST_SERVICE_TYPE", source)
         self.assertIn('pin.ok_or("Missing pairing PIN callback")', source)
-        self.assertIn("pin_callback(ctx,p.as_ptr())", source)
+        self.assertIn("pin_callback(callback_context as *mut c_void, p.as_ptr())", source)
         self.assertNotIn("pin.ok_or(()).unwrap()", source)
 
     def test_pairing_storage_matches_jit_and_is_protected(self):
@@ -30,15 +30,40 @@ class PairingGenerationTests(unittest.TestCase):
         self.assertIn("static func reset()", source)
         self.assertNotIn(".documentDirectory", source)
 
-    def test_swift_coordinator_advertises_and_replaces_pairing_identity(self):
+    def test_swift_coordinator_advertises_and_refreshes_pairing_identity_without_deleting_it(self):
         source = (ROOT / "iSteam" / "StikPairingCoordinator.swift").read_text()
         self.assertIn('_remotepairing-pairable-host._tcp.', source)
         self.assertIn("NetService.data(fromTXTRecord:txt)", source)
         self.assertIn("akatsubaki_pairing_run", source)
         self.assertIn("BGContinuedProcessingTaskRequest", source)
         self.assertIn("StikJITPairingFileStore.save", source)
-        self.assertIn("StikJITPairingFileStore.reset()", source)
+        self.assertNotIn("StikJITPairingFileStore.reset()", source)
         self.assertIn("akatsubaki_pairing_session_cancel", source)
+
+    def test_session_handle_is_freed_only_after_worker_returns_on_main_queue(self):
+        source = (ROOT / "iSteam" / "StikPairingCoordinator.swift").read_text()
+        main_dispatch = source.index("DispatchQueue.main.async { [weak self] in")
+        session_clear = source.index("self?.session = nil", main_dispatch)
+        session_free = source.index("akatsubaki_pairing_session_free(handle)", main_dispatch)
+        result_free = source.index("akatsubaki_pairing_result_free(&result)")
+        self.assertLess(result_free, main_dispatch)
+        self.assertLess(session_clear, session_free)
+        self.assertNotIn("akatsubaki_pairing_session_free(handle);DispatchQueue.main.async", source)
+
+    def test_refresh_keeps_existing_pairing_until_success(self):
+        source = (ROOT / "iSteam" / "StikPairingCoordinator.swift").read_text()
+        start_pairing = source.split("func startPairing", 1)[1].split("func applicationDidBecomeActive", 1)[0]
+        self.assertIn("keeps this iPad's existing host identity", start_pairing)
+        self.assertNotIn("StikJITPairingFileStore.reset()", start_pairing)
+
+    def test_pairing_uses_empty_host_udid(self):
+        source = (ROOT / "iSteam" / "StikPairingCoordinator.swift").read_text()
+        self.assertIn('let udid = ""', source)
+
+    def test_failed_pairing_cleans_pending_file(self):
+        source = (ROOT / "iSteam" / "StikPairingCoordinator.swift").read_text()
+        self.assertIn("if !ok, let pendingFileURL", source)
+        self.assertIn("StikJITPairingFileStore.cleanPending(pendingFileURL)", source)
 
     def test_app_and_info_register_continued_pairing_task(self):
         app = (ROOT / "iSteam" / "AppDelegate.swift").read_text()

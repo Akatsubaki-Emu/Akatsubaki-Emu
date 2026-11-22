@@ -20,7 +20,7 @@ Akatsubaki Emu can create the Apple Remote Pairing property-list file required b
 6. Return to Akatsubaki. The generated plist is validated and saved automatically.
 7. Select **Built-in StikJIT** and request JIT.
 
-A continued-processing task keeps the pairing listener alive while Settings is foregrounded. The temporary Bonjour service is stopped when pairing completes, fails, or is cancelled. Regenerating an existing pairing file first clears the previous file and host identity, then creates a fresh pairing identity.
+A continued-processing task keeps the pairing listener alive while Settings is foregrounded. The temporary Bonjour service is stopped when pairing completes, fails, or is cancelled. Refreshing an existing pairing file reuses its host identifier and altIRK. The previous protected file remains in place until a new handshake completes successfully; a failed or cancelled refresh leaves the previous file available.
 
 ## Implementation and storage
 
