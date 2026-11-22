@@ -438,8 +438,14 @@ class SourceValidatorTests(unittest.TestCase):
     def test_qemu_runtime_manual_runs_do_not_cancel_release_jobs(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
-        self.assertNotIn("\nconcurrency:\n", workflow)
-        self.assertNotIn("cancel-in-progress:", workflow)
+        qemu_job = workflow.split("\n  build-utm-runtime:\n", 1)[1].split("\n    steps:\n", 1)[0]
+        self.assertIn("group: qemu-runtime-${{ github.workflow }}-${{ github.ref }}", qemu_job)
+        self.assertIn("cancel-in-progress: true", qemu_job)
+
+        release = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        release_job = release.split("\n  release:\n", 1)[1]
+        self.assertIn("group: isteam-release-publish-${{ matrix.channel }}", release_job)
+        self.assertIn("cancel-in-progress: false", release_job)
 
     def test_qemu_runtime_pins_xcode_27_1_on_supported_runner(self):
         root = Path(__file__).resolve().parents[2]
