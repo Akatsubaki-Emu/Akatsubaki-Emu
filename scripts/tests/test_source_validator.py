@@ -515,7 +515,7 @@ class SourceValidatorTests(unittest.TestCase):
         for path in ("- src/**", "- iSteam/**", "- project.yml", "- scripts/tests/**"):
             with self.subTest(path=path):
                 self.assertIn(path, push)
-        device = workflow.split("\\n  build-ios-device:\\n", 1)[1]
+        device = workflow.split("\n  build-ios-device:\n", 1)[1]
         self.assertIn("-sdk iphoneos", device)
         self.assertIn("-destination 'generic/platform=iOS'", device)
         self.assertIn("CODE_SIGNING_ALLOWED=NO", device)
