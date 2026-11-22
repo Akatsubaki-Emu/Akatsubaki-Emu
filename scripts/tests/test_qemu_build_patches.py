@@ -320,6 +320,15 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertNotIn('nm -u "$PROBE_OBJECT" | grep', source)
         self.assertNotIn("\n; then\n", source)
 
+    def test_qemu_runtime_packager_preserves_firmware_bundle_directories(self):
+        script = (Path(__file__).resolve().parents[2] / "scripts/package-utm-qemu-runtime.sh").read_text()
+        self.assertIn('source_dir="$(dirname "$firmware_file")"', script)
+        self.assertIn('[ "$source_dir" = "$data_dir" ] && continue', script)
+        self.assertIn('target_dir="$OUT/QEMU/firmware/$relative_dir"', script)
+        self.assertIn('cp "$firmware_file" "$target_dir/"', script)
+        self.assertNotIn('cp "$firmware_file" "$OUT/QEMU/$(basename "$firmware_file")"', script)
+
+
     def test_release_tag_is_created_from_the_workflow_commit(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
         source = workflow.read_text(encoding="utf-8")
