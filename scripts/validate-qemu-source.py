@@ -369,7 +369,8 @@ required = {
         "case 0xC2:",
         "case 0x09, 0x0B:",
         "case 0x29, 0x2B, 0x39, 0x3B:",
-        "case 0x68, 0x6A:",
+        "case 0x68: // PUSH sign-extended imm32",
+        "case 0x6A: // PUSH sign-extended imm8",
         "private func fetchUInt16() -> UInt16?",
         "private func decodeRM(_ modrm: UInt8, rex: UInt8, trailingImmediateBytes: UInt8 = 0, includeSegmentBase: Bool = true)",
         "let addressBase = usesRIPRelative ? rip &+ UInt64(trailingImmediateBytes) : base",
@@ -508,7 +509,7 @@ required = {
         "let truncatedByteIncMemory = GuestMemory(size: 2)",
         "let truncatedMultiByteNopMemory = GuestMemory(size: 3)",
 
-        "let fsSegmentMemory = GuestMemory(size: 4096)",
+        "let fsSegmentMemory = GuestMemory(size: 0x2000)",
         "precondition(fsSegmentMemory.readByte(offset: 0x1020) == 0x5A)",
         "precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)",
         "precondition(syscallInterpreter.registerValue(1) == 21)",
