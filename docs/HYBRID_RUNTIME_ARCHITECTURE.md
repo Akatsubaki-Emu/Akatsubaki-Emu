@@ -69,7 +69,7 @@ The planner's availability set must be populated only by concrete runtime probes
  
 ## Kenran Butō AOT translator bring-up
 
-`src/Runtime/X86_64AOTTranslator.swift` provides bounded x86-64 to AArch64 block translation for NOP, exact ENDBR64-as-no-op, MOV register-immediate (32/64-bit), and register-only MOV (32/64-bit). These operations do not modify x86 arithmetic flags. The translator enforces instruction, output and guest-input budgets, rejects the REX.B `0x90` XCHG form rather than miscompiling it as NOP, and stops at the first unsupported/truncated instruction with a precise guest-byte fallback offset.
+`src/Runtime/X86_64AOTTranslator.swift` provides bounded x86-64 to AArch64 block translation for NOP, MOV register-immediate (32/64-bit), and register-only MOV (32/64-bit). These operations do not modify x86 arithmetic flags. ENDBR64 is not emitted: it side-exits to the interpreter until an explicit guest CET policy exists. The translator enforces instruction, output and guest-input budgets, rejects both REX.B `0x41 0x90` and `0x49 0x90` XCHG forms rather than miscompiling them as NOP, and stops at the first unsupported/truncated instruction with a precise guest-byte fallback offset.
 
 `KenranButoAOTCompiler` validates and caches serialized translation artifacts using guest-code SHA-256, guest ABI, translator version, AArch64 target and CPU feature identity. Cache hits are revalidated against the original guest bytes.
 
