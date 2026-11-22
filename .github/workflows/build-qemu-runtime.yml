@@ -22,12 +22,6 @@ permissions:
 
 jobs:
   build-utm-runtime:
-    # Concurrency must be declared on the actual job in a reusable workflow;
-    # caller-side concurrency is ignored for jobs that use a reusable workflow.
-    # Keep only the newest queued/running QEMU build for this workflow/ref.
-    concurrency:
-      group: qemu-runtime-${{ github.workflow }}-${{ github.ref }}
-      cancel-in-progress: true
     runs-on: xcode-27
     timeout-minutes: 350
     steps:
@@ -64,20 +58,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          XCODE_APP="/Applications/Xcode_27.1.app"
-          if [ ! -d "$XCODE_APP" ]; then
-            echo "Xcode 27.1 is required for the QEMU/Mesa Metal 4 headers." >&2
+          XCODE_DEVELOPER_DIR="$(xcode-select -p)"
+          if [ ! -d "$XCODE_DEVELOPER_DIR" ]; then
+            echo "The xcode-27 runner has no active Xcode developer directory." >&2
             exit 1
           fi
-          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
           XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
-          if [ "$XCODE_VERSION" != "27.1" ]; then
-            echo "Expected Xcode 27.1, selected $XCODE_VERSION." >&2
-            exit 1
-          fi
-          xcode-select -p
+          case "$XCODE_VERSION" in
+            27.*) ;;
+            *)
+              echo "Expected Xcode 27.x on the xcode-27 runner, selected $XCODE_VERSION." >&2
+              exit 1
+              ;;
+          esac
+          echo "Using Xcode $XCODE_VERSION at $XCODE_DEVELOPER_DIR"
           xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
           IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
           echo "version=${XCODE_VERSION}-ios-${IOS_SDK_VERSION}" >> "$GITHUB_OUTPUT"
 

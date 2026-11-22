@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths-ignore:
       - .github/workflows/blank.yml
+      - .github/workflows/reconcile-gitlab-main.yml
       - .github/workflows/validate-ios-build.yml
       - .github/workflows/validate-repository.yml
       - .gitlab-ci.yml
@@ -326,8 +327,22 @@ jobs:
             sha256sum -c "build/$asset.ipa.sha256"
           done
 
-      - name: Set release metadata
+      # Downloads and checksum verification can take time. Recheck immediately
+      # before mutating the rolling release so a newer main commit wins.
+      - name: Re-check freshness immediately before publishing
         if: steps.freshness.outputs.publish == 'true'
+        id: final-freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Set release metadata
+        if: steps.final-freshness.outputs.publish == 'true'
         id: meta
         shell: bash
         run: |
@@ -342,7 +357,7 @@ jobs:
           fi
 
       - name: Publish combined release
-        if: steps.freshness.outputs.publish == 'true'
+        if: steps.final-freshness.outputs.publish == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
@@ -367,6 +382,17 @@ jobs:
             - **visionOS:** `iSteam-visionOS.ipa`
 
             These are unsigned prototype builds. Sign them with a compatible signer before installing.
+
+      # softprops/action-gh-release creates a tag at target_commitish only
+      # when the tag is new. Move the rolling channel ref after the assets publish
+      # so existing main/nightly tags always resolve to this exact build commit.
+      - name: Update rolling channel tag
+        if: steps.final-freshness.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$RELEASE_CHANNEL"
 
       # Official AltStore/PAL feeds are refreshed from published GitHub releases
       # by the website repository's update-xthrx-alt-source.yml workflow.

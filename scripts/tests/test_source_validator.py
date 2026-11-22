@@ -435,25 +435,26 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("min(UInt64(999_999)", timeval)
 
 
-    def test_qemu_runtime_manual_runs_do_not_cancel_release_jobs(self):
+    def test_qemu_runtime_allows_parallel_builds_and_serializes_release_publication(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
         qemu_job = workflow.split("\n  build-utm-runtime:\n", 1)[1].split("\n    steps:\n", 1)[0]
-        self.assertIn("group: qemu-runtime-${{ github.workflow }}-${{ github.ref }}", qemu_job)
-        self.assertIn("cancel-in-progress: true", qemu_job)
+        self.assertNotIn("concurrency:", qemu_job)
+        self.assertNotIn("group: qemu-runtime-", qemu_job)
 
         release = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         release_job = release.split("\n  release:\n", 1)[1]
         self.assertIn("group: isteam-release-publish-${{ matrix.channel }}", release_job)
         self.assertIn("cancel-in-progress: false", release_job)
 
-    def test_qemu_runtime_pins_xcode_27_1_on_supported_runner(self):
+    def test_qemu_runtime_uses_the_xcode_27_runner_toolchain(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
         self.assertIn("runs-on: xcode-27", workflow)
-        self.assertIn('XCODE_APP="/Applications/Xcode_27.1.app"', workflow)
-        self.assertIn('sudo xcode-select --switch "$XCODE_APP/Contents/Developer"', workflow)
-        self.assertIn('if [ "$XCODE_VERSION" != "27.1" ]; then', workflow)
+        self.assertIn('XCODE_DEVELOPER_DIR="$(xcode-select -p)"', workflow)
+        self.assertIn('case "$XCODE_VERSION" in', workflow)
+        self.assertIn("27.*) ;;", workflow)
+        self.assertIn("Expected Xcode 27.x on the xcode-27 runner", workflow)
 
 
     def test_release_and_platform_validation_pin_xcode_26_2(self):
@@ -615,6 +616,32 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("let validGameIDs = existingIDs.union(seen)", import_flow)
         self.assertLess(import_flow.index("var current = GameStore.shared.games"), import_flow.index("for profile in backup.profiles"))
         self.assertLess(import_flow.index("let validGameIDs = existingIDs.union(seen)"), import_flow.index("for profile in backup.profiles"))
+
+    def test_release_tags_are_moved_after_successful_asset_publication(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        publish = workflow.index("- name: Publish combined release")
+        move = workflow.index("- name: Update rolling channel tag")
+        self.assertLess(publish, move)
+        update = workflow[move:]
+        self.assertIn('git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"', update)
+        self.assertIn('git push --force origin "refs/tags/$RELEASE_CHANNEL"', update)
+        self.assertIn("contents: write", workflow)
+        verify = workflow.index("- name: Verify combined release assets")
+        final_check = workflow.index("- name: Re-check freshness immediately before publishing")
+        publish = workflow.index("- name: Publish combined release")
+        self.assertLess(verify, final_check)
+        self.assertLess(final_check, publish)
+        self.assertIn("if: steps.final-freshness.outputs.publish == 'true'", workflow)
+
+    def test_mirror_reconciliation_only_changes_do_not_trigger_release_builds(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        freshness = (root / "scripts" / "check-build-freshness.sh").read_text(encoding="utf-8")
+        ignored_path = ".github/workflows/reconcile-gitlab-main.yml"
+        paths_ignore = workflow.split("paths-ignore:", 1)[1].split("schedule:", 1)[0]
+        self.assertIn(ignored_path, paths_ignore)
+        self.assertIn(ignored_path, freshness)
 
 if __name__ == "__main__":
     unittest.main()
