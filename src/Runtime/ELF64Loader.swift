@@ -98,7 +98,7 @@ final class ELF64Loader {
         var segments: [Segment] = []
         var pending: [(Segment, Int)] = []
         var rawLoadSegments: [(virtualAddress: UInt64, fileOffset: UInt64, fileSize: UInt64, memorySize: UInt64)] = []
-        var dynamicSegment: (fileOffset: UInt64, fileSize: UInt64)?
+        var dynamicSegment: (virtualAddress: UInt64, fileOffset: UInt64, fileSize: UInt64, memorySize: UInt64)?
         var total: UInt64 = 0
         var mappedProgramHeaderAddress: UInt64?
         var declaredProgramHeaderAddress: UInt64?
@@ -131,7 +131,8 @@ final class ELF64Loader {
                       memorySize >= fileSize else {
                     throw LoadError.unsupportedDynamicImage
                 }
-                dynamicSegment = (fileOffset: fileOffset, fileSize: fileSize)
+                dynamicSegment = (virtualAddress: virtualAddress, fileOffset: fileOffset,
+                                  fileSize: fileSize, memorySize: memorySize)
                 continue
             }
             if type == 3 || type == 7 {
@@ -163,6 +164,7 @@ final class ELF64Loader {
                   alignment <= 1 || (
                     alignment & (alignment - 1) == 0
                     && virtualAddress % alignment == fileOffset % alignment
+                    && loadBias % alignment == 0
                   ) else { throw LoadError.invalidSegment }
             rawLoadSegments.append((virtualAddress: virtualAddress, fileOffset: fileOffset,
                                     fileSize: fileSize, memorySize: memorySize))
@@ -181,6 +183,11 @@ final class ELF64Loader {
                 dynamicSegment.fileOffset >= segment.fileOffset
                     && dynamicSegment.fileOffset - segment.fileOffset <= segment.fileSize
                     && dynamicSegment.fileSize <= segment.fileSize - (dynamicSegment.fileOffset - segment.fileOffset)
+                    && dynamicSegment.virtualAddress >= segment.virtualAddress
+                    && dynamicSegment.virtualAddress - segment.virtualAddress
+                        == dynamicSegment.fileOffset - segment.fileOffset
+                    && dynamicSegment.memorySize <= segment.memorySize
+                        - (dynamicSegment.virtualAddress - segment.virtualAddress)
             }
             guard dynamicIsMapped else { throw LoadError.unsupportedDynamicImage }
         }
