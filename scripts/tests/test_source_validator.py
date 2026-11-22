@@ -356,7 +356,7 @@ class SourceValidatorTests(unittest.TestCase):
         before_loader = load.split("ELF64Loader().load", 1)[0]
         self.assertNotIn("memory.clear()", before_loader)
         self.assertLess(load.index("try cpu.reset(entryPoint: 0)"), load.index("ELF64Loader().load"))
-        self.assertLess(loader_body.index("memory.clear()"), loader_body.index("for segment in loadSegments"))
+        self.assertLess(loader_body.index("memory.clear()"), loader_body.index("for (segment, fileOffset) in pending"))
         self.assertIn("memory.clear()", load.split("} catch {", 1)[1])
         self.assertIn("_ = try? cpu.reset(entryPoint: 0)", load.split("} catch {", 1)[1])
         self.assertNotIn("cpu?.reset(entryPoint: 0)", load.split("} catch {", 1)[1])
