@@ -41,6 +41,22 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         vrSwitch.isOn = VRSettings.shared.mode == .cardboard
         persistSwitch.isOn = UserDefaults.standard.bool(forKey: "iSteam.persistSessionData")
         slotField.text = "My VM"
+
+        // An OS image imported in Library is stored inside the app sandbox.
+        // Preselect it here so importing an image actually reaches QEMU's boot
+        // media path instead of stopping at a library status label.
+        if let importedPath = UserDefaults.standard.string(forKey: "iSteam.customOSPath") {
+            let url = URL(fileURLWithPath: importedPath).standardizedFileURL
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            if values?.isRegularFile == true, (values?.fileSize ?? 0) > 0 {
+                selectedDiskURL = url
+                diskLabel.text = "Boot media: \(url.lastPathComponent) (imported OS image)"
+                statusLabel.text = "Imported OS image preselected. If this is an installer ISO, select or create an additional writable VM disk."
+            } else {
+                UserDefaults.standard.removeObject(forKey: "iSteam.customOSPath")
+                statusLabel.text = "The previously imported OS image is missing. Import it again from Library."
+            }
+        }
     }
 
     private func buildForm() {
