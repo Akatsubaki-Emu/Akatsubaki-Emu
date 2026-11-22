@@ -183,6 +183,7 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertEqual(tci_packager.count('cat > "$OUT/BUILD-INFO.txt"'), 1)
         self.assertEqual(tci_packager.count('REPORT="$OUT/dependency-report.txt"'), 1)
         self.assertIn('qemu_system_shutdown_request$\' > "$OUT/exports.txt" || true', tci_packager)
+        self.assertNotIn('\\n > "$OUT/exports.txt" || true\\n', tci_packager)
 
     def test_qemu_packagers_reject_output_paths_that_overlap_the_archive(self):
         root = Path(__file__).resolve().parents[2]
