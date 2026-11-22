@@ -23,6 +23,8 @@
 - Sign Akatsubaki with a profile that preserves `get-task-allow`.
 - When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
 
+The **Increased Memory Limit** capability is separate from `get-task-allow`. Requesting that memory capability does not grant `get-task-allow` or make the process debuggable; the development provisioning profile must still provide `get-task-allow=true`.
+
 The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user.
 
 ## Failure handling and security
