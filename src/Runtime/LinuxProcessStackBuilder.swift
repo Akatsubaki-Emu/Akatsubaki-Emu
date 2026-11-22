@@ -137,6 +137,9 @@ struct LinuxProcessStackBuilder {
         }
         guard vectorWritten else { throw BuildError.stackUnavailable }
 
+        guard memory.map(offset: stackBase, length: UInt64(Self.stackSize), permissions: 3) else {
+            throw BuildError.stackUnavailable
+        }
         let stackPointer = stackBase + UInt64(vectorStart)
         guard stackPointer & 0xF == 0,
               memory.write(buffer, sourceRange: vectorStart..<Self.stackSize, offset: stackPointer) else {
