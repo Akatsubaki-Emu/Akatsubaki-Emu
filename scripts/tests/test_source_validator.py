@@ -585,5 +585,12 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertNotIn("applyDefaultLayout()\n            } else if", layout)
 
 
+    def test_repository_validation_does_not_cancel_active_runs(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "validate-repository.yml").read_text(encoding="utf-8")
+        self.assertIn("  cancel-in-progress: false", workflow)
+        self.assertNotIn("  cancel-in-progress: true", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
