@@ -16,16 +16,16 @@ OBJC_PATCHED_ARGUMENT = (
 
 
 def patch_objc_compile_flag(source: str) -> str:
-    if OBJC_PATCHED_ARGUMENT in source:
-        if source.count(OBJC_PATCHED_ARGUMENT) != 1:
-            raise SystemExit("QEMU meson.build changed: duplicate Objective-C compiler flag patch")
-        return source
     block_start = source.find(OBJC_BLOCK_MARKER)
     if block_start < 0:
-        return source
+        raise SystemExit("QEMU meson.build changed: Objective-C compiler block not found")
     block_end = source.find("endif", block_start)
     if block_end < 0:
         raise SystemExit("QEMU meson.build changed: Objective-C compiler block is unterminated")
+    if OBJC_PATCHED_ARGUMENT in source:
+        if source.count(OBJC_PATCHED_ARGUMENT) != 1 or source.find(OBJC_PATCHED_ARGUMENT, block_start, block_end) < 0:
+            raise SystemExit("QEMU meson.build changed: duplicate or misplaced Objective-C compiler flag patch")
+        return source
     position = source.find(OBJC_ARGUMENT, block_start, block_end)
     if position < 0 or source.find(OBJC_ARGUMENT, position + len(OBJC_ARGUMENT), block_end) >= 0:
         raise SystemExit("QEMU meson.build changed: Objective-C compiler argument anchor not found exactly once")
