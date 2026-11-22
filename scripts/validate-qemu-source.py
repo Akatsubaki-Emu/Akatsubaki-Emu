@@ -1429,6 +1429,11 @@ if "aotExecutor: KenranButoAOTExecutor()" not in aot_guest_machine:
     print("GuestMachine does not install KenranButoAOTExecutor",file=sys.stderr); failed=True
 for token in ("maximumInstructions","maximumOutputBytes","maximumGuestBytes","inputLimit"):
     if token not in aot_translator: print(f"AOT translator missing bounded contract {token!r}",file=sys.stderr); failed=True
+for token in ("maximumInstructionBudget = 4096","maximumOutputBudget = 1_048_576","maximumGuestByteBudget = 65_536","guestCode.withUnsafeBytes { raw in","UnsafeBufferPointer(","var output = [UInt32]()","private struct EncodedWords","machineCode: code.withUnsafeBytes { Data($0) }","output.append(word.littleEndian)"):
+    if token not in aot_translator: print(f"AOT translator allocation contract missing {token!r}",file=sys.stderr); failed=True
+aot_allocation_test=Path("scripts/tests/test_aot_translator_allocation_hot_path.py").read_text(encoding="utf-8")
+for token in ("test_guest_input_is_borrowed_without_copying_to_a_byte_array","test_translated_output_uses_one_word_buffer_and_one_final_data_copy","test_each_instruction_uses_a_fixed_four_word_emission_buffer","test_move_immediate_does_not_allocate_chunk_or_word_arrays","test_output_capacity_is_bounded_by_input_and_instruction_budgets","test_words_are_stored_in_little_endian"):
+    if token not in aot_allocation_test: print(f"AOT allocation regression missing {token!r}",file=sys.stderr); failed=True
 aot_tests=Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
 for token in ("iSteamAOTGuestMemoryRead","iSteamAOTGuestMemoryWrite","sideExit!.exitRip == 0x100A","Kenran Butō AOT native block execution","cachedBlockCount","cachedExecutableBytes"):
     if token not in aot_tests: print(f"AOT runtime regression missing {token!r}",file=sys.stderr); failed=True

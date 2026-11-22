@@ -16,6 +16,7 @@ on:
       - "docs/KENRAN_BUTO_AOT_ABI.md"
       - "src/Performance/TranslationCache.swift"
       - "scripts/tests/test_kenran_buto_aot_*.swift"
+      - "scripts/tests/test_aot_translator_allocation_hot_path.py"
       - ".github/workflows/validate-kenran-buto-aot.yml"
   pull_request:
     paths:
@@ -31,6 +32,7 @@ on:
       - "docs/KENRAN_BUTO_AOT_ABI.md"
       - "src/Performance/TranslationCache.swift"
       - "scripts/tests/test_kenran_buto_aot_*.swift"
+      - "scripts/tests/test_aot_translator_allocation_hot_path.py"
       - ".github/workflows/validate-kenran-buto-aot.yml"
   workflow_dispatch:
 
@@ -43,6 +45,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - name: Verify fixed-buffer translator allocation contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p 'test_aot_translator_allocation_hot_path.py'
       - name: Compile and test x86-64 to AArch64 decoder
         shell: bash
         run: |

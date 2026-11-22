@@ -68,6 +68,8 @@ native execution; malformed results restore the pre-call GPR snapshot and fall
 back to interpretation. The in-memory executable-block cache is bounded by both
 64 entries and 16 MiB of page-rounded executable mappings.
 
+Translator v3 borrows its bounded guest input with `Data.withUnsafeBytes` instead of allocating an intermediate byte array, emits AArch64 words into a fixed four-word instruction buffer, and clamps instruction, guest-byte and output-byte budgets. The translator-version change invalidates persistent artifacts produced by earlier decoder versions.
+
 The focused native harness includes a 20-byte, four-instruction block to ensure
 multi-instruction AOT dispatch is not accidentally constrained by the 15-byte
 single-instruction decoder window. Native execution is required to run on an
