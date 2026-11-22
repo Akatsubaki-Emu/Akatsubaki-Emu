@@ -442,13 +442,13 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: false", workflow)
         self.assertIn("test_qemu_runtime_does_not_cancel_in_progress_release_build", tests)
 
-    def test_qemu_runtime_pins_xcode_27_1_on_supported_runner(self):
+    def test_qemu_runtime_pins_xcode_27_2_on_supported_runner(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
         self.assertIn("runs-on: xcode-27", workflow)
-        self.assertIn('XCODE_APP="/Applications/Xcode_27.1.app"', workflow)
+        self.assertIn('XCODE_APP="/Applications/Xcode_27.2.app"', workflow)
         self.assertIn('sudo xcode-select --switch "$XCODE_APP/Contents/Developer"', workflow)
-        self.assertIn('if [ "$XCODE_VERSION" != "27.1" ]; then', workflow)
+        self.assertIn('if [ "$XCODE_VERSION" != "27.2" ]; then', workflow)
 
 
     def test_release_and_platform_validation_pin_xcode_26_2(self):
