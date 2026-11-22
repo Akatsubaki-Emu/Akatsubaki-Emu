@@ -26,5 +26,16 @@ class ELFLoaderCopyTests(unittest.TestCase):
         self.assertNotIn("chunkSize", copy_loop)
 
 
+    def test_static_pie_relocation_segment_lookup_uses_binary_search(self):
+        root = Path(__file__).resolve().parents[2]
+        loader = (root / "src" / "Runtime" / "ELF64Loader.swift").read_text(encoding="utf-8")
+        relocations = loader.split("let relocationCount = Int(relaSize / 24)", 1)[1].split("private func u16", 1)[0]
+        self.assertIn("loadSegments.sorted { $0.virtualAddress < $1.virtualAddress }", relocations)
+        self.assertIn("forVirtualAddress: relaAddress", relocations)
+        self.assertIn("containsGuestRange(target, byteCount: 8", relocations)
+        self.assertIn("while lowerBound < upperBound", relocations)
+        self.assertNotIn("loadSegments.contains(where:", relocations)
+
+
 if __name__ == "__main__":
     unittest.main()
