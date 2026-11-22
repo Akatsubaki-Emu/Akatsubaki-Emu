@@ -142,8 +142,20 @@ else
 fi
 
 tci_library_merged="Frameworks/TCI/$tci_framework_relative"
-cp -a "$JIT_DIR/QEMU/." "$TEMP_OUT/QEMU/JIT/"
-cp -a "$TCI_DIR/QEMU/." "$TEMP_OUT/QEMU/TCI/"
+JIT_QEMU_SOURCE="$JIT_DIR/QEMU"
+if [[ -d "$JIT_DIR/QEMU/JIT" ]]; then
+  JIT_QEMU_SOURCE="$JIT_DIR/QEMU/JIT"
+  cmp -s "$JIT_DIR/QEMU/runtime-library-path.txt" "$JIT_QEMU_SOURCE/runtime-library-path.txt" || fail "JIT root and mode-specific runtime manifests disagree"
+fi
+TCI_QEMU_SOURCE="$TCI_DIR/QEMU"
+if [[ -d "$TCI_DIR/QEMU/TCI" ]]; then
+  TCI_QEMU_SOURCE="$TCI_DIR/QEMU/TCI"
+  cmp -s "$TCI_DIR/QEMU/runtime-library-path.txt" "$TCI_QEMU_SOURCE/runtime-library-path.txt" || fail "TCI root and mode-specific runtime manifests disagree"
+fi
+[[ -s "$JIT_QEMU_SOURCE/runtime-library-path.txt" ]] || fail "JIT data directory has no runtime manifest"
+[[ -s "$TCI_QEMU_SOURCE/runtime-library-path.txt" ]] || fail "TCI data directory has no runtime manifest"
+cp -a "$JIT_QEMU_SOURCE/." "$TEMP_OUT/QEMU/JIT/"
+cp -a "$TCI_QEMU_SOURCE/." "$TEMP_OUT/QEMU/TCI/"
 printf '%s\n' "$jit_library" > "$TEMP_OUT/QEMU/JIT/runtime-library-path.txt"
 printf '%s\n' "$tci_library_merged" > "$TEMP_OUT/QEMU/TCI/runtime-library-path.txt"
 cp "$JIT_DIR/exports.txt" "$TEMP_OUT/QEMU/JIT/exports.txt"
