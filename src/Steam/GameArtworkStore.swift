@@ -35,6 +35,11 @@ final class GameArtworkStore {
         guard values.isRegularFile == true, let size = values.fileSize, size > 0, size <= maxBytes else {
             throw ArtworkError.invalidFile
         }
+        let thumbnailOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 512,
+            kCGImageSourceShouldCacheImmediately: true
+        ] as CFDictionary
         let coordinator = NSFileCoordinator()
         var coordinationError: NSError?
         var imageData: Data?
@@ -51,7 +56,7 @@ final class GameArtworkStore {
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0, width <= 8192, height <= 8192,
               width <= (16 * 1024 * 1024) / height,
-              CGImageSourceCreateImageAtIndex(image, 0, nil) != nil,
+              CGImageSourceCreateThumbnailAtIndex(image, 0, thumbnailOptions) != nil,
               let type = CGImageSourceGetType(image) as String?,
               ["public.jpeg", "public.png", "public.heic", "public.webp", "org.webmproject.webp", "com.compuserve.gif"].contains(type) else {
             throw ArtworkError.invalidImage

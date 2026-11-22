@@ -573,6 +573,8 @@ required = {
         "copied_argv[i] = argument_storage + argument_offset;",
         "memcpy(copied_argv[i], argv[i], argument_length + 1u)",
         'dlsym(library, "qemu_init")',
+        "typedef void (*qemu_init_fn)(int, char **);",
+        "g_qemu_init(g_argc, g_argv);",
         'dlsym(library, "qemu_main_loop")',
         'dlsym(library, "qemu_cleanup")',
         'dlsym(library, "qemu_system_shutdown_request")',
@@ -585,6 +587,10 @@ required = {
         "ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES",
         "strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u)",
         "error_buffer && error_capacity > 0",
+    ],
+    "scripts/tests/fake_qemu_runtime.c": [
+        "void qemu_init(int argc, char *argv[])",
+        "poison_nonzero_return_register();",
     ],
     "scripts/package-utm-qemu-runtime.sh": [
         " _?isteam_qemu_set_jit_callbacks$",
@@ -710,6 +716,11 @@ required = {
     ],
     "scripts/tests/test_qemu_native_bridge_jit_validation.py": [
         "def test_qemu_arguments_use_one_contiguous_allocation(self):",
+        "def test_qemu_init_uses_the_upstream_void_abi(self):",
+        "typedef void (*qemu_init_fn)(int, char **);",
+        "g_qemu_init(g_argc, g_argv);",
+        "void qemu_init(int argc, char *argv[])",
+        "poison_nonzero_return_register();",
         "self.assertIn(\"malloc(total_argument_bytes)\", start)",
         "def test_jit_callback_export_is_required_during_validation_and_start(self):",
         "typedef void (*qemu_set_jit_callbacks_fn)",
@@ -772,7 +783,10 @@ required = {
         "CGImageSourceGetCount(image) <= 200",
         "width <= 8192, height <= 8192",
         "width <= (16 * 1024 * 1024) / height",
-        "CGImageSourceCreateImageAtIndex(image, 0, nil) != nil",
+        "CGImageSourceCreateThumbnailAtIndex(image, 0, thumbnailOptions) != nil",
+        "kCGImageSourceCreateThumbnailFromImageAlways: true",
+        "kCGImageSourceThumbnailMaxPixelSize: 512",
+        "kCGImageSourceShouldCacheImmediately: true",
         "org.webmproject.webp",
     ],
     "src/Runtime/ExternalDriveStore.swift": [
