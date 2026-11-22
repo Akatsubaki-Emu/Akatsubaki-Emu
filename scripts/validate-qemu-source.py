@@ -183,6 +183,11 @@ required = {
             ],
     ".github/workflows/build-qemu-runtime.yml": [
     ],
+    "scripts/tests/test_qemu_runtime_lookup.py": [
+        "test_fallback_runtime_scan_filters_jit_and_tci_artifacts",
+        "test_capability_probe_accepts_tci_when_jit_runtime_is_missing",
+        "test_runtime_start_falls_back_to_tci_when_jit_is_unavailable",
+    ],
     "scripts/tests/test_qemu_build_patches.py": [
         "test_qemu_stikjit_patcher_exports_required_runtime_symbols",
         "test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed",
@@ -546,8 +551,12 @@ required = {
         "backend = candidate",
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
-        "let requiresJIT = configuration.accelerator == .jit",
-        "switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)",
+        "let requestedJIT = configuration.accelerator == .jit",
+        "var requiresJIT = requestedJIT",
+        "QEMU JIT is unavailable; falling back to the TCI no-JIT runtime.",
+        "QEMURuntimeStatus.inspect(requiresJIT: false)",
+        "var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)",
+        "switch runtimeStatus",
         "isteam_qemu_start",
         "isteam_qemu_request_stop",
         "findUEFIFirmwarePair(in directory: URL)",
@@ -674,6 +683,8 @@ required = {
         "isteam_qemu_validate_library(",
         "validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory,",
         "requiresJIT: requiresJIT",
+        "requiresJIT ? !isTCIArtifact : isTCIArtifact",
+        'path.contains("/qemu-tci.framework/")',
         "QEMU-TCI.framework/QEMU",
         "The no-JIT QEMU TCI runtime is not packaged.",
         "The bundled QEMU library failed its load/export validation.",
@@ -685,7 +696,9 @@ required = {
         "level: .loadable",
         "level == .operational",
         "if probeQEMU",
-        "QEMURuntimeStatus.inspect(bundle: bundle)",
+        "QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: true)",
+        "QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: false)",
+        "The bundled QEMU TCI no-JIT library loads",
     ],
     "src/Steam/GameLauncher.swift": [
         "RuntimeCapabilityRegistry.current",
