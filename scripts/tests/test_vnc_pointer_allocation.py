@@ -10,7 +10,8 @@ class VNCPointerAllocationTests(unittest.TestCase):
         self.assertIn("var latestPosition: VNCPointerPosition?", source)
         movement = source.split("func movePointer", 1)[1].split("func sendButton", 1)[0]
         self.assertIn("batch.latestPosition = VNCPointerPosition", movement)
-        self.assertNotIn("Data([", movement)
+        drain_start = movement.split("sendQueue.async", 1)[0]
+        self.assertNotIn("Data([", drain_start)
         drain = movement.split("sendQueue.async", 1)[1]
         self.assertIn("let latestPosition = withStateLock", drain)
         self.assertIn("let message = Data([", drain)

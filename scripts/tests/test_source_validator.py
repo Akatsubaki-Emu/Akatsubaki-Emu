@@ -257,7 +257,7 @@ class SourceValidatorTests(unittest.TestCase):
         declared = source.split("if type == 6", 1)[1].split("if type == 2", 1)[0]
         self.assertIn("fileOffset == phoff", declared)
         self.assertIn("fileSize >= programHeaderTableSize", declared)
-        self.assertIn("memorySize >= programHeaderTableSize", declared)
+        self.assertIn("memorySize >= fileSize", declared)
         self.assertIn("mappedProgramHeaderAddress == declaredProgramHeaderAddress", source)
 
 
@@ -391,9 +391,9 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("withABIPlan.isExecutableWithInstalledBackends", harness)
 
     def test_linux_elf_launch_uses_bounded_guest_machine_batches(self):
-        self.assertNotIn("completion: (@escaping", launcher)
         root = Path(__file__).resolve().parents[2]
         launcher = (root / "src" / "Steam" / "GameLauncher.swift").read_text(encoding="utf-8")
+        self.assertNotIn("completion: (@escaping", launcher)
         runtime = launcher.split("final class LinuxELFRuntime", 1)[1]
         self.assertIn("format == .linuxELF", launcher)
         self.assertIn("LinuxELFRuntime.shared.launch(", launcher)

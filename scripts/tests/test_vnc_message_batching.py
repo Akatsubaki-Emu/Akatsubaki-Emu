@@ -22,7 +22,7 @@ class VNCMessageBatchingTests(unittest.TestCase):
         tap = source.split("func tapKey", 1)[1].split("func setMovement", 1)[0]
         movement = source.split("func setMovement", 1)[1].split("func movePointer", 1)[0]
         self.assertIn("Self.keyEvents(releaseEvents)", stop)
-        self.assertIn("Self.keyEvents(events)", tap)
+        self.assertIn("Self.keyTapEvents(keysym)", tap)
         self.assertIn("Self.keyEvents(events)", movement)
         self.assertNotIn("for event in keyState.setMovement", movement)
 

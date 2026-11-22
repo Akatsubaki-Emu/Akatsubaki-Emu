@@ -11,7 +11,7 @@ class X86ConditionHotPathTests(unittest.TestCase):
         for unused in ("let cf =", "let zf =", "let sf =", "let of ="):
             self.assertNotIn(unused, method)
         self.assertIn("for code in UInt8(0)...UInt8(15)", tests)
-        self.assertIn("for combination in 0..<16", tests)
+        self.assertIn("for combination in 0..<32", tests)
 
 
 if __name__ == "__main__":

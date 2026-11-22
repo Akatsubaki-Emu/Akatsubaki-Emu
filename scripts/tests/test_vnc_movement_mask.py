@@ -3,20 +3,19 @@ from pathlib import Path
 
 
 class VNCMovementMaskTests(unittest.TestCase):
-    def test_movement_updates_use_mask_and_preserve_button_overlap(self):
+    def test_movement_updates_use_source_masks_and_preserve_button_overlap(self):
         root = Path(__file__).resolve().parents[2]
-        source = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
-        self.assertIn("private var movementMask: UInt8 = 0", source)
-        self.assertNotIn("private var movementKeys = Set<UInt32>()", source)
-        stop = source.split("func stop()", 1)[1].split("func sendKey", 1)[0]
-        self.assertIn("movementMask = 0", stop)
-        send_key = source.split("func sendKey", 1)[1].split("func setMovement", 1)[0]
-        self.assertIn("movementKeyIsActive(keysym)", send_key)
-        movement = source.split("func setMovement", 1)[1].split("private func updateMovementKey", 1)[0]
-        self.assertIn("movementMask ^ desiredMask", movement)
-        self.assertNotIn("Set(", movement)
-        helpers = source.split("private func updateMovementKey", 1)[1].split("func movePointer", 1)[0]
-        self.assertIn("active || buttonKeys.contains(keysym)", helpers)
+        client = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
+        state = (root / "src" / "QEMU" / "VNCKeyState.swift").read_text(encoding="utf-8")
+        self.assertIn("private var keyState = VNCKeyState()", client)
+        self.assertIn("let events = keyState.setMovement(desiredMask, source: source)", client)
+        self.assertIn("keyState.setKey(keysym, source: source, isDown: down)", client)
+        self.assertIn("keyState.releaseAll()", client)
+        self.assertIn("private var movementSources: [String: UInt8] = [:]", state)
+        self.assertIn("private var movementSourceCounts", state)
+        self.assertIn("let changedMask = previousMask ^ movementMask", state)
+        self.assertIn("|| keySources[movement.keysym]?.isEmpty == false", state)
+        self.assertNotIn("private var movementKeys = Set<UInt32>()", client)
 
 
 if __name__ == "__main__":

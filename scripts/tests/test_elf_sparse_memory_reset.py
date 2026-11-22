@@ -10,7 +10,7 @@ class ELFSparseMemoryResetTests(unittest.TestCase):
         reset = loader.split("memory.clear()", 1)[1].split("for (segment, fileOffset)", 1)[0]
         self.assertNotIn("memory.zero(", reset)
         self.assertIn("new (std::nothrow) Page{}", native)
-        self.assertIn("memory.pages.clear()", native)
+        self.assertIn("memory->pages.clear()", native)
 
 
 if __name__ == "__main__":

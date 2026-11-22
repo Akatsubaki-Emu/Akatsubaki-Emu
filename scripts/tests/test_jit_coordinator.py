@@ -14,7 +14,7 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
         physical_guard = "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)"
-        self.assertEqual(source.count(physical_guard), 2)
+        self.assertEqual(source.count(physical_guard), 3)
 
     def test_jit_ready_uses_the_attached_debugger_status(self):
         root = Path(__file__).resolve().parents[2]
