@@ -248,7 +248,11 @@ required = {
         "static func or8(",
         "static func xor8(",
         "private static func makeFlags8(",
-    ],
+
+        "case 0x0: return overflowSet",
+        "case 0x6: return carrySet || zeroSet",
+        "case 0xA: return paritySet",
+        "case 0xF: return !zeroSet && signSet == overflowSet",    ],
     "src/Runtime/X86_64Interpreter.swift": [
         "func setInitialStackPointer(_ pointer: UInt64) throws",
         "func configureLinuxProcess(programBreak: UInt64, stackBase: UInt64) throws",
@@ -305,7 +309,9 @@ required = {
         "case 0x80: // ADD/OR/AND/SUB/XOR/CMP r/m8, imm8",
         "case 0xA8: // TEST AL, imm8",
         "X86_64ALU.add8(lhs, immediate, flags: flags)",
-    ],
+
+        "case 0x70...0x7F:",
+        "second >= 0x80 && second <= 0x8F",    ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
         "hello from static ELF",
@@ -384,7 +390,10 @@ required = {
         "precondition(unsupportedByteImmediateExit == .unsupportedInstruction(address: 0))",
         "Data([0x48, 0x0F, 0xBF, 0x05, 0x78, 0x00, 0x00, 0x00, 0xF4])",
         "precondition(signExtend.registerValue(0) == 0xFFFFFFFFFFFF80FF)",
-    ],
+
+        "let shortParityMemory = GuestMemory(size: 64)",
+        "let nearParityMemory = GuestMemory(size: 64)",
+        "for combination in 0..<32",    ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
         "\"-vnc\", \"127.0.0.1:0\"",
@@ -768,7 +777,9 @@ required = {
     "scripts/tests/test_x86_condition_dispatch.py": [
         "self.assertIn(\"static func condition(_ code: UInt8, flags: UInt64) -> Bool {\", alu)",
         "self.assertNotIn(\"guard let takeBranch = X86_64ALU.condition\", interpreter)",
-    ],
+
+        "self.assertIn("case 0x0: return overflowSet", alu)",
+        "self.assertIn("second >= 0x80 && second <= 0x8F", interpreter)",    ],
 }
 failed = False
 for name, tokens in required.items():

@@ -869,25 +869,57 @@ struct InterpreterTests {
         precondition(wordBoundaryMemory.readUInt16Calls == 1)
         precondition(wordBoundaryMemory.readByteCalls == 0)
 
+        let shortParityMemory = GuestMemory(size: 64)
+        precondition(shortParityMemory.write(Data([
+            0x31, 0xC0, 0x7A, 0x05,
+            0xBB, 0x01, 0x00, 0x00, 0x00,
+            0xBB, 0x02, 0x00, 0x00, 0x00, 0xF4
+        ]), offset: 0))
+        let shortParity = X86_64Interpreter(memory: shortParityMemory)
+        try shortParity.reset(entryPoint: 0)
+        let shortParityExit = try shortParity.run(maxInstructions: 8)
+        precondition(shortParityExit == .halted)
+        precondition(shortParity.registerValue(3) == 2)
+
+        let nearParityMemory = GuestMemory(size: 64)
+        precondition(nearParityMemory.write(Data([
+            0x31, 0xC0, 0x0F, 0x8A, 0x05, 0x00, 0x00, 0x00,
+            0xBB, 0x01, 0x00, 0x00, 0x00,
+            0xBB, 0x02, 0x00, 0x00, 0x00, 0xF4
+        ]), offset: 0))
+        let nearParity = X86_64Interpreter(memory: nearParityMemory)
+        try nearParity.reset(entryPoint: 0)
+        let nearParityExit = try nearParity.run(maxInstructions: 8)
+        precondition(nearParityExit == .halted)
+        precondition(nearParity.registerValue(3) == 2)
+
         for code in UInt8(0)...UInt8(15) {
-            for combination in 0..<16 {
+            for combination in 0..<32 {
                 var flags: UInt64 = 0
                 if combination & 0x1 != 0 { flags |= X86_64ALU.carry }
                 if combination & 0x2 != 0 { flags |= X86_64ALU.zero }
                 if combination & 0x4 != 0 { flags |= X86_64ALU.sign }
                 if combination & 0x8 != 0 { flags |= X86_64ALU.overflow }
+                if combination & 0x10 != 0 { flags |= X86_64ALU.parity }
                 let cf = combination & 0x1 != 0
                 let zf = combination & 0x2 != 0
                 let sf = combination & 0x4 != 0
                 let of = combination & 0x8 != 0
+                let pf = combination & 0x10 != 0
                 let expected: Bool
                 switch code {
+                case 0x0: expected = of
+                case 0x1: expected = !of
                 case 0x2: expected = cf
                 case 0x3: expected = !cf
                 case 0x4: expected = zf
                 case 0x5: expected = !zf
+                case 0x6: expected = cf || zf
+                case 0x7: expected = !cf && !zf
                 case 0x8: expected = sf
                 case 0x9: expected = !sf
+                case 0xA: expected = pf
+                case 0xB: expected = !pf
                 case 0xC: expected = sf != of
                 case 0xD: expected = sf == of
                 case 0xE: expected = zf || (sf != of)

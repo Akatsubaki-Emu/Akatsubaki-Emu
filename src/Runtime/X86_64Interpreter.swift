@@ -558,7 +558,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                 if group != 7 && !writeOperand(result.value, to: decoded.operand, width64: width64) {
                     return .memoryFault(address: operandAddress(decoded.operand))
                 }
-            case 0x72, 0x73, 0x74, 0x75, 0x78, 0x79, 0x7C, 0x7D, 0x7E, 0x7F:
+            case 0x70...0x7F:
                 guard let raw = fetchByte() else { return .memoryFault(address: rip) }
                 let takeBranch = X86_64ALU.condition(opcode & 0x0F, flags: flags)
                 if takeBranch { rip = addSigned(Int8(bitPattern: raw), to: rip) }
@@ -624,9 +624,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                     registers[decoded.reg] = width64
                         ? result.value
                         : UInt64(UInt32(truncatingIfNeeded: result.value))
-                } else if (second >= 0x82 && second <= 0x85)
-                    || (second >= 0x88 && second <= 0x89)
-                    || (second >= 0x8C && second <= 0x8F) {
+                } else if second >= 0x80 && second <= 0x8F {
                     guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
                     let takeBranch = X86_64ALU.condition(second & 0x0F, flags: flags)
                     if takeBranch { rip = addSigned(Int32(bitPattern: raw), to: rip) }
