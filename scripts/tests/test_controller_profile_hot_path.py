@@ -34,7 +34,7 @@ class ControllerProfileHotPathTests(unittest.TestCase):
     def test_held_button_release_keeps_the_action_chosen_on_press(self):
         mapped = self.manager.split("private func mappedAction", 1)[1].split("private func sourceID", 1)[0]
         self.assertIn("activeButtonActions[source] = action", mapped)
-        self.assertIn("activeButtonActions.removeValue(forKey: source) ?? profile.action(for: name)", mapped)
+        self.assertIn("return activeButtonActions.removeValue(forKey: source)\n            ?? profile.action(for: name)", mapped)
 
     def test_store_posts_changes_after_releasing_its_lock(self):
         self.assertIn("static let profileDidChangeNotification", self.store)

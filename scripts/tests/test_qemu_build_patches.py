@@ -150,7 +150,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("__builtin_available(iOS 26.0, *)", once)
         self.assertIn("mach_vm_remap(mach_task_self(), &buf_rw", once)
         self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
-        with self.assertRaisesRegex(SystemExit, "split-W^X Darwin allocator not found"):
+        with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
             patch_qemu_stikjit_ios.patch_source("#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n#endif\n")
 
     def test_windows_and_steamos_profiles_select_uefi_firmware(self):

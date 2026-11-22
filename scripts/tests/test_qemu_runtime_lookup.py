@@ -58,7 +58,13 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertIn("resourceValues(forKeys: [.isRegularFileKey])", locate)
         self.assertIn("values?.isRegularFile == true", locate)
         self.assertIn("compactMap(validatedRegularLibrary)", locate)
-        self.assertNotIn("isDirectory", locate)
+        library_check = locate.split("func validatedRegularLibrary", 1)[1].split("// Prefer", 1)[0]
+        self.assertIn("dataIsDirectory: ObjCBool = false", locate)
+        self.assertIn("dataIsDirectory.boolValue", locate)
+        self.assertIn("isDirectory: true", locate)
+        self.assertIn("resourceValues(forKeys: [.isRegularFileKey])", library_check)
+        self.assertIn("values?.isRegularFile == true", library_check)
+        self.assertNotIn("isDirectory", library_check)
 
     def test_start_path_uses_location_only_and_native_start_validates_load(self):
         root = Path(__file__).resolve().parents[2]
