@@ -53,11 +53,10 @@ def patch_script(source: str) -> str:
 
     qemu_build = 'build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS'
     qemu_patch_call = (
-        'case "$PLATFORM" in\n'
-        '    *-tci) echo "TCI mode: skipping the StikJIT executable-region patch." ;;\n'
-        '    *) : "${ISTEAM_QEMU_JIT_PATCHER:?ISTEAM_QEMU_JIT_PATCHER is required for JIT mode}"\n'
-        '       python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c" ;;\n'
-        'esac\n'
+        'if [ "$PLATFORM" != "ios-tci" ]; then\n'
+        '    : "${ISTEAM_QEMU_JIT_PATCHER:?ISTEAM_QEMU_JIT_PATCHER is required for JIT builds}"\n'
+        '    python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"\n'
+        'fi\n'
         ': "${ISTEAM_QEMU_MESON_PATCHER:?ISTEAM_QEMU_MESON_PATCHER is required}"\n'
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"\n'
         + qemu_build
