@@ -74,6 +74,17 @@ jobs:
             scripts/tests/test_kenran_buto_aot_cache.swift \
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
+      - name: Test Kenran Buto AOT translation and cache
+        if: matrix.scheme == 'iSteam'
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Core/EmulationLog.swift \
+            src/Performance/TranslationCache.swift \
+            src/Runtime/KenranButoAOT.swift \
+            scripts/tests/test_kenran_buto_aot.swift \
+            -o "$RUNNER_TEMP/test-kenran-buto-aot"
+          "$RUNNER_TEMP/test-kenran-buto-aot"
       - name: Test ELF program-header table mapping
         if: matrix.scheme == 'iSteam'
         run: |
