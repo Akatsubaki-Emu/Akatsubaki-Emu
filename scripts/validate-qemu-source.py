@@ -1350,6 +1350,7 @@ aot_memory_source = Path("iSteam/KenranButoAOTExecutableMemory.c").read_text(enc
 aot_interpreter_source = Path("src/Runtime/X86_64Interpreter.swift").read_text(encoding="utf-8")
 aot_guest_machine_source = Path("src/Runtime/GuestMachine.swift").read_text(encoding="utf-8")
 aot_execution_tests = Path("scripts/tests/test_kenran_buto_aot_execution.swift").read_text(encoding="utf-8")
+aot_cache_tests = Path("scripts/tests/test_kenran_buto_aot_cache.swift").read_text(encoding="utf-8")
 aot_interpreter_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
 aot_workflow = Path(".github/workflows/validate-ios-build.yml").read_text(encoding="utf-8")
 
@@ -1382,6 +1383,8 @@ for token in (
     "0xD65F03C0",
     "maximumCachedBlocks = 64",
     "KenranButoExecutableMemory.isAvailable",
+    "JITCoordinator.shared.isQEMUJITReady",
+    "JITCoordinator.shared.isJITReady",
 ):
     if token not in aot_execution_source:
         print(f"Kenran Buto AOT execution: missing block ABI/runtime contract {token!r}", file=sys.stderr)
@@ -1425,6 +1428,15 @@ for token in (
     if token not in aot_execution_tests:
         print(f"Kenran Buto AOT execution tests: missing executable-block regression {token!r}", file=sys.stderr)
         failed = True
+for token in (
+    "forged",
+    "repaired.translation != forged",
+    "cachedTranslation == translation",
+):
+    if token not in aot_cache_tests:
+        print(f"Kenran Buto AOT cache tests: missing cache-authenticity regression {token!r}", file=sys.stderr)
+        failed = True
+
 for token in (
     "aotSideExit",
     "unavailableAOT",
