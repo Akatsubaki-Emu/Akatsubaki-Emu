@@ -135,6 +135,7 @@ required = {
     "scripts/tests/test_linux_elf_runtime_initialization.py": [
         "test_guest_machine_retains_typed_initialization_errors",
         "test_linux_elf_runtime_propagates_initialization_error",
+        "test_stop_requests_interruption_without_blocking_the_calling_thread",
     ],
     "src/Runtime/LinuxSyscallDispatcher.swift": [
         "func configure(programBreak: UInt64, stackBase: UInt64) throws",
@@ -651,6 +652,8 @@ required = {
         "format == .windowsPE || format == .linuxELF",
         "LinuxELFRuntime.shared.launch(",
         "machine.loadELFImage(at: executable, arguments: arguments)",
+        "machine?.requestStop()",
+        "queue.async { machine.stop() }",
         "machine.runBatch(maxInstructions: Self.batchInstructionLimit)",
         "queue.asyncAfter",
         "private static let guestMemorySize: UInt64 = 1024 * 1024 * 1024",
@@ -781,6 +784,7 @@ required = {
         "withExecutionLock",
         "hasLoadedImage",
         "activeCPULock",
+        "func requestStop()",
         "requestActiveStop",
         "A caller can pause between bounded execution batches as well.",
         "state == .configured",

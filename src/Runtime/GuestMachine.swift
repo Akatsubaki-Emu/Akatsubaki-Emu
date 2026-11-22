@@ -305,8 +305,13 @@ final class GuestMachine {
         }
     }
 
+    /// Signals the active interpreter without waiting for its execution lock.
+    func requestStop() {
+        _ = requestActiveStop()
+    }
+
     func stop() {
-        requestActiveStop()
+        requestStop()
         withExecutionLock {
             cpu?.requestStop()
             memory.clear()

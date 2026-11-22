@@ -177,7 +177,12 @@ final class LinuxELFRuntime {
         pendingCompletion = nil
         lock.unlock()
 
-        machine?.stop()
+        machine?.requestStop()
+        if let machine {
+            // Image loading and memory cleanup run on the serial runtime queue;
+            // never wait for the execution lock on the caller (usually the UI).
+            queue.async { machine.stop() }
+        }
         if let callback {
             DispatchQueue.main.async { callback(.success(.interrupted)) }
         }

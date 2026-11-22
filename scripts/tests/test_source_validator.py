@@ -65,6 +65,7 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
         self.assertEqual(source.count("func stop()"), 1)
+        self.assertIn("func requestStop()", source)
         self.assertIn("requestActiveStop()", source)
         self.assertIn("memory.clear()", source)
 

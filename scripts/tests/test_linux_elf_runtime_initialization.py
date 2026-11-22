@@ -29,5 +29,18 @@ class LinuxELFRuntimeInitializationTests(unittest.TestCase):
         self.assertLess(stop, propagate)
 
 
+    def test_stop_requests_interruption_without_blocking_the_calling_thread(self):
+        guest = (ROOT / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        runtime = (ROOT / "src" / "Steam" / "GameLauncher.swift").read_text(encoding="utf-8")
+        request = guest.split("func requestStop()")[1].split("func stop()")[0]
+        stop = runtime.split("func stop()")[1].split("private func isCurrent")[0]
+        self.assertIn("_ = requestActiveStop()", request)
+        self.assertIn("machine?.requestStop()", stop)
+        self.assertIn("queue.async { machine.stop() }", stop)
+        self.assertNotIn("machine?.stop()", stop)
+
+
+
+
 if __name__ == "__main__":
     unittest.main()
