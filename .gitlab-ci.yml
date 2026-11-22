@@ -29,6 +29,7 @@ swift-runtime-tests:
         - src/Runtime/**/*.swift
         - src/Performance/*.swift
         - src/GPU/*.swift
+        - src/Display/TouchStickMath.swift
         - src/QEMU/VNCKeyState.swift
         - scripts/tests/*.swift
         - scripts/tests/**/*.swift
@@ -139,6 +140,8 @@ swift-runtime-tests:
     - /tmp/test-backend-router
     - swiftc -parse-as-library -swift-version 5 src/GPU/GPUBackend.swift scripts/tests/test_gpu_frame_region.swift -o /tmp/test-gpu-frame-region
     - /tmp/test-gpu-frame-region
+    - swiftc -parse-as-library -swift-version 5 src/Display/TouchStickMath.swift scripts/tests/test_touch_stick_math.swift -o /tmp/test-touch-stick
+    - /tmp/test-touch-stick
 
 native-memory-tests:
   stage: validate
