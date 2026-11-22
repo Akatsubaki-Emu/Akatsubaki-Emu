@@ -144,10 +144,14 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "validate-repository.yml").read_text(encoding="utf-8")
         self.assertIn("bash -n scripts/package-utm-qemu-runtime.sh", workflow)
+        self.assertIn("bash -n scripts/package-utm-qemu-tci-runtime.sh", workflow)
+        self.assertIn("bash -n scripts/merge-qemu-runtime-variants.sh", workflow)
         self.assertIn("bash -n scripts/validate-qemu-runtime.sh", workflow)
         self.assertIn("bash -n scripts/validate-apple-package.sh", workflow)
         for script in (
             "scripts/package-utm-qemu-runtime.sh",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+            "scripts/merge-qemu-runtime-variants.sh",
             "scripts/validate-qemu-runtime.sh",
             "scripts/validate-apple-package.sh",
         ):
@@ -538,8 +542,8 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn('configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg"', builder)
         self.assertNotIn("tcg,tb-size=64,split-wx=on", builder)
         self.assertIn("QEMU TCG uses JIT code generation", docs)
-        self.assertIn("The TCI source and packaging steps are present", docs)
-        self.assertIn("successful hosted JIT+TCI build and combined artifact have not yet been recorded", docs)
+        self.assertIn("The runtime workflow now builds the `iOS` and `iOS-TCI` archives and packages both under `QEMU/JIT` and `QEMU/TCI`", docs)
+        self.assertIn("successful hosted dual-runtime build and physical guest boot remain unverified", docs)
 
     def test_linux_arm32_translator_requires_linux_syscall_abi(self):
         root = Path(__file__).resolve().parents[2]
