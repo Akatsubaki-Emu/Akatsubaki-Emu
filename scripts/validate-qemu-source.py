@@ -183,6 +183,12 @@ required = {
             ],
     ".github/workflows/build-qemu-runtime.yml": [
     ],
+    "scripts/tests/test_qemu_runtime_variant_merge.py": [
+        "test_shell_scripts_parse",
+        "test_output_path_traversal_is_rejected_before_outside_data_is_touched",
+        "test_merger_keeps_jit_and_tci_frameworks_distinct",
+        "test_merger_rejects_different_bytes_for_shared_framework_dependencies",
+    ],
     "scripts/tests/test_qemu_build_patches.py": [
         "test_qemu_stikjit_patcher_exports_required_runtime_symbols",
         "test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed",
@@ -194,6 +200,10 @@ required = {
         "test_link_verifier_rejects_missing_objc_stub_generation",
         "test_link_verifier_rejects_missing_libobjc",
         "test_qemu_runtime_packager_preserves_firmware_bundle_directories",
+        "test_tci_packager_shell_syntax_and_export_manifest",
+        "test_generic_tci_packager_requires_no_jit_callback",
+        "test_tci_runtime_validator_rejects_jit_callback",
+        "test_release_validates_mode_specific_jit_and_tci_manifests",
         "test_build_freshness_script_ignores_only_non_build_paths",
         "#include <mach/vm_map.h>",
         "#define mach_vm_remap vm_remap",
