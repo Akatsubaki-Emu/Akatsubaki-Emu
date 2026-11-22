@@ -85,6 +85,7 @@ class QEMUBuildPatchTests(unittest.TestCase):
         source = '''#!/bin/sh
 generate_meson_cross() {
     echo "has_function_dup3 = false" >> $cross
+    echo "objc_args = [${OBJCFLAGS:+$(meson_quote $OBJCFLAGS)}]" >> $cross
 }
 QEMU_PLATFORM_BUILD_FLAGS="--enable-shared-lib --disable-cocoa --disable-sdl --disable-coreaudio --disable-slirp-smbd --enable-ucontext --with-coroutine=libucontext $HVF_FLAGS $TCI_BUILD_FLAGS"
 download () {
@@ -112,6 +113,10 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertNotIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$DIR/build/build.ninja"', twice)
         self.assertIn("http://ftp.gnu.org/gnu/libiconv/*", twice)
         self.assertIn("https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}", twice)
+        self.assertIn('echo "objc_args = [${OBJCFLAGS:+$(meson_quote $OBJCFLAGS)}]" >> $cross', twice)
+        without_objc_args = source.replace('    echo "objc_args = [${OBJCFLAGS:+$(meson_quote $OBJCFLAGS)}]" >> $cross\n', "")
+        with self.assertRaisesRegex(SystemExit, "Objective-C flags are not propagated to Meson"):
+            patch_utm_qemu_ios.patch_script(without_objc_args)
         shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
         self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
 
@@ -302,8 +307,8 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         source = workflow.read_text(encoding="utf-8")
         self.assertIn("Verify Objective-C class-selector stub compatibility", source)
         self.assertIn("runs-on: xcode-27", source)
-        self.assertIn('XCODE_APP="/Applications/Xcode_27.1.app"', source)
-        self.assertIn('if [ "$XCODE_VERSION" != "27.1" ]; then', source)
+        self.assertIn('XCODE_APP="/Applications/Xcode_27.2.app"', source)
+        self.assertIn('if [ "$XCODE_VERSION" != "27.2" ]; then', source)
         self.assertIn("utm-ios-arm64-deps-v14-", source)
         self.assertIn("PROBE_BINARY=", source)
         self.assertIn("-Wl,-objc_stubs_fast", source)
