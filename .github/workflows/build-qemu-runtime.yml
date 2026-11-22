@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   build-utm-runtime:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 350
     steps:
       - name: Checkout i-Steam
@@ -47,15 +47,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          XCODE_APP="/Applications/Xcode_26.2.app"
+          XCODE_APP="/Applications/Xcode_27.1.app"
           if [ ! -d "$XCODE_APP" ]; then
-            echo "Xcode 26.2 is required for the QEMU/Mesa Metal 4 headers." >&2
+            echo "Xcode 27.1 is required for the QEMU/Mesa Metal 4 headers." >&2
             exit 1
           fi
           sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
           XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
-          if [ "$XCODE_VERSION" != "26.2" ]; then
-            echo "Expected Xcode 26.2, selected $XCODE_VERSION." >&2
+          if [ "$XCODE_VERSION" != "27.1" ]; then
+            echo "Expected Xcode 27.1, selected $XCODE_VERSION." >&2
             exit 1
           fi
           xcode-select -p
@@ -80,7 +80,8 @@ jobs:
           EOF
           "$CLANG" -target arm64-apple-ios15.0 -isysroot "$SDKROOT" \
             -fno-objc-msgsend-class-selector-stubs -c "$PROBE_SOURCE" -o "$PROBE_OBJECT"
-          if xcrun --sdk iphoneos nm -u "$PROBE_OBJECT" | grep -Fq '_objc_msgSendClass'; then
+          SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"
+          if grep -Fq '_objc_msgSendClass' <<<"$SYMBOLS"; then
             echo "Xcode still emitted an Objective-C class-selector stub that the selected linker cannot resolve." >&2
             exit 1
           fi
@@ -119,7 +120,7 @@ jobs:
             UTM/sysroot-iOS-arm64
           # Include the workflow itself: Meson cross-file fixes change build configuration.
           # A workflow-only fix must not reuse a QEMU build tree configured without it.
-          key: utm-ios-arm64-deps-v13-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
+          key: utm-ios-arm64-deps-v14-${{ steps.utm-source.outputs.commit }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('.github/workflows/build-qemu-runtime.yml', 'scripts/package-utm-qemu-runtime.sh', 'scripts/patch_utm_qemu_ios.py', 'scripts/patch_qemu_stikjit_ios.py', 'scripts/patch_qemu_meson_ios.py', 'scripts/verify_qemu_meson_link.py') }}
 
       - name: Build UTM dependencies for physical iOS arm64
         shell: bash
