@@ -73,6 +73,12 @@ jobs:
   qemu-runtime:
     needs: [validate-release-channel, check-push-freshness]
     if: needs.check-push-freshness.outputs.build == 'true'
+    # Keep only the newest queued/running runtime build for each ref/channel.
+    # A queued self-hosted Xcode runner otherwise cannot run its in-job freshness
+    # check, allowing obsolete QEMU builds to pile up ahead of the latest commit.
+    concurrency:
+      group: qemu-runtime-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'nightly' }}
+      cancel-in-progress: true
     uses: ./.github/workflows/build-qemu-runtime.yml
     with:
       rebuild_dependencies: false
