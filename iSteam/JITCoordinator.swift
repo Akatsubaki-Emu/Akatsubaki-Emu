@@ -72,7 +72,7 @@ final class JITCoordinator {
     var isJITReady: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if #available(iOS 17.4, *) {
-            return iSteamJITIsReady()
+            return isStikDebugAvailable && hasGetTaskAllow && isJITProtocolKnown && iSteamJITIsReady()
         }
         #endif
         return false
