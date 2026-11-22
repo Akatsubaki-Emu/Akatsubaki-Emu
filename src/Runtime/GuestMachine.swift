@@ -51,6 +51,7 @@ final class GuestMachine {
     /// Host services available to a future CPU/network backend adapter.
     let hostBridge = HostDeviceBridge.shared
     private(set) var state: State = .stopped
+    private(set) var initializationError: GuestEngineError?
     private(set) var lastExit: GuestCPUExit?
     private var cpu: GuestCPUBackend?
     private var hasLoadedImage = false
@@ -113,7 +114,9 @@ final class GuestMachine {
         let requestedSize = memorySize.map { min(max($0, GuestMemory.pageSize), maximumGuestBytes) } ?? defaultSize
         self.memory = GuestMemory(size: requestedSize)
         guard self.memory.isAvailable else {
-            self.state = .failed("Unable to create the native guest-memory store.")
+            let error = GuestEngineError.memoryUnavailable
+            self.initializationError = error
+            self.state = .failed(error.localizedDescription)
             return
         }
         // Ship the small x86-64 interpreter as the first runnable backend.
@@ -122,9 +125,9 @@ final class GuestMachine {
             self.cpu = X86_64Interpreter(memory: self.memory)
             self.state = .configured
         } else {
-            self.state = .failed(
-                GuestEngineError.backendNotInstalled(configuration.architecture).localizedDescription
-            )
+            let error = GuestEngineError.backendNotInstalled(configuration.architecture)
+            self.initializationError = error
+            self.state = .failed(error.localizedDescription)
         }
     }
 
@@ -164,6 +167,7 @@ final class GuestMachine {
             backend.resume()
             cpu = backend
             state = .configured
+            initializationError = nil
             lastExit = nil
         }
     }
