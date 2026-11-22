@@ -114,8 +114,6 @@ final class AnisetteDataHelper
                 self.printOut("Implementation-Version: \(version)")
             } else { self.printOut("No Implementation-Version header") }
             
-            self.printOut("Anisette used: \(formattedJSON)")
-            self.printOut("Original JSON: \(json)")
             do {
                 let jsonData = try JSONEncoder().encode(formattedJSON)
                 let anisette = try JSONDecoder().decode(AnisetteData.self, from: jsonData)
@@ -367,10 +365,8 @@ final class AnisetteDataHelper
         
         let decoded = Data(base64Encoded: Keychain.shared.identifier!)!
         self.mdLu = decoded.sha256().hexEncodedString()
-        self.printOut("X-Apple-I-MD-LU: \(self.mdLu!)")
         let uuid: UUID = decoded.object()
         self.deviceId = uuid.uuidString.uppercased()
-        self.printOut("X-Mme-Device-Id: \(self.deviceId!)")
 
         // Client info on Anisette Servers are out of date for latest GSA
         /*
@@ -405,10 +401,8 @@ final class AnisetteDataHelper
                         
                         let decoded = Data(base64Encoded: Keychain.shared.identifier!)!
                         self.mdLu = decoded.sha256().hexEncodedString()
-                        self.printOut("X-Apple-I-MD-LU: \(self.mdLu!)")
                         let uuid: UUID = decoded.object()
                         self.deviceId = uuid.uuidString.uppercased()
-                        self.printOut("X-Mme-Device-Id: \(self.deviceId!)")
                         
                         return
                     } else { throw "v1 server is not supported" }
