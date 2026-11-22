@@ -1,0 +1,4 @@
+module AkatsubakiPairingFFI {
+    header "AkatsubakiPairingFFI.h"
+    export *
+}
