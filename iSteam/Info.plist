@@ -16,4 +16,8 @@
 <key>NSMotionUsageDescription</key><string>Akatsubaki Emu uses device motion for head-look input in Cardboard VR mode.</string>
 <key>UILaunchScreen</key><dict/>
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Akatsubaki uses the local network to prepare the Developer Disk Image and establish the StikJIT Remote Pairing connection.</string>
+    <key>NSBonjourServices</key>
+    <array><string>_remotepairing._tcp</string></array>
 </dict></plist>

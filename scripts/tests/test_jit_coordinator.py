@@ -16,13 +16,22 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         physical_guard = "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)"
         self.assertGreaterEqual(source.count(physical_guard), 4)
 
-    def test_unknown_ios_26_jit_protocol_blocks_helper_and_vm_start(self):
+    def test_builtin_stikjit_resolves_unknown_protocol_before_qemu_start(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
-        self.assertIn("var isJITProtocolKnown: Bool", source)
-        self.assertIn("return iSteamJITGetProtocolMode() >= 0", source)
-        self.assertIn("guard isJITProtocolKnown else", source)
-        self.assertIn("JIT compatibility unknown", source)
+        self.assertIn("activeMethod != .builtInStikJIT", source)
+        self.assertIn("BuiltInJITHelperClient.shared.perform", source)
+        self.assertIn("prepared.txmPresent", source)
+        self.assertIn("iSteamJITSetProtocolOverride(protocolMode)", source)
+        self.assertIn("forceScript", source)
+        self.assertIn("case .builtInStikJIT", source)
+
+    def test_external_jit_methods_remain_fail_closed_when_protocol_is_unknown(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("if !isJITProtocolKnown && activeMethod != .builtInStikJIT", source)
+        self.assertIn("External JIT methods remain disabled", source)
+
 
     def test_jit_ready_uses_the_attached_debugger_status(self):
         root = Path(__file__).resolve().parents[2]

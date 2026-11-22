@@ -4,11 +4,10 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <dlfcn.h>
 #include <stdint.h>
-#include <stdio.h>
+#include <stdatomic.h>
 #include <string.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
-#include <sys/utsname.h>
 #include <unistd.h>
 #endif
 
@@ -44,46 +43,24 @@ bool iSteamJITHasGetTaskAllow(void) {
     return allowed;
 }
 
-static int iSteamJITHardwareTXMMode(const char *hardwareIdentifier, bool isIOS27OrNewer) {
-    if (hardwareIdentifier == NULL || hardwareIdentifier[0] == '\0') {
-        return ISTEAM_JIT_PROTOCOL_UNKNOWN;
-    }
+static atomic_int gJITProtocolOverride = ATOMIC_VAR_INIT(ISTEAM_JIT_PROTOCOL_UNKNOWN);
 
-    if (isIOS27OrNewer) {
-        return strcmp(hardwareIdentifier, "iPad8,11") == 0
-            || strcmp(hardwareIdentifier, "iPad8,12") == 0
-            ? ISTEAM_JIT_PROTOCOL_STANDARD
-            : ISTEAM_JIT_PROTOCOL_STIKDEBUG;
+void iSteamJITSetProtocolOverride(int protocolMode) {
+    if (protocolMode != ISTEAM_JIT_PROTOCOL_STANDARD &&
+        protocolMode != ISTEAM_JIT_PROTOCOL_STIKDEBUG) {
+        protocolMode = ISTEAM_JIT_PROTOCOL_UNKNOWN;
     }
-
-    int major = 0;
-    int minor = 0;
-    if (sscanf(hardwareIdentifier, "iPhone%d,%d", &major, &minor) == 2) {
-        return major > 14 || (major == 14 && minor >= 2)
-            ? ISTEAM_JIT_PROTOCOL_STIKDEBUG
-            : ISTEAM_JIT_PROTOCOL_STANDARD;
-    }
-    if (sscanf(hardwareIdentifier, "iPad%d,%d", &major, &minor) == 2) {
-        return major > 14 || (major == 14 && minor >= 5)
-            ? ISTEAM_JIT_PROTOCOL_STIKDEBUG
-            : ISTEAM_JIT_PROTOCOL_STANDARD;
-    }
-    return ISTEAM_JIT_PROTOCOL_UNKNOWN;
+    atomic_store_explicit(&gJITProtocolOverride, protocolMode, memory_order_release);
 }
 
 int iSteamJITGetProtocolMode(void) {
-    struct utsname systemInfo;
-    if (__builtin_available(iOS 27.0, *)) {
-        if (uname(&systemInfo) != 0) {
-            return ISTEAM_JIT_PROTOCOL_UNKNOWN;
-        }
-        return iSteamJITHardwareTXMMode(systemInfo.machine, true);
+    int override = atomic_load_explicit(&gJITProtocolOverride, memory_order_acquire);
+    if (override == ISTEAM_JIT_PROTOCOL_STANDARD ||
+        override == ISTEAM_JIT_PROTOCOL_STIKDEBUG) {
+        return override;
     }
     if (__builtin_available(iOS 26.0, *)) {
-        if (uname(&systemInfo) != 0) {
-            return ISTEAM_JIT_PROTOCOL_UNKNOWN;
-        }
-        return iSteamJITHardwareTXMMode(systemInfo.machine, false);
+        return ISTEAM_JIT_PROTOCOL_UNKNOWN;
     }
     return ISTEAM_JIT_PROTOCOL_STANDARD;
 }
@@ -134,5 +111,6 @@ void *iSteamJITPrepareRegion(void *address, size_t length) {
 }
 bool iSteamJITIsSupported(void) { return false; }
 int iSteamJITGetProtocolMode(void) { return ISTEAM_JIT_PROTOCOL_UNKNOWN; }
+void iSteamJITSetProtocolOverride(int protocolMode) { (void)protocolMode; }
 bool iSteamJITIsReady(void) { return false; }
 #endif

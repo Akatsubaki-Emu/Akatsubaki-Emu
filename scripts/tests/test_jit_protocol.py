@@ -21,25 +21,27 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn("status & UINT32_C(0x10000000)", source)
         self.assertIn("bool iSteamJITIsReady(void) { return false; }", source)
 
-    def test_txm_detection_matches_stikdebug_hardware_rules(self):
+    def test_txm_protocol_is_resolved_by_the_isolated_stikjit_helper(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
-        self.assertIn("#include <sys/utsname.h>", source)
-        self.assertIn("uname(&systemInfo) != 0", source)
-        self.assertIn('strcmp(hardwareIdentifier, "iPad8,11") == 0', source)
-        self.assertIn('strcmp(hardwareIdentifier, "iPad8,12") == 0', source)
-        self.assertIn('sscanf(hardwareIdentifier, "iPhone%d,%d"', source)
-        self.assertIn('sscanf(hardwareIdentifier, "iPad%d,%d"', source)
-        self.assertIn("minor >= 2", source)
-        self.assertIn("minor >= 5", source)
-        self.assertIn("static int iSteamJITHardwareTXMMode", source)
-        self.assertIn("iSteamJITGetProtocolMode(void)", source)
-        self.assertIn("ISTEAM_JIT_PROTOCOL_UNKNOWN", source)
-        self.assertIn("ISTEAM_JIT_PROTOCOL_STANDARD", source)
-        self.assertIn("ISTEAM_JIT_PROTOCOL_STIKDEBUG", source)
+        self.assertIn("static atomic_int gJITProtocolOverride", source)
+        self.assertIn("atomic_load_explicit", source)
+        self.assertIn("atomic_store_explicit", source)
+        self.assertIn("iSteamJITSetProtocolOverride", source)
         self.assertIn("return ISTEAM_JIT_PROTOCOL_UNKNOWN;", source)
-        self.assertIn("if (__builtin_available(iOS 27.0, *))", source)
-        self.assertIn("if (__builtin_available(iOS 26.0, *))", source)
+        self.assertNotIn("uname(", source)
+        self.assertNotIn("sscanf(", source)
+        self.assertNotIn("iSteamJITHardwareTXMMode", source)
+
+    def test_unknown_txm_mode_is_not_guessed_before_helper_confirmation(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
+        mode = source.split("int iSteamJITGetProtocolMode(void)", 1)[1].split(
+            "bool iSteamJITIsSupported(void)", 1
+        )[0]
+        self.assertIn("ISTEAM_JIT_PROTOCOL_UNKNOWN", mode)
+        self.assertIn("iSteamJITSetProtocolOverride", source)
+
 
     def test_live_debugger_is_required_only_for_txm_breakpoint_protocol(self):
         root = Path(__file__).resolve().parents[2]

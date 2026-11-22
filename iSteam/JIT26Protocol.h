@@ -7,6 +7,7 @@
 #define ISTEAM_JIT_PROTOCOL_STIKDEBUG 1
 bool iSteamJITHasGetTaskAllow(void);
 int iSteamJITGetProtocolMode(void);
+void iSteamJITSetProtocolOverride(int protocolMode);
 bool iSteamJITIsSupported(void);
 bool iSteamJITIsReady(void);
 void iSteamJITDetach(void);

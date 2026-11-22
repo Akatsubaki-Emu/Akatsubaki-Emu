@@ -31,21 +31,42 @@ targets:
         excludes:
           - Display/VMDisplayViewController-tvOS.swift
     dependencies:
+      - sdk: ExtensionFoundation.framework
+      - sdk: XPC.framework
       - package: StosSign
         product: StosSign_API
       - package: StosSign
         product: StosSign_Auth
       - package: StosSign
         product: StosSign_Common
+    postBuildScripts:
+      - name: Embed bundled StikJIT helper
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          case "$PLATFORM_NAME" in iphoneos|iphonesimulator) ;; *) exit 0 ;; esac
+          case "$PRODUCT_BUNDLE_IDENTIFIER" in
+            com.xthrx.isteam.nightly) helper_name="AkatsubakiJITHelperNightly.appex" ;;
+            *) helper_name="AkatsubakiJITHelper.appex" ;;
+          esac
+          helper_source="$SRCROOT/Vendor/Helpers/$PLATFORM_NAME/$helper_name"
+          helper_destination="$TARGET_BUILD_DIR/$WRAPPER_NAME/Extensions/$helper_name"
+          if [ ! -d "$helper_source" ]; then
+            echo "error: Missing StikJIT helper at $helper_source. Build it with scripts/build_stikjit_helper.sh using Xcode 27.1." >&2
+            exit 1
+          fi
+          mkdir -p "$(dirname "$helper_destination")"
+          /usr/bin/rsync -a --delete "$helper_source/" "$helper_destination/"
     settings:
       base:
+        EX_ENABLE_EXTENSION_POINT_GENERATION: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam
         PRODUCT_NAME: iSteam
         INFOPLIST_KEY_CFBundleDisplayName: Akatsubaki Emu
         INFOPLIST_FILE: iSteam/Info.plist
         CODE_SIGN_ENTITLEMENTS: iSteam/iSteam.entitlements
         SWIFT_OBJC_BRIDGING_HEADER: iSteam/iSteam-Bridging-Header.h
-        OTHER_LDFLAGS: ["$(inherited)", "-ObjC", "-framework", "Metal", "-framework", "MetalKit", "-framework", "Security", "-Wl,-exported_symbol,_iSteamJITIsSupported", "-Wl,-exported_symbol,_iSteamJITGetProtocolMode", "-Wl,-exported_symbol,_iSteamJITIsReady", "-Wl,-exported_symbol,_iSteamJITPrepareRegion", "-Wl,-exported_symbol,_iSteamJITDetach"]
+        OTHER_LDFLAGS: ["$(inherited)", "-ObjC", "-framework", "Metal", "-framework", "MetalKit", "-framework", "Security", "-Wl,-exported_symbol,_iSteamJITIsSupported", "-Wl,-exported_symbol,_iSteamJITGetProtocolMode", "-Wl,-exported_symbol,_iSteamJITSetProtocolOverride", "-Wl,-exported_symbol,_iSteamJITIsReady", "-Wl,-exported_symbol,_iSteamJITPrepareRegion", "-Wl,-exported_symbol,_iSteamJITDetach"]
   iSteamNightly:
     type: application
     platform: iOS
@@ -61,21 +82,42 @@ targets:
         excludes:
           - Display/VMDisplayViewController-tvOS.swift
     dependencies:
+      - sdk: ExtensionFoundation.framework
+      - sdk: XPC.framework
       - package: StosSign
         product: StosSign_API
       - package: StosSign
         product: StosSign_Auth
       - package: StosSign
         product: StosSign_Common
+    postBuildScripts:
+      - name: Embed bundled StikJIT helper
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          case "$PLATFORM_NAME" in iphoneos|iphonesimulator) ;; *) exit 0 ;; esac
+          case "$PRODUCT_BUNDLE_IDENTIFIER" in
+            com.xthrx.isteam.nightly) helper_name="AkatsubakiJITHelperNightly.appex" ;;
+            *) helper_name="AkatsubakiJITHelper.appex" ;;
+          esac
+          helper_source="$SRCROOT/Vendor/Helpers/$PLATFORM_NAME/$helper_name"
+          helper_destination="$TARGET_BUILD_DIR/$WRAPPER_NAME/Extensions/$helper_name"
+          if [ ! -d "$helper_source" ]; then
+            echo "error: Missing StikJIT helper at $helper_source. Build it with scripts/build_stikjit_helper.sh using Xcode 27.1." >&2
+            exit 1
+          fi
+          mkdir -p "$(dirname "$helper_destination")"
+          /usr/bin/rsync -a --delete "$helper_source/" "$helper_destination/"
     settings:
       base:
+        EX_ENABLE_EXTENSION_POINT_GENERATION: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.nightly
         PRODUCT_NAME: iSteam
         INFOPLIST_KEY_CFBundleDisplayName: Akatsubaki Emu Nightly
         INFOPLIST_FILE: iSteam/Info.plist
         CODE_SIGN_ENTITLEMENTS: iSteam/iSteam.entitlements
         SWIFT_OBJC_BRIDGING_HEADER: iSteam/iSteam-Bridging-Header.h
-        OTHER_LDFLAGS: ["$(inherited)", "-ObjC", "-framework", "Metal", "-framework", "MetalKit", "-framework", "Security", "-Wl,-exported_symbol,_iSteamJITIsSupported", "-Wl,-exported_symbol,_iSteamJITGetProtocolMode", "-Wl,-exported_symbol,_iSteamJITIsReady", "-Wl,-exported_symbol,_iSteamJITPrepareRegion", "-Wl,-exported_symbol,_iSteamJITDetach"]
+        OTHER_LDFLAGS: ["$(inherited)", "-ObjC", "-framework", "Metal", "-framework", "MetalKit", "-framework", "Security", "-Wl,-exported_symbol,_iSteamJITIsSupported", "-Wl,-exported_symbol,_iSteamJITGetProtocolMode", "-Wl,-exported_symbol,_iSteamJITSetProtocolOverride", "-Wl,-exported_symbol,_iSteamJITIsReady", "-Wl,-exported_symbol,_iSteamJITPrepareRegion", "-Wl,-exported_symbol,_iSteamJITDetach"]
   iSteamTV:
     type: application
     platform: tvOS
@@ -94,6 +136,11 @@ targets:
     sources:
       - path: iSteam
         excludes:
+          - BuiltInJITHelperClient.swift
+          - BuiltInJITSettingsView.swift
+          - JITHelperExtensionPoint.swift
+          - JITHelperIPC.swift
+          - StikJITPairingFileStore.swift
           - Info.plist
           - Info-tvOS.plist
           - AppDelegate-tvOS.swift
