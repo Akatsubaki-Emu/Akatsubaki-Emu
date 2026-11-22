@@ -79,8 +79,10 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
         self.assertIn("guard JITCoordinator.shared.isQEMUProtocolAvailable else", source)
+        # QEMU accepts a known STANDARD or StikDebug protocol; the TXM-only
+        # StikDebug capability is not a prerequisite for the STANDARD mode.
         self.assertLess(
-            source.index("guard JITCoordinator.shared.isJITProtocolSupported else"),
+            source.index("guard JITCoordinator.shared.isQEMUProtocolAvailable else"),
             source.index("JITCoordinator.shared.requestJIT(from: self, onFailure:"),
         )
         self.assertIn("JITCoordinator.shared.requestJIT(from: self, onFailure:", source)

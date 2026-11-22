@@ -27,7 +27,7 @@ class LinuxWritevContractTests(unittest.TestCase):
     def test_guest_memory_read_into_avoids_intermediate_data_allocations(self):
         root = Path(__file__).resolve().parents[2]
         memory = (root / "src" / "Runtime" / "GuestMemory.swift").read_text(encoding="utf-8")
-        read_into = memory.split("func read(offset: UInt64, length: Int, into:", 1)[1].split("func readByte", 1)[0]
+        read_into = memory.split("func read(offset: UInt64, length: Int, into data:", 1)[1].split("func readByte", 1)[0]
         self.assertIn("destinationOffset <= data.count", read_into)
         self.assertIn("length <= data.count - destinationOffset", read_into)
         self.assertIn("base.advanced(by: destinationOffset)", read_into)
