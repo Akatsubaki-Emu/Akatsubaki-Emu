@@ -10,9 +10,11 @@ final class X86_64Interpreter: GuestCPUBackend {
     private let syscallDispatcher: LinuxSyscallDispatcher
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
-    private var instructionWindow = [UInt8](repeating: 0, count: 15)
+    private var instructionWindow = [UInt8](repeating: 0, count: 64)
     private var instructionWindowLength = 0
     private var instructionWindowCursor = 0
+    private var instructionWindowAddress: UInt64 = 0
+    private var instructionWindowGeneration: UInt64 = .max
     private var flags: UInt64 = 0x2
     private var fsBase: UInt64 = 0
     private var gsBase: UInt64 = 0
@@ -39,6 +41,9 @@ final class X86_64Interpreter: GuestCPUBackend {
         registers[4] = memory.size >= 8 ? memory.size - 8 : 0 // RSP
         rip = entryPoint
         instructionCount = 0
+        instructionWindowLength = 0
+        instructionWindowCursor = 0
+        instructionWindowGeneration = .max
         halted = false
         stopLock.lock()
         stopRequested = false
@@ -943,63 +948,75 @@ final class X86_64Interpreter: GuestCPUBackend {
     }
 
     private func prepareInstructionWindow(at address: UInt64) {
+        let generation = memory.mutationGeneration
+        if generation == instructionWindowGeneration,
+           address >= instructionWindowAddress {
+            let cachedOffset = address - instructionWindowAddress
+            if cachedOffset < UInt64(instructionWindowLength) {
+                instructionWindowCursor = Int(cachedOffset)
+                return
+            }
+        }
+        refillInstructionWindow(at: address, generation: generation)
+    }
+
+    private func refillInstructionWindow(at address: UInt64, generation: UInt64) {
+        // Capture the version before copying. If a writer races the copy, the
+        // next instruction observes the new generation and refreshes safely.
+        instructionWindowAddress = address
+        instructionWindowGeneration = generation
         instructionWindowLength = memory.readPrefix(offset: address, into: &instructionWindow) ?? 0
         instructionWindowCursor = 0
     }
 
-    private func fetchByte() -> UInt8? {
-        if instructionWindowCursor < instructionWindowLength {
-            let value = instructionWindow[instructionWindowCursor]
-            instructionWindowCursor += 1
-            rip &+= 1
-            return value
+    private func ensureInstructionWindowContains(_ byteCount: Int) -> Bool {
+        guard byteCount > 0, instructionWindowCursor <= instructionWindowLength else { return false }
+        if instructionWindowLength - instructionWindowCursor >= byteCount {
+            return true
         }
-        guard let value = memory.readByte(offset: rip) else { return nil }
+        guard instructionWindowLength == instructionWindow.count else { return false }
+        refillInstructionWindow(at: rip, generation: memory.mutationGeneration)
+        return instructionWindowCursor <= instructionWindowLength
+            && instructionWindowLength - instructionWindowCursor >= byteCount
+    }
+
+    private func fetchByte() -> UInt8? {
+        guard ensureInstructionWindowContains(1) else { return nil }
+        let value = instructionWindow[instructionWindowCursor]
+        instructionWindowCursor += 1
         rip &+= 1
         return value
     }
 
     private func fetchUInt16() -> UInt16? {
-        guard let low = fetchByte(), let high = fetchByte() else { return nil }
-        return UInt16(low) | UInt16(high) << 8
+        guard ensureInstructionWindowContains(2) else { return nil }
+        let offset = instructionWindowCursor
+        let value = instructionWindow.withUnsafeBytes { raw in
+            UInt16(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt16.self))
+        }
+        instructionWindowCursor += 2
+        rip &+= 2
+        return value
     }
 
     private func fetchUInt32() -> UInt32? {
-        if instructionWindowCursor <= instructionWindowLength,
-           instructionWindowLength - instructionWindowCursor >= 4 {
-            let offset = instructionWindowCursor
-            let value = UInt32(instructionWindow[offset])
-                | UInt32(instructionWindow[offset + 1]) << 8
-                | UInt32(instructionWindow[offset + 2]) << 16
-                | UInt32(instructionWindow[offset + 3]) << 24
-            instructionWindowCursor += 4
-            rip &+= 4
-            return value
+        guard ensureInstructionWindowContains(4) else { return nil }
+        let offset = instructionWindowCursor
+        let value = instructionWindow.withUnsafeBytes { raw in
+            UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt32.self))
         }
-        guard let value = memory.readUInt32(offset: rip) else { return nil }
-        instructionWindowCursor = instructionWindowLength
+        instructionWindowCursor += 4
         rip &+= 4
         return value
     }
 
     private func fetchUInt64() -> UInt64? {
-        if instructionWindowCursor <= instructionWindowLength,
-           instructionWindowLength - instructionWindowCursor >= 8 {
-            let offset = instructionWindowCursor
-            let value = UInt64(instructionWindow[offset])
-                | UInt64(instructionWindow[offset + 1]) << 8
-                | UInt64(instructionWindow[offset + 2]) << 16
-                | UInt64(instructionWindow[offset + 3]) << 24
-                | UInt64(instructionWindow[offset + 4]) << 32
-                | UInt64(instructionWindow[offset + 5]) << 40
-                | UInt64(instructionWindow[offset + 6]) << 48
-                | UInt64(instructionWindow[offset + 7]) << 56
-            instructionWindowCursor += 8
-            rip &+= 8
-            return value
+        guard ensureInstructionWindowContains(8) else { return nil }
+        let offset = instructionWindowCursor
+        let value = instructionWindow.withUnsafeBytes { raw in
+            UInt64(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt64.self))
         }
-        guard let value = memory.readUInt64(offset: rip) else { return nil }
-        instructionWindowCursor = instructionWindowLength
+        instructionWindowCursor += 8
         rip &+= 8
         return value
     }

@@ -10,6 +10,7 @@ typedef struct ISteamGuestMemory ISteamGuestMemory;
 ISteamGuestMemory *isteam_guest_memory_create(uint64_t size);
 void isteam_guest_memory_destroy(ISteamGuestMemory *memory);
 uint64_t isteam_guest_memory_size(const ISteamGuestMemory *memory);
+uint64_t isteam_guest_memory_generation(const ISteamGuestMemory *memory);
 bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset, uint8_t *destination, size_t length);
 bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset, const uint8_t *source, size_t length);
 bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset, uint64_t length);
