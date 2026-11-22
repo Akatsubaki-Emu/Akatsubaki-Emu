@@ -34,8 +34,6 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("SecItemCopyMatching", self.keychain)
         self.assertIn("SecItemAdd", self.keychain)
         self.assertIn("kSecAttrSynchronizable", self.keychain)
-        self.assertIn("kSecAttrSynchronizable", self.keychain)
-        self.assertIn("kSecAttrSynchronizable", self.keychain)
 
 
     def test_anisette_helper_does_not_log_auth_material_and_uses_safe_load(self):
