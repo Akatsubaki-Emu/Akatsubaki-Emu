@@ -59,11 +59,11 @@ The source includes separate entries for iOS Main, iOS Nightly, tvOS Main, and t
 - File selection and shared-directory handling.
 - Bounded, read-only metadata inspection for Windows PE and Linux ELF files.
 - Guest-memory and block-device prototypes.
-- Early display, Metal presentation, frame-pacing, keyboard, controller, and JIT-related experiments.
+- Early display, Metal presentation, frame-pacing, keyboard, and controller support.
 - Research into app-container and binary-execution approaches used by projects such as LiveContainer.
 - Native DroidDeck-inspired library backup/restore, per-game profile defaults, artwork caching, local compatibility records, and runtime component integrity verification.
 
-These are works in progress. Importing a file or inspecting its metadata does not execute it, and a storage prototype is not a complete virtual storage controller. JIT behavior depends on iOS version, device, signing, entitlements, and supported tooling; Akatsubaki Emu does not enable JIT for every app.
+These are works in progress. Importing a file or inspecting its metadata does not execute it, and a storage prototype is not a complete virtual storage controller. JIT behavior depends on iOS version, device, signing, entitlements, and supported tooling. The current VM launch path requests JIT through LocalDevVPN and StikDebug before starting QEMU; those helper apps and a compatible signature are still required. Akatsubaki Emu does not yet embed the StikJIT helper extension.
 
 ### tvOS app
 
@@ -136,6 +136,7 @@ Bug reports, documentation improvements, and focused pull requests are welcome. 
 - [Build and release workflow](docs/RELEASES.md)
 - [tvOS status and roadmap](docs/TVOS.md)
 - [Host-device bridge](docs/HOST_DEVICE_BRIDGE.md)
+- [JIT activation and limitations](docs/JIT.md)
 - [Hybrid runtime architecture and roadmap](docs/HYBRID_RUNTIME_ARCHITECTURE.md)
 - [QEMU runtime build and failure diagnostics](docs/QEMU_BUILD_WORKFLOW.md)
 - [DroidDeck feature-port plan](docs/DROIDDECK_PORT_PLAN.md)
@@ -153,7 +154,8 @@ These projects are research references; listing them does not mean their code is
 - [Box64](https://github.com/ptitSeb/box64) — x86-64 user-mode emulation reference.
 - [FEX-Emu](https://github.com/FEX-Emu/FEX) — x86-64 Linux user-mode translation reference.
 - [Wine](https://www.winehq.org/) and [Proton](https://github.com/ValveSoftware/Proton) — Windows user-mode compatibility references.
-- [StikDebug](https://github.com/StephenDev0/StikDebug) — JIT-related iOS development reference.
+- [StikDebug](https://github.com/StikDebug/StikDebug) and [StikJIT](https://github.com/StikDebug/StikJIT) — JIT activation and universal breakpoint-protocol references.
+- [LocalDevVPN](https://github.com/jkcoxson/LocalDevVPN) — local RSD tunnel and URL activation reference.
 - [LiveContainer](https://github.com/LiveContainer/LiveContainer) and [LiveExec32](https://github.com/LiveContainer/LiveExec32) — iOS app-container and binary-execution research reference.
 - [MeloNX](https://github.com/AzureDominus/melonx) — iOS emulator UI and performance reference.
 - [SharpEmu](https://github.com/sharpemu/sharpemu) — emulator architecture research reference.

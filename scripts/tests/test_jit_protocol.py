@@ -21,6 +21,18 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn("status & UINT32_C(0x10000000)", source)
         self.assertIn("bool iSteamJITIsReady(void) { return false; }", source)
 
+    def test_ios_26_requires_live_debugger_but_older_ios_uses_cs_debugged(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
+        self.assertIn("#include <sys/sysctl.h>", source)
+        self.assertIn("static bool iSteamJITDebuggerIsAttached(void)", source)
+        self.assertIn("sysctl(mib, 4, &info, &size, NULL, 0) == 0", source)
+        self.assertIn("info.kp_proc.p_flag & P_TRACED", source)
+        readiness = source.split("bool iSteamJITIsReady(void) {", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn("if (__builtin_available(iOS 26.0, *))", readiness)
+        self.assertIn("return iSteamJITDebuggerIsAttached();", readiness)
+        self.assertTrue(readiness.rstrip().endswith("return true;"))
+
     def test_qemu_can_resolve_host_jit_callbacks_from_main_and_nightly_apps(self):
         root = Path(__file__).resolve().parents[2]
         project = (root / "project.yml").read_text(encoding="utf-8")
