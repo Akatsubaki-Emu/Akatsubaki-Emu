@@ -180,6 +180,51 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("QEMU-TCI.framework", tci_packager)
         self.assertIn('scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci_packager)
 
+    def test_qemu_packagers_reject_output_paths_that_overlap_the_archive(self):
+        root = Path(__file__).resolve().parents[2]
+        for relative in (
+            "scripts/package-utm-qemu-runtime.sh",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+        ):
+            source = (root / relative).read_text(encoding="utf-8")
+            self.assertIn('ARCHIVE_ROOT="$(cd "$ARCHIVE" && pwd -P)"', source)
+            self.assertIn('[[ "$candidate" == "$parent" ]] && return 0', source)
+            self.assertIn('path_is_within "$OUT" "$ARCHIVE_ROOT"', source)
+            self.assertIn('path_is_within "$ARCHIVE_ROOT" "$OUT"', source)
+            self.assertLess(
+                source.index('path_is_within "$OUT" "$ARCHIVE_ROOT"'),
+                source.index('rm -rf "$OUT"'),
+            )
+
+    def test_qemu_packagers_preserve_archive_when_output_is_same_path(self):
+        root = Path(__file__).resolve().parents[2]
+        build_root = root / "build"
+        build_root.mkdir(exist_ok=True)
+        for relative in (
+            "scripts/package-utm-qemu-runtime.sh",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+        ):
+            with TemporaryDirectory(prefix="qemu-output-overlap-", dir=build_root) as temporary:
+                archive = Path(temporary)
+                marker = archive / "keep.txt"
+                marker.write_text("keep", encoding="utf-8")
+                result = subprocess.run(
+                    ["bash", str(root / relative), str(archive), f"build/{archive.name}"],
+                    cwd=root,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertNotEqual(result.returncode, 0, relative)
+                self.assertIn("overlaps the input UTM archive", result.stderr, relative)
+                self.assertEqual(marker.read_text(encoding="utf-8"), "keep", relative)
+
+    def test_tci_packager_has_one_data_and_report_pass(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
+        self.assertEqual(source.count('data_dir=""'), 1)
+        self.assertEqual(source.count('cat > "$OUT/BUILD-INFO.txt"'), 1)
+        self.assertEqual(source.count('REPORT="$OUT/dependency-report.txt"'), 1)
+        self.assertNotIn('\\n > "$OUT/exports.txt" || true\\n', source)
     def test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed(self):
         source = """#ifdef CONFIG_DARWIN
 #include <mach/mach.h>
