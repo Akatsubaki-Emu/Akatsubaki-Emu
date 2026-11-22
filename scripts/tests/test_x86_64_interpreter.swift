@@ -141,6 +141,31 @@ final class EmulationLog {
     func write(_ message: String) { messages.append(message) }
 }
 
+final class TestAOTExecutor: X86_64AOTExecuting {
+    var isAvailable: Bool
+    private(set) var callCount = 0
+    private(set) var lastInstructionBudget = 0
+
+    init(isAvailable: Bool = true) {
+        self.isAvailable = isAvailable
+    }
+
+    func execute(guestCode: Data,
+                 registers: inout [UInt64],
+                 maximumInstructions: Int) -> X86_64AOTExecutionResult? {
+        callCount += 1
+        lastInstructionBudget = maximumInstructions
+        let movEAX42: [UInt8] = [0xB8, 0x2A, 0x00, 0x00, 0x00]
+        guard maximumInstructions > 0,
+              guestCode.count >= movEAX42.count,
+              Array(guestCode.prefix(movEAX42.count)) == movEAX42 else {
+            return nil
+        }
+        registers[0] = 42
+        return X86_64AOTExecutionResult(guestBytesConsumed: movEAX42.count, instructionCount: 1)
+    }
+}
+
 @main
 struct InterpreterTests {
     static func main() throws {
@@ -1242,6 +1267,35 @@ struct InterpreterTests {
         precondition(leaveFaultExit == .memoryFault(address: 72))
         precondition(leaveFault.registerValue(4) == 56)
         precondition(leaveFault.registerValue(5) == 72)
+
+        // AOT blocks execute only within the caller's instruction budget and
+        // side-exit at the first unsupported instruction into the interpreter.
+        let aotMemory = GuestMemory(size: 64)
+        precondition(aotMemory.write(Data([0xB8, 0x2A, 0x00, 0x00, 0x00, 0x01, 0xD8]), offset: 0))
+        let aotExecutor = TestAOTExecutor()
+        let aotInterpreter = X86_64Interpreter(memory: aotMemory, aotExecutor: aotExecutor)
+        try aotInterpreter.reset(entryPoint: 0)
+        let aotBudgetExit = try aotInterpreter.run(maxInstructions: 1)
+        precondition(aotBudgetExit == .instructionLimit)
+        precondition(aotInterpreter.registerValue(0) == 42)
+        precondition(aotInterpreter.instructionPointer == 5)
+        precondition(aotInterpreter.instructionCount == 1)
+        precondition(aotExecutor.callCount == 1)
+        precondition(aotExecutor.lastInstructionBudget == 1)
+        let aotSideExit = try aotInterpreter.run(maxInstructions: 1)
+        precondition(aotSideExit == .unsupportedInstruction(address: 5))
+        precondition(aotExecutor.callCount == 2)
+
+        // Without executable memory/JIT, the interpreter remains the safe fallback.
+        let fallbackMemory = GuestMemory(size: 32)
+        precondition(fallbackMemory.write(Data([0xB8, 0x2A, 0x00, 0x00, 0x00]), offset: 0))
+        let unavailableAOT = TestAOTExecutor(isAvailable: false)
+        let fallbackInterpreter = X86_64Interpreter(memory: fallbackMemory, aotExecutor: unavailableAOT)
+        try fallbackInterpreter.reset(entryPoint: 0)
+        let fallbackExit = try fallbackInterpreter.run(maxInstructions: 1)
+        precondition(fallbackExit == .instructionLimit)
+        precondition(fallbackInterpreter.registerValue(0) == 42)
+        precondition(unavailableAOT.callCount == 0)
 
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
