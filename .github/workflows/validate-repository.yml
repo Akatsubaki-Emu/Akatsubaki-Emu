@@ -241,7 +241,11 @@ jobs:
               raise SystemExit("Do not rely on QEMU configure LDFLAGS; verify the Meson target LINK_ARGS instead.")
           if "qemu-runtime:" not in release or "needs: qemu-runtime" not in release:
               raise SystemExit("App builds must wait for the same-run QEMU runtime artifact.")
-          if "git push" in release or "git push" in qemu:
+          # Permit only the rolling release-tag update after all assets publish.
+          release_without_channel_tag_update = release.replace(
+              'git push --force origin "refs/tags/$RELEASE_CHANNEL"', ""
+          )
+          if "git push" in release_without_channel_tag_update or "git push" in qemu:
               raise SystemExit("Build workflows must not perform repository mirroring pushes.")
           print("Release/QEMU reusable workflow and same-run artifact contracts passed.")
           PY
