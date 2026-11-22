@@ -125,11 +125,12 @@ final class GameStore {
         return true
     }
 
-    func add(_ game: GameEntry) {
+    @discardableResult
+    func add(_ game: GameEntry) -> Bool {
         var current = games
-        guard !current.contains(where: { $0.id == game.id }) else { return }
+        guard !current.contains(where: { $0.id == game.id }) else { return false }
         current.append(game)
-        save(current)
+        return save(current)
     }
 
     func update(_ game: GameEntry) {

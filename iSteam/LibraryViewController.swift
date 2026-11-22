@@ -298,10 +298,25 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
             let id = UUID()
             let gameDir = dir.appendingPathComponent(id.uuidString, isDirectory: true)
             try fm.createDirectory(at: gameDir, withIntermediateDirectories: true)
+            var keepGameDirectory = false
+            defer {
+                if !keepGameDirectory { try? fm.removeItem(at: gameDir) }
+            }
             let destination = gameDir.appendingPathComponent(source.lastPathComponent)
             try ExternalDriveStore.shared.copyDocument(at: source, to: destination)
             try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destination.path)
-            GameStore.shared.add(GameEntry(id: id, name: source.deletingPathExtension().lastPathComponent, executablePath: destination.path, workingDirectory: gameDir.path))
+            let entry = GameEntry(
+                id: id,
+                name: source.deletingPathExtension().lastPathComponent,
+                executablePath: destination.path,
+                workingDirectory: gameDir.path
+            )
+            guard GameStore.shared.add(entry) else {
+                throw NSError(domain: "iSteam.Import", code: 2, userInfo: [
+                    NSLocalizedDescriptionKey: "The game library could not be saved. Existing library data was preserved."
+                ])
+            }
+            keepGameDirectory = true
             showMessage("Game imported", source.lastPathComponent + " added to the library.")
         } catch { showMessage("Import failed", error.localizedDescription) }
     }
