@@ -29,7 +29,7 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
     }
     func invalidateAll(){lock.lock();blocks.removeAll(keepingCapacity:true);order.removeAll(keepingCapacity:true);cachedExecutableBytesStorage=0;lock.unlock()}
     static func makeMemoryCallbacks(for memory:GuestMemory)->KenranButoAOTMemoryCallbacks{
-        var c=KenranButoAOTMemoryCallbacks();c.abi_version=1;c.struct_size=UInt32(MemoryLayout<KenranButoAOTMemoryCallbacks>.size)
+        var c=KenranButoAOTMemoryCallbacks();c.abi_version=KenranButoAOTCompiler.executionABIVersion;c.struct_size=UInt32(MemoryLayout<KenranButoAOTMemoryCallbacks>.size)
         c.context=Unmanaged.passUnretained(memory).toOpaque();c.read_memory=readCallback;c.write_memory=writeCallback;return c
     }
     private typealias ReadCallback=@convention(c)(UnsafeMutableRawPointer?,UInt64,UnsafeMutableRawPointer?,Int)->Bool
@@ -49,7 +49,7 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
         guard registers.count==16,!guestCode.isEmpty,maximumInstructions>0 else{return nil}
         guard isAvailable else{invalidateAll();return nil}
         let budget=min(maximumInstructions,4096)
-        let key=BlockKey(code:guestCode,budget:budget,guestByteBudget:4096,outputByteBudget:1_048_576,translatorVersion:X86_64AOTTranslator.translatorVersion,abiVersion:1)
+        let key=BlockKey(code:guestCode,budget:budget,guestByteBudget:4096,outputByteBudget:1_048_576,translatorVersion:X86_64AOTTranslator.translatorVersion,abiVersion:KenranButoAOTCompiler.executionABIVersion)
         guard let block=executableBlock(for:key) else{return nil}
         let t=block.translation
         guard t.isValid(for:guestCode,maximumOutputBytes:key.outputByteBudget),t.guestBytesConsumed>0,t.instructionCount>0,t.instructionCount<=budget else{return nil}

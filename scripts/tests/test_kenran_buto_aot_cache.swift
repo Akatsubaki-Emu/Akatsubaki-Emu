@@ -22,7 +22,10 @@ struct KenranButoAOTCacheTests {
         precondition(second.cacheHit)
         precondition(second.translation == first.translation)
 
-        // Guest ABI is part of the cache identity and cannot alias another ABI.
+        // Guest ABI and execution ABI version are both part of the cache identity.
+        let abiV1 = KenranButoAOTCompiler.cacheGuestABI("sysv-linux-x86_64", abiVersion: 1)
+        let abiV2 = KenranButoAOTCompiler.cacheGuestABI("sysv-linux-x86_64", abiVersion: 2)
+        precondition(abiV1 != abiV2)
         let otherABI = try compiler.compile(guest, guestABI: "custom-x86_64")
         precondition(!otherABI.cacheHit)
         let statisticsAfterABI = try cache.statistics()
@@ -59,7 +62,8 @@ struct KenranButoAOTCacheTests {
         try cache.store(try JSONEncoder().encode(forged), for: forgedIdentity)
         let revalidated = try compiler.compile(guest, guestABI: "sysv-linux-x86_64")
         precondition(!revalidated.cacheHit && revalidated.translation == first.translation)
-        precondition(try cache.statistics().entryCount == 3)
+        let statisticsAfterRevalidation = try cache.statistics()
+        precondition(statisticsAfterRevalidation.entryCount == 3)
         // An unavailable persistent cache must behave like a cache miss.
         let blockedDirectory = directory.appendingPathComponent("not-a-directory")
         try Data([0x01]).write(to: blockedDirectory)

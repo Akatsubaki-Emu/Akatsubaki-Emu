@@ -18,18 +18,30 @@ final class KenranButoAOTCompiler {
         self.translator = translator
     }
 
-    static func cacheGuestABI(_ guestABI: String, maximumInstructions: Int,
-                              maximumGuestBytes: Int, maximumOutputBytes: Int) -> String {
-        "\(guestABI)-i\(maximumInstructions)-g\(maximumGuestBytes)-o\(maximumOutputBytes)"
+    static let executionABIVersion: UInt32 = 1
+
+    static func cacheGuestABI(
+        _ guestABI: String,
+        abiVersion: UInt32 = executionABIVersion,
+        maximumInstructions: Int = X86_64AOTTranslator.maximumInstructionBudget,
+        maximumGuestBytes: Int = X86_64AOTTranslator.maximumGuestByteBudget,
+        maximumOutputBytes: Int = X86_64AOTTranslator.maximumOutputBudget
+    ) -> String {
+        "\(guestABI)-abi\(abiVersion)-i\(maximumInstructions)-g\(maximumGuestBytes)-o\(maximumOutputBytes)"
     }
 
     func compile(_ guestCode: Data, guestABI: String,
                  maximumInstructions: Int = 4096,
                  maximumGuestBytes: Int = 65_536,
                  maximumOutputBytes: Int = 1_048_576) throws -> Compilation {
-        let budget = min(maximumInstructions, 4096)
-        let guestByteBudget = min(max(maximumGuestBytes, 1), 65_536)
-        let outputByteBudget = min(max(maximumOutputBytes, 4), 1_048_576)
+        guard maximumInstructions > 0, maximumGuestBytes > 0,
+              maximumOutputBytes >= 4, maximumOutputBytes.isMultiple(of: 4) else {
+            throw NSError(domain: "KenranButoAOTCompiler", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "AOT translation budgets are invalid."])
+        }
+        let budget = min(maximumInstructions, X86_64AOTTranslator.maximumInstructionBudget)
+        let guestByteBudget = min(maximumGuestBytes, X86_64AOTTranslator.maximumGuestByteBudget)
+        let outputByteBudget = min(maximumOutputBytes, X86_64AOTTranslator.maximumOutputBudget)
         let identity = TranslationCacheIdentity(
             guestCodeSHA256: Self.sha256(guestCode),
             guestArchitecture: "x86_64",
@@ -37,7 +49,8 @@ final class KenranButoAOTCompiler {
             translatorVersion: X86_64AOTTranslator.translatorVersion,
             hostArchitecture: X86_64AOTTranslator.hostArchitecture,
             cpuFeatures: X86_64AOTTranslator.cpuFeatures,
-            guestABI: Self.cacheGuestABI(guestABI, maximumInstructions: budget,
+            guestABI: Self.cacheGuestABI(guestABI, abiVersion: Self.executionABIVersion,
+                                        maximumInstructions: budget,
                                         maximumGuestBytes: guestByteBudget,
                                         maximumOutputBytes: outputByteBudget)
         )
