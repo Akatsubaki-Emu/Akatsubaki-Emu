@@ -11,9 +11,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: platform-compile-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build-platform-simulators:
