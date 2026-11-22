@@ -52,7 +52,7 @@ swift-runtime-tests:
                   mapping[key] = self.construct_object(value_node, deep=deep)
               return mapping
 
-      for name in ('.gitlab-ci.yml', '.github/workflows/blank.yml', '.github/workflows/release.yml', '.github/workflows/build-qemu-runtime.yml', '.github/workflows/mirror-from-gitlab.yml', 'project.yml'):
+      for name in ('.gitlab-ci.yml', '.github/workflows/blank.yml', '.github/workflows/release.yml', '.github/workflows/build-qemu-runtime.yml', 'project.yml'):
           text = pathlib.Path(name).read_text()
           try:
               if name == '.gitlab-ci.yml':
@@ -104,18 +104,19 @@ swift-runtime-tests:
       if 'workflow_dispatch:' not in qemu_workflow or 'workflow_call:' not in qemu_workflow:
           raise SystemExit('QEMU runtime workflow must remain manually runnable and reusable by the release workflow.')
       sync_job = pathlib.Path('.gitlab-ci.yml').read_text()
-      mirror_workflow = pathlib.Path('.github/workflows/mirror-from-gitlab.yml').read_text()
       if 'sync_to_github:' in sync_job:
           raise SystemExit('GitLab CI must not run a competing GitHub mirror push.')
-      if 'I-Steam/I-steam.git' not in mirror_workflow:
-          raise SystemExit('GitHub mirror workflow must fetch the actual i-Steam application repository.')
-      if 'secrets.MIRROR_TOKEN' not in mirror_workflow:
-          raise SystemExit('GitHub mirror workflow must use the dedicated mirror token.')
-      if 'git push origin HEAD:refs/heads/main' not in mirror_workflow:
-          raise SystemExit('GitHub mirror workflow must push only to GitHub main.')
+      if 'mirror-from-gitlab.yml' in sync_job:
+          raise SystemExit('The removed polling mirror workflow must not be referenced.')
       reverse_sync = pathlib.Path('.github/workflows/blank.yml').read_text()
-      if '  push:' in reverse_sync:
-          raise SystemExit('Automatic GitHub-to-GitLab sync must stay disabled.')
+      if '  push:' not in reverse_sync or 'branches: [main]' not in reverse_sync:
+          raise SystemExit('The retained GitHub-to-GitLab sync must target main pushes.')
+      if 'secrets.GITLAB_TOKEN' not in reverse_sync:
+          raise SystemExit('The GitHub-to-GitLab sync must use the configured GitLab token.')
+      if 'git push gitlab HEAD:refs/heads/main' not in reverse_sync:
+          raise SystemExit('The GitHub-to-GitLab sync must push only to GitLab main.')
+      if 'git merge-base --is-ancestor' not in reverse_sync:
+          raise SystemExit('The GitHub-to-GitLab sync must retain its divergence guards.')
       print('CI YAML (duplicate-key strict), release requirements, QEMU cache invalidation, main-only sync, and source guards passed.')
       PY
     - python3 scripts/validate-qemu-source.py
