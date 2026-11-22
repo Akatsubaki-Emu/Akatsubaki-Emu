@@ -200,7 +200,7 @@ jobs:
           test -s "$TCI_RUNTIME_DIR/exports.txt" || { echo "TCI export manifest is missing." >&2; exit 1; }
           TCI_RUNTIME_REL="$(head -n 1 "$TCI_RUNTIME_DIR/runtime-library-path.txt")"
           case "$TCI_RUNTIME_REL" in
-            Frameworks/*) ;;
+            Frameworks/TCI/*) ;;
             *) echo "Unexpected TCI QEMU runtime path: $TCI_RUNTIME_REL" >&2; exit 1 ;;
           esac
           test -s "$RUNTIME_DIR/$TCI_RUNTIME_REL" || { echo "TCI manifest points to a missing QEMU library: $TCI_RUNTIME_REL" >&2; exit 1; }
@@ -225,10 +225,11 @@ jobs:
           test -s "$APP/QEMU/TCI/exports.txt" || { echo "Embedded TCI export manifest is missing." >&2; exit 1; }
           EMBEDDED_TCI_REL="$(head -n 1 "$APP/QEMU/TCI/runtime-library-path.txt")"
           case "$EMBEDDED_TCI_REL" in
-            Frameworks/*) ;;
+            Frameworks/TCI/*) ;;
             *) echo "Unexpected embedded TCI runtime path: $EMBEDDED_TCI_REL" >&2; exit 1 ;;
           esac
           test -s "$APP/$EMBEDDED_TCI_REL" || { echo "Embedded TCI library is missing: $EMBEDDED_TCI_REL" >&2; exit 1; }
+          test -s "$APP/Frameworks/TCI/QEMU-TCI.framework/Info.plist" || { echo "Embedded TCI framework metadata is missing." >&2; exit 1; }
           test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
 
           mkdir -p build/Payload
