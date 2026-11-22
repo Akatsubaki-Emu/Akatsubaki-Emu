@@ -17,7 +17,7 @@ final class SettingsViewController: UITableViewController {
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int {
-#if os(iOS)
+#if os(iOS) && !os(visionOS)
         return 12
 #else
         return 11
@@ -193,13 +193,20 @@ final class SettingsViewController: UITableViewController {
         case 10:
             navigationController?.pushViewController(DroidDeckPortStatusViewController(), animated: true)
         case 11:
-#if os(iOS)
-            navigationController?.pushViewController(UIHostingController(rootView: EntitlementSettingsView()), animated: true)
+#if os(iOS) && !os(visionOS)
+            showEntitlementSettings()
 #endif
         default:
             break
         }
     }
+
+#if os(iOS) && !os(visionOS)
+    private func showEntitlementSettings() {
+        let controller = UIHostingController(rootView: EntitlementSettingsView())
+        navigationController?.pushViewController(controller, animated: true)
+    }
+#endif
 
     private func showCustomFPSEditor() {
         let alert = UIAlertController(title: "Custom FPS", message: "Choose a target between 24 and 120 FPS.", preferredStyle: .alert)
