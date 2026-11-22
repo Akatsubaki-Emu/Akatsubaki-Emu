@@ -17,8 +17,10 @@ class GitLabSyncWorkflowTests(unittest.TestCase):
         self.assertIn("for attempt in 1 2 3 4 5; do", self.workflow)
         self.assertIn("grep -Eiq '429|rate limit exceeded|too many requests'", self.workflow)
         self.assertIn('sleep "$delay"', self.workflow)
-        self.assertIn("delay=$((60 * (2 ** (attempt - 1)))", self.workflow)
-        self.assertIn('if [ "$delay" -gt 300 ]; then delay=300; fi', self.workflow)
+        self.assertIn('1) delay=60 ;;', self.workflow)
+        self.assertIn('2) delay=120 ;;', self.workflow)
+        self.assertIn('3) delay=240 ;;', self.workflow)
+        self.assertIn('*) delay=300 ;;', self.workflow)
 
     def test_sync_job_rechecks_gitlab_ancestry_before_retry(self):
         self.assertGreaterEqual(self.workflow.count("git fetch --no-tags gitlab main"), 2)
