@@ -46,17 +46,26 @@ struct RuntimeCapabilityRegistry {
         )
 
         if probeQEMU {
-            switch QEMURuntimeStatus.inspect(bundle: bundle) {
+            let jitStatus = QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: true)
+            switch jitStatus {
             case .ready:
                 records[.qemuTCG] = RuntimeCapabilityRecord(
                     level: .loadable,
-                    detail: "The bundled library loads and required lifecycle exports resolve; guest boot and device operation are not yet verified."
+                    detail: "The bundled QEMU JIT library loads and required lifecycle/JIT exports resolve; guest boot and device operation are not yet verified."
                 )
-            case .unavailable(let reason):
-                records[.qemuTCG] = RuntimeCapabilityRecord(
-                    level: .missing,
-                    detail: reason
-                )
+            case .unavailable(let jitReason):
+                switch QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: false) {
+                case .ready:
+                    records[.qemuTCG] = RuntimeCapabilityRecord(
+                        level: .loadable,
+                        detail: "The bundled QEMU TCI no-JIT library loads and required lifecycle exports resolve; guest boot and device operation are not yet verified."
+                    )
+                case .unavailable(let tciReason):
+                    records[.qemuTCG] = RuntimeCapabilityRecord(
+                        level: .missing,
+                        detail: "JIT probe: \(jitReason) TCI probe: \(tciReason)"
+                    )
+                }
             }
         } else {
             records[.qemuTCG] = RuntimeCapabilityRecord(
