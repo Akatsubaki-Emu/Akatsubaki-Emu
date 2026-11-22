@@ -216,9 +216,7 @@ extension MetalGPUBackend: MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     func draw(in view: MTKView) {
-        guard let queue, let commandBuffer = queue.makeCommandBuffer(),
-              let drawable = view.currentDrawable,
-              let pass = view.currentRenderPassDescriptor else { return }
+        guard let queue else { return }
 
         textureLock.lock()
         let source: FramebufferSlot?
@@ -231,6 +229,13 @@ extension MetalGPUBackend: MTKViewDelegate {
         }
         textureLock.unlock()
         if isUploading { return }
+
+        guard let commandBuffer = queue.makeCommandBuffer(),
+              let drawable = view.currentDrawable,
+              let pass = view.currentRenderPassDescriptor else {
+            if let source { release(source) }
+            return
+        }
 
         if let source {
             guard let blit = commandBuffer.makeBlitCommandEncoder() else {

@@ -10,7 +10,9 @@ struct GPUFrameRegionTests {
         precondition(first.union(disjoint) == GPUFrameRegion(x: 10, y: 20, width: 98, height: 109))
         let contained = GPUFrameRegion(x: 15, y: 25, width: 5, height: 6)
         precondition(first.union(contained) == first)
+        let adjacent = GPUFrameRegion(x: 40, y: 25, width: 5, height: 10)
         precondition(first.overlapsOrTouches(overlapping))
+        precondition(first.overlapsOrTouches(adjacent))
         precondition(!first.overlapsOrTouches(disjoint))
 
         var accumulator = GPUFrameRegionAccumulator(maximumRegionCount: 4)
@@ -27,6 +29,12 @@ struct GPUFrameRegionTests {
         bounded.add(GPUFrameRegion(x: 200, y: 200, width: 2, height: 2))
         precondition(bounded.regions.count == 1)
         precondition(bounded.regions[0] == GPUFrameRegion(x: 0, y: 0, width: 202, height: 202))
-        print("GPU dirty-region accumulator tests passed (overlap, adjacency, disjoint, containment, cap)")
+
+        var transitive = GPUFrameRegionAccumulator(maximumRegionCount: 4)
+        transitive.add(GPUFrameRegion(x: 8, y: 0, width: 2, height: 2))
+        transitive.add(GPUFrameRegion(x: 0, y: 0, width: 2, height: 10))
+        transitive.add(GPUFrameRegion(x: 2, y: 4, width: 10, height: 2))
+        precondition(transitive.regions == [GPUFrameRegion(x: 0, y: 0, width: 12, height: 10)])
+        print("GPU dirty-region accumulator tests passed")
     }
 }

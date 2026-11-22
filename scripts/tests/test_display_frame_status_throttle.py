@@ -13,7 +13,7 @@ class DisplayFrameStatusThrottleTests(unittest.TestCase):
         self.assertIn("lastReportedGuestFrameWidth = width", callback)
         self.assertIn("lastReportedGuestFrameHeight = height", callback)
         self.assertIn("DispatchQueue.main.async { [weak self] in", callback)
-        self.assertIn("self.virtioGPU.submit(.updateFramebuffer(data, width: width, height: height, dirtyRegion: dirtyRegion))", callback)
+        self.assertIn("self.virtioGPU.submit(.updateFramebuffer(data, width: width, height: height, dirtyRegions: dirtyRegions))", callback)
 
 
 if __name__ == "__main__":

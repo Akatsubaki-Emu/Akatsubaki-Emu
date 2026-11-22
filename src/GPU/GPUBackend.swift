@@ -13,7 +13,6 @@ struct GPUFrameRegion: Equatable {
         let bottom = max(y + height, other.y + other.height)
         return GPUFrameRegion(x: left, y: top, width: right - left, height: bottom - top)
     }
-
     func overlapsOrTouches(_ other: GPUFrameRegion) -> Bool {
         x <= other.x + other.width
             && other.x <= x + width
