@@ -97,9 +97,10 @@ def patch_source(source: str) -> str:
         required = [
             "iSteamJITGetProtocolMode",
             "isteam_qemu_set_jit_callbacks",
-            "g_jit_ready",
-            "g_jit_prepare_region",
-            "g_jit_detach",
+            "g_jit_ready = ready;",
+            "g_jit_prepare_region = prepare;",
+            "g_jit_detach = detach;",
+            '__attribute__((used, visibility("default")))',
             'dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")',
             "jit_protocol_mode < 0",
             "jit_protocol_mode > 0",
@@ -107,6 +108,10 @@ def patch_source(source: str) -> str:
             "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
             "tcg_splitwx_diff = buf_rx - buf_rw",
         ]
+        if source.count("static int alloc_code_gen_buffer_splitwx_stikdebug(") != 1:
+            required.append("exactly one StikDebug allocator definition")
+        if source.count("void isteam_qemu_set_jit_callbacks(") != 1:
+            required.append("exactly one exported callback setter")
         missing = [item for item in required if item not in source]
         forbidden = [
             'dlsym(RTLD_DEFAULT, "iSteamJITIsReady")',
@@ -119,15 +124,15 @@ def patch_source(source: str) -> str:
             raise SystemExit("Existing StikDebug QEMU patch is incomplete: " + ", ".join(details))
         return source
 
-    if INCLUDE_ANCHOR not in source:
-        raise SystemExit("QEMU tcg/region.c changed: Darwin Mach include anchor not found")
+    if source.count(INCLUDE_ANCHOR) != 1:
+        raise SystemExit("QEMU tcg/region.c changed: Darwin Mach include anchor missing or duplicated")
     source = source.replace(
         INCLUDE_ANCHOR,
         "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <dlfcn.h>\n#include <mach/mach.h>",
         1,
     )
-    if FUNCTION_ANCHOR not in source:
-        raise SystemExit("QEMU tcg/region.c changed: split-W^X Darwin allocator not found")
+    if source.count(FUNCTION_ANCHOR) != 1:
+        raise SystemExit("QEMU tcg/region.c changed: split-W^X Darwin allocator not found or duplicated")
     replacement = HELPER + FUNCTION_ANCHOR + (
         "#if TARGET_OS_IOS\n"
         "    if (__builtin_available(iOS 26.0, *)) {\n"

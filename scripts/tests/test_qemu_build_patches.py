@@ -169,7 +169,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("g_jit_ready = ready;", once)
         self.assertIn("g_jit_prepare_region = prepare;", once)
         self.assertIn("g_jit_detach = detach;", once)
-        self.assertIn("__attribute__((used, visibility(\\"default\\")))", once)
+        self.assertIn('__attribute__((used, visibility("default")))', once)
         self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")', once)
         self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITIsReady")', once)
         self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")', once)
@@ -177,6 +177,10 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("__builtin_available(iOS 26.0, *)", once)
         self.assertIn("mach_vm_remap(mach_task_self(), &buf_rw", once)
         self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
+        with self.assertRaisesRegex(SystemExit, "unexpected host-symbol lookup"):
+            patch_qemu_stikjit_ios.patch_source(
+                once + '\\nvoid *bad = dlsym(RTLD_DEFAULT, "iSteamJITIsReady");'
+            )
         with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
             patch_qemu_stikjit_ios.patch_source("#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n#endif\n")
 
