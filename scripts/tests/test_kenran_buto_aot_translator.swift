@@ -66,7 +66,10 @@ struct KenranButoAOTTranslatorTests {
         let instructionLimited = translator.translate(Data([0x90, 0x90]), maximumInstructions: 1)
         precondition(instructionLimited.stopReason == .instructionLimit)
         precondition(instructionLimited.guestBytesConsumed == 1)
-        let outputLimited = translator.translate(Data([0xB8, 1, 0, 0, 0]), maximumOutputBytes: 4)
+        let outputLimited = translator.translate(
+            Data([0x48, 0xB8, 0xEF, 0xCD, 0xAB, 0x90, 0x78, 0x56, 0x34, 0x12]),
+            maximumOutputBytes: 4
+        )
         precondition(outputLimited.stopReason == .outputLimit)
         precondition(outputLimited.guestBytesConsumed == 0)
 
