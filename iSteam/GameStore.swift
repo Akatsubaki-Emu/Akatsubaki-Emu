@@ -88,22 +88,51 @@ final class GameStore {
 
     private func loadGames() -> [GameEntry]? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
-        guard data.count <= 20 * 1024 * 1024 else { return nil }
-        guard let decoded = try? decoder.decode([GameEntry].self, from: data),
-              decoded.count <= 10_000,
-              Set(decoded.map(\.id)).count == decoded.count,
-              decoded.allSatisfy({ $0.validate() }) else { return nil }
+        guard data.count <= 20 * 1024 * 1024,
+              let decoded = try? decoder.decode([GameEntry].self, from: data),
+              decoded.count <= 10_000 else { return nil }
+
+        var identifiers = Set<UUID>()
+        identifiers.reserveCapacity(decoded.count)
+        for game in decoded {
+            guard game.validate(), identifiers.insert(game.id).inserted else { return nil }
+        }
         return decoded
+    }
+
+    private func loadGamesForMutation() -> [GameEntry]? {
+        guard let value = loadGames() else {
+            EmulationLog.shared.write("Game library data is unreadable; preserving the original data instead of treating it as an empty library")
+            return nil
+        }
+        return value
+    }
+
+    private func persistValidated(_ games: [GameEntry]) -> Bool {
+        guard games.count <= 10_000 else {
+            EmulationLog.shared.write("Game library could not be encoded; existing saved data was left unchanged")
+            return false
+        }
+        var identifiers = Set<UUID>()
+        identifiers.reserveCapacity(games.count)
+        for game in games {
+            guard game.validate(), identifiers.insert(game.id).inserted else {
+                EmulationLog.shared.write("Game library could not be encoded; existing saved data was left unchanged")
+                return false
+            }
+        }
+        guard let data = try? encoder.encode(games), data.count <= 20 * 1024 * 1024 else {
+            EmulationLog.shared.write("Game library could not be encoded; existing saved data was left unchanged")
+            return false
+        }
+        UserDefaults.standard.set(data, forKey: key)
+        return true
     }
 
     var isReadable: Bool { loadGames() != nil }
 
     var games: [GameEntry] {
-        guard let value = loadGames() else {
-            EmulationLog.shared.write("Game library data is unreadable; preserving the original data instead of treating it as an empty library")
-            return []
-        }
-        return value
+        loadGamesForMutation() ?? []
     }
 
     @discardableResult
@@ -113,34 +142,26 @@ final class GameStore {
             EmulationLog.shared.write("Game library save blocked because existing data could not be decoded")
             return false
         }
-        guard games.count <= 10_000,
-              Set(games.map(\.id)).count == games.count,
-              games.allSatisfy({ $0.validate() }),
-              let data = try? encoder.encode(games),
-              data.count <= 20 * 1024 * 1024 else {
-            EmulationLog.shared.write("Game library could not be encoded; existing saved data was left unchanged")
-            return false
-        }
-        UserDefaults.standard.set(data, forKey: key)
-        return true
+        return persistValidated(games)
     }
 
     func add(_ game: GameEntry) {
-        var current = games
-        guard !current.contains(where: { $0.id == game.id }) else { return }
+        guard var current = loadGamesForMutation(),
+              !current.contains(where: { $0.id == game.id }) else { return }
         current.append(game)
-        save(current)
+        _ = persistValidated(current)
     }
 
     func update(_ game: GameEntry) {
-        var current = games
-        guard let index = current.firstIndex(where: { $0.id == game.id }) else { return }
+        guard var current = loadGamesForMutation(),
+              let index = current.firstIndex(where: { $0.id == game.id }) else { return }
         current[index] = game
-        save(current)
+        _ = persistValidated(current)
     }
 
     func remove(id: UUID) {
-        guard save(games.filter { $0.id != id }) else { return }
+        guard let current = loadGamesForMutation(),
+              persistValidated(current.filter { $0.id != id }) else { return }
         // Remove metadata and artwork only after the library entry is safely
         // removed, avoiding orphaned profile records in future backups.
         try? GameRuntimeProfileStore.shared.removeProfile(for: id)
@@ -148,32 +169,37 @@ final class GameStore {
     }
 
     func game(id: UUID) -> GameEntry? {
-        games.first { $0.id == id }
+        loadGamesForMutation()?.first { $0.id == id }
     }
 
     func search(_ query: String, favoritesOnly: Bool = false) -> [GameEntry] {
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return games.filter { game in
-            (!favoritesOnly || game.isFavorite) &&
-            (normalized.isEmpty ||
-             game.name.localizedCaseInsensitiveContains(normalized) ||
-             game.tags.contains(where: { $0.localizedCaseInsensitiveContains(normalized) }))
-        }.sorted {
+        var results = loadGamesForMutation() ?? []
+        results.removeAll { game in
+            (favoritesOnly && !game.isFavorite) ||
+            (!normalized.isEmpty &&
+             !game.name.localizedCaseInsensitiveContains(normalized) &&
+             !game.tags.contains(where: { $0.localizedCaseInsensitiveContains(normalized) }))
+        }
+        results.sort {
             if $0.isFavorite != $1.isFavorite { return $0.isFavorite && !$1.isFavorite }
             return $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
+        return results
     }
 
     func setFavorite(_ favorite: Bool, id: UUID) {
-        guard var entry = game(id: id) else { return }
-        entry.isFavorite = favorite
-        update(entry)
+        guard var current = loadGamesForMutation(),
+              let index = current.firstIndex(where: { $0.id == id }) else { return }
+        current[index].isFavorite = favorite
+        _ = persistValidated(current)
     }
 
     /// Records a launch attempt; callers must only call this after a backend accepts it.
     func recordLaunchAccepted(id: UUID) {
-        guard var entry = game(id: id) else { return }
-        entry.lastPlayedAt = Date()
-        update(entry)
+        guard var current = loadGamesForMutation(),
+              let index = current.firstIndex(where: { $0.id == id }) else { return }
+        current[index].lastPlayedAt = Date()
+        _ = persistValidated(current)
     }
 }
