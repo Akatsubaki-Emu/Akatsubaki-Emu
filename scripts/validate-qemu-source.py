@@ -1069,6 +1069,11 @@ if 'SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"' not in qemu_workflo
 if "if grep -Fq '_objc_msgSendClass' <<<\"$SYMBOLS\"; then" not in qemu_workflow:
     print("QEMU workflow: Objective-C class-selector stub probe is malformed", file=sys.stderr)
     failed = True
+objcflags_export = qemu_workflow.find("export OBJCFLAGS=")
+dependency_build = qemu_workflow.find("./scripts/build_dependencies.sh -p ios -a arm64")
+if objcflags_export < 0 or dependency_build < 0 or objcflags_export > dependency_build:
+    print("QEMU workflow: OBJCFLAGS must be exported before the UTM dependency build", file=sys.stderr)
+    failed = True
 if "\n; then\n" in qemu_workflow:
     print("QEMU workflow: Objective-C class-selector probe contains a stray shell terminator", file=sys.stderr)
     failed = True
@@ -1085,9 +1090,9 @@ for token in [
     "spirv-llvm-translator",
     "steps.xcode.outputs.version",
     "runs-on: xcode-27",
-    'XCODE_APP="/Applications/Xcode_27.1.app"',
+    'XCODE_APP="/Applications/Xcode_27.2.app"',
     'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-    'if [ "$XCODE_VERSION" != "27.1" ]; then',
+    'if [ "$XCODE_VERSION" != "27.2" ]; then',
     "PROBE_BINARY=",
     "-Wl,-objc_stubs_fast",
     "-lobjc -framework Metal",
