@@ -127,6 +127,9 @@ struct LinuxSyscallDispatcherTests {
     static func main() throws {
         let memory = GuestMemory(size: 4 * 1024 * 1024)
         precondition(memory.beginMapping())
+        precondition(memory.map(offset: 0x1000, length: 4096, permissions: 5))
+        precondition(memory.map(offset: 0x2000, length: 4096, permissions: 3))
+        precondition(memory.map(offset: 0x3F0000, length: 0x10000, permissions: 3))
         let dispatcher = LinuxSyscallDispatcher(memory: memory)
         try dispatcher.configure(programBreak: 0x40000, stackBase: 0x3F0000)
 
@@ -185,6 +188,29 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let executableValue) = executable else { preconditionFailure() }
         precondition(executableValue == 0)
         precondition(memory.permission(at: mapped) == 5)
+        let imageReadOnly = dispatcher.dispatch(number: 10, arguments: [0x2000, 4096, 1, 0, 0, 0])!
+        guard case .returned(let imageReadOnlyValue) = imageReadOnly else { preconditionFailure() }
+        precondition(imageReadOnlyValue == 0)
+        precondition(memory.permission(at: 0x2000) == 1)
+        let imageWritable = dispatcher.dispatch(number: 10, arguments: [0x2000, 4096, 3, 0, 0, 0])!
+        guard case .returned(let imageWritableValue) = imageWritable else { preconditionFailure() }
+        precondition(imageWritableValue == 0)
+        precondition(memory.permission(at: 0x2000) == 3)
+        let stackReadOnly = dispatcher.dispatch(number: 10, arguments: [0x3F0000, 4096, 1, 0, 0, 0])!
+        guard case .returned(let stackReadOnlyValue) = stackReadOnly else { preconditionFailure() }
+        precondition(stackReadOnlyValue == 0)
+        precondition(memory.permission(at: 0x3F0000) == 1)
+        let stackWritable = dispatcher.dispatch(number: 10, arguments: [0x3F0000, 4096, 3, 0, 0, 0])!
+        guard case .returned(let stackWritableValue) = stackWritable else { preconditionFailure() }
+        precondition(stackWritableValue == 0)
+        precondition(memory.permission(at: 0x3F0000) == 3)
+        let unmappedProtection = dispatcher.dispatch(number: 10, arguments: [0x8000, 4096, 1, 0, 0, 0])!
+        guard case .returned(let unmappedProtectionValue) = unmappedProtection else { preconditionFailure() }
+        precondition(unmappedProtectionValue == UInt64(bitPattern: Int64(-12)))
+        let unalignedProtection = dispatcher.dispatch(number: 10, arguments: [0x2001, 4096, 1, 0, 0, 0])!
+        guard case .returned(let unalignedProtectionValue) = unalignedProtection else { preconditionFailure() }
+        precondition(unalignedProtectionValue == UInt64(bitPattern: Int64(-22)))
+
         let advice = dispatcher.dispatch(number: 28, arguments: [mapped, 4096, 0, 0, 0, 0])!
         guard case .returned(let adviceValue) = advice else { preconditionFailure() }
         precondition(adviceValue == 0)

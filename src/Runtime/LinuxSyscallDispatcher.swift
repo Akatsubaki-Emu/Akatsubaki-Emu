@@ -383,8 +383,8 @@ final class LinuxSyscallDispatcher {
         let (rounded, overflow) = length.addingReportingOverflow(4095)
         guard !overflow else { return errno(22) }
         let size = rounded & ~UInt64(4095)
-        let validation = validateRange(address: address, length: size)
-        guard validation == 0 else { return validation }
+        guard address <= memory.size, size <= memory.size - address else { return errno(22) }
+        // GuestMemory is the authority for mapped pages, including PT_LOAD and stack pages.
         guard memory.protect(offset: address, length: size,
                              permissions: guestPermissions(protection)) else {
             return errno(12)
