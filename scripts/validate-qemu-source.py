@@ -841,7 +841,12 @@ required = {
         "CGImageSourceGetCount(image) <= 200",
         "width <= 8192, height <= 8192",
         "width <= (16 * 1024 * 1024) / height",
-        "CGImageSourceCreateImageAtIndex(image, 0, nil) != nil",
+        "private let directory: URL",
+        "private func ensureDirectory() throws",
+        "try ensureDirectory()",
+        "CGImageSourceCreateThumbnailAtIndex(image, 0, thumbnailOptions) != nil",
+        "kCGImageSourceThumbnailMaxPixelSize: 512",
+        "kCGImageSourceShouldCacheImmediately: true",
         "org.webmproject.webp",
     ],
     "src/Runtime/ExternalDriveStore.swift": [
@@ -1010,12 +1015,13 @@ required = {
         "const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);",
         "static_cast<uint64_t>(amount) == pageLength",
     ],
-    ".gitlab-ci.yml": [
-        "apt-get install -y --no-install-recommends bash build-essential",
+    ".github/workflows/validate-repository.yml": [
         "test_execution_backend_router.swift",
+        "test_elf_loader_program_headers.swift",
         "test_static_elf_execution.swift",
         "test_native_guest_memory.cpp",
-        "g++ -std=c++17 -Wall -Wextra -Werror",
+        "clang++ -std=c++17 -Wall -Wextra -Werror",
+        "cc -std=c11 -Wall -Wextra -Werror -pthread",
         "test_vnc_key_state.swift",
         "test_windows_pe_image.swift",
         "python -m unittest discover -s scripts/tests -p 'test_*.py'",
@@ -1292,7 +1298,6 @@ if "- scripts/validate-qemu-source.py" not in release_workflow:
 for token in [
     "- .github/workflows/validate-ios-build.yml",
     "- .github/workflows/validate-repository.yml",
-    "- .gitlab-ci.yml",
     "- scripts/tests/**",
 ]:
     if token not in release_workflow:

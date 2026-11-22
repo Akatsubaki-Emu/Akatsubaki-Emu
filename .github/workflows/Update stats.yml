@@ -72,4 +72,4 @@ jobs:
       - name: Dispatch GitHub-to-GitLab synchronization
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run blank.yml --ref main
+        run: gh workflow run blank.yml --repo "${GITHUB_REPOSITORY}" --ref main

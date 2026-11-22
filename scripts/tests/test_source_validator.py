@@ -416,23 +416,21 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn('log.write("[guest \\(stream)] " + chunk)', output)
 
 
-    def test_gitlab_ci_runs_all_runtime_and_python_regression_suites(self):
+    def test_github_actions_runs_all_runtime_and_python_regression_suites(self):
         root = Path(__file__).resolve().parents[2]
-        workflow = (root / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        workflow = (
+            root / ".github" / "workflows" / "validate-repository.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("scripts/tests/test_execution_backend_router.swift", workflow)
         self.assertIn("scripts/tests/test_elf_loader_program_headers.swift", workflow)
         self.assertIn("scripts/tests/test_windows_pe_image.swift", workflow)
         self.assertIn("scripts/tests/test_static_elf_execution.swift", workflow)
         self.assertIn("scripts/tests/test_native_guest_memory.cpp", workflow)
-        self.assertIn("g++ -std=c++17 -Wall -Wextra -Werror", workflow)
+        self.assertIn("clang++ -std=c++17 -Wall -Wextra -Werror", workflow)
+        self.assertIn("cc -std=c11 -Wall -Wextra -Werror -pthread", workflow)
         self.assertIn("scripts/tests/test_vnc_key_state.swift", workflow)
-        self.assertIn("scripts/tests/test_native_guest_memory.cpp", workflow)
-        self.assertIn("g++ -std=c++17 -Wall -Wextra -Werror", workflow)
-        self.assertIn("apt-get install -y --no-install-recommends bash build-essential", workflow)
-        self.assertLess(
-            workflow.index("apt-get install -y --no-install-recommends bash build-essential"),
-            workflow.index("cc -std=c11"),
-        )
         self.assertIn("python -m unittest discover -s scripts/tests -p 'test_*.py'", workflow)
+        self.assertFalse((root / ".gitlab-ci.yml").exists())
 
 
     def test_guest_backend_replacement_resets_previous_syscall_state(self):
