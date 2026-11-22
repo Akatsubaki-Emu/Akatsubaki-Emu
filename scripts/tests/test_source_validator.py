@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prevent silent duplicate keys and lifecycle/source-contract regressions."""
 import ast
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -92,14 +93,34 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertLess(package.index("dynamically linked shared library"), package.index("candidate_exports="))
         self.assertIn("dynamically linked shared library", runtime_validator)
         self.assertIn("vtool -show-build", package)
-        self.assertIn("platform[[:space:]]+IOS", package)
+        self.assertIn("platform[[:space:]]+IOS([[:space:]]|$)", package)
         self.assertIn("vtool -show-build", runtime_validator)
-        self.assertIn("platform[[:space:]]+IOS", runtime_validator)
+        self.assertIn("platform[[:space:]]+IOS([[:space:]]|$)", runtime_validator)
         self.assertIn("runtime-library-path.txt", package)
         self.assertIn("qemu_system_shutdown_request", runtime_validator)
         self.assertIn("isteam_qemu_set_jit_callbacks", runtime_validator)
         self.assertIn('dlsym(library, "isteam_qemu_set_jit_callbacks")', bridge)
         self.assertNotIn("duplicate_string", bridge)
+
+    def test_qemu_ios_platform_guard_rejects_simulator_platforms(self):
+        pattern = "platform[[:space:]]+IOS([[:space:]]|$)"
+        device = subprocess.run(
+            ["grep", "-Eq", pattern],
+            input="platform IOS\n",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(device.returncode, 0)
+        for platform in ("IOSSIMULATOR", "IOS_SIMULATOR", "MACOS", "MACCATALYST"):
+            result = subprocess.run(
+                ["grep", "-Eq", pattern],
+                input=f"platform {platform}\n",
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 1, platform)
 
     def test_native_bridge_enables_strict_c11_strnlen_and_covers_cleanup_race(self):
         root = Path(__file__).resolve().parents[2]

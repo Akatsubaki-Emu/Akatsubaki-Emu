@@ -530,13 +530,13 @@ required = {
         " _?isteam_qemu_set_jit_callbacks$",
         "isteam_qemu_set_jit_callbacks",
         "vtool -show-build",
-        "platform[[:space:]]+IOS",
+        "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
     ],
     "scripts/validate-qemu-runtime.sh": [
         "for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request isteam_qemu_set_jit_callbacks; do",
         "vtool -show-build",
-        "platform[[:space:]]+IOS",
+        "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
     ],
     "src/QEMU/QEMURuntimeStatus.swift": [
@@ -910,6 +910,7 @@ required = {
         "def test_linux_elf_launch_uses_bounded_guest_machine_batches(self):",
         "def test_console_uses_the_runtime_router_instead_of_direct_box64(self):",
         "def test_imported_games_are_reachable_from_the_ios_library(self):",
+        "def test_qemu_ios_platform_guard_rejects_simulator_platforms(self):",
     ],
 }
 failed = False
