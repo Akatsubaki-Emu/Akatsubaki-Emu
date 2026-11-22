@@ -482,7 +482,7 @@ required = {
         "let truncatedByteIncMemory = GuestMemory(size: 2)",
         "let truncatedMultiByteNopMemory = GuestMemory(size: 3)",
 
-        "let fsSegmentMemory = GuestMemory(size: 4096)",
+        "let fsSegmentMemory = GuestMemory(size: 0x2000)",
         "precondition(fsSegmentMemory.readByte(offset: 0x1020) == 0x5A)",
         "precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)",
         "precondition(syscallInterpreter.registerValue(1) == 21)",
@@ -894,6 +894,11 @@ required = {
         'XCODE_APP="/Applications/Xcode_26.2.app"',
         'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
         'if [ "$XCODE_VERSION" != "26.2" ]; then',
+    ],
+    "scripts/patch_qemu_stikjit_ios.py": [
+        "#include <mach/mach_vm.h>",
+        "mach_vm_remap(mach_task_self(), &buf_rw",
+        "mach_vm_protect(mach_task_self(), buf_rw",
     ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
