@@ -327,6 +327,11 @@ required = {
         "X86_64ALU.add8(lhs, immediate, flags: flags)",
         "case 0x70...0x7F:",
         "second >= 0x80 && second <= 0x8F",
+        "case 0xF6: // TEST, NOT and NEG r/m8",
+        "case 0xFE: // INC and DEC r/m8",
+        "second >= 0x40 && second <= 0x4F",
+        "second >= 0x90 && second <= 0x9F",
+        "second == 0x1F",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
         "Static ELF load → initial stack → x86-64 execution → Linux write/exit passed",
@@ -409,6 +414,9 @@ required = {
         "let shortParityMemory = GuestMemory(size: 64)",
         "let nearParityMemory = GuestMemory(size: 64)",
         "for combination in 0..<32",
+        "let byteFlagMemory = GuestMemory(size: 64)",
+        "let conditionalMoveMemory = GuestMemory(size: 64)",
+        "let multiByteNopMemory = GuestMemory(size: 64)",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
@@ -806,6 +814,10 @@ required = {
         "self.assertIn(\"case 0xA: return paritySet\", alu)",
         "self.assertIn(\"case 0x70...0x7F:\", interpreter)",
         "self.assertIn(\"second >= 0x80 && second <= 0x8F\", interpreter)",
+        "self.assertIn(\"case 0xF6: // TEST, NOT and NEG r/m8\", interpreter)",
+        "self.assertIn(\"second >= 0x40 && second <= 0x4F\", interpreter)",
+        "self.assertIn(\"second >= 0x90 && second <= 0x9F\", interpreter)",
+        "self.assertIn(\"second == 0x1F\", interpreter)",
     ],
 }
 failed = False

@@ -149,6 +149,56 @@ final class X86_64Interpreter: GuestCPUBackend {
                 guard registers[4] <= UInt64.max - 8 else { return .memoryFault(address: registers[4]) }
                 registers[5] = value
                 registers[4] += 8
+            case 0xF6: // TEST, NOT and NEG r/m8
+                guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
+                let group = (modrm >> 3) & 7
+                guard group == 0 || group == 2 || group == 3 else {
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                guard let decoded = decodeRM(modrm, rex: rex, trailingImmediateBytes: group == 0 ? 1 : 0) else {
+                    return .memoryFault(address: rip)
+                }
+                guard let source = readByteOperand(decoded.operand, modrm: modrm, rex: rex) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
+                switch group {
+                case 0:
+                    guard let immediate = fetchByte() else { return .memoryFault(address: rip) }
+                    flags = X86_64ALU.and8(source, immediate, flags: flags).flags
+                case 2:
+                    guard writeByteOperand(~source, to: decoded.operand, modrm: modrm, rex: rex) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                case 3:
+                    let result = X86_64ALU.subtract8(0, source, flags: flags)
+                    flags = result.flags
+                    guard writeByteOperand(UInt8(truncatingIfNeeded: result.value), to: decoded.operand, modrm: modrm, rex: rex) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                default:
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+            case 0xFE: // INC and DEC r/m8
+                guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
+                let group = (modrm >> 3) & 7
+                guard group == 0 || group == 1,
+                      let decoded = decodeRM(modrm, rex: rex) else {
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                guard let source = readByteOperand(decoded.operand, modrm: modrm, rex: rex) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
+                let previousCarry = flags & X86_64ALU.carry
+                let result = group == 0
+                    ? X86_64ALU.add8(source, 1, flags: flags)
+                    : X86_64ALU.subtract8(source, 1, flags: flags)
+                flags = (result.flags & ~X86_64ALU.carry) | previousCarry
+                guard writeByteOperand(UInt8(truncatingIfNeeded: result.value), to: decoded.operand, modrm: modrm, rex: rex) else {
+                    return .memoryFault(address: operandAddress(decoded.operand))
+                }
             case 0xF7: // TEST, NOT and NEG
                 guard let modrm = fetchByte() else { return .memoryFault(address: rip) }
                 let group = (modrm >> 3) & 7
@@ -624,6 +674,33 @@ final class X86_64Interpreter: GuestCPUBackend {
                     registers[decoded.reg] = width64
                         ? result.value
                         : UInt64(UInt32(truncatingIfNeeded: result.value))
+                } else if second >= 0x40 && second <= 0x4F {
+                    guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                        return .memoryFault(address: rip)
+                    }
+                    let width64 = rex & 0x08 != 0
+                    guard let source = readOperand(decoded.operand, width64: width64) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                    if X86_64ALU.condition(second & 0x0F, flags: flags) {
+                        registers[decoded.reg] = width64
+                            ? source
+                            : UInt64(UInt32(truncatingIfNeeded: source))
+                    }
+                } else if second >= 0x90 && second <= 0x9F {
+                    guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
+                        return .memoryFault(address: rip)
+                    }
+                    let value: UInt8 = X86_64ALU.condition(second & 0x0F, flags: flags) ? 1 : 0
+                    guard writeByteOperand(value, to: decoded.operand, modrm: modrm, rex: rex) else {
+                        return .memoryFault(address: operandAddress(decoded.operand))
+                    }
+                } else if second == 0x1F {
+                    guard let modrm = fetchByte(), ((modrm >> 3) & 7) == 0,
+                          decodeRM(modrm, rex: rex) != nil else {
+                        rip = instructionAddress
+                        return .unsupportedInstruction(address: instructionAddress)
+                    }
                 } else if second >= 0x80 && second <= 0x8F {
                     guard let raw = fetchUInt32() else { return .memoryFault(address: rip) }
                     let takeBranch = X86_64ALU.condition(second & 0x0F, flags: flags)

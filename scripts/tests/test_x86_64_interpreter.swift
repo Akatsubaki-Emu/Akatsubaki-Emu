@@ -869,6 +869,38 @@ struct InterpreterTests {
         precondition(wordBoundaryMemory.readUInt16Calls == 1)
         precondition(wordBoundaryMemory.readByteCalls == 0)
 
+        let byteFlagMemory = GuestMemory(size: 64)
+        precondition(byteFlagMemory.write(Data([
+            0xB0, 0x80, 0xF6, 0xC0, 0x80, 0x0F, 0x98, 0xC3,
+            0xFE, 0xC3, 0xFE, 0xCB, 0xF4
+        ]), offset: 0))
+        let byteFlagInterpreter = X86_64Interpreter(memory: byteFlagMemory)
+        try byteFlagInterpreter.reset(entryPoint: 0)
+        let byteFlagExit = try byteFlagInterpreter.run(maxInstructions: 12)
+        precondition(byteFlagExit == .halted)
+        precondition(byteFlagInterpreter.registerValue(3) == 1)
+
+        let conditionalMoveMemory = GuestMemory(size: 64)
+        precondition(conditionalMoveMemory.write(Data([
+            0xB8, 0x05, 0x00, 0x00, 0x00,
+            0x83, 0xF8, 0x05,
+            0xB9, 0x02, 0x00, 0x00, 0x00,
+            0xBB, 0x01, 0x00, 0x00, 0x00,
+            0x0F, 0x44, 0xD9, 0xF4
+        ]), offset: 0))
+        let conditionalMove = X86_64Interpreter(memory: conditionalMoveMemory)
+        try conditionalMove.reset(entryPoint: 0)
+        let conditionalMoveExit = try conditionalMove.run(maxInstructions: 12)
+        precondition(conditionalMoveExit == .halted)
+        precondition(conditionalMove.registerValue(3) == 2)
+
+        let multiByteNopMemory = GuestMemory(size: 64)
+        precondition(multiByteNopMemory.write(Data([0x0F, 0x1F, 0x44, 0x00, 0x00, 0xF4]), offset: 0))
+        let multiByteNop = X86_64Interpreter(memory: multiByteNopMemory)
+        try multiByteNop.reset(entryPoint: 0)
+        let multiByteNopExit = try multiByteNop.run(maxInstructions: 4)
+        precondition(multiByteNopExit == .halted)
+
         let shortParityMemory = GuestMemory(size: 64)
         precondition(shortParityMemory.write(Data([
             0x31, 0xC0, 0x7A, 0x05,
