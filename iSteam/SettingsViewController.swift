@@ -18,7 +18,7 @@ final class SettingsViewController: UITableViewController {
 
     override func numberOfSections(in tableView: UITableView) -> Int {
 #if os(iOS)
-        return 12
+        return 13
 #else
         return 11
 #endif
@@ -32,13 +32,13 @@ final class SettingsViewController: UITableViewController {
         case 3: return frameRates.count
         case 4: return vrModes.count + 2
         case 5: return jitMethods.count + 1
-        case 6, 7, 8, 9, 10, 11: return 1
+        case 6, 7, 8, 9, 10, 11, 12: return 1
         default: return 0
         }
     }
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        ["Windows Runtime", "VM / Hypervisor", "Resolution", "Display / FPS", "VR / Input", "JIT", "Diagnostics", "Performance", "Android Experiment", "Device Compatibility", "DroidDeck Port", "Entitlements"][section]
+        ["Windows Runtime", "VM / Hypervisor", "Resolution", "Display / FPS", "VR / Input", "JIT", "Diagnostics", "Performance", "Android Experiment", "Device Compatibility", "DroidDeck Port", "Entitlements", "Experiments"][section]
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -120,10 +120,16 @@ final class SettingsViewController: UITableViewController {
             c.text = "DroidDeck feature status"
             c.secondaryText = "See which library, controller, storage, XR and guest-runtime features are implemented, partial or unavailable."
             cell.accessoryType = .disclosureIndicator
-        default:
+        case 11:
             c.text = "Apple Developer account"
             c.secondaryText = "Enable Increased Memory Limit for this installation's App ID"
             cell.accessoryType = .disclosureIndicator
+        case 12:
+            c.text = "Add Anything"
+            c.secondaryText = "Request a custom capability for this app's App ID"
+            cell.accessoryType = .disclosureIndicator
+        default:
+            break
         }
         cell.contentConfiguration = c
         return cell
@@ -195,6 +201,10 @@ final class SettingsViewController: UITableViewController {
         case 11:
 #if os(iOS)
             navigationController?.pushViewController(UIHostingController(rootView: EntitlementSettingsView()), animated: true)
+#endif
+        case 12:
+#if os(iOS)
+            navigationController?.pushViewController(UIHostingController(rootView: ExperimentsView()), animated: true)
 #endif
         default:
             break

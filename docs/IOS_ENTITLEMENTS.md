@@ -15,6 +15,12 @@ The iOS Settings screen includes an **Entitlements** page based on the Apple Dev
 
 The integration lists the selected team's App IDs to locate the exact bundle identifier of the running build, then reads that App ID's current capability list and settings. It preserves every existing capability and its settings while adding `INCREASED_MEMORY_LIMIT`. If Apple does not return a complete, readable capability list, the app stops without changing the App ID. It does not create or modify unrelated App IDs. The Anisette device identifier and provisioning data are stored in the iOS Keychain; the Apple account password is held only in memory for authentication and cleared when sign-in finishes.
 
+## Custom capability requests
+
+The iOS Settings → **Experiments** → **Add Anything** screen accepts a capability identifier and submits it through the same authenticated Apple Developer Services session used by the Entitlements page. The request is restricted to the App ID whose bundle identifier exactly matches the running build. Existing capability records and their settings are fetched and preserved; the requested capability is added only if it is not already present.
+
+Apple remains the authority: unsupported, unavailable, or account-ineligible identifiers can be rejected. The input sends an empty settings array for the new capability, so capabilities requiring additional capability-specific settings may be rejected. This is not an entitlement bypass and does not change the running installation's signature. After Apple accepts a request, reinstall/re-provision through SideStore or AltStore and inspect the effective signed entitlements.
+
 ## Important limits
 
 - The app cannot grant itself a privileged entitlement at runtime, rewrite its own code signature, or replace its installed provisioning profile from inside its sandbox.
