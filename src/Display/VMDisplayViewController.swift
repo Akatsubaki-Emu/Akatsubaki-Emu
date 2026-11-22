@@ -125,7 +125,9 @@ final class VMDisplayViewController: UIViewController {
         if #available(iOS 17.4, *), JITCoordinator.shared.isStikDebugAvailable,
            !JITCoordinator.shared.isJITReady {
             status.text = "Waiting for JIT • preparing LocalDevVPN and StikDebug"
-            JITCoordinator.shared.requestJIT(from: self) { [weak self] in
+            JITCoordinator.shared.requestJIT(from: self, onFailure: { [weak self] message in
+                self?.status.text = "JIT failed • \(message)"
+            }) { [weak self] in
                 self?.startEngine()
             }
         } else {

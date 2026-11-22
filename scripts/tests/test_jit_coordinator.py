@@ -64,12 +64,19 @@ class JITCoordinatorSourceTests(unittest.TestCase):
     def test_vm_launch_waits_for_jit_before_starting_qemu(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
-        self.assertIn("JITCoordinator.shared.requestJIT(from: self)", source)
+        self.assertIn("JITCoordinator.shared.requestJIT(from: self, onFailure:", source)
         self.assertIn("override func viewDidAppear", source)
         self.assertIn("guard !startupFlowStarted else { return }", source)
         self.assertIn("self?.startEngine()", source)
         self.assertLess(source.index("JITCoordinator.shared.requestJIT(from: self)"), source.index("private func startEngine()"))
         self.assertIn("guard !engineStartRequested else { return }", source)
+
+    def test_jit_failure_callback_reaches_launch_ui(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn("onFailure: ((String) -> Void)? = nil", source)
+        self.assertIn("onJITFailure = onFailure", source)
+        self.assertIn("failure?(message)", source)
 
     def test_app_registers_localdevvpn_and_its_callback_scheme(self):
         root = Path(__file__).resolve().parents[2]

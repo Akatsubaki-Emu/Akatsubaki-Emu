@@ -6,7 +6,7 @@
 
 ## Startup lifecycle
 
-1. When the VM display first appears, `VMDisplayViewController` checks whether JIT is already ready. A one-shot startup guard prevents duplicate launches when returning from helper apps.
+1. When the user launches a VM, `LaunchSetupViewController` requests JIT through `JITCoordinator` before presenting the VM screen. It passes success/failure callbacks; `VMDisplayViewController` repeats the readiness check defensively before starting QEMU.
 2. `JITCoordinator` checks the running process's actual `get-task-allow` entitlement using `SecTaskCreateFromSelf` and `SecTaskCopyValueForEntitlement` resolved from Security at runtime. If the entitlement is missing, the VM is not started.
 3. The coordinator opens LocalDevVPN with `localdevvpn://enable?scheme=<bundle-id>`. The bundle ID is also registered as Akatsubaki's callback URL scheme, so stable and nightly builds can return to their own app instance.
 4. LocalDevVPN submits its tunnel-start request and calls back to Akatsubaki after its own one-second delay. Akatsubaki waits a further two seconds, then opens StikDebug with the current bundle identifier and process ID using `stikdebug://enable-jit`.
@@ -30,7 +30,7 @@ The helper apps are not embedded in Akatsubaki. They remain external dependencie
 - Missing LocalDevVPN, missing StikDebug, an unavailable callback, or a missing `get-task-allow` entitlement prevents QEMU startup.
 - LocalDevVPN's callback confirms that the tunnel-start request was submitted; it does **not** confirm that the VPN is connected. The readiness check is separate. If acquisition fails, verify the VPN is connected, StikDebug pairing is valid, Developer Mode is enabled, and the signing entitlement is present.
 - The entitlement query uses Security task SPI. This is a sideload/developer workflow and is not suitable for App Store submission.
-- The current readiness probe checks the process's `CS_DEBUGGED` state. The QEMU allocator then performs the executable-region breakpoint protocol. A successful helper handoff alone is not treated as proof of a usable VM session.
+- The coordinator owns one foreground readiness poll and reports completion through callbacks; Launch Setup does not run a second polling loop. The readiness probe checks the process's `CS_DEBUGGED` state. The QEMU allocator then performs the executable-region breakpoint protocol. A successful helper handoff alone is not treated as proof of a usable VM session.
 
 ## Build integration
 
@@ -38,7 +38,8 @@ The helper apps are not embedded in Akatsubaki. They remain external dependencie
 - `iSteam/JIT26Protocol.c` / `.h` — entitlement lookup and iOS 26 breakpoint protocol entry points.
 - `iSteam/Info.plist` — LocalDevVPN query permission and per-bundle callback URL scheme.
 - `iSteam/AppDelegate.swift` — callback dispatch and app-activation readiness polling.
-- `src/Display/VMDisplayViewController.swift` — delays QEMU startup until JIT is confirmed.
+- `iSteam/LaunchSetupViewController.swift` — waits for the coordinator's success/failure callback before presenting the VM.
+- `src/Display/VMDisplayViewController.swift` — repeats the readiness gate and starts QEMU only once.
 - `iSteam/SettingsViewController.swift` — describes the automatic helper sequence.
 - `project.yml` — links Security for the stable and nightly iOS targets.
 - `scripts/tests/test_jit_coordinator.py` — source-contract regression coverage.
