@@ -15,7 +15,7 @@ static void testGuestMemoryPermissions() {
 
     constexpr uint8_t readWrite = 0x03;
     constexpr uint8_t readExecute = 0x05;
-    assert(isteam_guest_memory_map(memory, 0, pageSize * 2, readWrite, false));
+    assert(isteam_guest_memory_map(memory, 0, pageSize, readWrite, false));
 
     const uint8_t marker = 0x5A;
     uint8_t value = 0;
@@ -32,6 +32,10 @@ static void testGuestMemoryPermissions() {
     assert(isteam_guest_memory_read_execute_prefix(memory, pageSize, window.data(), window.size()) == 0);
 
     assert(!isteam_guest_memory_protect(memory, pageSize * 2, pageSize, 0));
+    assert(!isteam_guest_memory_map(memory, 0, pageSize, readWrite, false));
+    assert(isteam_guest_memory_map(memory, 0, pageSize, readWrite, true));
+    assert(isteam_guest_memory_write(memory, 0, &marker, 1));
+    assert(isteam_guest_memory_map(memory, pageSize, pageSize, 0, false));
     assert(!isteam_guest_memory_map(memory, pageSize, pageSize, 0, false));
     assert(isteam_guest_memory_map(memory, pageSize, pageSize, 0, true));
     assert(!isteam_guest_memory_read(memory, pageSize, &value, 1));
