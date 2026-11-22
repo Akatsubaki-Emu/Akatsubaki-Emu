@@ -217,7 +217,7 @@ final class SettingsViewController: UITableViewController {
                   let w = Int(alert.textFields?[0].text ?? ""), let h = Int(alert.textFields?[1].text ?? ""),
                   (320...8192).contains(w), (240...8192).contains(h),
                   UInt64(w) * UInt64(h) * 4 <= UInt64(framebufferLimit) else {
-                self.showInvalidResolutionAlert(); return
+                self?.showInvalidResolutionAlert(); return
             }
             RuntimeSettings.shared.customWidth = w
             RuntimeSettings.shared.customHeight = h

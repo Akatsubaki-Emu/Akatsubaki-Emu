@@ -453,6 +453,7 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("UInt64(w) * UInt64(h) * 4 <= UInt64(framebufferLimit)", settings)
         self.assertIn("framebuffer up to 64 MiB", settings)
         self.assertIn("framebuffer no larger than 64 MiB", settings)
+        self.assertIn("self?.showInvalidResolutionAlert(); return", settings)
 
     def test_console_uses_the_runtime_router_instead_of_direct_box64(self):
         root = Path(__file__).resolve().parents[2]
