@@ -202,7 +202,7 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
     def test_qemu_packagers_preserve_archive_when_output_is_same_path(self):
         root = Path(__file__).resolve().parents[2]
         build_root = root / "build"
-        build_root.mkdir(exist_ok=True)
+        build_root.mkdir(parents=True, exist_ok=True)
         for relative in (
             "scripts/package-utm-qemu-runtime.sh",
             "scripts/package-utm-qemu-tci-runtime.sh",
@@ -237,6 +237,9 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertEqual(source.count('cat > "$OUT/BUILD-INFO.txt"'), 1)
         self.assertEqual(source.count('REPORT="$OUT/dependency-report.txt"'), 1)
         self.assertNotIn('\n > "$OUT/exports.txt" || true\n', source)
+        self.assertIn("Lifecycle and graceful-shutdown exports: verified by nm before packaging", source)
+        self.assertIn("StikJIT callback export: absent by design", source)
+        self.assertNotIn("StikDebug JIT callback exports: verified by nm", source)
 
     def test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed(self):
         source = """#ifdef CONFIG_DARWIN
