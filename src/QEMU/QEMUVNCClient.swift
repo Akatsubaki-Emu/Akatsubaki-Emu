@@ -112,15 +112,18 @@ final class QEMUVNCClient {
                 } catch {
                     lastError = error
                     if Task.isCancelled { return }
-                    self.withStateLock {
-                        if self.connection === candidate {
-                            self.connection = nil
-                            self.connected = false
-                            self.pointerSendBatch = nil
-                            _ = self.keyState.releaseAll()
-                        }
+                    let wasCurrent = self.withStateLock {
+                        guard self.connection === candidate else { return false }
+                        self.connection = nil
+                        self.connected = false
+                        self.pointerSendBatch = nil
+                        self.pendingSendGroup = DispatchGroup()
+                        _ = self.keyState.releaseAll()
+                        return true
                     }
-                    candidate.cancel()
+                    if wasCurrent {
+                        candidate.cancel()
+                    }
                     if attempt < 119 {
                         try? await Task.sleep(nanoseconds: 500_000_000)
                     }
