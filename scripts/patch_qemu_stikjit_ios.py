@@ -108,17 +108,22 @@ def patch_source(source: str) -> str:
             "isteam_jit_prepare_callback",
             "isteam_jit_detach_callback",
             "iSteamJITIsSupported",
-            "iSteamJITIsReady",
-            "iSteamJITPrepareRegion",
-            "iSteamJITDetach",
+            'dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")',
             "jit_protocol_supported()",
             "__builtin_available(iOS 26.0, *)",
             "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
             "tcg_splitwx_diff = buf_rx - buf_rw",
         ]
         missing = [item for item in required if item not in source]
-        if missing:
-            raise SystemExit("Existing StikDebug QEMU patch is incomplete: " + ", ".join(missing))
+        forbidden = [
+            'dlsym(RTLD_DEFAULT, "iSteamJITIsReady")',
+            'dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")',
+            'dlsym(RTLD_DEFAULT, "iSteamJITDetach")',
+        ]
+        unexpected = [item for item in forbidden if item in source]
+        if missing or unexpected:
+            details = missing + ["unexpected host-symbol lookup: " + item for item in unexpected]
+            raise SystemExit("Existing StikDebug QEMU patch is incomplete: " + ", ".join(details))
         return source
 
     if INCLUDE_ANCHOR not in source:
@@ -158,9 +163,7 @@ def patch_source(source: str) -> str:
         "isteam_jit_prepare_callback",
         "isteam_jit_detach_callback",
         "iSteamJITIsSupported",
-        "iSteamJITIsReady",
-        "iSteamJITPrepareRegion",
-        "iSteamJITDetach",
+        'dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")',
         "jit_protocol_supported()",
         "if (jit_protocol_supported())",
         "__builtin_available(iOS 26.0, *)",

@@ -555,6 +555,7 @@ required = {
         'dlsym(library, "qemu_cleanup")',
         'dlsym(library, "qemu_system_shutdown_request")',
         'dlsym(library, "isteam_qemu_set_jit_callbacks")',
+        "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
         "static bool g_starting = false;",
         "static _Thread_local char error_copy",
         "ISTEAM_QEMU_MAX_ARGUMENTS 4096",
@@ -914,7 +915,9 @@ required = {
         "isteam_qemu_set_jit_callbacks",
         "__attribute__((visibility(\"default\")))",
         "isteam_jit_prepare_callback",
-        "iSteamJITIsSupported",
+        'dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")',
+        "jit_protocol_supported()",
+        "return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);",
     ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",

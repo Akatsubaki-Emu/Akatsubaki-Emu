@@ -164,9 +164,10 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         once = patch_qemu_stikjit_ios.patch_source(source)
         twice = patch_qemu_stikjit_ios.patch_source(once)
         self.assertEqual(once, twice)
-        self.assertIn("iSteamJITIsReady", once)
-        self.assertIn("iSteamJITPrepareRegion", once)
-        self.assertIn("iSteamJITDetach", once)
+        self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")', once)
+        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITIsReady")', once)
+        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")', once)
+        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITDetach")', once)
         self.assertIn('__attribute__((visibility("default")))', once)
         self.assertIn("void isteam_qemu_set_jit_callbacks(", once)
         self.assertIn("void isteam_qemu_set_jit_callbacks(ISTEAMJITReadyFunction ready,", once)
@@ -175,6 +176,15 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")', once)
         self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITIsReady")', once)
         self.assertIn("__builtin_available(iOS 26.0, *)", once)
+        bridge = (Path(__file__).resolve().parents[2] / "iSteam/QEMUNativeBridge.c").read_text(encoding="utf-8")
+        self.assertIn(
+            "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
+            bridge,
+        )
+        self.assertIn(
+            "typedef void (*qemu_set_jit_callbacks_fn)(bool (*)(void), void *(*)(void *, size_t), void (*)(void));",
+            bridge,
+        )
         self.assertIn("mach_vm_remap(mach_task_self(), &buf_rw", once)
         self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
         with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
