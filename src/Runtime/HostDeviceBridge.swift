@@ -8,8 +8,15 @@ import UIKit
 /// real VM network/virtio-serial adapter is connected to this service.
 final class HostDeviceBridge {
     static let shared = HostDeviceBridge()
-    private init() {}
     private let maximumInMemoryTransferBytes = 64 * 1024 * 1024
+    let sharedDirectoryURL: URL
+
+    private init() {
+        let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("GuestShared", isDirectory: true)
+        sharedDirectoryURL = root
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    }
 
     enum BridgeError: LocalizedError {
         case invalidPath
@@ -29,14 +36,7 @@ final class HostDeviceBridge {
         }
     }
 
-    /// A user-visible shared directory that can be exposed to the guest through
-    /// a future virtio-fs, 9p, or explicit file-transfer adapter.
-    var sharedDirectoryURL: URL {
-        let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("GuestShared", isDirectory: true)
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        return root
-    }
+    /// A user-visible shared directory exposed through a future guest file adapter.
 
     struct DeviceInfo: Codable {
         let systemName: String

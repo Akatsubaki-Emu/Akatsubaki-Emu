@@ -706,6 +706,11 @@ required = {
         "isValidName(_ name: String)",
         "configuration.name == expectedName",
         "startAccessingSecurityScopedResource()",
+
+        "private let directory: URL",
+        "private func ensureDirectory() throws",
+        "directory = root.appendingPathComponent(\"VMSlots\", isDirectory: true)",
+        "try ensureDirectory()",
     ],
     "src/Runtime/ExecutionBackendRouter.swift": [
         "antiCheatAssessment == .notRequested",
@@ -855,6 +860,13 @@ required = {
         "private func loadRecords() throws",
         "DatabaseError.corruptDatabase",
         "fileSize <= 5 * 1024 * 1024",
+
+        "private let fileURL: URL",
+        "private func ensureDirectory() throws",
+        "identifiers.reserveCapacity(records.count)",
+        "identifiers.insert(record.appID.lowercased()).inserted",
+        "guard let loaded = try? loadRecords() else { return nil }",
+        "try ensureDirectory()",
     ],
     "iSteam/GameStore.swift": [
         "func validate() -> Bool",
@@ -918,6 +930,10 @@ required = {
         "case fileChangedDuringTransfer",
         "copiedBytes == sourceSize",
         "data.count == size",
+
+        "let sharedDirectoryURL: URL",
+        "sharedDirectoryURL = root",
+        "createDirectory(at: root",
     ],
     "src/Steam/DroidDeckFeatureServices.swift": [
         "NSFileCoordinator()",
