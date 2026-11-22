@@ -497,7 +497,7 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("Expected Xcode 27.x on the xcode-27 runner", workflow)
 
 
-    def test_release_and_platform_validation_pin_xcode_26_2(self):
+    def test_release_and_platform_validation_require_xcode_27_1_or_later(self):
         root = Path(__file__).resolve().parents[2]
         release = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         release_build = release.split("\n  build:\n", 1)[1].split("\n  release:\n", 1)[0]
@@ -506,10 +506,11 @@ class SourceValidatorTests(unittest.TestCase):
         validation_build = validation.split("\n  build-platform-simulators:\n", 1)[1]
         for name, job in (("release build", release_build), ("platform validation", validation_build)):
             with self.subTest(workflow=name):
-                self.assertIn("runs-on: macos-26", job)
-                self.assertIn('XCODE_APP="/Applications/Xcode_26.2.app"', job)
-                self.assertIn('sudo xcode-select --switch "$XCODE_APP/Contents/Developer"', job)
-                self.assertIn('if [ "$XCODE_VERSION" != "26.2" ]; then', job)
+                self.assertIn("runs-on: xcode-27", job)
+                self.assertIn('XCODE_DEVELOPER_DIR="$(xcode-select -p)"', job)
+                self.assertIn('case "$XCODE_VERSION" in', job)
+                self.assertIn("27.1*|27.[2-9]*) ;;", job)
+                self.assertIn("Expected Xcode 27.1 or later on the xcode-27 runner", job)
         self.assertIn("runs-on: ubuntu-24.04", release_publish)
         self.assertIn("sha256sum -c", release_publish)
 

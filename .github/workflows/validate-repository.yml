@@ -202,12 +202,13 @@ jobs:
               raise SystemExit("QEMU/Mesa build requires the Xcode 27 runner image.")
           if "runs-on: macos-15" in release or "runs-on: macos-15" in platform_validation:
               raise SystemExit("Apple builds must not use an unpinned macOS 15 runner.")
-          if "runs-on: macos-26" not in release or "runs-on: macos-26" not in platform_validation:
+          if "runs-on: xcode-27" not in release or "runs-on: xcode-27" not in platform_validation:
               raise SystemExit("Apple builds must use the macOS 26 runner image.")
           xcode_contract = [
-              'XCODE_APP="/Applications/Xcode_26.2.app"',
-              'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
-              'if [ "$XCODE_VERSION" != "26.2" ]; then',
+              'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
+              'case "$XCODE_VERSION" in',
+              '27.1*|27.[2-9]*) ;;',
+              'Expected Xcode 27.1 or later on the xcode-27 runner',
           ]
           for workflow in (release, platform_validation):
               for token in xcode_contract:

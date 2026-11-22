@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   build-platform-simulators:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -36,18 +36,25 @@ jobs:
             destination: generic/platform=visionOS Simulator
     steps:
       - uses: actions/checkout@v7
-      - name: Select and verify Xcode 26.2
+      - name: Select and verify Xcode 27.1+
         shell: bash
         run: |
           set -euo pipefail
-          XCODE_APP="/Applications/Xcode_26.2.app"
-          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
-          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
-          XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
-          if [ "$XCODE_VERSION" != "26.2" ]; then
-            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+          XCODE_DEVELOPER_DIR="$(xcode-select -p)"
+          if [ ! -d "$XCODE_DEVELOPER_DIR" ]; then
+            echo "The xcode-27 runner has no active Xcode developer directory." >&2
             exit 1
           fi
+          XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          case "$XCODE_VERSION" in
+            27.1*|27.[2-9]*) ;;
+            *)
+              echo "Expected Xcode 27.1 or later on the xcode-27 runner, found $XCODE_VERSION." >&2
+              exit 1
+              ;;
+          esac
+          echo "Using Xcode $XCODE_VERSION at $XCODE_DEVELOPER_DIR"
+          xcodebuild -version
       - name: Test translation cache integrity and invalidation
         if: matrix.scheme == 'iSteam'
         run: |
@@ -193,22 +200,29 @@ jobs:
 
 
   build-ios-device:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - name: Select and verify Xcode 26.2
+      - name: Select and verify Xcode 27.1+
         shell: bash
         run: |
           set -euo pipefail
-          XCODE_APP="/Applications/Xcode_26.2.app"
-          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
-          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
-          XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
-          if [ "$XCODE_VERSION" != "26.2" ]; then
-            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+          XCODE_DEVELOPER_DIR="$(xcode-select -p)"
+          if [ ! -d "$XCODE_DEVELOPER_DIR" ]; then
+            echo "The xcode-27 runner has no active Xcode developer directory." >&2
             exit 1
           fi
+          XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          case "$XCODE_VERSION" in
+            27.1*|27.[2-9]*) ;;
+            *)
+              echo "Expected Xcode 27.1 or later on the xcode-27 runner, found $XCODE_VERSION." >&2
+              exit 1
+              ;;
+          esac
+          echo "Using Xcode $XCODE_VERSION at $XCODE_DEVELOPER_DIR"
+          xcodebuild -version
       - name: Install XcodeGen
         run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
       - name: Generate Xcode project
