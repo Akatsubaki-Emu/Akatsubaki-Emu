@@ -124,6 +124,7 @@ jobs:
               "actions/download-artifact@v4",
               "name: iSteam-qemu-runtime-ios-arm64",
               "if-no-files-found: error",
+            "- .github/workflows/blank.yml",
           ]
           missing = [item for item in required_release if item not in release]
           if missing:
