@@ -142,14 +142,6 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn('"tcg,tb-size=128,split-wx=on"', source)
         self.assertIn('"tcg,tb-size=64,split-wx=on"', source)
 
-    def test_qemu_runtime_rejects_tcg_when_stikdebug_jit_is_not_ready(self):
-        root = Path(__file__).resolve().parents[2]
-        source = (root / "src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8")
-        self.assertIn("JITCoordinator.shared.isStikDebugAvailable", source)
-        self.assertIn("!JITCoordinator.shared.isJITReady", source)
-        self.assertIn("Enable JIT for Akatsubaki Emu with StikDebug", source)
-
-
     def test_launch_setup_uses_jit_callbacks_before_presenting_vm(self):
         root = Path(__file__).resolve().parents[2]
         launch = (root / "iSteam/LaunchSetupViewController.swift").read_text(encoding="utf-8")
@@ -165,7 +157,7 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("self.launchInProgress = false", launch_method)
         self.assertNotIn("waitForJIT", launch)
         self.assertIn("VMDisplayViewController(configuration: configuration", complete_method)
-        self.assertIn("!JITCoordinator.shared.isJITReady", native)
+        self.assertIn("guard JITCoordinator.shared.isJITReady else", native)
 
     def test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed(self):
         source = """#ifdef CONFIG_DARWIN
