@@ -13,6 +13,7 @@ final class LinuxSyscallDispatcher {
     private var mmapCursor: UInt64 = 0
     private var stackBase: UInt64 = 0
     private var mappedRanges: [Range<UInt64>] = []
+    private var closedStandardDescriptorMask: UInt8 = 0
 
     init(memory: GuestMemory, log: EmulationLog = .shared) {
         self.memory = memory
@@ -33,6 +34,7 @@ final class LinuxSyscallDispatcher {
         let preferred = max(minimumCursor, 0x10000000)
         mmapCursor = preferred < stackBase ? preferred : minimumCursor
         mappedRanges.removeAll(keepingCapacity: true)
+        closedStandardDescriptorMask = 0
     }
 
     func reset() {
@@ -44,6 +46,7 @@ final class LinuxSyscallDispatcher {
         }
         programBreak = initialProgramBreak
         mappedRanges.removeAll(keepingCapacity: true)
+        closedStandardDescriptorMask = 0
         let (rawCursor, overflow) = initialProgramBreak.addingReportingOverflow(0x10000)
         let minimumCursor = overflow ? UInt64.max : Self.alignUp(rawCursor)
         let preferred = max(minimumCursor, 0x10000000)
@@ -61,12 +64,14 @@ final class LinuxSyscallDispatcher {
                   arg3: UInt64, arg4: UInt64, arg5: UInt64) -> Outcome? {
         switch number {
         case 0:
-            return .returned(arg0 == 0 ? 0 : errno(9))
+            guard arg0 == 0, !isStandardDescriptorClosed(arg0) else { return .returned(errno(9)) }
+            return .returned(0)
         case 1:
             let descriptor = arg0
             let address = arg1
             let requested = arg2
             guard descriptor == 1 || descriptor == 2 else { return .returned(errno(9)) }
+            guard !isStandardDescriptorClosed(descriptor) else { return .returned(errno(9)) }
             if requested == 0 { return .returned(0) }
             guard requested <= 1_048_576, requested <= UInt64(Int.max),
                   let bytes = memory.read(offset: address, length: Int(requested)) else {
@@ -77,7 +82,11 @@ final class LinuxSyscallDispatcher {
         case 20:
             return .returned(writeVector(descriptor: arg0, vectors: arg1, count: arg2))
         case 3:
-            return .returned(arg0 <= 2 ? 0 : errno(9))
+            guard arg0 <= 2 else { return .returned(errno(9)) }
+            let bit = UInt8(1) << UInt8(arg0)
+            guard closedStandardDescriptorMask & bit == 0 else { return .returned(errno(9)) }
+            closedStandardDescriptorMask |= bit
+            return .returned(0)
         case 9:
             guard arg4 == UInt64.max, arg5 == 0 else { return .returned(errno(22)) }
             return .returned(mapAnonymous(address: arg0, length: arg1, flags: arg3))
@@ -118,6 +127,12 @@ final class LinuxSyscallDispatcher {
     }
 
 
+    private func isStandardDescriptorClosed(_ descriptor: UInt64) -> Bool {
+        guard descriptor <= 2 else { return false }
+        let bit = UInt8(1) << UInt8(descriptor)
+        return closedStandardDescriptorMask & bit != 0
+    }
+
     private static let maximumVectorCount: UInt64 = 1024
     private static let maximumVectorBytes: UInt64 = 1_048_576
 
@@ -125,6 +140,7 @@ final class LinuxSyscallDispatcher {
     /// descriptors are not exposed to the host filesystem by this runtime.
     private func writeVector(descriptor: UInt64, vectors: UInt64, count: UInt64) -> UInt64 {
         guard descriptor == 1 || descriptor == 2 else { return errno(9) }
+        guard !isStandardDescriptorClosed(descriptor) else { return errno(9) }
         guard count <= Self.maximumVectorCount else { return errno(22) }
         if count == 0 { return 0 }
 

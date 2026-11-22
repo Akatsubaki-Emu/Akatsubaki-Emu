@@ -128,6 +128,11 @@ required = {
         "guard arg4 == UInt64.max, arg5 == 0",
         "case 9:",
         "case 20:",
+        "closedStandardDescriptorMask",
+        "isStandardDescriptorClosed(_ descriptor: UInt64) -> Bool",
+        "closedStandardDescriptorMask |= bit",
+        "case 3:",
+
         "writeVector(descriptor: arg0, vectors: arg1, count: arg2)",
         "private func writeVector(descriptor: UInt64, vectors: UInt64, count: UInt64) -> UInt64",
         "maximumVectorCount: UInt64 = 1024",

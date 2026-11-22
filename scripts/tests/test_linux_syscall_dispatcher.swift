@@ -246,6 +246,34 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let noVectorsValue) = noVectors else { preconditionFailure() }
         precondition(noVectorsValue == 0)
 
+        let closeStdout = outputDispatcher.dispatch(number: 3, arguments: [1, 0, 0, 0, 0, 0])!
+        guard case .returned(let closeStdoutValue) = closeStdout else { preconditionFailure() }
+        precondition(closeStdoutValue == 0)
+        let closedStdoutWrite = outputDispatcher.dispatch(number: 1, arguments: [1, 0x3F3000, 1, 0, 0, 0])!
+        guard case .returned(let closedStdoutValue) = closedStdoutWrite else { preconditionFailure() }
+        precondition(closedStdoutValue == UInt64(bitPattern: Int64(-9)))
+        let repeatedStdoutClose = outputDispatcher.dispatch(number: 3, arguments: [1, 0, 0, 0, 0, 0])!
+        guard case .returned(let repeatedStdoutCloseValue) = repeatedStdoutClose else { preconditionFailure() }
+        precondition(repeatedStdoutCloseValue == UInt64(bitPattern: Int64(-9)))
+
+        let closeStderr = outputDispatcher.dispatch(number: 3, arguments: [2, 0, 0, 0, 0, 0])!
+        guard case .returned(let closeStderrValue) = closeStderr else { preconditionFailure() }
+        precondition(closeStderrValue == 0)
+        let closedStderrWritev = outputDispatcher.dispatch(
+            number: 20, arg0: 2, arg1: 0x3F2000, arg2: 2, arg3: 0, arg4: 0, arg5: 0
+        )!
+        guard case .returned(let closedStderrValue) = closedStderrWritev else { preconditionFailure() }
+        precondition(closedStderrValue == UInt64(bitPattern: Int64(-9)))
+
+        let invalidClose = outputDispatcher.dispatch(number: 3, arguments: [3, 0, 0, 0, 0, 0])!
+        guard case .returned(let invalidCloseValue) = invalidClose else { preconditionFailure() }
+        precondition(invalidCloseValue == UInt64(bitPattern: Int64(-9)))
+
+        outputDispatcher.reset()
+        let reopenedStdoutWrite = outputDispatcher.dispatch(number: 1, arguments: [1, 0x3F3000, 1, 0, 0, 0])!
+        guard case .returned(let reopenedStdoutValue) = reopenedStdoutWrite else { preconditionFailure() }
+        precondition(reopenedStdoutValue == 1)
+
         let invalidRandomFlags = dispatcher.dispatch(number: 318, arguments: [0x40800, 8, 8, 0, 0, 0])!
         guard case .returned(let invalidRandomFlagsValue) = invalidRandomFlags else { preconditionFailure() }
         precondition(invalidRandomFlagsValue == UInt64(bitPattern: Int64(-22)))
@@ -270,6 +298,13 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let badTimezoneValue) = badTimezone else { preconditionFailure() }
         precondition(badTimezoneValue == UInt64(bitPattern: Int64(-14)))
 
+        let closeStdin = dispatcher.dispatch(number: 3, arguments: [0, 0, 0, 0, 0, 0])!
+        guard case .returned(let closeStdinValue) = closeStdin else { preconditionFailure() }
+        precondition(closeStdinValue == 0)
+        let closedStdinRead = dispatcher.dispatch(number: 0, arguments: [0, 0, 0, 0, 0, 0])!
+        guard case .returned(let closedStdinValue) = closedStdinRead else { preconditionFailure() }
+        precondition(closedStdinValue == UInt64(bitPattern: Int64(-9)))
+
         let identity = dispatcher.dispatch(number: 39, arguments: [0, 0, 0, 0, 0, 0])!
         guard case .returned(let pid) = identity else { preconditionFailure() }
         precondition(pid == 1)
@@ -288,6 +323,9 @@ struct LinuxSyscallDispatcherTests {
         let resetBreak = dispatcher.dispatch(number: 12, arguments: [0, 0, 0, 0, 0, 0])!
         guard case .returned(let resetValue) = resetBreak else { preconditionFailure() }
         precondition(resetValue == 0x40000)
+        let reopenedStdinRead = dispatcher.dispatch(number: 0, arguments: [0, 0, 0, 0, 0, 0])!
+        guard case .returned(let reopenedStdinValue) = reopenedStdinRead else { preconditionFailure() }
+        precondition(reopenedStdinValue == 0)
 
         print("Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/identity and reset tests passed")
     }

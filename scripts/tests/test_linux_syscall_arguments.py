@@ -14,6 +14,12 @@ class LinuxSyscallArgumentTests(unittest.TestCase):
         self.assertNotIn("let arguments = [registers[7]", interpreter)
         self.assertIn("scalarIdentity", tests)
         self.assertIn("arguments: [0]) == nil", tests)
+        self.assertIn("closedStandardDescriptorMask", dispatcher)
+        self.assertIn("isStandardDescriptorClosed", dispatcher)
+        self.assertIn("closedStandardDescriptorMask |= bit", dispatcher)
+        self.assertIn("closedStandardDescriptorMask = 0", dispatcher)
+        self.assertIn("closedStdinRead", tests)
+        self.assertIn("closedStdoutWrite", tests)
 
 
 if __name__ == "__main__":
