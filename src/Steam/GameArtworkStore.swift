@@ -8,13 +8,15 @@ final class GameArtworkStore {
     private let fm = FileManager.default
     private let maxBytes = 12 * 1024 * 1024
     private static let supportedExtensions = ["jpg", "png", "heic", "webp", "gif"]
-    private init() {}
+    private let directory: URL
 
-    private var directory: URL {
+    private init() {
         let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let folder = base.appendingPathComponent("GameArtwork", isDirectory: true)
-        try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
-        return folder
+        directory = base.appendingPathComponent("GameArtwork", isDirectory: true)
+    }
+
+    private func ensureDirectory() throws {
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
     private func artworkFiles(for gameID: UUID) -> [URL] {
@@ -32,6 +34,11 @@ final class GameArtworkStore {
         guard values.isRegularFile == true, let size = values.fileSize, size > 0, size <= maxBytes else {
             throw ArtworkError.invalidFile
         }
+        let thumbnailOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 512,
+            kCGImageSourceShouldCacheImmediately: true
+        ] as CFDictionary
         let coordinator = NSFileCoordinator()
         var coordinationError: NSError?
         var imageData: Data?
@@ -48,7 +55,7 @@ final class GameArtworkStore {
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0, width <= 8192, height <= 8192,
               width <= (16 * 1024 * 1024) / height,
-              CGImageSourceCreateImageAtIndex(image, 0, nil) != nil,
+              CGImageSourceCreateThumbnailAtIndex(image, 0, thumbnailOptions) != nil,
               let type = CGImageSourceGetType(image) as String?,
               ["public.jpeg", "public.png", "public.heic", "public.webp", "org.webmproject.webp", "com.compuserve.gif"].contains(type) else {
             throw ArtworkError.invalidImage
@@ -61,6 +68,7 @@ final class GameArtworkStore {
         case "public.webp", "org.webmproject.webp": ext = "webp"
         default: ext = "gif"
         }
+        try ensureDirectory()
         let destination = directory.appendingPathComponent(gameID.uuidString).appendingPathExtension(ext)
         try data.write(to: destination, options: .atomic)
         // Keep one canonical artwork file per game. Otherwise changing format
