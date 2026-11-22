@@ -319,7 +319,6 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
             return
         }
 #endif
-        }
         completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)
     }
 
