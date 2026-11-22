@@ -873,6 +873,8 @@ required = {
         "GameLibraryViewController()",
         "GameStore.shared.search(\"\")",
         "ConsoleViewController(game: games[indexPath.row])",
+        "super.init(style: .insetGrouped)",
+        "required init?(coder: NSCoder)",
     ],
     "scripts/tests/test_source_validator.py": [
         "def test_linux_elf_launch_uses_bounded_guest_machine_batches(self):",

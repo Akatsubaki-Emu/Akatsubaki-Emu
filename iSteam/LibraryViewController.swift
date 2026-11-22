@@ -318,10 +318,17 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
 private final class GameLibraryViewController: UITableViewController {
     private var games: [GameEntry] = []
 
+    init() {
+        super.init(style: .insetGrouped)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "My Games"
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "game")
         tableView.rowHeight = 64
     }
 
