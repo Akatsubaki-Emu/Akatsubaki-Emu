@@ -33,6 +33,7 @@ final class ELF64Loader {
             switch self {
             case .unreadable: return "The ELF image could not be read."
             case .fileTooLarge: return "The ELF image exceeds the 512 MiB inspection limit."
+            case .memoryMappingFailed: return "The ELF load-segment page permissions could not be installed."
             case .invalidMagic: return "The file is not an ELF image."
             case .unsupportedClassOrEndian: return "Only little-endian ELF64 images are supported."
             case .truncatedHeader: return "The ELF64 header is truncated or invalid."
@@ -249,6 +250,26 @@ final class ELF64Loader {
                 loadSegments: rawLoadSegments,
                 memory: memory
             )
+        }
+        guard memory.beginMapping() else { throw LoadError.memoryMappingFailed }
+        for segment in segments {
+            let pageMask = GuestMemory.pageSize - 1
+            let start = segment.guestAddress & ~pageMask
+            let (rawEnd, endOverflow) = segment.guestAddress.addingReportingOverflow(segment.memorySize)
+            guard !endOverflow else { throw LoadError.invalidSegment }
+            let (roundedEnd, roundingOverflow) = rawEnd.addingReportingOverflow(pageMask)
+            guard !roundingOverflow else { throw LoadError.invalidSegment }
+            let end = roundedEnd & ~pageMask
+            guard end > start, end <= memory.size else { throw LoadError.segmentOutsideGuestMemory }
+
+            var permissions: GuestMemoryPermissions = []
+            if (segment.flags & 0x4) != 0 { permissions.insert(.read) }
+            if (segment.flags & 0x2) != 0 { permissions.insert(.write) }
+            if (segment.flags & 0x1) != 0 { permissions.insert(.execute) }
+            guard memory.map(offset: start, length: end - start,
+                             permissions: permissions, merge: true) else {
+                throw LoadError.memoryMappingFailed
+            }
         }
         let maximumGuestAddress = orderedSegments.reduce(UInt64(0)) { max($0, $1.guestAddress + $1.memorySize) }
         return Image(entryPoint: loadedEntryPoint, machine: machine, segments: segments, loadedByteCount: total,
