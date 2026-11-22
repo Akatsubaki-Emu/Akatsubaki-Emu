@@ -131,6 +131,8 @@ jobs:
         run: |
           set -euo pipefail
           cd UTM
+          # Use regular Objective-C selector stubs supported by the selected Xcode linker.
+          export OBJCFLAGS="${OBJCFLAGS:-} -fno-objc-msgsend-class-selector-stubs"
           # Patch QEMU's iOS 26+ TCG JIT allocator and Meson project, then verify the generated
           # QEMU dylib link edge before its compile/link tasks start.
           python3 "$GITHUB_WORKSPACE/scripts/patch_utm_qemu_ios.py" scripts/build_dependencies.sh
