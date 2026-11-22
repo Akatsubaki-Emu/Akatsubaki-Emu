@@ -12,7 +12,9 @@ class GameStoreImportFailureTests(unittest.TestCase):
     def test_add_returns_the_library_persistence_result(self):
         method = self.store.split("func add(_ game:", 1)[1].split("func update", 1)[0]
         self.assertIn("@discardableResult\n    func add(_ game: GameEntry) -> Bool", self.store)
-        self.assertIn("return save(current)", method)
+        self.assertIn("return persist(current)", method)
+        self.assertIn("readableGames()", method)
+        self.assertNotIn("save(current)", method)
 
     def test_failed_import_removes_the_staged_executable_and_reports_failure(self):
         import_flow = self.library.split("let gameDir = dir.appendingPathComponent", 1)[1].split(
