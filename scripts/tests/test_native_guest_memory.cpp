@@ -79,6 +79,39 @@ int main() {
         }
     }
 
+    // Permission checks are opt-in so the loader can populate pages before
+    // beginning the guest address-space mapping phase.
+    ISteamGuestMemory *protectedMemory = isteam_guest_memory_create(pageSize * 3);
+    assert(protectedMemory != nullptr);
+    const std::array<uint8_t, 4> instruction{0x90, 0x90, 0x90, 0xC3};
+    assert(isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
+    assert(isteam_guest_memory_begin_mapping(protectedMemory));
+    assert(isteam_guest_memory_map(protectedMemory, 0, pageSize, 5, false)); // read + execute
+    assert(isteam_guest_memory_map(protectedMemory, pageSize, pageSize, 3, false)); // read + write
+    std::array<uint8_t, 4> protectedBytes{};
+    assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(isteam_guest_memory_read_execute(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(!isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
+    assert(!isteam_guest_memory_read_execute(protectedMemory, pageSize, protectedBytes.data(), protectedBytes.size()));
+    assert(isteam_guest_memory_write(protectedMemory, pageSize, instruction.data(), instruction.size()));
+    assert(isteam_guest_memory_protect(protectedMemory, 0, pageSize, 1)); // read-only, no execute
+    assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(!isteam_guest_memory_read_execute(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(!isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
+    assert(!isteam_guest_memory_protect(protectedMemory, pageSize * 2, pageSize, 0)); // unmapped
+    assert(isteam_guest_memory_protect(protectedMemory, pageSize, pageSize, 0)); // PROT_NONE
+    assert(!isteam_guest_memory_read(protectedMemory, pageSize, protectedBytes.data(), protectedBytes.size()));
+    assert(!isteam_guest_memory_write(protectedMemory, pageSize, instruction.data(), instruction.size()));
+    assert(isteam_guest_memory_map(protectedMemory, pageSize * 2, pageSize, 5, false));
+    assert(isteam_guest_memory_map(protectedMemory, pageSize * 2, pageSize, 2, true)); // merge permissions
+    assert(isteam_guest_memory_write(protectedMemory, pageSize * 2, instruction.data(), instruction.size()));
+    assert(isteam_guest_memory_read_execute(protectedMemory, pageSize * 2, protectedBytes.data(), protectedBytes.size()));
+    assert(!isteam_guest_memory_map(protectedMemory, UINT64_MAX, 2, 3, false));
+    isteam_guest_memory_clear(protectedMemory);
+    assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
+    isteam_guest_memory_destroy(protectedMemory);
+
     // Clearing the final partial page should release its backing allocation too.
     constexpr uint64_t partialSize = pageSize + 17;
     ISteamGuestMemory *partial = isteam_guest_memory_create(partialSize);
