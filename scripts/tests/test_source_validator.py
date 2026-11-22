@@ -422,6 +422,9 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("machine.loadELFImage(at: executable, arguments: arguments)", runtime)
         self.assertIn("machine.runBatch(maxInstructions: Self.batchInstructionLimit)", runtime)
         self.assertIn("queue.asyncAfter", runtime)
+        self.assertIn("private func executeNextBatch", runtime)
+        self.assertIn("self.executeNextBatch(machine: machine, token: token)", runtime)
+        self.assertNotIn("self.runNextBatch(machine: machine, token: token)", runtime)
         self.assertIn("machine.stop()", runtime)
 
     def test_console_uses_the_runtime_router_instead_of_direct_box64(self):

@@ -172,19 +172,24 @@ final class LinuxELFRuntime {
 
     private func runNextBatch(machine: GuestMachine, token: UInt64) {
         queue.async { [weak self] in
-            guard let self, self.isCurrent(token: token, machine: machine) else { return }
-            do {
-                let exit = try machine.runBatch(maxInstructions: Self.batchInstructionLimit)
-                if exit == .instructionLimit {
-                    self.queue.asyncAfter(deadline: .now() + .milliseconds(1)) {
-                        self.runNextBatch(machine: machine, token: token)
-                    }
-                } else {
-                    self.finish(token: token, machine: machine, result: .success(exit))
+            guard let self else { return }
+            self.executeNextBatch(machine: machine, token: token)
+        }
+    }
+
+    private func executeNextBatch(machine: GuestMachine, token: UInt64) {
+        guard isCurrent(token: token, machine: machine) else { return }
+        do {
+            let exit = try machine.runBatch(maxInstructions: Self.batchInstructionLimit)
+            if exit == .instructionLimit {
+                queue.asyncAfter(deadline: .now() + .milliseconds(1)) { [weak self] in
+                    self?.executeNextBatch(machine: machine, token: token)
                 }
-            } catch {
-                self.finish(token: token, machine: machine, result: .failure(error))
+            } else {
+                finish(token: token, machine: machine, result: .success(exit))
             }
+        } catch {
+            finish(token: token, machine: machine, result: .failure(error))
         }
     }
 
