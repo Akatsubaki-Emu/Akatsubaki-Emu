@@ -90,9 +90,9 @@ final class VMDisplayViewController: UIViewController {
         registerKeyboardNotifications()
         refreshHardwareKeyboardState()
         virtioGPU.start()
-        vncClient.onFrame = { [weak self] data, width, height in
+        vncClient.onFrame = { [weak self] data, width, height, dirtyRegion in
             guard let self else { return }
-            self.virtioGPU.submit(.updateFramebuffer(data, width: width, height: height))
+            self.virtioGPU.submit(.updateFramebuffer(data, width: width, height: height, dirtyRegion: dirtyRegion))
             guard self.lastReportedGuestFrameWidth != width
                 || self.lastReportedGuestFrameHeight != height else { return }
             self.lastReportedGuestFrameWidth = width
@@ -125,7 +125,9 @@ final class VMDisplayViewController: UIViewController {
         if #available(iOS 17.4, *), JITCoordinator.shared.isStikDebugAvailable,
            !JITCoordinator.shared.isJITReady {
             status.text = "Waiting for JIT • preparing LocalDevVPN and StikDebug"
-            JITCoordinator.shared.requestJIT(from: self) { [weak self] in
+            JITCoordinator.shared.requestJIT(from: self, onFailure: { [weak self] message in
+                self?.status.text = "JIT failed • \(message)"
+            }) { [weak self] in
                 self?.startEngine()
             }
         } else {

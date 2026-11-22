@@ -13,6 +13,7 @@ final class JITCoordinator {
     private weak var presentationController: UIViewController?
     private weak var activeAlert: UIAlertController?
     private var onJITReady: (() -> Void)?
+    private var onJITFailure: ((String) -> Void)?
     private var waitingForStikDebugReturn = false
     private var waitingForLocalDevVPN = false
     private var readinessChecksRemaining = 0
@@ -66,9 +67,10 @@ final class JITCoordinator {
         return false
     }
 
-    func requestJIT(from controller: UIViewController?, onReady: (() -> Void)? = nil) {
+    func requestJIT(from controller: UIViewController?, onFailure: ((String) -> Void)? = nil, onReady: (() -> Void)? = nil) {
         presentationController = controller
         onJITReady = onReady
+        onJITFailure = onFailure
         guard isStikDebugAvailable else {
             failRequest("StikDebug JIT requires iOS 17.4 or later on a physical iOS device.", title: "JIT unavailable")
             return
@@ -203,6 +205,11 @@ final class JITCoordinator {
             } else {
                 self?.show("JIT is enabled for this process. You can now launch your emulation session.", title: "JIT ready")
             }
+        onJITFailure = nil
+        if let completion {
+            completion()
+        } else {
+            show("JIT is enabled for this process. You can now launch your emulation session.", title: "JIT ready")
         }
     }
 
@@ -211,7 +218,10 @@ final class JITCoordinator {
         waitingForLocalDevVPN = false
         readinessChecksRemaining = 0
         readinessCheckScheduled = false
+        let failure = onJITFailure
+        onJITFailure = nil
         onJITReady = nil
+        failure?(message)
         show(message, title: title)
     }
 

@@ -1,4 +1,5 @@
 import UIKit
+import SwiftUI
 
 final class SettingsViewController: UITableViewController {
     private let jitMethods = JITMethod.allCases
@@ -15,7 +16,7 @@ final class SettingsViewController: UITableViewController {
         tableView.tableFooterView = UIView()
     }
 
-    override func numberOfSections(in tableView: UITableView) -> Int { 11 }
+    override func numberOfSections(in tableView: UITableView) -> Int { 12 }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch section {
@@ -25,13 +26,13 @@ final class SettingsViewController: UITableViewController {
         case 3: return frameRates.count
         case 4: return vrModes.count + 2
         case 5: return jitMethods.count + 1
-        case 6, 7, 8, 9, 10: return 1
+        case 6, 7, 8, 9, 10, 11: return 1
         default: return 0
         }
     }
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        ["Windows Runtime", "VM / Hypervisor", "Resolution", "Display / FPS", "VR / Input", "JIT", "Diagnostics", "Performance", "Android Experiment", "Device Compatibility", "DroidDeck Port"][section]
+        ["Windows Runtime", "VM / Hypervisor", "Resolution", "Display / FPS", "VR / Input", "JIT", "Diagnostics", "Performance", "Android Experiment", "Device Compatibility", "DroidDeck Port", "Entitlements"][section]
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -109,9 +110,13 @@ final class SettingsViewController: UITableViewController {
             c.text = "\(UIDevice.current.model) · iOS \(UIDevice.current.systemVersion)"
             c.secondaryText = "Hypervisor.framework: unavailable to ordinary iOS apps. QEMU/JIT or interpreter paths are the supported prototype choices. macOS guest boot is disabled on iOS."
             c.secondaryTextProperties.numberOfLines = 0
-        default:
+        case 10:
             c.text = "DroidDeck feature status"
             c.secondaryText = "See which library, controller, storage, XR and guest-runtime features are implemented, partial or unavailable."
+            cell.accessoryType = .disclosureIndicator
+        default:
+            c.text = "Apple Developer account"
+            c.secondaryText = "Enable Increased Memory Limit for this installation's App ID"
             cell.accessoryType = .disclosureIndicator
         }
         cell.contentConfiguration = c
@@ -181,6 +186,8 @@ final class SettingsViewController: UITableViewController {
             present(alert, animated: true)
         case 10:
             navigationController?.pushViewController(DroidDeckPortStatusViewController(), animated: true)
+        case 11:
+            navigationController?.pushViewController(UIHostingController(rootView: EntitlementSettingsView()), animated: true)
         default:
             break
         }

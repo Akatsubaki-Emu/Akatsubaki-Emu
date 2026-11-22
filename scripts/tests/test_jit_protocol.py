@@ -18,8 +18,51 @@ class JITProtocolSourceTests(unittest.TestCase):
         source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
         self.assertIn('dlsym(RTLD_DEFAULT, "csops")', source)
         self.assertIn("queryStatus(getpid(), 0, &status, sizeof(status)) == 0", source)
+        self.assertIn("bool hasDebuggedStatus = queryStatus != NULL", source)
+        self.assertIn("if (!hasDebuggedStatus)", source)
         self.assertIn("status & UINT32_C(0x10000000)", source)
         self.assertIn("bool iSteamJITIsReady(void) { return false; }", source)
+
+    def test_ios_26_requires_live_debugger_but_older_ios_uses_cs_debugged(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
+        self.assertIn("#include <sys/sysctl.h>", source)
+        self.assertIn("static bool iSteamJITDebuggerIsAttached(void)", source)
+        self.assertIn("sysctl(mib, 4, &info, &size, NULL, 0) == 0", source)
+        self.assertIn("info.kp_proc.p_flag & P_TRACED", source)
+        readiness = source.split("bool iSteamJITIsReady(void) {", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn("if (__builtin_available(iOS 26.0, *))", readiness)
+        self.assertIn("return iSteamJITDebuggerIsAttached();", readiness)
+        self.assertTrue(readiness.rstrip().endswith("return true;"))
+
+    def test_txm_detection_matches_stikdebug_hardware_rules(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
+        self.assertIn("#include <sys/utsname.h>", source)
+        self.assertIn("uname(&systemInfo) != 0", source)
+        self.assertIn('strcmp(hardwareIdentifier, "iPad8,11") != 0', source)
+        self.assertIn('strcmp(hardwareIdentifier, "iPad8,12") != 0', source)
+        self.assertIn('sscanf(hardwareIdentifier, "iPhone%d,%d"', source)
+        self.assertIn('sscanf(hardwareIdentifier, "iPad%d,%d"', source)
+        self.assertIn("minor >= 2", source)
+        self.assertIn("minor >= 5", source)
+        self.assertIn("if (__builtin_available(iOS 27.0, *))", source)
+        self.assertIn("if (__builtin_available(iOS 26.0, *))", source)
+
+    def test_live_debugger_is_required_only_for_txm_breakpoint_protocol(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JIT26Protocol.c").read_text(encoding="utf-8")
+        readiness = source.split("bool iSteamJITIsReady(void) {", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn("if (__builtin_available(iOS 26.0, *) && iSteamJITIsSupported())", readiness)
+        self.assertIn("return iSteamJITDebuggerIsAttached();", readiness)
+        self.assertTrue(readiness.rstrip().endswith("return true;"))
+
+    def test_qemu_uses_breakpoint_allocator_only_when_txm_is_present(self):
+        root = Path(__file__).resolve().parents[2]
+        patcher = (root / "scripts" / "patch_qemu_stikjit_ios.py").read_text(encoding="utf-8")
+        self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITIsSupported")', patcher)
+        self.assertIn("if (jit_protocol_supported())", patcher)
+        self.assertIn("return alloc_code_gen_buffer_splitwx_stikdebug(size, errp);", patcher)
 
     def test_qemu_can_resolve_host_jit_callbacks_from_main_and_nightly_apps(self):
         root = Path(__file__).resolve().parents[2]
@@ -28,7 +71,7 @@ class JITProtocolSourceTests(unittest.TestCase):
             start = project.index("PRODUCT_BUNDLE_IDENTIFIER: " + bundle)
             end = project.index("  iSteamTV:", start)
             block = project[start:end]
-            for symbol in ("iSteamJITIsReady", "iSteamJITPrepareRegion", "iSteamJITDetach"):
+            for symbol in ("iSteamJITIsSupported", "iSteamJITIsReady", "iSteamJITPrepareRegion", "iSteamJITDetach"):
                 self.assertIn("-Wl,-exported_symbol,_" + symbol, block)
 
 

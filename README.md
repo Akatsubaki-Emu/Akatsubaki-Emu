@@ -59,11 +59,11 @@ The source includes separate entries for iOS Main, iOS Nightly, tvOS Main, and t
 - File selection and shared-directory handling.
 - Bounded, read-only metadata inspection for Windows PE and Linux ELF files.
 - Guest-memory and block-device prototypes.
-- Early display, Metal presentation, frame-pacing, keyboard, controller, and JIT-related experiments.
+- Automatic JIT acquisition for supported physical iOS devices through LocalDevVPN and StikDebug, with QEMU startup gated on readiness.
 - Research into app-container and binary-execution approaches used by projects such as LiveContainer.
 - Native DroidDeck-inspired library backup/restore, per-game profile defaults, artwork caching, local compatibility records, and runtime component integrity verification.
 
-These are works in progress. Importing a file or inspecting its metadata does not execute it, and a storage prototype is not a complete virtual storage controller. JIT behavior depends on iOS version, device, signing, entitlements, and supported tooling. Akatsubaki Emu requests JIT only for its QEMU VM process through the LocalDevVPN/StikDebug flow; it does not enable JIT for unrelated apps.
+These are works in progress. Importing a file or inspecting its metadata does not execute it, and a storage prototype is not a complete virtual storage controller. JIT behavior depends on iOS version, device, signing, entitlements, and supported tooling. Akatsubaki Emu requests JIT only for its QEMU VM process through the LocalDevVPN/StikDebug flow; it does not enable JIT for unrelated apps and does not yet embed the StikJIT helper extension.
 
 ### tvOS app
 
@@ -97,22 +97,7 @@ The project currently declares iOS 16, tvOS 17, and visionOS 1.0 deployment targ
 
 ## Automatic JIT activation
 
-On supported physical iOS devices running iOS 17.4 or later, launching a QEMU VM now requests JIT before starting the emulation engine:
-
-1. Akatsubaki checks the running process for the `get-task-allow` signing entitlement.
-2. It opens [LocalDevVPN](https://github.com/jkcoxson/LocalDevVPN) using its `localdevvpn://enable` URL and returns through a bundle-specific callback. LocalDevVPN's callback confirms that its tunnel-start request was submitted; it does not prove that the VPN is connected.
-3. Akatsubaki opens [StikDebug](https://github.com/StikDebug/StikDebug) for its own bundle identifier and process ID. On iOS 26 and later it also requests the `universal.js` breakpoint protocol used by the existing QEMU executable-region callbacks.
-4. QEMU starts only after the process JIT/debugger state is confirmed. If acquisition fails, the VM is not started.
-
-### First-time setup
-
-- Install StikDebug and LocalDevVPN separately.
-- Open LocalDevVPN once and approve its VPN configuration.
-- Import the device pairing file into StikDebug and enable iOS Developer Mode.
-- Use a signing method that preserves `get-task-allow`; Akatsubaki checks the entitlement at runtime.
-- When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
-
-This is a sideload/developer workflow, not an App Store-safe feature: entitlement inspection uses Security task SPI. The LocalDevVPN callback is only a start-request handoff; if JIT is not confirmed, check that the VPN is actually connected and that StikDebug pairing/signing are valid. Simulators and Mac Catalyst are excluded. The iOS 26 breakpoint path still requires physical-device validation.
+Akatsubaki can orchestrate JIT acquisition for its QEMU VM on supported physical iOS devices through LocalDevVPN and StikDebug. This sideload/developer workflow requires a valid `get-task-allow` entitlement. See [Automatic JIT activation](docs/JIT_ACTIVATION.md) for setup, lifecycle, failure handling and validation.
 
 ## Building
 
@@ -155,10 +140,12 @@ Bug reports, documentation improvements, and focused pull requests are welcome. 
 - [Build and release workflow](docs/RELEASES.md)
 - [tvOS status and roadmap](docs/TVOS.md)
 - [Host-device bridge](docs/HOST_DEVICE_BRIDGE.md)
+- [JIT activation and limitations](docs/JIT.md)
 - [Hybrid runtime architecture and roadmap](docs/HYBRID_RUNTIME_ARCHITECTURE.md)
 - [QEMU runtime build and failure diagnostics](docs/QEMU_BUILD_WORKFLOW.md)
 - [DroidDeck feature-port plan](docs/DROIDDECK_PORT_PLAN.md)
 - [DroidDeck port status](docs/DROIDDECK_PORT_STATUS.md)
+- [iOS memory entitlements](docs/IOS_ENTITLEMENTS.md)
 - Portable library transfer, per-game profile defaults, and feature readiness services: `src/Steam/DroidDeckFeatureServices.swift`
 - Artwork cache: `src/Steam/GameArtworkStore.swift`
 - Compatibility records: `src/Windows/GameCompatibilityDatabase.swift`
@@ -172,7 +159,8 @@ These projects are research references; listing them does not mean their code is
 - [Box64](https://github.com/ptitSeb/box64) — x86-64 user-mode emulation reference.
 - [FEX-Emu](https://github.com/FEX-Emu/FEX) — x86-64 Linux user-mode translation reference.
 - [Wine](https://www.winehq.org/) and [Proton](https://github.com/ValveSoftware/Proton) — Windows user-mode compatibility references.
-- [StikDebug](https://github.com/StephenDev0/StikDebug) — JIT-related iOS development reference.
+- [StikDebug](https://github.com/StikDebug/StikDebug) and [StikJIT](https://github.com/StikDebug/StikJIT) — JIT activation and universal breakpoint-protocol references.
+- [LocalDevVPN](https://github.com/jkcoxson/LocalDevVPN) — local RSD tunnel and URL activation reference.
 - [LiveContainer](https://github.com/LiveContainer/LiveContainer) and [LiveExec32](https://github.com/LiveContainer/LiveExec32) — iOS app-container and binary-execution research reference.
 - [MeloNX](https://github.com/AzureDominus/melonx) — iOS emulator UI and performance reference.
 - [SharpEmu](https://github.com/sharpemu/sharpemu) — emulator architecture research reference.

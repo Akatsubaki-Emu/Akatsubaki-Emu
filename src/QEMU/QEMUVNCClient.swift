@@ -67,7 +67,7 @@ final class QEMUVNCClient {
     private var pointerSendBatch: VNCPointerSendBatch?
     private var connected = false
     var isConnected: Bool { withStateLock { connected } }
-    var onFrame: ((Data, Int, Int) -> Void)?
+    var onFrame: ((Data, Int, Int, GPUFrameRegion?) -> Void)?
     var onStatus: ((String) -> Void)?
 
     func start(port: UInt16 = 5900) {
@@ -112,15 +112,18 @@ final class QEMUVNCClient {
                 } catch {
                     lastError = error
                     if Task.isCancelled { return }
-                    self.withStateLock {
-                        if self.connection === candidate {
-                            self.connection = nil
-                            self.connected = false
-                            self.pointerSendBatch = nil
-                            _ = self.keyState.releaseAll()
-                        }
+                    let wasCurrent = self.withStateLock {
+                        guard self.connection === candidate else { return false }
+                        self.connection = nil
+                        self.connected = false
+                        self.pointerSendBatch = nil
+                        self.pendingSendGroup = DispatchGroup()
+                        _ = self.keyState.releaseAll()
+                        return true
                     }
-                    candidate.cancel()
+                    if wasCurrent {
+                        candidate.cancel()
+                    }
                     if attempt < 119 {
                         try? await Task.sleep(nanoseconds: 500_000_000)
                     }
@@ -370,6 +373,7 @@ final class QEMUVNCClient {
                 }
                 var updateBytes = 0
                 var framebufferChanged = false
+                var dirtyRegion: GPUFrameRegion?
                 for _ in 0..<count {
                     let header = try await receiveExactly(12, from: connection)
                     let x = Int(Self.u16(header, 0))
@@ -389,6 +393,7 @@ final class QEMUVNCClient {
                             pointerX = min(pointerX, width - 1)
                             pointerY = min(pointerY, height - 1)
                         }
+                        dirtyRegion = GPUFrameRegion(x: 0, y: 0, width: width, height: height)
                         framebufferChanged = true
                         continue
                     }
@@ -405,6 +410,8 @@ final class QEMUVNCClient {
                         throw ClientError.protocolError("QEMU framebuffer update exceeded the 64 MiB transfer limit.")
                     }
                     updateBytes += rectangleBytes
+                    let region = GPUFrameRegion(x: x, y: y, width: width, height: height)
+                    dirtyRegion = dirtyRegion.map { $0.union(region) } ?? region
                     let pixels = try await receiveExactly(rectangleBytes, from: connection)
                     withStateLock {
                         // The reader task owns framebuffer updates; the lock also
@@ -435,7 +442,7 @@ final class QEMUVNCClient {
                 }
                 if framebufferChanged {
                     let frame = withStateLock { (framebuffer, framebufferWidth, framebufferHeight) }
-                    onFrame?(frame.0, frame.1, frame.2)
+                    onFrame?(frame.0, frame.1, frame.2, dirtyRegion)
                 }
                 try await requestFramebufferUpdate(incremental: true, connection: connection)
             case 1: // SetColourMapEntries: padding + first-colour + colour-count.
