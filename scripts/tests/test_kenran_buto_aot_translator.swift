@@ -27,9 +27,9 @@ struct KenranButoAOTTranslatorTests {
         precondition(translated.instructionCount == 3)
         precondition(word(translated.machineCode, 0) == 0x52800020) // MOVZ W0, #1
         precondition(word(translated.machineCode, 1) == 0xD28EF109) // MOVZ X9, #0x7788
-        precondition(word(translated.machineCode, 2) == 0xF2AACCE9) // MOVK X9, #0x5566, LSL #16
+        precondition(word(translated.machineCode, 2) == 0xF2AACCC9) // MOVK X9, #0x5566, LSL #16
         precondition(word(translated.machineCode, 3) == 0xF2C66889) // MOVK X9, #0x3344, LSL #32
-        precondition(word(translated.machineCode, 4) == 0xF2E22469) // MOVK X9, #0x1122, LSL #48
+        precondition(word(translated.machineCode, 4) == 0xF2E22449) // MOVK X9, #0x1122, LSL #48
         precondition(word(translated.machineCode, 5) == 0xD503201F) // NOP
 
         // MOV EAX, EBX and MOV RBX, RAX use register-only encodings.
@@ -47,13 +47,14 @@ struct KenranButoAOTTranslatorTests {
         precondition(malformedEndbr.guestBytesConsumed == 0)
 
         // Arithmetic and memory operands stop before the unsupported instruction.
-        let fallback = translator.translate(Data([0xB8, 1, 0, 0, 0, 0x01, 0xD8]))
+        let unsupportedGuest = Data([0xB8, 1, 0, 0, 0, 0x01, 0xD8])
+        let fallback = translator.translate(unsupportedGuest)
         precondition(fallback.stopReason == .unsupportedInstruction)
         precondition(fallback.guestBytesConsumed == 5)
         precondition(fallback.fallbackOffset == 5)
         precondition(fallback.fallbackOpcode == 0x01)
         precondition(fallback.isCacheable)
-        precondition(fallback.isValid(for: Data([0xB8, 1, 0, 0, 0, 0x01, 0xD8])))
+        precondition(fallback.isValid(for: unsupportedGuest))
 
         // A truncated immediate is not consumed or partially emitted.
         let truncated = translator.translate(Data([0xB8, 0x01, 0x02]))
