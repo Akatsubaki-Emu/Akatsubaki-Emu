@@ -39,9 +39,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate-release-channel:
+    name: Validate release channel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main ref for Main channel
+        if: github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && github.ref != 'refs/heads/main'
+        shell: bash
+        run: |
+          echo "The Main release channel can only be dispatched from refs/heads/main (got $GITHUB_REF)." >&2
+          exit 1
+
   # This reusable workflow runs inside this run and uploads the artifact here.
   # App jobs cannot start until the runtime is successfully compiled and packaged.
   qemu-runtime:
+    needs: validate-release-channel
     uses: ./.github/workflows/build-qemu-runtime.yml
     with:
       rebuild_dependencies: false

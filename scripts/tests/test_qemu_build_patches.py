@@ -225,6 +225,15 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertNotIn("export OBJCFLAGS=", source)
         self.assertNotIn("\n; then\n", source)
 
+    def test_main_release_dispatch_is_limited_to_main_branch(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("validate-release-channel:", source)
+        self.assertIn("needs: validate-release-channel", source)
+        self.assertIn("inputs.channel == 'Main'", source)
+        self.assertIn("github.ref != 'refs/heads/main'", source)
+        self.assertIn("The Main release channel can only be dispatched from refs/heads/main", source)
+
     def test_visionos_release_channel_uses_distinct_bundle_identifiers(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
         source = workflow.read_text(encoding="utf-8")
