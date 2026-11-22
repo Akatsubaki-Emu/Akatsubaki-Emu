@@ -97,7 +97,7 @@ The project currently declares iOS 16, tvOS 17, and visionOS 1.0 deployment targ
 
 ## Automatic JIT activation
 
-Akatsubaki can orchestrate JIT acquisition for its QEMU VM on supported physical iOS devices through LocalDevVPN and StikDebug. This sideload/developer workflow requires a valid `get-task-allow` entitlement. See [Automatic JIT activation](docs/JIT_ACTIVATION.md) for setup, lifecycle, failure handling and validation.
+Akatsubaki can use an embedded StikJIT ExtensionKit helper on physical iOS 26+ devices, or the external StikDebug path on iOS 17.4+. Both methods use LocalDevVPN, which remains a separately installed app because its packet-tunnel provider requires Apple's Network Extension entitlement. This sideload/developer workflow requires `get-task-allow`. See [Automatic JIT activation](docs/JIT_ACTIVATION.md) for setup, lifecycle, limitations and validation.
 
 ## Building
 

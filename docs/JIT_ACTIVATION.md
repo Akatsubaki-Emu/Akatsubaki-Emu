@@ -1,59 +1,71 @@
 # Automatic QEMU JIT activation
 
-- **Status:** Implemented at source level; not yet verified on a physical device.
-- **Scope:** Physical iOS devices running iOS 17.4 or later. Simulator and Mac Catalyst paths are excluded.
-- **Owner:** `JITCoordinator` coordinates helper apps and readiness; `VMDisplayViewController` gates QEMU startup; the existing QEMU native bridge and allocator own executable-region preparation.
+- **Status:** Built-in StikJIT helper source and Xcode targets are integrated; a signed device build and physical-device JIT session are not yet verified.
+- **Scope:** Physical iOS devices. External StikDebug remains available from iOS 17.4; embedded StikJIT requires iOS 26+ and is disabled in LiveContainer.
+- **Owner:** `JITCoordinator` coordinates the selected helper and readiness; the ExtensionKit helper owns StikJIT/DDI work; `VMDisplayViewController` gates QEMU startup; the QEMU native bridge and allocator own executable-region preparation.
 
-## Startup lifecycle
+## Built-in StikJIT architecture
 
-1. When the user launches a VM, `LaunchSetupViewController` requests JIT through `JITCoordinator` before presenting the VM screen. It passes success/failure callbacks; `VMDisplayViewController` repeats the readiness check defensively before starting QEMU.
-2. `JITCoordinator` checks the running process's actual `get-task-allow` entitlement using `SecTaskCreateFromSelf` and `SecTaskCopyValueForEntitlement` resolved from Security at runtime. If the entitlement is missing, the VM is not started.
-3. The coordinator opens LocalDevVPN with `localdevvpn://enable?scheme=<bundle-id>`. The bundle ID is also registered as Akatsubaki's callback URL scheme, so stable and nightly builds can return to their own app instance.
-4. LocalDevVPN submits its tunnel-start request and calls back to Akatsubaki after its own one-second delay. Akatsubaki waits a further two seconds, then opens StikDebug with the current bundle identifier and process ID using `stikdebug://enable-jit`.
-5. On iOS 26+ devices with TXM/SPTM, the StikDebug request includes `script-name=universal.js`. The QEMU allocator selects the breakpoint-based executable-region protocol only when the host's hardware check reports TXM; non-TXM devices omit the script and retain QEMU's normal Darwin split-W^X allocator.
-6. When Akatsubaki becomes active again, it polls the process debugger/JIT status. QEMU starts only after that state is confirmed. If the request fails or times out, QEMU remains stopped.
-7. During QEMU initialization, the existing native bridge registers `iSteamJITPrepareRegion` and `iSteamJITDetach` callbacks. The QEMU allocator uses those breakpoints to prepare executable regions and detach at the appropriate point; the bridge's required `isteam_qemu_set_jit_callbacks` export remains part of the runtime contract.
+The iOS app embeds an ExtensionKit helper, not a second runnable app. The helper contains the pinned StikJIT 2.0.1 XCFramework and runs outside the host process so it can attach a debugger to Akatsubaki without self-attach deadlocking.
 
-## First-time setup
+1. Import a device pairing file in Settings → JIT. Akatsubaki validates it as a property-list dictionary and stores it at `Documents/StikJIT/pairingFile.plist`. The file contents are never logged.
+2. Start LocalDevVPN through its documented `localdevvpn://enable?scheme=<bundle-id>` URL. Its callback means the start request was submitted, not that the tunnel is connected.
+3. Akatsubaki sends the current PID and pairing-file bytes over an ExtensionFoundation XPC session to the embedded helper.
+4. The helper writes a temporary extension-local pairing file, then synchronously calls `StikJIT.enableJIT` on one serial queue. StikJIT checks RSD reachability, downloads/mounts/verifies the appropriate Developer Disk Image, and starts the selected universal script.
+5. The host keeps the XPC session alive and polls its own debugger state while StikJIT's script waits. QEMU starts only after the host reports `CS_DEBUGGED`; TXM/SPTM devices additionally require `P_TRACED`.
+6. QEMU invokes the existing universal breakpoint callbacks to prepare executable regions and then calls `iSteamJITDetach`. That breakpoint ends the script, allowing the helper's synchronous call to return. The helper reports the final result over XPC.
+7. If the helper fails before readiness, QEMU remains stopped. If the helper fails during the breakpoint handshake, the failure is surfaced to the launch flow; the guest must not be treated as successfully started.
 
-- Install [StikDebug](https://github.com/StikDebug/StikDebug) and [LocalDevVPN](https://github.com/jkcoxson/LocalDevVPN) separately.
-- Open LocalDevVPN once and approve its VPN configuration.
-- Import the device pairing file into StikDebug.
-- When StikDebug shows its external JIT request confirmation, approve it; cancelling the request leaves QEMU stopped.
+The helper's persistent DDI cache lives under its own Library container. The temporary pairing file is removed when the request completes. The host retains the imported pairing file so future requests do not require re-importing it.
+
+## External helper paths
+
+- **StikDebug mode:** still opens the separately installed StikDebug app using `stikdebug://enable-jit`. It remains the fallback for devices that cannot run the embedded helper.
+- **LocalDevVPN:** remains a separately installed and user-approved app for both StikDebug and Built-in StikJIT. Its packet-tunnel provider requires Apple's `packet-tunnel-provider` Network Extension entitlement and matching provisioning profile. Akatsubaki's current signing setup does not include that entitlement; embedding the provider without Apple's approval would produce an extension that cannot be installed/started reliably. Therefore this change does not copy or embed LocalDevVPN's app or tunnel extension.
+- **LiveContainer:** Built-in StikJIT is disabled because LiveContainer cannot create the required ExtensionKit helper. Choose StikDebug (and enable its **Use LiveContainer's Bundle ID** option) or Wait for Debugger instead.
+
+## Requirements and first-time setup
+
+- Physical iPhone/iPad on iOS 26 or later for Built-in StikJIT; iOS 17.4 or later for external StikDebug.
+- Akatsubaki must be signed with `get-task-allow=true`; Increased Memory Limit is a separate entitlement and does not grant it.
 - Enable iOS Developer Mode.
-- Sign Akatsubaki with a profile that preserves `get-task-allow`.
-- When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
-
-The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM hardware classification independently follows the public model/version rules in [StikDebug's ProcessInfo+TXM implementation](https://github.com/StikDebug/StikDebug/blob/main/StikDebug/Support/ProcessInfo+TXM.swift).
-
-The **Increased Memory Limit** capability is separate from `get-task-allow`. Requesting that memory capability does not grant `get-task-allow` or make the process debuggable; the development provisioning profile must still provide `get-task-allow=true`.
+- Install LocalDevVPN separately and approve its VPN configuration.
+- Obtain a valid device pairing file through AFC/Finder, `idevice_pair`, or another supported pairing method, then import it in Settings → JIT.
+- Use a nearby Wi-Fi network where possible. If no Wi-Fi is available, enable cellular data, connect LocalDevVPN, and follow StikJIT's documented Airplane Mode procedure.
+- A successful helper handoff is not proof of a usable VM. QEMU must complete the matching allocator protocol before guest execution.
 
 ## Failure handling and security
 
-- Missing LocalDevVPN, missing StikDebug, an unavailable callback, or a missing `get-task-allow` entitlement prevents QEMU startup.
-- LocalDevVPN's callback confirms that the tunnel-start request was submitted; it does **not** confirm that the VPN is connected. The readiness check is separate. If acquisition fails, verify the VPN is connected, StikDebug pairing is valid, Developer Mode is enabled, and the signing entitlement is present.
-- The entitlement query uses Security task SPI. This is a sideload/developer workflow and is not suitable for App Store submission.
-- The coordinator owns one foreground readiness poll and reports completion through callbacks; Launch Setup does not run a second polling loop. Every supported JIT path requires `CS_DEBUGGED`. On iOS 26+ TXM/SPTM devices, readiness additionally requires a live `P_TRACED` debugger because QEMU must complete the universal breakpoint protocol before detaching. Known non-TXM devices use the normal split-W^X allocator and do not require a live debugger after JIT is enabled. Unknown hardware identifiers or a failed hardware query produce an explicit unknown protocol mode. Akatsubaki blocks the JIT request before opening either helper, and QEMU independently refuses startup if the mode callback is missing or unknown; it never guesses between the two allocators. A successful helper handoff alone is not treated as proof of a usable VM session.
+- Unknown iOS 26 hardware protocol mode blocks helper handoff; the app does not guess between the standard and TXM allocators.
+- LocalDevVPN's URL callback does not prove the tunnel is connected. StikJIT's RSD reachability check is authoritative for its next step.
+- StikJIT's DDI download, mount, pairing, and debugger errors are returned to Akatsubaki and shown to the user.
+- The host's entitlement check uses Security task SPI and is a sideload/developer workflow, not an App Store-safe design.
+- Pairing data crosses the XPC boundary only for the active request; the helper's temporary copy is deleted after completion. The imported host copy is kept in the app's Documents folder for reuse.
+- Built-in StikJIT runs only on a physical iOS 26+ device and is hidden from the usable method path in LiveContainer. The app keeps the external StikDebug and Wait for Debugger choices.
 
 ## Build integration
 
-- `iSteam/JITCoordinator.swift` — helper orchestration, entitlement gate, callback handling and readiness polling.
-- `iSteam/JIT26Protocol.c` / `.h` — runtime signing-entitlement inspection, tri-state TXM hardware detection, version-aware readiness, and iOS 26 breakpoint protocol entry points.
-- `iSteam/Info.plist` — LocalDevVPN query permission and per-bundle callback URL scheme.
-- `iSteam/AppDelegate.swift` — callback dispatch and app-activation readiness polling.
-- `iSteam/LaunchSetupViewController.swift` — waits for the coordinator's success/failure callback before presenting the VM.
-- `src/Display/VMDisplayViewController.swift` — repeats the readiness gate and starts QEMU only once.
-- `iSteam/SettingsViewController.swift` — describes the automatic helper sequence.
-- `project.yml` — links Security for the stable and nightly iOS targets.
-- `scripts/patch_qemu_stikjit_ios.py` — selects the breakpoint allocator only on TXM devices; non-TXM iOS 26 devices retain the upstream split-W^X allocator.
-- `scripts/tests/test_jit_protocol.py` — source-contract regression coverage for known/unknown TXM modes, live-debugger gating, exported mode callbacks, and QEMU allocator routing.
-- `scripts/tests/test_jit_coordinator.py` — verifies that an unknown iOS 26 protocol blocks helper handoff and VM startup.
+- `iSteam/JITCoordinator.swift` — pairing-file import, method selection, LocalDevVPN handoff, helper launch and host-side readiness polling.
+- `iSteam/JITExtensionPoint.swift` — declares the app's ExtensionKit helper point.
+- `iSteam/AkatsubakiJITHelperCoordinator.swift` — starts the embedded helper and keeps its XPC session alive during QEMU's breakpoint handshake.
+- `iSteamJITHelper/Shared` — XPC request/response contract.
+- `iSteamJITHelper/Helper` — serial StikJIT execution, temporary pairing-file handling and stable/nightly extension binding.
+- `iSteamJITHelper/Info.plist` and `Info-nightly.plist` — host-specific ExtensionKit point identifiers.
+- `scripts/fetch_stikjit.sh` — downloads StikJIT 2.0.1 and verifies SHA-256 before XcodeGen runs.
+- `project.yml` — embeds one matching iOS 26 helper extension in stable and nightly app targets.
+- `.github/workflows/release.yml` and `.github/workflows/validate-ios-build.yml` — fetch the pinned XCFramework before project generation; iOS validation now compiles the device target so the helper extension is included.
+- `iSteam/Info.plist` — grants Bonjour discovery metadata for `_remotepairing._tcp`.
+
+## Third-party licensing
+
+- StikJIT 2.0.1 is distributed under MPL-2.0. Its XCFramework is downloaded from the upstream release at build time and its license is included in `THIRD_PARTY_LICENSES/MPL-2.0.txt`.
+- LocalDevVPN and StikDebug app binaries/source are not redistributed by this integration. Their upstream projects retain their own licenses.
 
 ## Validation status
 
-- **Source readback:** completed for all changed implementation, project, settings and test files.
-- **Static contract checks:** passed for the physical-device guards, entitlement lookup, LocalDevVPN and StikDebug URL construction, iOS 26 script gate, callback registration, Security linker flags, VM launch gate and source-validator contract.
-- **Hosted tests/build:** blocked. GitLab pipeline `3099547557` failed before runner startup with `failure_reason=ci_quota_exceeded`; its `python-source-contracts` job had `started_at=null` and no runner assigned. Manual pipeline creation is rejected by the repository's workflow rules.
-- **Not tested:** Python unittest execution, Xcode compilation, IPA packaging, installation, JIT activation on hardware, QEMU guest boot or persistent guest state.
+- **Source integration:** written on a feature branch based on the current TXM fail-closed JIT branch.
+- **Static source checks:** pending execution after commit; the new regression tests cover helper target wiring, pairing-file handling, XPC session lifetime, SHA pinning, workflow ordering, and the LocalDevVPN entitlement boundary.
+- **Hosted CI:** not yet run for this branch. The project has recent GitLab runner-quota failures before job startup.
+- **Not verified:** XcodeGen project generation, Xcode 26.2 compilation of the StikJIT 2.0.1 module, IPA packaging/signing, extension installation, LocalDevVPN tunnel activation, RSD pairing/DDI mount, TXM breakpoint handshake, QEMU guest boot or persistence.
 
-Do not treat source-level integration as proof of a working JIT session until a physical-device build and VM launch have been tested.
+Do not describe this integration as device-working until the iOS 26 extension is built, installed with a valid signing profile, and a physical QEMU guest completes the JIT breakpoint handshake.

@@ -1,5 +1,6 @@
 name: iSteam
 options:
+  minimumXcodeGenVersion: 2.40.0
   bundleIdPrefix: com.Xthrx
   xcodeVersion: "26.0"
   deploymentTarget:
@@ -37,8 +38,11 @@ targets:
         product: StosSign_Auth
       - package: StosSign
         product: StosSign_Common
+      - target: iSteamJITHelper
+        embed: true
     settings:
       base:
+        EX_ENABLE_EXTENSION_POINT_GENERATION: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam
         PRODUCT_NAME: iSteam
         INFOPLIST_KEY_CFBundleDisplayName: Akatsubaki Emu
@@ -67,8 +71,11 @@ targets:
         product: StosSign_Auth
       - package: StosSign
         product: StosSign_Common
+      - target: iSteamNightlyJITHelper
+        embed: true
     settings:
       base:
+        EX_ENABLE_EXTENSION_POINT_GENERATION: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.nightly
         PRODUCT_NAME: iSteam
         INFOPLIST_KEY_CFBundleDisplayName: Akatsubaki Emu Nightly
@@ -76,6 +83,49 @@ targets:
         CODE_SIGN_ENTITLEMENTS: iSteam/iSteam.entitlements
         SWIFT_OBJC_BRIDGING_HEADER: iSteam/iSteam-Bridging-Header.h
         OTHER_LDFLAGS: ["$(inherited)", "-ObjC", "-framework", "Metal", "-framework", "MetalKit", "-framework", "Security", "-Wl,-exported_symbol,_iSteamJITIsSupported", "-Wl,-exported_symbol,_iSteamJITGetProtocolMode", "-Wl,-exported_symbol,_iSteamJITIsReady", "-Wl,-exported_symbol,_iSteamJITPrepareRegion", "-Wl,-exported_symbol,_iSteamJITDetach"]
+  iSteamJITHelper:
+    type: extensionkit-extension
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: iSteamJITHelper/Shared
+      - path: iSteamJITHelper/Helper
+    dependencies:
+      - framework: build/dependencies/StikJIT.xcframework
+        embed: true
+      - sdk: ExtensionFoundation.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.jithelper
+        PRODUCT_NAME: AkatsubakiJITHelper
+        INFOPLIST_FILE: iSteamJITHelper/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        EX_ENABLE_EXTENSION_POINT_GENERATION: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: NO
+
+  iSteamNightlyJITHelper:
+    type: extensionkit-extension
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: iSteamJITHelper/Shared
+      - path: iSteamJITHelper/Helper
+    dependencies:
+      - framework: build/dependencies/StikJIT.xcframework
+        embed: true
+      - sdk: ExtensionFoundation.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.nightly.jithelper
+        PRODUCT_NAME: AkatsubakiJITHelper
+        INFOPLIST_FILE: iSteamJITHelper/Info-nightly.plist
+        GENERATE_INFOPLIST_FILE: NO
+        EX_ENABLE_EXTENSION_POINT_GENERATION: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) NIGHTLY_BUILD"
+        SKIP_INSTALL: NO
+
   iSteamTV:
     type: application
     platform: tvOS

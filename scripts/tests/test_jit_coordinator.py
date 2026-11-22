@@ -96,5 +96,49 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("JITCoordinator.shared.applicationDidBecomeActive()", app)
 
 
+
+    def test_builtin_stikjit_requires_pairing_and_uses_embedded_helper_after_vpn(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn('case builtInStikJIT = "Built-in StikJIT"', source)
+        self.assertIn("guard isBuiltInStikJITAvailable else", source)
+        self.assertIn("guard hasPairingFile", source)
+        self.assertIn("pendingPairingData = data", source)
+        self.assertIn("self?.continueAfterVPN()", source)
+        self.assertIn("AkatsubakiJITHelperCoordinator.enableJIT(targetPID: getpid(), pairingData: pairingData)", source)
+        self.assertIn("readinessChecksRemaining = 300", source)
+
+    def test_builtin_stikjit_keeps_helper_alive_during_qemu_breakpoint_handshake(self):
+        root = Path(__file__).resolve().parents[2]
+        host = (root / "iSteam" / "AkatsubakiJITHelperCoordinator.swift").read_text(encoding="utf-8")
+        helper = (root / "iSteamJITHelper" / "Helper" / "AkatsubakiJITHelper.swift").read_text(encoding="utf-8")
+        self.assertIn("private static var activeSession", host)
+        self.assertIn("session.send(request)", host)
+        self.assertIn("try StikJIT.enableJIT(", helper)
+        self.assertIn("script: .universal", helper)
+        self.assertIn("private static let workQueue = DispatchQueue", helper)
+        self.assertIn("defer { try? FileManager.default.removeItem(at: pairingFile) }", helper)
+
+    def test_pairing_file_is_imported_into_documents_without_logging_its_contents(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        self.assertIn('appendingPathComponent("StikJIT", isDirectory: true)', source)
+        self.assertIn('appendingPathComponent("pairingFile.plist")', source)
+        self.assertIn("startAccessingSecurityScopedResource()", source)
+        self.assertIn("PropertyListSerialization.propertyList", source)
+        self.assertIn("data.write(to: destination, options: .atomic)", source)
+
+    def test_embedded_helper_is_available_for_stable_and_nightly_ios_targets(self):
+        root = Path(__file__).resolve().parents[2]
+        project = (root / "project.yml").read_text(encoding="utf-8")
+        stable = (root / "iSteamJITHelper" / "Info.plist").read_text(encoding="utf-8")
+        nightly = (root / "iSteamJITHelper" / "Info-nightly.plist").read_text(encoding="utf-8")
+        self.assertIn("type: extensionkit-extension", project)
+        self.assertIn("target: iSteamJITHelper", project)
+        self.assertIn("target: iSteamNightlyJITHelper", project)
+        self.assertIn("build/dependencies/StikJIT.xcframework", project)
+        self.assertIn("com.xthrx.isteam.AkatsubakiJITHelper", stable)
+        self.assertIn("com.xthrx.isteam.nightly.AkatsubakiJITHelper", nightly)
+
 if __name__ == "__main__":
     unittest.main()

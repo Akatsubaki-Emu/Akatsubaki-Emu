@@ -25,7 +25,7 @@ final class SettingsViewController: UITableViewController {
         case 2: return resolutions.count
         case 3: return frameRates.count
         case 4: return vrModes.count + 2
-        case 5: return jitMethods.count + 1
+        case 5: return jitMethods.count + 2
         case 6, 7, 8, 9, 10, 11: return 1
         default: return 0
         }
@@ -87,13 +87,30 @@ final class SettingsViewController: UITableViewController {
             if indexPath.row < jitMethods.count {
                 let method = jitMethods[indexPath.row]
                 c.text = method.rawValue
-                c.secondaryText = method == .stikDebug
-                    ? "Automatically start LocalDevVPN, then request JIT for this process with StikDebug."
-                    : "Wait for a compatible debugger to attach."
+                switch method {
+                case .waitForDebugger:
+                    c.secondaryText = "Wait for a compatible debugger to attach."
+                case .stikDebug:
+                    c.secondaryText = "Start LocalDevVPN, then request JIT from the separate StikDebug app."
+                case .builtInStikJIT:
+                    if JITCoordinator.shared.isBuiltInStikJITAvailable {
+                        c.secondaryText = "Run the embedded StikJIT helper. LocalDevVPN must still be installed and approved."
+                    } else {
+                        c.secondaryText = "Requires iOS 26+ on a physical device; unavailable inside LiveContainer."
+                        cell.isUserInteractionEnabled = false
+                        c.textProperties.color = .secondaryLabel
+                    }
+                }
                 cell.accessoryType = JITCoordinator.shared.selectedMethod == method ? .checkmark : .none
+            } else if indexPath.row == jitMethods.count {
+                c.text = "Import StikJIT pairing file"
+                c.secondaryText = JITCoordinator.shared.hasPairingFile
+                    ? "Pairing file imported · Documents/StikJIT/pairingFile.plist"
+                    : "Required for Built-in StikJIT · choose a .plist file"
+                cell.accessoryType = .disclosureIndicator
             } else {
                 c.text = "Request JIT"
-                c.secondaryText = "Open the selected JIT helper for this app."
+                c.secondaryText = "Start the selected JIT method before launching QEMU."
                 cell.accessoryType = .disclosureIndicator
             }
         case 6:
@@ -173,8 +190,14 @@ final class SettingsViewController: UITableViewController {
             tableView.reloadSections(IndexSet(integer: 4), with: .automatic)
         case 5:
             if indexPath.row < jitMethods.count {
-                JITCoordinator.shared.selectedMethod = jitMethods[indexPath.row]
+                let method = jitMethods[indexPath.row]
+                guard method != .builtInStikJIT || JITCoordinator.shared.isBuiltInStikJITAvailable else { return }
+                JITCoordinator.shared.selectedMethod = method
                 tableView.reloadSections(IndexSet(integer: 5), with: .automatic)
+            } else if indexPath.row == jitMethods.count {
+                JITCoordinator.shared.importPairingFile(from: self) { [weak self] in
+                    self?.tableView.reloadSections(IndexSet(integer: 5), with: .automatic)
+                }
             } else {
                 JITCoordinator.shared.requestJIT(from: self)
             }

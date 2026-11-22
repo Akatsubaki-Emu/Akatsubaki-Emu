@@ -24,8 +24,8 @@ jobs:
       matrix:
         include:
           - scheme: iSteam
-            sdk: iphonesimulator
-            destination: generic/platform=iOS Simulator
+            sdk: iphoneos
+            destination: generic/platform=iOS
           - scheme: iSteamTV
             sdk: appletvsimulator
             destination: generic/platform=tvOS Simulator
@@ -148,6 +148,8 @@ jobs:
         run: python3 scripts/validate-qemu-source.py
       - name: Install XcodeGen
         run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Download and verify pinned StikJIT XCFramework
+        run: bash scripts/fetch_stikjit.sh
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
       - name: Compile ${{ matrix.scheme }} for ${{ matrix.destination }}
