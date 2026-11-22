@@ -280,6 +280,7 @@ required = {
         "if type == 2",
         "type == 3 || type == 7",
         "applyStaticPIERelocations",
+        "let relaFileOffset = self.fileOffset(",
         "relocationType == 8",
         "relaEntrySize == 24",
         "alignment & (alignment - 1) == 0",
@@ -995,6 +996,14 @@ required = {
     ],
     ".github/workflows/validate-ios-build.yml": [
         "src/Runtime/LinuxSyscallDispatcher.swift",
+        "      - src/**",
+        "      - iSteam/**",
+        "      - project.yml",
+        "      - scripts/tests/**",
+        "build-ios-device:",
+        "-sdk iphoneos",
+        "-destination 'generic/platform=iOS'",
+        "CODE_SIGNING_ALLOWED=NO",
         "Test VNC key-state source arbitration",
         "scripts/tests/test_vnc_key_state.swift",
         "runs-on: macos-26",
@@ -1136,6 +1145,8 @@ required = {
         "def test_console_uses_the_runtime_router_instead_of_direct_box64(self):",
         "def test_imported_games_are_reachable_from_the_ios_library(self):",
         "def test_qemu_ios_platform_guard_rejects_simulator_platforms(self):",
+        "def test_static_pie_relocation_uses_loader_method_not_shadowed_parameter(self):",
+        "def test_platform_validation_compiles_physical_ios_arm64(self):",
     ],
 }
 failed = False

@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths:
       - .github/workflows/validate-ios-build.yml
+      - src/**
+      - iSteam/**
+      - project.yml
+      - scripts/tests/**
+      - scripts/validate-qemu-source.py
   pull_request:
   workflow_dispatch:
 
@@ -177,5 +182,40 @@ jobs:
             -configuration Debug \
             -sdk "${{ matrix.sdk }}" \
             -destination '${{ matrix.destination }}' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+
+  build-ios-device:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select and verify Xcode 26.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP="/Applications/Xcode_26.2.app"
+          test -d "$XCODE_APP" || { echo "Xcode 26.2 is not installed on this runner." >&2; exit 1; }
+          sudo xcode-select --switch "$XCODE_APP/Contents/Developer"
+          XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/{print $2}')"
+          if [ "$XCODE_VERSION" != "26.2" ]; then
+            echo "Expected Xcode 26.2, found $XCODE_VERSION." >&2
+            exit 1
+          fi
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate --spec project.yml
+      - name: Compile physical iOS ARM64 target without signing
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project iSteam.xcodeproj \
+            -scheme iSteam \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-iOS-device" \
             CODE_SIGNING_ALLOWED=NO \
             build
