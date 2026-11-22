@@ -16,15 +16,15 @@
 #include <stdatomic.h>
 #include <string.h>
 
-#define ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI 4
+#define ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI 5
 #define ISTEAM_QEMU_MAX_ARGUMENTS 4096
 #define ISTEAM_QEMU_MAX_ARGUMENT_BYTES (1024u * 1024u)
 #define ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES (8u * 1024u * 1024u)
 
 /* QEMU 10.0.12 declares qemu_init(int, char **) as void. */
 typedef void (*qemu_init_fn)(int, char **);
-typedef void (*qemu_main_loop_fn)(void);
-typedef void (*qemu_cleanup_fn)(void);
+typedef int (*qemu_main_loop_fn)(void);
+typedef void (*qemu_cleanup_fn)(int);
 typedef void (*qemu_shutdown_request_fn)(int);
 typedef void (*qemu_set_jit_callbacks_fn)(bool (*)(void), void *(*)(void *, size_t), void (*)(void));
 
@@ -72,14 +72,14 @@ static void *qemu_thread_main(void *unused) {
     qemu_shutdown_request_fn shutdown_fn = g_qemu_shutdown;
     pthread_mutex_unlock(&g_lock);
     if (stop_after_init && shutdown_fn) shutdown_fn(ISTEAM_QEMU_SHUTDOWN_CAUSE_HOST_UI);
-    g_qemu_main_loop();
+    int qemu_exit_status = g_qemu_main_loop();
 
     // Clear the callable state before waiting on the lifecycle mutex.
     atomic_store(&g_main_loop_active, false);
     pthread_mutex_lock(&g_lock);
     g_running = false;
     pthread_mutex_unlock(&g_lock);
-    if (g_qemu_cleanup) g_qemu_cleanup();
+    if (g_qemu_cleanup) g_qemu_cleanup(qemu_exit_status);
 
     pthread_mutex_lock(&g_lock);
     g_running = false;
