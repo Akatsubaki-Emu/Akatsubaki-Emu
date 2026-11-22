@@ -1406,6 +1406,23 @@ for token in ("endbr64Memory", "malformedEndbr64Memory", "truncatedEndbr64Memory
         print(f"x86-64 interpreter tests: missing ENDBR64 prefix regression {token!r}", file=sys.stderr)
         failed = True
 
+aot_translator_source = Path("src/Runtime/X86_64AOTTranslator.swift").read_text(encoding="utf-8")
+for token in (
+    "guestCode.withUnsafeBytes { raw in",
+    "UnsafeBufferPointer(",
+    "var output = [UInt32]()",
+    "output.reserveCapacity(reserveWords)",
+    "private struct EncodedWords",
+    "var words = EncodedWords()",
+    "private static func moveImmediate",
+    "output.append(word.littleEndian)",
+    "machineCode: code.withUnsafeBytes { Data($0) }",
+):
+    if token not in aot_translator_source:
+        print(f"AOT translator: missing allocation hot-path contract {token!r}", file=sys.stderr)
+        failed = True
+
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")
