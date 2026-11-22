@@ -48,6 +48,10 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
         source = self.meson_source().replace("if 'objc' in all_languages\n", "")
         with self.assertRaisesRegex(SystemExit, "Objective-C compiler block not found"):
             patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+    def test_meson_patcher_fails_closed_if_objc_block_is_missing(self):
+        source = self.meson_source().replace("if 'objc' in all_languages\n", "")
+        with self.assertRaisesRegex(SystemExit, "Objective-C compiler block not found"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
     def test_meson_patcher_fails_closed_if_objc_block_changes(self):
         source = self.meson_source().replace(
             "objc.get_supported_arguments(qemu_common_flags + warn_flags)",
