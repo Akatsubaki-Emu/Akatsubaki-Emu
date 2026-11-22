@@ -896,6 +896,11 @@ required = {
         'sudo xcode-select --switch "$XCODE_APP/Contents/Developer"',
         'if [ "$XCODE_VERSION" != "26.2" ]; then',
     ],
+    "scripts/patch_qemu_stikjit_ios.py": [
+        "#include <mach/mach_vm.h>",
+        "mach_vm_remap(mach_task_self(), &buf_rw",
+        "mach_vm_protect(mach_task_self(), buf_rw",
+    ],
     "scripts/patch_utm_qemu_ios.py": [
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",

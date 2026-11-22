@@ -84,6 +84,7 @@ def patch_source(source: str) -> str:
     if MARKER in source:
         required = [
             "iSteamJITIsSupported",
+            "#include <mach/mach_vm.h>",
             "iSteamJITIsReady",
             "iSteamJITPrepareRegion",
             "iSteamJITDetach",
@@ -101,7 +102,7 @@ def patch_source(source: str) -> str:
         raise SystemExit("QEMU tcg/region.c changed: Darwin Mach include anchor not found")
     source = source.replace(
         INCLUDE_ANCHOR,
-        "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <dlfcn.h>\n#include <mach/mach.h>",
+        "#ifdef CONFIG_DARWIN\n#include <TargetConditionals.h>\n#include <dlfcn.h>\n#include <mach/mach.h>\n#include <mach/mach_vm.h>",
         1,
     )
     if FUNCTION_ANCHOR not in source:
@@ -127,6 +128,7 @@ def patch_source(source: str) -> str:
         "#include <TargetConditionals.h>",
         "#include <dlfcn.h>",
         "iSteamJITIsSupported",
+        "#include <mach/mach_vm.h>",
         "iSteamJITIsReady",
         "iSteamJITPrepareRegion",
         "iSteamJITDetach",
