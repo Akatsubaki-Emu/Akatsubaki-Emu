@@ -837,7 +837,7 @@ required = {
         "-Wl,-force_load,",
     ],
     "scripts/tests/test_x86_condition_dispatch.py": [
-        "self.assertIn(\"static func condition(_ code: UInt8, flags: UInt64) -> Bool {\", alu)",
+        "condition = alu.split(\"static func condition(_ code: UInt8, flags: UInt64) -> Bool {\", 1)[1]",
         'self.assertNotIn("let carrySet", condition)',
         "self.assertNotIn(\"guard let takeBranch = X86_64ALU.condition\", interpreter)",
         'self.assertIn("case 0x0: return flags & overflow != 0", condition)',
