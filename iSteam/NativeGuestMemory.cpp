@@ -24,7 +24,6 @@ struct ISteamGuestMemory {
 
     uint64_t size;
     bool usesDensePages = false;
-    size_t densePageCount = 0;
     std::vector<std::unique_ptr<Page>> densePages;
     std::vector<uint64_t> denseAllocatedPageIndices;
     std::unordered_map<uint64_t, std::unique_ptr<Page>> pages;
@@ -43,7 +42,6 @@ Page *allocateDensePage(ISteamGuestMemory *memory, uint64_t pageIndex) {
     }
     Page *result = page.get();
     memory->densePages[static_cast<size_t>(pageIndex)] = std::move(page);
-    ++memory->densePageCount;
     return result;
 }
 
@@ -58,7 +56,6 @@ void removeDensePage(ISteamGuestMemory *memory, uint64_t pageIndex) {
     if (movedPageIndex != pageIndex) {
         memory->densePages[static_cast<size_t>(movedPageIndex)]->allocatedIndex = allocatedIndex;
     }
-    --memory->densePageCount;
 }
 }
 
@@ -352,7 +349,6 @@ void isteam_guest_memory_clear(ISteamGuestMemory *memory) {
                 memory->densePages[static_cast<size_t>(pageIndex)].reset();
             }
             memory->denseAllocatedPageIndices.clear();
-            memory->densePageCount = 0;
         } else {
             memory->pages.clear();
         }
@@ -365,7 +361,7 @@ size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory) {
     if (!memory) return 0;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
-        return memory->usesDensePages ? memory->densePageCount : memory->pages.size();
+        
     } catch (...) {
         return 0;
     }
