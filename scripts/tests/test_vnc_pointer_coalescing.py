@@ -12,18 +12,27 @@ class VNCPointerCoalescingTests(unittest.TestCase):
         stop = source.split("func stop()", 1)[1].split("private func waitUntilReady", 1)[0]
         self.assertIn("pointerSendBatch = nil", stop)
         movement = source.split("func movePointer", 1)[1].split("func sendButton", 1)[0]
-        self.assertIn("batch.latestMessage = message", movement)
+        self.assertIn("batch.latestPosition = VNCPointerPosition", movement)
         self.assertIn("guard !batch.scheduled else { return }", movement)
         self.assertIn("sendQueue.async", movement)
-        self.assertIn("let latestMessage = withStateLock", movement)
+        self.assertIn("let latestPosition = withStateLock", movement)
         self.assertIn("group.enter()", movement)
         self.assertIn("group.leave()", movement)
+        self.assertIn("connection.send(content: message, completion:", movement)
         self.assertNotIn("enqueueSend(message", movement)
-        enqueue = source.split("private func enqueueSend", 1)[1].split("private func send(", 1)[0]
-        self.assertIn("pointerSendBatch = VNCPointerSendBatch()", enqueue)
-        self.assertLess(enqueue.index("pointerSendBatch = VNCPointerSendBatch()"), enqueue.index("sendQueue.async"))
         self.assertIn("@unchecked Sendable", source)
         self.assertIn("pointer send failed: \\(error.localizedDescription)", source)
+
+    def test_cancelled_reader_cannot_install_connection_after_stop(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
+        start = source.split("func start(port:", 1)[1].split("func stop()", 1)[0]
+        self.assertIn("let installed = self.withStateLock", start)
+        self.assertIn("guard !Task.isCancelled else { return false }", start)
+        self.assertIn("self.connection = candidate", start)
+        self.assertIn("guard installed else {", start)
+        self.assertLess(start.index("guard !Task.isCancelled"), start.index("self.connection = candidate"))
+        self.assertLess(start.index("self.connection = candidate"), start.index("guard installed else"))
 
 
 if __name__ == "__main__":

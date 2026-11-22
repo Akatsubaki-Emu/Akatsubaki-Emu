@@ -82,12 +82,14 @@ final class QEMUVNCClient {
             for attempt in 0..<120 {
                 if Task.isCancelled { return }
                 let candidate = NWConnection(host: "127.0.0.1", port: endpointPort, using: .tcp)
-                if Task.isCancelled {
+                let installed = self.withStateLock {
+                    guard !Task.isCancelled else { return false }
+                    self.connection = candidate
+                    return true
+                }
+                guard installed else {
                     candidate.cancel()
                     return
-                }
-                self.withStateLock {
-                    self.connection = candidate
                 }
                 do {
                     try await self.waitUntilReady(candidate)
