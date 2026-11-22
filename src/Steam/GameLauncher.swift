@@ -23,7 +23,7 @@ final class GameLauncher {
             // Only the built-in diagnostic interpreter is integrated today.
             // Do not advertise FEXCore, Box64, AOT or a complete Linux syscall ABI
             // until their concrete adapters are packaged and verified.
-            let availability = RuntimeBackendAvailability(installed: [.x86Interpreter])
+            let availability = RuntimeCapabilityRegistry.current.backendAvailability
             let request = RuntimeExecutionRequest(format: .linuxX64ELF)
             let plan = RuntimeBackendRouter.plan(for: request, availability: availability)
             for message in plan.explanation {
