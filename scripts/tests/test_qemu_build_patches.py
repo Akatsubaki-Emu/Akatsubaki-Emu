@@ -222,7 +222,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertEqual(once.count("qemu_system_shutdown_request;"), 1)
         self.assertEqual(once.count("isteam_qemu_set_jit_callbacks;"), 1)
         with self.assertRaisesRegex(SystemExit, "expected exactly one closing"):
-            patch_qemu_stikjit_ios.patch_exported_symbols("{\n  qemu_init;\n")
+            patch_qemu_stikjit_ios.patch_exported_symbols("{\n  qemu_init;\n  qemu_main_loop;\n  qemu_cleanup;\n")
 
 
     def test_qemu_stikjit_patcher_updates_region_and_export_list_together(self):
