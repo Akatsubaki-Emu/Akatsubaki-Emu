@@ -27,6 +27,9 @@ class LinuxStackCopyTests(unittest.TestCase):
         self.assertIn("let randomOffset = writeCursor - vectorStart", source)
         self.assertNotIn("Data(count: Self.stackSize)", source)
         self.assertIn("writeCursor == cursor", source)
+        self.assertIn("reserveString(value)", source)
+        self.assertIn("reserveString(executablePath)", source)
+        self.assertNotIn("pushString(", source)
 
     def test_stack_builder_avoids_temporary_argument_environment_and_word_arrays(self):
         root = Path(__file__).resolve().parents[2]

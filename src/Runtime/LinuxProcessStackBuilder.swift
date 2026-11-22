@@ -96,14 +96,14 @@ struct LinuxProcessStackBuilder {
         environmentPointers.reserveCapacity(environmentKeys.count)
         for key in environmentKeys.reversed() {
             let value = "\(key)=\(environment[key] ?? "")"
-            environmentPointers.append(try pushString(value))
+            environmentPointers.append(try reserveString(value))
         }
         environmentPointers.reverse()
 
         var argumentPointers: [UInt64] = []
         argumentPointers.reserveCapacity(argumentCount)
-        for value in arguments.reversed() { argumentPointers.append(try pushString(value)) }
-        argumentPointers.append(try pushString(executablePath))
+        for value in arguments.reversed() { argumentPointers.append(try reserveString(value)) }
+        argumentPointers.append(try reserveString(executablePath))
         argumentPointers.reverse()
 
         guard cursor >= 16 else { throw BuildError.insufficientSpace }
