@@ -141,5 +141,17 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("com.xthrx.isteam.AkatsubakiJITHelper", stable)
         self.assertIn("com.xthrx.isteam.nightly.AkatsubakiJITHelper", nightly)
 
+
+    def test_builtin_stikjit_supports_known_non_txm_protocols(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        known = source.split("var isJITProtocolKnown: Bool", 1)[1].split("var isJITReady: Bool", 1)[0]
+        built_in = source.split("var isBuiltInStikJITAvailable: Bool", 1)[1].split("var hasPairingFile: Bool", 1)[0]
+        helper = (root / "iSteamJITHelper" / "Helper" / "AkatsubakiJITHelper.swift").read_text(encoding="utf-8")
+        self.assertIn("return iSteamJITGetProtocolMode() >= 0", known)
+        self.assertIn("return !isRunningInLiveContainer", built_in)
+        self.assertNotIn("iSteamJITIsSupported()", built_in)
+        self.assertIn("script: .universal", helper)
+
 if __name__ == "__main__":
     unittest.main()

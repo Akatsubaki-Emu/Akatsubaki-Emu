@@ -89,6 +89,8 @@ required = {
         "return iSteamJITIsSupported()",
         "var isJITProtocolKnown: Bool",
         "iSteamJITGetProtocolMode() >= 0",
+        "var isBuiltInStikJITAvailable: Bool",
+        "return !isRunningInLiveContainer",
         "guard isJITProtocolKnown else",
         "scheme = \"stikdebug\"",
         "host = \"enable-jit\"",
