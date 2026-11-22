@@ -9,7 +9,7 @@ fi
 library="$1"
 [[ -f "$library" ]] || { echo "Missing runtime library: $library" >&2; exit 2; }
 
-for tool in file lipo nm codesign; do
+for tool in file lipo nm codesign vtool; do
   command -v "$tool" >/dev/null 2>&1 || {
     echo "Required Apple validation tool is unavailable: $tool" >&2
     exit 4
@@ -34,6 +34,14 @@ case " $architectures " in
     ;;
 esac
 
+echo "== Mach-O build platform =="
+build_info="$(vtool -show-build "$library")"
+printf '%s\n' "$build_info"
+if ! grep -Eq 'platform[[:space:]]+IOS([[:space:]]|$)' <<<"$build_info"; then
+  echo "Runtime is not built for physical iOS." >&2
+  exit 3
+fi
+
 echo "== Defined external lifecycle symbols =="
 # -U excludes undefined imports. Do not fall back to plain nm -g: that can
 # mistake an undefined reference for an exported implementation.
@@ -49,5 +57,5 @@ done
 echo "== Code signature =="
 codesign --verify --strict "$library"
 
-echo "QEMU runtime architecture, lifecycle/shutdown exports, and code signature verified."
+echo "QEMU runtime iOS platform, arm64 architecture, lifecycle/shutdown exports, and code signature verified."
 echo "This does not prove dependent libraries load or that a guest boots."

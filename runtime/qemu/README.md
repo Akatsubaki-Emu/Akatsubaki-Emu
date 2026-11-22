@@ -8,7 +8,7 @@ The build script `scripts/package-utm-qemu-runtime.sh` selects a loadable UTM/QE
 
 The release workflow embeds the complete `Frameworks/` and `QEMU/` directories into the iOS app. Do not assume a fixed QEMU library filename: the manifest is authoritative, and UTM may change its internal library name or layout.
 
-The library is an **iOS device arm64** binary that runs an **x86_64 system guest**. It must not be replaced with a macOS or simulator build.
+The library is an **iOS device arm64** binary that runs an **x86_64 system guest**. Packaging and standalone validation inspect the Mach-O build-version platform and require `IOS`; an arm64 slice alone is insufficient, and macOS, Catalyst or simulator builds are rejected.
 
 ## Native bridge contract
 

@@ -75,6 +75,17 @@ case " $ARCHS " in
   *) echo "QEMU candidate is not device arm64: $candidate ($ARCHS)" >&2; exit 3 ;;
 esac
 
+# arm64 alone does not distinguish an iOS device binary from macOS or simulator code.
+if ! PLATFORM_INFO="$(vtool -show-build "$candidate" 2>&1)"; then
+  echo "Unable to inspect QEMU Mach-O build platform: $candidate" >&2
+  exit 3
+fi
+if ! printf '%s\n' "$PLATFORM_INFO" | grep -Eq 'platform[[:space:]]+IOS([[:space:]]|$)'; then
+  echo "QEMU candidate is not built for physical iOS: $candidate" >&2
+  printf '%s\n' "$PLATFORM_INFO" >&2
+  exit 3
+fi
+
 # Preserve the relative location inside UTM.app/Frameworks whenever possible.
 case "$candidate" in
   "$APP/Frameworks/"*)
