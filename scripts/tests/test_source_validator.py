@@ -600,5 +600,15 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn(nul_guard, resolver)
         self.assertLess(resolver.index(nul_guard), resolver.index("appendingPathComponent(relativePath)"))
 
+    def test_library_backup_import_uses_one_consistent_game_snapshot(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Steam" / "DroidDeckFeatureServices.swift").read_text(encoding="utf-8")
+        import_flow = source.split("func importBackup(from source: URL)", 1)[1].split("enum TransferError", 1)[0]
+        self.assertEqual(import_flow.count("GameStore.shared.games"), 1)
+        self.assertIn("let existingIDs = Set(current.map(\\.id))", import_flow)
+        self.assertIn("let validGameIDs = existingIDs.union(seen)", import_flow)
+        self.assertLess(import_flow.index("var current = GameStore.shared.games"), import_flow.index("for profile in backup.profiles"))
+        self.assertLess(import_flow.index("let validGameIDs = existingIDs.union(seen)"), import_flow.index("for profile in backup.profiles"))
+
 if __name__ == "__main__":
     unittest.main()

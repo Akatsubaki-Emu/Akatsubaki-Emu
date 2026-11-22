@@ -84,8 +84,10 @@ final class GameLibraryTransferStore {
                 throw TransferError.invalidEntry
             }
         }
+        var current = GameStore.shared.games
+        let existingIDs = Set(current.map(\.id))
         var profileGameIDs = Set<UUID>()
-        let validGameIDs = Set(GameStore.shared.games.map(\.id)).union(seen)
+        let validGameIDs = existingIDs.union(seen)
         for profile in backup.profiles {
             try profile.validate()
             guard validGameIDs.contains(profile.gameID),
@@ -100,8 +102,6 @@ final class GameLibraryTransferStore {
             }
         }
 
-        var current = GameStore.shared.games
-        let existingIDs = Set(current.map(\.id))
         let incoming = backup.games.filter { !existingIDs.contains($0.id) }
         current.append(contentsOf: incoming)
 
