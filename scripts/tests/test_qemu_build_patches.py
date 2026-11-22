@@ -180,6 +180,22 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("QEMU-TCI.framework", tci_packager)
         self.assertIn('scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci_packager)
 
+    def test_qemu_packagers_reject_output_paths_that_overlap_the_archive(self):
+        root = Path(__file__).resolve().parents[2]
+        for relative in (
+            "scripts/package-utm-qemu-runtime.sh",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+        ):
+            source = (root / relative).read_text(encoding="utf-8")
+            self.assertIn('ARCHIVE_ROOT="$(cd "$ARCHIVE" && pwd -P)"', source)
+            self.assertIn('[[ "$candidate" == "$parent" ]] && return 0', source)
+            self.assertIn('path_is_within "$OUT" "$ARCHIVE_ROOT"', source)
+            self.assertIn('path_is_within "$ARCHIVE_ROOT" "$OUT"', source)
+            self.assertLess(
+                source.index('path_is_within "$OUT" "$ARCHIVE_ROOT"'),
+                source.index('rm -rf "$OUT"'),
+            )
+
     def test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed(self):
         source = """#ifdef CONFIG_DARWIN
 #include <mach/mach.h>
