@@ -202,6 +202,24 @@ required = {
         "min(UInt64(999_999)",
 
             ],
+    "scripts/embed-qemu-runtime.sh": [
+        "validate_mode JIT",
+        "validate_mode TCI",
+        "runtime-mode-manifest.txt",
+        "combined JIT manifest does not match",
+        "combined TCI manifest does not match",
+        "TCI runtime unexpectedly exports the StikJIT callback",
+    ],
+    "scripts/tests/test_qemu_runtime_embedding.py": [
+        "test_embeds_both_modes_using_their_own_manifests",
+        "test_rejects_tci_runtime_with_stikjit_callback",
+        "test_rejects_mismatched_combined_mode_manifest",
+        "test_rejects_library_symlink_that_escapes_runtime_package",
+        "test_release_workflow_uses_mode_aware_embedding_script",
+    ],
+    ".github/workflows/release.yml": [
+        "bash scripts/embed-qemu-runtime.sh \"$RUNTIME_DIR\" \"$APP\"",
+    ],
     ".github/workflows/build-qemu-runtime.yml": [
     ],
     ".github/workflows/validate-qemu-runtime-pr.yml": [
