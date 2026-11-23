@@ -4,6 +4,13 @@ import Foundation
 /// native implementation; absent pages read as zero without allocating memory.
 final class GuestMemory {
     static let pageSize: UInt64 = 4096
+
+    enum TransactionResult: Int32 {
+        case success = 0
+        case alreadyMapped = 1
+        case allocationFailed = 2
+        case invalid = 3
+    }
     let size: UInt64
     private let native: OpaquePointer?
     var isAvailable: Bool { native != nil }
@@ -71,6 +78,8 @@ final class GuestMemory {
         }
     }
 
+    /// Returns zero for a valid non-executable range; nil is reserved for an
+    /// unavailable native object or an out-of-range offset.
     func readPrefix(offset: UInt64, maximumLength: Int? = nil, into buffer: inout [UInt8]) -> Int? {
         guard let native, offset <= size else { return nil }
         let limit = min(buffer.count, max(0, maximumLength ?? buffer.count))
@@ -120,6 +129,27 @@ final class GuestMemory {
     func map(offset: UInt64, length: UInt64, permissions: UInt8, merge: Bool = false) -> Bool {
         guard let native, offset <= size, length > 0, length <= size - offset else { return false }
         return isteam_guest_memory_map(native, offset, length, permissions, merge)
+    }
+
+    @discardableResult
+    func mapTransaction(offset: UInt64, length: UInt64, permissions: UInt8,
+                        replaceExisting: Bool) -> TransactionResult {
+        guard let native, offset % Self.pageSize == 0,
+              offset <= size, length > 0, length <= size - offset,
+              permissions & ~UInt8(7) == 0 else { return .invalid }
+        return TransactionResult(
+            rawValue: isteam_guest_memory_map_transaction(
+                native, offset, length, permissions, replaceExisting
+            )
+        ) ?? .invalid
+    }
+
+    @discardableResult
+    func resizeBreak(from oldBreak: UInt64, to newBreak: UInt64) -> TransactionResult {
+        guard let native, oldBreak <= size, newBreak <= size else { return .invalid }
+        return TransactionResult(
+            rawValue: isteam_guest_memory_resize_break(native, oldBreak, newBreak)
+        ) ?? .invalid
     }
 
     @discardableResult

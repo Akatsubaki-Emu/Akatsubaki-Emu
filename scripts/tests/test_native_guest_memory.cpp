@@ -211,6 +211,75 @@ int main() {
     assert(!isteam_guest_memory_read_execute(
         atomicReadMemory, 0, revokedBytes.data(), revokedBytes.size()));
     isteam_guest_memory_destroy(atomicReadMemory);
+
+    // MAP_FIXED replacement stages every permission node before touching old bytes.
+    ISteamGuestMemory *transactional = isteam_guest_memory_create(pageSize * 4);
+    assert(transactional != nullptr);
+    assert(isteam_guest_memory_write(transactional, 0, &fallbackMarker, 1));
+    assert(isteam_guest_memory_begin_mapping(transactional));
+    assert(isteam_guest_memory_map(transactional, 0, pageSize, 3, false));
+    const uint8_t originalByte = 0xA5;
+    assert(isteam_guest_memory_write(transactional, 0, &originalByte, 1));
+    // One old page and one new page: fail after the new permission node is staged,
+    // but before destination metadata reserve/commit.
+    isteam_guest_memory_set_allocation_failure_countdown(2);
+    assert(isteam_guest_memory_map_transaction(
+        transactional, 0, pageSize * 2, 5, true
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_ALLOCATION_FAILED);
+    isteam_guest_memory_set_allocation_failure_countdown(-1);
+    std::array<uint8_t, 1> preservedByte{};
+    assert(isteam_guest_memory_read(transactional, 0, preservedByte.data(), 1));
+    assert(preservedByte[0] == originalByte);
+    assert(isteam_guest_memory_has_mapped_pages(transactional, 0, pageSize));
+    assert(!isteam_guest_memory_has_mapped_pages(transactional, pageSize, pageSize));
+    assert(isteam_guest_memory_map_transaction(
+        transactional, 0, pageSize, 5, false
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_ALREADY_MAPPED);
+    assert(isteam_guest_memory_map_transaction(
+        transactional, 0, pageSize, 5, true
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS);
+    preservedByte[0] = 0xA5;
+    assert(isteam_guest_memory_read(transactional, 0, preservedByte.data(), 1));
+    assert(preservedByte[0] == 0);
+    assert(isteam_guest_memory_read_execute(transactional, 0, preservedByte.data(), 1));
+    isteam_guest_memory_destroy(transactional);
+
+    // brk growth stages all new pages first; an injected failure preserves the
+    // old heap bytes and leaves every page beyond the old break unmapped.
+    ISteamGuestMemory *heap = isteam_guest_memory_create(pageSize * 8);
+    assert(heap != nullptr);
+    assert(isteam_guest_memory_write(heap, 0, &originalByte, 1));
+    assert(isteam_guest_memory_begin_mapping(heap));
+    assert(isteam_guest_memory_map(heap, 0, pageSize, 3, false));
+    isteam_guest_memory_set_allocation_failure_countdown(3);
+    assert(isteam_guest_memory_resize_break(
+        heap, pageSize, pageSize * 3
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_ALLOCATION_FAILED);
+    isteam_guest_memory_set_allocation_failure_countdown(-1);
+    preservedByte[0] = 0;
+    assert(isteam_guest_memory_read(heap, 0, preservedByte.data(), 1));
+    assert(preservedByte[0] == originalByte);
+    assert(!isteam_guest_memory_has_mapped_pages(heap, pageSize, pageSize * 2));
+    assert(isteam_guest_memory_resize_break(
+        heap, pageSize, pageSize * 3
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS);
+    assert(isteam_guest_memory_has_mapped_pages(heap, pageSize, pageSize * 2));
+    const uint8_t heapMarker = 0x5A;
+    assert(isteam_guest_memory_write(heap, pageSize + 128, &heapMarker, 1));
+    assert(isteam_guest_memory_write(heap, pageSize * 2, &heapMarker, 1));
+    assert(isteam_guest_memory_resize_break(
+        heap, pageSize * 3, pageSize + 128
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS);
+    preservedByte[0] = 0xA5;
+    assert(isteam_guest_memory_read(heap, pageSize + 128, preservedByte.data(), 1));
+    assert(preservedByte[0] == 0);
+    assert(!isteam_guest_memory_has_mapped_pages(heap, pageSize * 2, pageSize));
+    assert(isteam_guest_memory_resize_break(
+        heap, pageSize + 128, pageSize * 3
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS);
+    assert(isteam_guest_memory_has_mapped_pages(heap, pageSize * 2, pageSize));
+    isteam_guest_memory_destroy(heap);
+    isteam_guest_memory_set_allocation_failure_countdown(-1);
 #endif
 
     // Clearing the final partial page should release its backing allocation too.

@@ -7,6 +7,10 @@
 extern "C" {
 #endif
 typedef struct ISteamGuestMemory ISteamGuestMemory;
+#define ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS 0
+#define ISTEAM_GUEST_MEMORY_TRANSACTION_ALREADY_MAPPED 1
+#define ISTEAM_GUEST_MEMORY_TRANSACTION_ALLOCATION_FAILED 2
+#define ISTEAM_GUEST_MEMORY_TRANSACTION_INVALID 3
 ISteamGuestMemory *isteam_guest_memory_create(uint64_t size);
 void isteam_guest_memory_destroy(ISteamGuestMemory *memory);
 uint64_t isteam_guest_memory_size(const ISteamGuestMemory *memory);
@@ -16,6 +20,8 @@ size_t isteam_guest_memory_read_execute_prefix(ISteamGuestMemory *memory, uint64
 bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset, const uint8_t *source, size_t length);
 bool isteam_guest_memory_begin_mapping(ISteamGuestMemory *memory);
 bool isteam_guest_memory_map(ISteamGuestMemory *memory, uint64_t offset, uint64_t length, uint8_t permissions, bool merge);
+int isteam_guest_memory_map_transaction(ISteamGuestMemory *memory, uint64_t offset, uint64_t length, uint8_t permissions, bool replace_existing);
+int isteam_guest_memory_resize_break(ISteamGuestMemory *memory, uint64_t old_break, uint64_t new_break);
 bool isteam_guest_memory_protect(ISteamGuestMemory *memory, uint64_t offset, uint64_t length, uint8_t permissions);
 bool isteam_guest_memory_unmap(ISteamGuestMemory *memory, uint64_t offset, uint64_t length);
 bool isteam_guest_memory_has_mapped_pages(ISteamGuestMemory *memory, uint64_t offset, uint64_t length);
@@ -27,6 +33,7 @@ size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory);
 typedef void (*ISteamGuestMemoryReadExecuteTestHook)(void *context);
 void isteam_guest_memory_set_read_execute_test_hook(
     ISteamGuestMemoryReadExecuteTestHook hook, void *context);
+void isteam_guest_memory_set_allocation_failure_countdown(int64_t countdown);
 #endif
 #ifdef __cplusplus
 }

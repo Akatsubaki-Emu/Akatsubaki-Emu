@@ -69,7 +69,21 @@ constexpr uint8_t permissionExecute = 4;
 #ifdef ISTEAM_GUEST_MEMORY_TESTING
 std::atomic<ISteamGuestMemoryReadExecuteTestHook> readExecuteTestHook{nullptr};
 std::atomic<void *> readExecuteTestContext{nullptr};
+std::atomic<int64_t> allocationFailureCountdown{-1};
 #endif
+
+bool allocationFailurePoint() {
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+    int64_t remaining = allocationFailureCountdown.load(std::memory_order_acquire);
+    while (remaining >= 0) {
+        if (remaining == 0) return true;
+        if (allocationFailureCountdown.compare_exchange_weak(
+                remaining, remaining - 1, std::memory_order_acq_rel,
+                std::memory_order_acquire)) return false;
+    }
+#endif
+    return false;
+}
 
 bool hasPermissionLocked(const ISteamGuestMemory *memory, uint64_t offset,
                          size_t length, uint8_t required) {
@@ -82,6 +96,115 @@ bool hasPermissionLocked(const ISteamGuestMemory *memory, uint64_t offset,
             || (found->second & required) != required) return false;
     }
     return true;
+}
+
+
+bool pageIsMappedLocked(const ISteamGuestMemory *memory, uint64_t pageIndex) {
+    if (memory->pagePermissions.find(pageIndex) != memory->pagePermissions.end()) return true;
+    if (memory->usesDensePages) {
+        return pageIndex < memory->densePages.size()
+            && memory->densePages[static_cast<size_t>(pageIndex)] != nullptr;
+    }
+    const auto found = memory->pages.find(pageIndex);
+    return found != memory->pages.end() && found->second != nullptr;
+}
+
+void eraseBackingPagesLocked(ISteamGuestMemory *memory, uint64_t firstPage,
+                             uint64_t lastPage) {
+    if (lastPage < firstPage) return;
+    if (memory->usesDensePages) {
+        if (memory->densePages.empty() || firstPage >= memory->densePages.size()) return;
+        const uint64_t finalPage = std::min<uint64_t>(lastPage, memory->densePages.size() - 1);
+        for (uint64_t page = firstPage; page <= finalPage; ++page) {
+            removeDensePage(memory, page);
+        }
+        return;
+    }
+    for (auto it = memory->pages.begin(); it != memory->pages.end();) {
+        if (it->first >= firstPage && it->first <= lastPage) it = memory->pages.erase(it);
+        else ++it;
+    }
+}
+
+void erasePermissionPagesLocked(ISteamGuestMemory *memory, uint64_t firstPage,
+                                uint64_t lastPage) {
+    if (lastPage < firstPage) return;
+    for (auto it = memory->pagePermissions.begin(); it != memory->pagePermissions.end();) {
+        if (it->first >= firstPage && it->first <= lastPage) it = memory->pagePermissions.erase(it);
+        else ++it;
+    }
+}
+
+void zeroAllocatedRangeLocked(ISteamGuestMemory *memory, uint64_t offset,
+                              uint64_t length) {
+    if (!length) return;
+    const uint64_t end = offset + length;
+    const uint64_t firstPage = offset / pageSize;
+    const uint64_t lastPage = (end - 1) / pageSize;
+    if (memory->usesDensePages) {
+        if (memory->densePages.empty() || firstPage >= memory->densePages.size()) return;
+        const uint64_t finalPage = std::min<uint64_t>(lastPage, memory->densePages.size() - 1);
+        for (uint64_t pageIndex = firstPage; pageIndex <= finalPage; ++pageIndex) {
+            Page *page = memory->densePages[static_cast<size_t>(pageIndex)].get();
+            if (!page) continue;
+            const uint64_t pageStart = pageIndex * pageSize;
+            const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);
+            const uint64_t overlapStart = std::max(offset, pageStart);
+            const uint64_t overlapEnd = std::min(end, pageStart + pageLength);
+            if (overlapEnd > overlapStart) {
+                std::memset(page->bytes.data() + static_cast<size_t>(overlapStart - pageStart),
+                            0, static_cast<size_t>(overlapEnd - overlapStart));
+            }
+        }
+        return;
+    }
+    for (auto it = memory->pages.begin(); it != memory->pages.end(); ++it) {
+        if (!it->second) continue;
+        const uint64_t pageStart = it->first * pageSize;
+        if (pageStart >= end || pageStart >= memory->size) continue;
+        const uint64_t pageLength = std::min(pageSize, memory->size - pageStart);
+        const uint64_t pageEnd = pageStart + pageLength;
+        if (pageEnd <= offset) continue;
+        const uint64_t overlapStart = std::max(offset, pageStart);
+        const uint64_t overlapEnd = std::min(end, pageEnd);
+        if (overlapEnd > overlapStart) {
+            std::memset(it->second->bytes.data() + static_cast<size_t>(overlapStart - pageStart),
+                        0, static_cast<size_t>(overlapEnd - overlapStart));
+        }
+    }
+}
+
+uint64_t pageBoundaryAtOrAfter(uint64_t address, uint64_t limit) {
+    const uint64_t remainder = address % pageSize;
+    if (remainder == 0) return address;
+    const uint64_t delta = pageSize - remainder;
+    return delta > limit - address ? limit : address + delta;
+}
+
+int stagePermissionEntriesLocked(
+    ISteamGuestMemory *memory, uint64_t firstPage, uint64_t lastPage,
+    uint8_t permissions, std::unordered_map<uint64_t, uint8_t> &staged) {
+    if (lastPage < firstPage) return ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS;
+    const uint64_t pageCount = lastPage - firstPage + 1;
+    if (pageCount > static_cast<uint64_t>(SIZE_MAX)
+        || allocationFailurePoint()) {
+        return ISTEAM_GUEST_MEMORY_TRANSACTION_ALLOCATION_FAILED;
+    }
+    staged.reserve(static_cast<size_t>(pageCount));
+    for (uint64_t page = firstPage; page <= lastPage; ++page) {
+        if (memory->pagePermissions.find(page) != memory->pagePermissions.end()) continue;
+        if (allocationFailurePoint()) {
+            return ISTEAM_GUEST_MEMORY_TRANSACTION_ALLOCATION_FAILED;
+        }
+        staged.emplace(page, permissions);
+    }
+    if (staged.size() > memory->pagePermissions.max_size() - memory->pagePermissions.size()
+        || allocationFailurePoint()) {
+        return ISTEAM_GUEST_MEMORY_TRANSACTION_ALLOCATION_FAILED;
+    }
+    // Reserve all destination buckets before the transaction mutates bytes or permissions.
+    memory->pagePermissions.reserve(memory->pagePermissions.size() + staged.size());
+    return ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS;
 }
 
 bool copyReadLocked(ISteamGuestMemory *memory, uint64_t offset,
@@ -381,6 +504,106 @@ bool isteam_guest_memory_map(ISteamGuestMemory *memory, uint64_t offset,
     }
 }
 
+
+int isteam_guest_memory_map_transaction(ISteamGuestMemory *memory, uint64_t offset,
+                                         uint64_t length, uint8_t permissions,
+                                         bool replaceExisting) {
+    if (!memory || (permissions & static_cast<uint8_t>(~7u))
+        || offset % pageSize != 0 || offset > memory->size
+        || !length || length > memory->size - offset) {
+        return ISTEAM_GUEST_MEMORY_TRANSACTION_INVALID;
+    }
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!memory->permissionsEnabled) return ISTEAM_GUEST_MEMORY_TRANSACTION_INVALID;
+        const uint64_t firstPage = offset / pageSize;
+        const uint64_t lastPage = (offset + length - 1) / pageSize;
+        if (!replaceExisting) {
+            for (uint64_t page = firstPage; page <= lastPage; ++page) {
+                if (pageIsMappedLocked(memory, page)) {
+                    return ISTEAM_GUEST_MEMORY_TRANSACTION_ALREADY_MAPPED;
+                }
+            }
+        }
+
+        std::unordered_map<uint64_t, uint8_t> staged;
+        const int stagedResult = stagePermissionEntriesLocked(
+            memory, firstPage, lastPage, permissions, staged);
+        if (stagedResult != ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS) return stagedResult;
+
+        // All potentially throwing allocations have completed. The remaining
+        // operations are erases, scalar permission updates, and node transfers.
+        if (replaceExisting) eraseBackingPagesLocked(memory, firstPage, lastPage);
+        for (uint64_t page = firstPage; page <= lastPage; ++page) {
+            auto found = memory->pagePermissions.find(page);
+            if (found != memory->pagePermissions.end()) found->second = permissions;
+        }
+        memory->pagePermissions.merge(staged);
+        return ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS;
+    } catch (...) {
+        return ISTEAM_GUEST_MEMORY_TRANSACTION_ALLOCATION_FAILED;
+    }
+}
+
+int isteam_guest_memory_resize_break(ISteamGuestMemory *memory, uint64_t oldBreak,
+                                     uint64_t newBreak) {
+    if (!memory || oldBreak > memory->size || newBreak > memory->size) {
+        return ISTEAM_GUEST_MEMORY_TRANSACTION_INVALID;
+    }
+    if (oldBreak == newBreak) return ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!memory->permissionsEnabled) {
+            const uint64_t start = std::min(oldBreak, newBreak);
+            zeroAllocatedRangeLocked(memory, start,
+                                     std::max(oldBreak, newBreak) - start);
+            return ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS;
+        }
+
+        const uint64_t oldPageEnd = pageBoundaryAtOrAfter(oldBreak, memory->size);
+        const uint64_t newPageEnd = pageBoundaryAtOrAfter(newBreak, memory->size);
+        if (newBreak > oldBreak) {
+            std::unordered_map<uint64_t, uint8_t> staged;
+            if (newPageEnd > oldPageEnd) {
+                const uint64_t firstPage = oldPageEnd / pageSize;
+                const uint64_t lastPage = (newPageEnd - 1) / pageSize;
+                for (uint64_t page = firstPage; page <= lastPage; ++page) {
+                    if (pageIsMappedLocked(memory, page)) {
+                        return ISTEAM_GUEST_MEMORY_TRANSACTION_ALREADY_MAPPED;
+                    }
+                }
+                const int stagedResult = stagePermissionEntriesLocked(
+                    memory, firstPage, lastPage, 3, staged);
+                if (stagedResult != ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS) return stagedResult;
+            }
+            // Only the tail of the old partial page can contain stale bytes.
+            // Newly exposed whole pages are absent and therefore already zero-filled.
+            const uint64_t zeroEnd = std::min(newBreak, oldPageEnd);
+            if (zeroEnd > oldBreak) {
+                zeroAllocatedRangeLocked(memory, oldBreak, zeroEnd - oldBreak);
+            }
+            memory->pagePermissions.merge(staged);
+            return ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS;
+        }
+
+        // Shrink has no allocation path: clear the retained partial page, then
+        // release complete pages and their permission nodes under the same lock.
+        const uint64_t zeroEnd = std::min(oldBreak, newPageEnd);
+        if (zeroEnd > newBreak) {
+            zeroAllocatedRangeLocked(memory, newBreak, zeroEnd - newBreak);
+        }
+        if (oldPageEnd > newPageEnd) {
+            const uint64_t firstPage = newPageEnd / pageSize;
+            const uint64_t lastPage = (oldPageEnd - 1) / pageSize;
+            eraseBackingPagesLocked(memory, firstPage, lastPage);
+            erasePermissionPagesLocked(memory, firstPage, lastPage);
+        }
+        return ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS;
+    } catch (...) {
+        return ISTEAM_GUEST_MEMORY_TRANSACTION_ALLOCATION_FAILED;
+    }
+}
+
 bool isteam_guest_memory_protect(ISteamGuestMemory *memory, uint64_t offset,
                                  uint64_t length, uint8_t permissions) {
     if (!memory || (permissions & static_cast<uint8_t>(~7u)) || !length
@@ -462,6 +685,9 @@ void isteam_guest_memory_set_read_execute_test_hook(
     ISteamGuestMemoryReadExecuteTestHook hook, void *context) {
     readExecuteTestContext.store(context, std::memory_order_release);
     readExecuteTestHook.store(hook, std::memory_order_release);
+}
+void isteam_guest_memory_set_allocation_failure_countdown(int64_t countdown) {
+    allocationFailureCountdown.store(countdown, std::memory_order_release);
 }
 #endif
 
