@@ -40,7 +40,14 @@ final class KenranButoAOTExecutor:KenranButoAOTExecuting {
  var isAvailable:Bool{lock.lock();defer{lock.unlock()};return availabilitySnapshot}
  func refreshAvailability()->Bool{
   let ready=iSteamAOTExecutableMemoryIsAvailable()
-  lock.lock();availabilitySnapshot=ready;lock.unlock()
+  lock.lock()
+  availabilitySnapshot=ready
+  if !ready{
+   blocks.removeAll(keepingCapacity:true)
+   order.removeAll(keepingCapacity:true)
+   cachedExecutableBytesStorage=0
+  }
+  lock.unlock()
   return ready
  }
  func invalidateAll(){lock.lock();blocks.removeAll(keepingCapacity:true);order.removeAll(keepingCapacity:true);cachedExecutableBytesStorage=0;lock.unlock()}
