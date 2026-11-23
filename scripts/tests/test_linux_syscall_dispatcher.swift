@@ -187,6 +187,49 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let preservedSuffixResult) = preservedSuffixProtection else { preconditionFailure() }
         precondition(preservedSuffixResult == UInt64(bitPattern: Int64(-38)))
 
+
+        // Regression: a 256 MiB guest whose preferred mmap cursor is beyond
+        // stackBase must still let brk grow to free space below the stack guard.
+        let roomyMemorySize: UInt64 = 256 * 1024 * 1024
+        let roomyMemory = GuestMemory(size: roomyMemorySize)
+        let roomyStackBase = roomyMemorySize - 1024 * 1024
+        let roomyDispatcher = LinuxSyscallDispatcher(memory: roomyMemory)
+        try roomyDispatcher.configure(programBreak: 0x200000, stackBase: roomyStackBase)
+        let expandedBreak = roomyDispatcher.dispatch(
+            number: 12, arguments: [0x400000, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let expandedBreakValue) = expandedBreak else { preconditionFailure() }
+        precondition(expandedBreakValue == 0x400000)
+
+        // Shrinking the heap rewinds the mmap cursor to the first reusable page.
+        let shrunkExpandedBreak = roomyDispatcher.dispatch(
+            number: 12, arguments: [0x300000, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let shrunkExpandedBreakValue) = shrunkExpandedBreak else { preconditionFailure() }
+        precondition(shrunkExpandedBreakValue == 0x300000)
+        let firstAfterShrink = roomyDispatcher.dispatch(
+            number: 9, arguments: [0, 4096, 3, 0x22, UInt64.max, 0]
+        )!
+        guard case .returned(let firstAfterShrinkAddress) = firstAfterShrink else { preconditionFailure() }
+        precondition(firstAfterShrinkAddress == 0x310000)
+
+        // A live mapping, unlike the search cursor, is a hard heap ceiling.
+        let blockedBreak = roomyDispatcher.dispatch(
+            number: 12, arguments: [0x320000, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let blockedBreakValue) = blockedBreak else { preconditionFailure() }
+        precondition(blockedBreakValue == 0x300000)
+        let releaseFirstAfterShrink = roomyDispatcher.dispatch(
+            number: 11, arguments: [firstAfterShrinkAddress, 4096, 0, 0, 0, 0]
+        )!
+        guard case .returned(let releasedMappingValue) = releaseFirstAfterShrink else { preconditionFailure() }
+        precondition(releasedMappingValue == 0)
+        let resumedBreak = roomyDispatcher.dispatch(
+            number: 12, arguments: [0x500000, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let resumedBreakValue) = resumedBreak else { preconditionFailure() }
+        precondition(resumedBreakValue == 0x500000)
+
         let outputLog = EmulationLog()
         let outputDispatcher = LinuxSyscallDispatcher(memory: memory, log: outputLog)
         try outputDispatcher.configure(programBreak: 0x41000, stackBase: 0x3F0000)
