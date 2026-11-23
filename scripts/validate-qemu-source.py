@@ -69,8 +69,8 @@ required = {
     "src/Runtime/WindowsPEImage.swift": [
         "unterminated PE string within its mapped section",
         "let descriptorRVA = UInt64(directory.rva) + UInt64(index) * 20",
-        "fileOffset(forRVA: UInt32(descriptorRVA), length: 20)",
-        "end <= UInt64(sizeOfHeaders)",
+        "descriptorCursor.offset(forRVA: UInt32(descriptorRVA), length: 20)",
+        "UInt64(sizeOfHeaders) >= UInt64(table + tableSize.partialValue)",
         "import directory range is invalid",
         "relocation directory range is invalid",
         "private func contiguousFileLength(forRVA rva: UInt32) throws -> Int",
@@ -279,13 +279,13 @@ required = {
         "precondition(hintedAddress == 0x48000)",
         "precondition(fixedAddress == mapped)",
         "precondition(noReplaceValue == UInt64(bitPattern: Int64(-17)))",
-        "precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-12)))",
+        "precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-38)))",
         "precondition(badTimezoneValue == UInt64(bitPattern: Int64(-14)))",
         "precondition(invalidMmapFDValue == UInt64(bitPattern: Int64(-22)))",
         "let partialFixed = dispatcher.dispatch(number: 9, arguments: [0x47000, 8192, 3, 0x32, UInt64.max, 0])!",
         "precondition(memory.read(offset: 0x47000, length: 3) == Data([0, 0, 0]))",
         "precondition(memory.read(offset: 0x49000, length: 3) == Data([0x11, 0x22, 0x33]))",
-        "precondition(preservedSuffixResult == 0)",
+        "precondition(preservedSuffixResult == UInt64(bitPattern: Int64(-38)))",
         "let heapUnmap = dispatcher.dispatch(number: 11, arguments: [0x40000, 4096, 0, 0, 0, 0])!",
         "precondition(heapUnmapValue == UInt64(bitPattern: Int64(-22)))",
         "precondition(memory.read(offset: 0x40000, length: 2) == Data([0xAA, 0xBB]))",
@@ -583,8 +583,8 @@ required = {
         "backend = candidate",
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
-        "let requiresJIT = configuration.accelerator == .jit",
-        "switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)",
+        "let requestedJIT = configuration.accelerator == .jit",
+        "var requiresJIT = requestedJIT",
         "isteam_qemu_start",
         "isteam_qemu_request_stop",
         "findUEFIFirmwarePair(in directory: URL)",
@@ -638,7 +638,6 @@ required = {
         "error_buffer && error_capacity > 0",
     ],
     "scripts/tests/fake_qemu_runtime.c": [
-        "#ifndef FAKE_QEMU_NO_JIT_CALLBACK",
         "void isteam_qemu_set_jit_callbacks",
         "fake_qemu_jit_callbacks_installed",
         "void qemu_init(int argc, char *argv[])",
@@ -666,15 +665,15 @@ required = {
         "has_jit_callbacks=false",
         "QEMU-TCI.framework",
         'bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci',
-        "StikJIT callback export: absent by design",
+        "StikJIT callback export absent by design",
         "runtime-library-path.txt",
     ],
     "scripts/merge-qemu-runtime-variants.sh": [
-        'grep -q \'isteam_qemu_set_jit_callbacks\' "$JIT_DIR/exports.txt"',
-        'if grep -q \'isteam_qemu_set_jit_callbacks\' "$TCI_DIR/exports.txt"; then',
-        'mkdir -p "$OUT/Frameworks" "$OUT/QEMU/JIT" "$OUT/QEMU/TCI"',
-        'cp -a "$JIT_DIR/QEMU/." "$OUT/QEMU/JIT/"',
-        'cp -a "$TCI_DIR/QEMU/." "$OUT/QEMU/TCI/"',
+        'grep -Fq \'isteam_qemu_set_jit_callbacks\' "$JIT_DIR/exports.txt"',
+        'if grep -Fq \'isteam_qemu_set_jit_callbacks\' "$TCI_DIR/exports.txt"; then',
+        'mkdir -p "$TEMP_OUT/Frameworks" "$TEMP_OUT/QEMU/JIT" "$TEMP_OUT/QEMU/TCI"',
+        'cp -a "$JIT_DIR/QEMU/." "$TEMP_OUT/QEMU/JIT/"',
+        'cp -a "$TCI_DIR/QEMU/." "$TEMP_OUT/QEMU/TCI/"',
     ],
     "scripts/validate-qemu-runtime.sh": [
         "for tool in file lipo nm codesign vtool; do",
@@ -759,6 +758,8 @@ required = {
         "?? .linuxVM",
         "TCG with a 128 MiB translation-block cache and split-WX enabled",
         "case qemuInterpreter = \"QEMU TCI (no JIT)\"",
+        "case .automatic, .qemuInterpreter: return true",
+        "case .qemuJIT: return JITCoordinator.shared.isQEMUJITReady",
         "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG",
         "stored selections fall back to QEMU TCI (no JIT)",
     ],
@@ -1282,10 +1283,10 @@ for token in (
     "UTM/build-iOS-TCI-arm64",
     "UTM/sysroot-iOS-TCI-arm64",
     "./scripts/build_dependencies.sh -p ios-tci -a arm64",
-    "./scripts/build_utm.sh -k iphoneos -s iOS-TCI -a arm64 -o UTMBuildTCI",
-    "build/qemu-runtime-tci/QEMU/TCI",
-    "for mode in JIT TCI; do",
-    "Physical iOS arm64 runtime variants: JIT and TCI",
+    "./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI",
+    "UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app",
+    "bash scripts/merge-qemu-runtime-variants.sh build/qemu-runtime-jit build/qemu-runtime-tci build/qemu-runtime",
+    "test -s build/qemu-runtime/QEMU/TCI/runtime-library-path.txt",
 ):
     if token not in qemu_workflow:
         print(f"QEMU workflow: TCI build/package contract is missing {token!r}", file=sys.stderr)
@@ -1428,26 +1429,31 @@ else:
         failed = True
 
 
-# The no-JIT bridge test must use a fake library that truly lacks the JIT callback.
+# The no-JIT bridge fixture is a separate library with no JIT callback.
 fake_qemu_runtime = Path("scripts/tests/fake_qemu_runtime.c").read_text(encoding="utf-8")
+fake_qemu_runtime_tci = Path("scripts/tests/fake_qemu_runtime_tci.c").read_text(encoding="utf-8")
 native_bridge_test = Path("scripts/tests/test_qemu_native_bridge.c").read_text(encoding="utf-8")
 validation_workflow = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
 for token in (
-    "-DFAKE_QEMU_NO_JIT_CALLBACK",
     'test-qemu-native-bridge" jit',
     'test-qemu-native-bridge" tci',
     "libfakeqemu-jit.so",
     "libfakeqemu-tci.so",
+    "scripts/tests/fake_qemu_runtime_tci.c",
 ):
     if token not in validation_workflow:
         print(f"repository validation workflow: missing JIT/TCI bridge test {token!r}", file=sys.stderr)
         failed = True
-if "#ifndef FAKE_QEMU_NO_JIT_CALLBACK" not in fake_qemu_runtime:
-    print("fake QEMU runtime: no-JIT fixture does not omit the callback export", file=sys.stderr)
+if "void isteam_qemu_set_jit_callbacks" not in fake_qemu_runtime:
+    print("fake QEMU JIT runtime: callback export is missing", file=sys.stderr)
     failed = True
-for token in ('assert(argc == 3);', 'strcmp(argv[1], "jit")', 'strcmp(argv[1], "tci")'):
+if "isteam_qemu_set_jit_callbacks" in fake_qemu_runtime_tci:
+    print("fake QEMU TCI runtime: must not export the JIT callback", file=sys.stderr)
+    failed = True
+for token in ('assert(argc == 3);', 'strcmp(argv[1], "jit")', 'strcmp(argv[1], "tci")',
+              "unexpected isteam_qemu_set_jit_callbacks"):
     if token not in native_bridge_test:
-        print(f"native QEMU bridge test: missing mode selection {token!r}", file=sys.stderr)
+        print(f"native QEMU bridge test: missing mode selection/rejection {token!r}", file=sys.stderr)
         failed = True
 
 
