@@ -158,6 +158,25 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let invalidMmapFDValue) = invalidMmapFD else { preconditionFailure() }
         precondition(invalidMmapFDValue == UInt64(bitPattern: Int64(-22)))
 
+        // The current backing memory cannot enforce guest page protections.
+        // Reject every mapping other than the explicitly supported RW contract.
+        for unsupportedProtection: UInt64 in [0, 1, 2, 4, 5, 7] {
+            let rejected = dispatcher.dispatch(
+                number: 9, arguments: [0, 4096, unsupportedProtection, 0x22, UInt64.max, 0]
+            )!
+            guard case .returned(let value) = rejected else { preconditionFailure() }
+            precondition(value == UInt64(bitPattern: Int64(-22)))
+        }
+
+        // Unknown mmap flags and contradictory fixed modes must fail with EINVAL.
+        for unsupportedFlags: UInt64 in [0x200022, 0x100032] {
+            let rejected = dispatcher.dispatch(
+                number: 9, arguments: [0, 4096, 3, unsupportedFlags, UInt64.max, 0]
+            )!
+            guard case .returned(let value) = rejected else { preconditionFailure() }
+            precondition(value == UInt64(bitPattern: Int64(-22)))
+        }
+
         precondition(memory.write(Data([0xCC, 0xDD, 0xEE]), offset: 0x47000))
         precondition(memory.write(Data([0x11, 0x22, 0x33]), offset: 0x49000))
         let partialFixed = dispatcher.dispatch(number: 9, arguments: [0x47000, 8192, 3, 0x32, UInt64.max, 0])!
