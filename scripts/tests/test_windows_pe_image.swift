@@ -107,8 +107,8 @@ struct WindowsPEImageTests {
         // Deliberately store sections in a different order from their RVAs.
         let definitions: [(String, UInt32, UInt32, UInt32)] = [
             (".data", 0x3000, 0x600, 0xC0000040),
-            (".text", 0x1000, 0x200, 0x60000020),
-            (".rdata", 0x2000, 0x400, 0x40000040)
+            (".rdata", 0x2000, 0x400, 0x40000040),
+            (".text", 0x1000, 0x200, 0x60000020)
         ]
         for (index, item) in definitions.enumerated() {
             let offset = table + index * 40
@@ -303,6 +303,22 @@ struct WindowsPEImageTests {
         guard try multiSection.fileOffset(forRVA: 0x2000, length: 0) == 0x300 else {
             throw NSError(domain: "WindowsPEImageTests", code: 8,
                           userInfo: [NSLocalizedDescriptionKey: "Zero-length PE boundary mapping changed"])
+        }
+
+        // A zero-length cursor at the virtual end of a section with a larger
+        // zero-fill tail maps to raw EOF, while the zero-fill bytes stay unmapped.
+        let virtualEndImage = try WindowsPEImage.parse(
+            makeImage(importDirectoryRVA: 0x1000, importDirectorySize: 40)
+        )
+        guard try virtualEndImage.fileOffset(forRVA: 0x2000, length: 0) == 0x400 else {
+            throw NSError(domain: "WindowsPEImageTests", code: 15,
+                          userInfo: [NSLocalizedDescriptionKey: "Virtual-end cursor did not map to raw EOF"])
+        }
+        do {
+            _ = try virtualEndImage.fileOffset(forRVA: 0x1FFF, length: 1)
+            throw NSError(domain: "WindowsPEImageTests", code: 16,
+                          userInfo: [NSLocalizedDescriptionKey: "PE virtual zero-fill tail was incorrectly treated as file-backed"])
+        } catch WindowsPEImage.ParseError.unmappedRVA(_) {
         }
         do {
             _ = try multiSection.fileOffset(forRVA: 0x3100, length: 1)
