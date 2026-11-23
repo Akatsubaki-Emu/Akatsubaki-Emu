@@ -32,7 +32,9 @@ struct VMConfiguration: Codable, Identifiable, Equatable {
 
     static var defaultAccelerator: Accelerator {
         switch RuntimeSettings.shared.acceleration {
-        case .automatic, .qemuJIT: return .jit
+        case .automatic:
+            return JITCoordinator.shared.isQEMUJITReady ? .jit : .tcg
+        case .qemuJIT: return .jit
         case .qemuInterpreter, .hypervisor: return .tcg
         }
     }
