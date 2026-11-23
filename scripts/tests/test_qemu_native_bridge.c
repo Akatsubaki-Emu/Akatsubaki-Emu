@@ -71,15 +71,24 @@ int main(int argc, char **argv) {
     char validation_error[512] = {0};
     assert(isteam_qemu_validate_library(library, requires_jit,
                                         validation_error, (int)sizeof(validation_error)));
-    if (!requires_jit) {
-        memset(validation_error, 0, sizeof(validation_error));
-        assert(!isteam_qemu_validate_library(library, true,
-                                             validation_error, (int)sizeof(validation_error)));
-        assert(strstr(validation_error, "isteam_qemu_set_jit_callbacks") != NULL);
-        assert(dlsym(probe, "isteam_qemu_set_jit_callbacks") == NULL);
-    } else {
+    assert((dlsym(probe, "isteam_qemu_set_jit_callbacks") != NULL) == requires_jit);
+    if (requires_jit) {
         assert(read_counter(probe, "fake_qemu_jit_callbacks_installed") == 0);
     }
+
+    const char *mode_arguments[] = {"qemu-system-x86_64"};
+    memset(validation_error, 0, sizeof(validation_error));
+    assert(!isteam_qemu_validate_library(library, !requires_jit,
+                                         validation_error, (int)sizeof(validation_error)));
+    assert(strstr(validation_error, requires_jit
+        ? "unexpected isteam_qemu_set_jit_callbacks"
+        : "missing isteam_qemu_set_jit_callbacks") != NULL);
+
+    char mode_error[512] = {0};
+    assert(!isteam_qemu_start(1, mode_arguments, library, !requires_jit,
+                              mode_error, (int)sizeof(mode_error)));
+    assert(strstr(mode_error, requires_jit ? "requested TCI mode" : "requested JIT mode") != NULL);
+    assert(!isteam_qemu_is_active());
 
     char argumentError[512] = {0};
     const char *tooManyArguments[4097];
