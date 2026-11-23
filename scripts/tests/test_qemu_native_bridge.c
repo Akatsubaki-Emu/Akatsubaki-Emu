@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
     memset(validation_error, 0, sizeof(validation_error));
     assert(!isteam_qemu_validate_library(wrong_mode_library, requires_jit,
                                          validation_error, (int)sizeof(validation_error)));
-    assert(validation_error[0] != '\0');
+    assert(strstr(validation_error, "incompatible JIT mode") != NULL);
 
     // Reject a mismatched library before reserving the one-shot process
     // lifecycle, so a subsequent correctly matched launch remains possible.
@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
     const char *mismatch_arguments[] = {"qemu-system-x86_64"};
     assert(!isteam_qemu_start(1, mismatch_arguments, wrong_mode_library, requires_jit,
                               mismatch_error, (int)sizeof(mismatch_error)));
-    assert(mismatch_error[0] != '\0');
+    assert(strstr(mismatch_error, "incompatible JIT mode") != NULL);
     assert(!isteam_qemu_is_active());
 
     char argumentError[512] = {0};
