@@ -393,9 +393,23 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
         self.assertIn("private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64?", source)
-        self.assertIn("if noReplace { return errno(17) }", source)
+        self.assertIn("if noReplace && memory.hasMappedPages(offset: address, length: size)", source)
         self.assertIn("private func validateRange(address: UInt64, length: UInt64) -> UInt64", source)
         self.assertIn("cursor = min(end, range.upperBound)", source)
+
+
+    def test_linux_mmap_protect_and_fixed_replacement_use_page_permissions(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
+        self.assertIn("memory.hasMappedPages(offset: address, length: size)", source)
+        self.assertIn("MAP_FIXED intentionally replaces every existing guest mapping", source)
+        self.assertIn("memory.protect(offset: address, length: size", source)
+        self.assertIn("memory.map(offset: address, length: size", source)
+        self.assertIn("memory.unmap(offset: address, length: size)", source)
+        tests = (root / "scripts" / "tests" / "test_linux_syscall_dispatcher.swift").read_text(encoding="utf-8")
+        self.assertIn("noReplaceELF", tests)
+        self.assertIn("fixedStack", tests)
+        self.assertIn("middleReplacement", tests)
 
     def test_guest_image_load_resets_cpu_and_clears_memory_once_in_loader(self):
         root = Path(__file__).resolve().parents[2]

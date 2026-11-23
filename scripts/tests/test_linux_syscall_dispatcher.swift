@@ -3,30 +3,85 @@ import Foundation
 final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
+    private let pageSize: UInt64 = 4096
+    private var permissionsEnabled = false
+    private var pagePermissions: [UInt64: UInt8] = [:]
 
     init(size: UInt64) {
         self.size = size
         bytes = [UInt8](repeating: 0, count: Int(size))
     }
 
+    func beginMapping() -> Bool {
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = true
+        return true
+    }
+
+    func map(offset: UInt64, length: UInt64, permissions: UInt8, merge: Bool = false) -> Bool {
+        guard permissionsEnabled, permissions & ~UInt8(7) == 0,
+              length > 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / pageSize
+        let last = (offset + length - 1) / pageSize
+        for page in first...last {
+            let old = pagePermissions[page] ?? 0
+            pagePermissions[page] = merge ? old | permissions : permissions
+        }
+        return true
+    }
+
+    func hasMappedPages(offset: UInt64, length: UInt64) -> Bool {
+        guard length > 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / 4096
+        let last = (offset + length - 1) / 4096
+        return (first...last).contains { pagePermissions[$0] != nil }
+    }
+
+    func protect(offset: UInt64, length: UInt64, permissions: UInt8) -> Bool {
+        guard permissionsEnabled, permissions & ~UInt8(7) == 0,
+              offset % pageSize == 0, length > 0,
+              offset <= size, length <= size - offset else { return false }
+        let first = offset / pageSize
+        let last = (offset + length - 1) / pageSize
+        for page in first...last where pagePermissions[page] == nil { return false }
+        for page in first...last { pagePermissions[page] = permissions }
+        return true
+    }
+
+    func unmap(offset: UInt64, length: UInt64) -> Bool {
+        guard permissionsEnabled, offset % pageSize == 0, length > 0,
+              offset <= size, length <= size - offset else { return false }
+        let first = offset / pageSize
+        let last = (offset + length - 1) / pageSize
+        for page in first...last {
+            pagePermissions.removeValue(forKey: page)
+            let start = page * pageSize
+            let end = min(size, start + pageSize)
+            if start < end {
+                bytes.replaceSubrange(Int(start)..<Int(end),
+                                      with: repeatElement(0, count: Int(end - start)))
+            }
+        }
+        return true
+    }
+
+    func permission(at offset: UInt64) -> UInt8? { pagePermissions[offset / pageSize] }
+
     func read(offset: UInt64, length: Int) -> Data? {
         guard length >= 0, offset <= size, UInt64(length) <= size - offset else { return nil }
         return Data(bytes[Int(offset)..<Int(offset) + length])
     }
 
-    func read(offset: UInt64, length: Int, into data: inout Data,
-              destinationOffset: Int) -> Bool {
-        guard length >= 0, destinationOffset >= 0,
-              destinationOffset <= data.count,
-              length <= data.count - destinationOffset,
-              offset <= size, UInt64(length) <= size - offset else { return false }
+    func read(offset: UInt64, length: Int, into data: inout Data, destinationOffset: Int) -> Bool {
+        guard length >= 0, destinationOffset >= 0, destinationOffset <= data.count,
+              length <= data.count - destinationOffset, offset <= size,
+              UInt64(length) <= size - offset else { return false }
         if length == 0 { return true }
         let start = Int(offset)
         data.replaceSubrange(destinationOffset..<(destinationOffset + length),
                              with: bytes[start..<(start + length)])
         return true
     }
-
 
     func write(_ data: Data, offset: UInt64) -> Bool {
         guard offset <= size, UInt64(data.count) <= size - offset else { return false }
@@ -51,15 +106,13 @@ final class GuestMemory {
 
     func readUInt64(offset: UInt64) -> UInt64? {
         guard let data = read(offset: offset, length: 8) else { return nil }
-        return data.enumerated().reduce(UInt64(0)) {
-            $0 | UInt64($1.element) << ($1.offset * 8)
-        }
+        return data.enumerated().reduce(UInt64(0)) { $0 | UInt64($1.element) << ($1.offset * 8) }
     }
-
 
     func zero(offset: UInt64, length: UInt64) -> Bool {
         guard offset <= size, length <= size - offset, length <= UInt64(Int.max) else { return false }
-        bytes.replaceSubrange(Int(offset)..<Int(offset + length), with: repeatElement(0, count: Int(length)))
+        bytes.replaceSubrange(Int(offset)..<Int(offset + length),
+                              with: repeatElement(0, count: Int(length)))
         return true
     }
 }
@@ -361,6 +414,78 @@ struct LinuxSyscallDispatcherTests {
         let reopenedStdinRead = dispatcher.dispatch(number: 0, arguments: [0, 0, 0, 0, 0, 0])!
         guard case .returned(let reopenedStdinValue) = reopenedStdinRead else { preconditionFailure() }
         precondition(reopenedStdinValue == 0)
+
+
+        // Linux page permissions and MAP_FIXED replacement cover PT_LOAD, heap, stack and mmap pages.
+        let permissionMemory = GuestMemory(size: 1024 * 1024)
+        precondition(permissionMemory.beginMapping())
+        precondition(permissionMemory.map(offset: 0x1000, length: 4096, permissions: 5))
+        precondition(permissionMemory.map(offset: 0x2000, length: 4096, permissions: 3))
+        precondition(permissionMemory.map(offset: 0xEF000, length: 4096, permissions: 3))
+        let permissionDispatcher = LinuxSyscallDispatcher(memory: permissionMemory)
+        try permissionDispatcher.configure(programBreak: 0x2000, stackBase: 0xF0000)
+
+        func syscallResult(_ outcome: LinuxSyscallDispatcher.Outcome?) -> UInt64 {
+            guard case .returned(let value) = outcome else { preconditionFailure("Expected a returned syscall value") }
+            return value
+        }
+        let fixedELF = syscallResult(permissionDispatcher.dispatch(
+            number: 9, arg0: 0x1000, arg1: 4096, arg2: 3, arg3: 0x32,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(fixedELF == 0x1000)
+        precondition(permissionMemory.permission(at: 0x1000) == 3)
+
+        let noReplaceELF = syscallResult(permissionDispatcher.dispatch(
+            number: 9, arg0: 0x1000, arg1: 4096, arg2: 3, arg3: 0x100022,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(noReplaceELF == UInt64(bitPattern: Int64(-17)))
+
+        precondition(syscallResult(permissionDispatcher.dispatch(
+            number: 10, arg0: 0x1000, arg1: 4096, arg2: 1, arg3: 0, arg4: 0, arg5: 0
+        )) == 0)
+        precondition(permissionMemory.permission(at: 0x1000) == 1)
+        precondition(syscallResult(permissionDispatcher.dispatch(
+            number: 10, arg0: 0x3000, arg1: 4096, arg2: 1, arg3: 0, arg4: 0, arg5: 0
+        )) == UInt64(bitPattern: Int64(-12)))
+
+        let fixedHeap = syscallResult(permissionDispatcher.dispatch(
+            number: 9, arg0: 0x2000, arg1: 4096, arg2: 1, arg3: 0x32,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(fixedHeap == 0x2000)
+        precondition(permissionMemory.permission(at: 0x2000) == 1)
+
+        let fixedStack = syscallResult(permissionDispatcher.dispatch(
+            number: 9, arg0: 0xEF000, arg1: 4096, arg2: 5, arg3: 0x32,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(fixedStack == 0xEF000)
+        precondition(permissionMemory.permission(at: 0xEF000) == 5)
+        let noReplaceStack = syscallResult(permissionDispatcher.dispatch(
+            number: 9, arg0: 0xEF000, arg1: 4096, arg2: 3, arg3: 0x100022,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(noReplaceStack == UInt64(bitPattern: Int64(-17)))
+        precondition(syscallResult(permissionDispatcher.dispatch(
+            number: 11, arg0: 0xEF000, arg1: 4096, arg2: 0, arg3: 0, arg4: 0, arg5: 0
+        )) == 0)
+        precondition(!permissionMemory.hasMappedPages(offset: 0xEF000, length: 4096))
+
+        let threePages = syscallResult(permissionDispatcher.dispatch(
+            number: 9, arg0: 0x90000, arg1: 3 * 4096, arg2: 3, arg3: 0x22,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(threePages == 0x90000)
+        let middleReplacement = syscallResult(permissionDispatcher.dispatch(
+            number: 9, arg0: 0x91000, arg1: 4096, arg2: 1, arg3: 0x32,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(middleReplacement == 0x91000)
+        precondition(syscallResult(permissionDispatcher.dispatch(
+            number: 28, arg0: 0x90000, arg1: 3 * 4096, arg2: 0, arg3: 0, arg4: 0, arg5: 0
+        )) == 0)
 
         print("Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/identity and reset tests passed")
     }
