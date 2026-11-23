@@ -122,6 +122,34 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let mapped) = mapping else { preconditionFailure() }
         precondition(mapped >= 0x10000 && mapped % 4096 == 0)
         precondition(memory.write(Data([1, 2, 3]), offset: mapped))
+
+        // Until page permissions are enforced by the production memory
+        // backend, mmap may expose only the read/write combination used by
+        // this bounded runtime. Never silently turn PROT_NONE, read-only,
+        // write-only or executable mappings into the same writable mapping.
+        for protection: UInt64 in [0, 1, 2, 4, 5, 6, 7, 8] {
+            let rejected = dispatcher.dispatch(
+                number: 9, arguments: [0x60000, 4096, protection, 0x22, UInt64.max, 0]
+            )!
+            guard case .returned(let rejectedValue) = rejected else { preconditionFailure() }
+            precondition(rejectedValue == UInt64(bitPattern: Int64(-22)))
+        }
+        let unsupportedFlags = dispatcher.dispatch(
+            number: 9, arguments: [0x60000, 4096, 3, 0x4022, UInt64.max, 0]
+        )!
+        guard case .returned(let unsupportedFlagsValue) = unsupportedFlags else { preconditionFailure() }
+        precondition(unsupportedFlagsValue == UInt64(bitPattern: Int64(-22)))
+        let conflictingFixedFlags = dispatcher.dispatch(
+            number: 9, arguments: [0x60000, 4096, 3, 0x100032, UInt64.max, 0]
+        )!
+        guard case .returned(let conflictingFixedFlagsValue) = conflictingFixedFlags else { preconditionFailure() }
+        precondition(conflictingFixedFlagsValue == UInt64(bitPattern: Int64(-22)))
+        // Rejected requests must not reserve the hinted address.
+        let validAfterRejected = dispatcher.dispatch(
+            number: 9, arguments: [0x60000, 4096, 3, 0x22, UInt64.max, 0]
+        )!
+        guard case .returned(let validAfterRejectedValue) = validAfterRejected else { preconditionFailure() }
+        precondition(validAfterRejectedValue == 0x60000)
         let hinted = dispatcher.dispatch(number: 9, arguments: [0x48000, 4096, 3, 0x22, UInt64.max, 0])!
         guard case .returned(let hintedAddress) = hinted else { preconditionFailure() }
         precondition(hintedAddress == 0x48000)
