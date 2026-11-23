@@ -170,6 +170,25 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let preservedSuffixResult) = preservedSuffixProtection else { preconditionFailure() }
         precondition(preservedSuffixResult == UInt64(bitPattern: Int64(-38)))
 
+        // A small guest address space can place mmapCursor close to the
+        // initial break. That cursor is not a heap boundary: with no actual
+        // mappings, brk must be allowed to grow until the reserved stack guard.
+        let roomyMemorySize: UInt64 = 16 * 1024 * 1024
+        let roomyMemory = GuestMemory(size: roomyMemorySize)
+        let roomyStackBase = roomyMemorySize - 1024 * 1024
+        let roomyDispatcher = LinuxSyscallDispatcher(memory: roomyMemory)
+        try roomyDispatcher.configure(programBreak: 0x200000, stackBase: roomyStackBase)
+        let expandedBreak = roomyDispatcher.dispatch(
+            number: 12, arguments: [0x400000, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let expandedBreakValue) = expandedBreak else { preconditionFailure() }
+        precondition(expandedBreakValue == 0x400000)
+        let shrunkExpandedBreak = roomyDispatcher.dispatch(
+            number: 12, arguments: [0x300000, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let shrunkExpandedBreakValue) = shrunkExpandedBreak else { preconditionFailure() }
+        precondition(shrunkExpandedBreakValue == 0x300000)
+
         let outputLog = EmulationLog()
         let outputDispatcher = LinuxSyscallDispatcher(memory: memory, log: outputLog)
         try outputDispatcher.configure(programBreak: 0x41000, stackBase: 0x3F0000)
