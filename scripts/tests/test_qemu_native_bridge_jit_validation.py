@@ -16,10 +16,12 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertNotIn("malloc(argument_length + 1)", start)
         self.assertIn("g_argument_storage = argument_storage", start)
 
-    def test_jit_callback_export_is_required_only_for_jit_runtime(self):
+    def test_jit_callback_export_matches_requested_runtime_mode(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
-        self.assertIn("(requires_jit && !has_jit_callbacks)", source)
+        self.assertIn("if (requires_jit != has_jit_callbacks)", source)
+        self.assertIn("unexpected isteam_qemu_set_jit_callbacks in TCI runtime", source)
+        self.assertEqual(source.count("jit_export_mismatch(requires_jit, has_jit_callbacks)"), 2)
         self.assertIn("requires_jit ? \"lifecycle/JIT\" : \"lifecycle\"", source)
         self.assertIn("if (requires_jit) {", source)
         self.assertIn("isteam_qemu_set_jit_callbacks", source)
@@ -33,6 +35,15 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         )
         header = (root / "iSteam" / "QEMUNativeBridge.h").read_text(encoding="utf-8")
         self.assertIn("bool requires_jit", header)
+        workflow = (root / ".github" / "workflows" / "validate-repository.yml").read_text(encoding="utf-8")
+        self.assertIn("-DFAKE_QEMU_NO_JIT_CALLBACK", workflow)
+        self.assertIn('"$RUNNER_TEMP/test-qemu-native-bridge" jit', workflow)
+        self.assertIn('"$RUNNER_TEMP/test-qemu-native-bridge" tci', workflow)
+        self.assertIn("libfakeqemu-jit.so", workflow)
+        self.assertIn("libfakeqemu-tci.so", workflow)
+        harness = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
+        self.assertIn("!requires_jit", harness)
+        self.assertIn("mode_error", harness)
         tci_fake = (root / "scripts" / "tests" / "fake_qemu_runtime_tci.c").read_text(encoding="utf-8")
         self.assertIn("int qemu_main_loop(void)", tci_fake)
         self.assertNotIn("isteam_qemu_set_jit_callbacks", tci_fake)

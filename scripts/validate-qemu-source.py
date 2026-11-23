@@ -636,6 +636,10 @@ required = {
         "ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES",
         "strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u)",
         "error_buffer && error_capacity > 0",
+
+        "if (requires_jit != has_jit_callbacks)",
+        "unexpected isteam_qemu_set_jit_callbacks in TCI runtime",
+        "jit_export_mismatch(requires_jit, has_jit_callbacks)",
     ],
     "scripts/tests/fake_qemu_runtime.c": [
         "#ifndef FAKE_QEMU_NO_JIT_CALLBACK",
@@ -806,9 +810,13 @@ required = {
         "void qemu_init(int argc, char *argv[])",
         "poison_nonzero_return_register();",
         "self.assertIn(\"malloc(total_argument_bytes)\", start)",
-        "def test_jit_callback_export_is_required_only_for_jit_runtime(self):",
+        "def test_jit_callback_export_matches_requested_runtime_mode(self):",
         "typedef void (*qemu_set_jit_callbacks_fn)",
         "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
+
+        "if (requires_jit != has_jit_callbacks)",
+        "unexpected isteam_qemu_set_jit_callbacks in TCI runtime",
+        "workflow = (root / ".github" / "workflows" / "validate-repository.yml")",
     ],
     "scripts/tests/test_qemu_native_bridge.c": [
         "tooManyArguments[4097]",
@@ -816,6 +824,10 @@ required = {
         "QEMU arguments exceed the configured size limits",
         'fake_qemu_cleanup_status") == 37',
         'fake_qemu_shutdown_cause") == 5',
+
+        "assert(!isteam_qemu_validate_library(library, !requires_jit,",
+        "assert(!isteam_qemu_start(1, arguments, library, !requires_jit,",
+        "mode_error",
     ],
     "src/Runtime/GuestBlockDevice.swift": [
         "case invalidGeometry, outOfBounds, readOnly, shortRead",
