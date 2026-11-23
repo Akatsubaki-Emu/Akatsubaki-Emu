@@ -60,7 +60,7 @@ The development strategy is to reuse mature upstream implementations wherever th
 ### Integration sequence — optimise for the first playable build
 
 **Track A — first physical guest (continues immediately):**
-1. Finish and package the QEMU TCI no-JIT runtime and its iOS device-arm64 dependencies.
+1. Verify the upstream iOS-SE TCI no-JIT archive, merged runtime manifests and iOS device-arm64 dependencies in a fresh hosted build.
 2. Build the unsigned iOS IPA, install it on a physical iPad, and boot a known-good small Linux guest.
 3. Verify display, input, stop/cleanup, repeat launch and persistent disk state. This is the first-playable acceptance path; do not block it on Wine/Proton or user-mode translator ports.
 
