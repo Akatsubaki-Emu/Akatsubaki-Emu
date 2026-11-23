@@ -71,15 +71,24 @@ int main(int argc, char **argv) {
     char validation_error[512] = {0};
     assert(isteam_qemu_validate_library(library, requires_jit,
                                         validation_error, (int)sizeof(validation_error)));
-    if (!requires_jit) {
-        memset(validation_error, 0, sizeof(validation_error));
-        assert(!isteam_qemu_validate_library(library, true,
-                                             validation_error, (int)sizeof(validation_error)));
-        assert(strstr(validation_error, "isteam_qemu_set_jit_callbacks") != NULL);
-        assert(dlsym(probe, "isteam_qemu_set_jit_callbacks") == NULL);
-    } else {
+    memset(validation_error, 0, sizeof(validation_error));
+    assert(!isteam_qemu_validate_library(library, !requires_jit,
+                                         validation_error, (int)sizeof(validation_error)));
+    assert(strstr(validation_error, "StikJIT callback export") != NULL);
+    if (requires_jit) {
+        assert(dlsym(probe, "isteam_qemu_set_jit_callbacks") != NULL);
         assert(read_counter(probe, "fake_qemu_jit_callbacks_installed") == 0);
+    } else {
+        assert(dlsym(probe, "isteam_qemu_set_jit_callbacks") == NULL);
+        assert(dlsym(probe, "fake_qemu_jit_callbacks_installed") == NULL);
     }
+
+    char mismatchError[512] = {0};
+    const char *mismatchArguments[] = {"qemu-system-x86_64"};
+    assert(!isteam_qemu_start(1, mismatchArguments, library, !requires_jit,
+                              mismatchError, (int)sizeof(mismatchError)));
+    assert(strstr(mismatchError, "StikJIT callback export") != NULL);
+    assert(!isteam_qemu_is_active());
 
     char argumentError[512] = {0};
     const char *tooManyArguments[4097];
