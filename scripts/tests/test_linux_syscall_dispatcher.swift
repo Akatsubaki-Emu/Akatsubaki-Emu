@@ -144,11 +144,14 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let initial) = initialBreak else { preconditionFailure() }
         precondition(initial == 0x40000)
 
-        let grown = dispatcher.dispatch(number: 12, arguments: [0x42000, 0, 0, 0, 0, 0])!
+        // The mmap search cursor is not a heap boundary: brk must be able
+        // to grow past it while remaining below the stack guard.
+        let grown = dispatcher.dispatch(number: 12, arguments: [0x60000, 0, 0, 0, 0, 0])!
         guard case .returned(let grownValue) = grown else { preconditionFailure() }
-        precondition(grownValue == 0x42000)
+        precondition(grownValue == 0x60000)
         precondition(memory.permission(at: 0x40000) == 3)
         precondition(memory.permission(at: 0x41000) == 3)
+        precondition(memory.permission(at: 0x5F000) == 3)
 
         let shrunk = dispatcher.dispatch(number: 12, arguments: [0x41000, 0, 0, 0, 0, 0])!
         guard case .returned(let shrunkValue) = shrunk else { preconditionFailure() }
@@ -164,7 +167,7 @@ struct LinuxSyscallDispatcherTests {
 
         let mapping = dispatcher.dispatch(number: 9, arguments: [0, 8192, 3, 0x22, UInt64.max, 0])!
         guard case .returned(let mapped) = mapping else { preconditionFailure() }
-        precondition(mapped >= 0x10000 && mapped % 4096 == 0)
+        precondition(mapped == 0x41000)
         precondition(memory.write(Data([1, 2, 3]), offset: mapped))
         let hinted = dispatcher.dispatch(number: 9, arguments: [0x48000, 4096, 3, 0x22, UInt64.max, 0])!
         guard case .returned(let hintedAddress) = hinted else { preconditionFailure() }
@@ -482,6 +485,44 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let reopenedStdinValue) = reopenedStdinRead else { preconditionFailure() }
         precondition(reopenedStdinValue == 0)
 
-        print("Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/identity and reset tests passed")
+        // Linux MAP_FIXED replaces any existing mapping, including PT_LOAD,
+        // heap and stack pages. MAP_FIXED_NOREPLACE must reject each one
+        // without changing either its bytes or permissions.
+        let fixedMemory = GuestMemory(size: 4 * 1024 * 1024)
+        precondition(fixedMemory.beginMapping())
+        let fixedAddresses: [UInt64] = [0x1000, 0x40000, 0x3F0000]
+        for address in fixedAddresses {
+            precondition(fixedMemory.map(offset: address, length: 4096, permissions: 5))
+            precondition(fixedMemory.write(Data([0xAA, 0xBB, 0xCC]), offset: address))
+        }
+        let fixedDispatcher = LinuxSyscallDispatcher(memory: fixedMemory)
+        try fixedDispatcher.configure(programBreak: 0x40000, stackBase: 0x3F0000)
+        for address in fixedAddresses {
+            let originalPermission = fixedMemory.permission(at: address)
+            let noReplace = fixedDispatcher.dispatch(
+                number: 9, arguments: [address, 4096, 3, 0x100022, UInt64.max, 0]
+            )!
+            guard case .returned(let noReplaceResult) = noReplace else { preconditionFailure() }
+            precondition(noReplaceResult == UInt64(bitPattern: Int64(-17)))
+            precondition(fixedMemory.permission(at: address) == originalPermission)
+            precondition(fixedMemory.read(offset: address, length: 3) == Data([0xAA, 0xBB, 0xCC]))
+
+            let replacement = fixedDispatcher.dispatch(
+                number: 9, arguments: [address, 4096, 3, 0x32, UInt64.max, 0]
+            )!
+            guard case .returned(let replacementAddress) = replacement else { preconditionFailure() }
+            precondition(replacementAddress == address)
+            precondition(fixedMemory.permission(at: address) == 3)
+            precondition(fixedMemory.read(offset: address, length: 3) == Data([0, 0, 0]))
+        }
+        let unmapReplacement = fixedDispatcher.dispatch(
+            number: 11, arguments: [0x1000, 4096, 0, 0, 0, 0]
+        )!
+        guard case .returned(let unmapReplacementResult) = unmapReplacement else { preconditionFailure() }
+        precondition(unmapReplacementResult == 0)
+        precondition(fixedMemory.permission(at: 0x1000) == nil)
+        precondition(fixedMemory.read(offset: 0x1000, length: 3) == Data([0, 0, 0]))
+
+        print("Linux x86-64 brk/mmap/munmap/mprotect/MAP_FIXED/writev/time/random/identity and reset tests passed")
     }
 }
