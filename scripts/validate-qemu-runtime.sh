@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 1 || $# -gt 2 ]]; then
-  echo "Usage: $0 /path/to/signed/manifest-selected-QEMU-library [jit|tci]" >&2
+if [[ $# -lt 1 || $# -gt 3 ]]; then
+  echo "Usage: $0 /path/to/manifest-selected-QEMU-library [jit|tci] [required|allow-unsigned]" >&2
   exit 64
 fi
 
 library="$1"
 mode="${2:-jit}"
+signature_policy="${3:-required}"
 case "$mode" in
   jit|tci) ;;
   *) echo "Runtime mode must be jit or tci: $mode" >&2; exit 64 ;;
+esac
+case "$signature_policy" in
+  required|allow-unsigned) ;;
+  *) echo "Signature policy must be required or allow-unsigned: $signature_policy" >&2; exit 64 ;;
 esac
 [[ -f "$library" ]] || { echo "Missing runtime library: $library" >&2; exit 2; }
 
@@ -74,7 +79,16 @@ echo "This does not prove dependent libraries load or that a guest boots."
 fi
 
 echo "== Code signature =="
-codesign --verify --strict "$library"
+signature_status=""
+if codesign -dv "$library" >/dev/null 2>&1; then
+  codesign --verify --strict "$library"
+  signature_status="verified"
+elif [[ "$signature_policy" == "allow-unsigned" ]]; then
+  signature_status="unsigned intermediate accepted; final app signing is still required"
+else
+  echo "Runtime library is unsigned; refusing to accept an unsigned release artifact." >&2
+  exit 4
+fi
 
-echo "QEMU $mode runtime dynamic-library type, iOS platform, arm64 architecture, required lifecycle/shutdown exports, mode-specific JIT policy, and code signature verified."
+echo "QEMU $mode runtime dynamic-library type, iOS platform, arm64 architecture, required lifecycle/shutdown exports, mode-specific JIT policy, and signature policy ($signature_status) verified."
 echo "This does not prove dependent libraries load or that a guest boots."
