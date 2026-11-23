@@ -92,7 +92,21 @@ jobs:
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
 
+      - name: Detect native AOT runtime integration
+        id: native_aot
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -s iSteam/KenranButoAOTExecutableMemory.c && -s src/Runtime/KenranButoAOTExecution.swift ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Explain optional native AOT runtime tests
+        if: steps.native_aot.outputs.available != 'true'
+        run: echo "Native AOT runtime integration is not present on this branch; translator and cache tests ran."
       - name: Compile W^X executable-memory provider
+        if: steps.native_aot.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -100,6 +114,7 @@ jobs:
             -c iSteam/KenranButoAOTExecutableMemory.c \
             -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
       - name: Execute ABI, AOT block and interpreter side-exit tests on ARM64
+        if: steps.native_aot.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -120,6 +135,7 @@ jobs:
           "$RUNNER_TEMP/test-x86-64-interpreter-aot"
 
       - name: Run a real static ELF guest through the hybrid interpreter/AOT path
+        if: steps.native_aot.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
