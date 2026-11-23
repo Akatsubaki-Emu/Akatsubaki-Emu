@@ -16,8 +16,10 @@ class QEMUAccelerationSettingsTests(unittest.TestCase):
     def test_automatic_mode_falls_back_but_explicit_jit_does_not(self):
         source = (ROOT / "iSteam/LaunchSetupViewController.swift").read_text(encoding="utf-8")
         self.assertIn("let permitsTCIFallback = RuntimeSettings.shared.acceleration == .automatic", source)
+        self.assertIn("QEMURuntimeStatus.inspect(requiresJIT: true)", source)
         self.assertIn("guard permitsTCIFallback else", source)
         self.assertIn("fallbackConfiguration.accelerator = .tcg", source)
+        self.assertIn("using the bundled TCI interpreter (no JIT)", source)
         self.assertIn("does not fall back to TCI", source)
 
     def test_device_compatibility_reports_the_real_tci_load_probe(self):
