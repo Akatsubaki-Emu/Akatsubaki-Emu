@@ -611,5 +611,21 @@ build unrelated.dylib: c_LINKER other
         self.assertIn('APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"', packager)
 
 
+    def test_release_workflow_embeds_both_qemu_runtime_modes(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        self.assertIn('runtime-mode-manifest.txt', workflow)
+        self.assertIn('JIT_RUNTIME_DIR="$RUNTIME_DIR/QEMU/JIT"', workflow)
+        self.assertIn('TCI_RUNTIME_DIR="$RUNTIME_DIR/QEMU/TCI"', workflow)
+        self.assertIn('Frameworks/TCI/*)', workflow)
+        self.assertIn('EMBEDDED_TCI_LIBRARY="$APP/$TCI_RUNTIME_REL"', workflow)
+        self.assertIn('QEMU/JIT/runtime-library-path.txt', workflow)
+        self.assertIn('QEMU/TCI/runtime-library-path.txt', workflow)
+        self.assertIn('cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"', workflow)
+        self.assertNotIn('test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt"', workflow)
+        self.assertNotIn('test -s "$RUNTIME_DIR/exports.txt"', workflow)
+
+
+
 if __name__ == "__main__":
     unittest.main()
