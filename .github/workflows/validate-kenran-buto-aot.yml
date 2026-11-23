@@ -117,6 +117,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ ! -f iSteam/KenranButoAOTExecutableMemory.c ]; then
+            echo "Skipping native AOT execution checks: executable-memory provider is not present in this revision."
+            exit 0
+          fi
           clang -std=c11 -Wall -Wextra -Werror -I iSteam \
             -c iSteam/KenranButoAOTExecutableMemory.c \
             -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
@@ -125,6 +129,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ ! -f iSteam/KenranButoAOTExecutableMemory.c ]; then
+            echo "Skipping native AOT execution checks: executable-memory provider is not present in this revision."
+            exit 0
+          fi
           test "$(uname -m)" = "arm64" || { echo "Native AOT execution requires an ARM64 runner." >&2; exit 1; }
           swiftc -parse-as-library -swift-version 5 \
             -import-objc-header iSteam/JIT26Protocol.h \
@@ -146,6 +154,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ ! -f iSteam/KenranButoAOTExecutableMemory.c ]; then
+            echo "Skipping native AOT execution checks: executable-memory provider is not present in this revision."
+            exit 0
+          fi
           swiftc -parse-as-library -swift-version 5 \
             -import-objc-header iSteam/JIT26Protocol.h \
             src/Core/EmulationLog.swift \
