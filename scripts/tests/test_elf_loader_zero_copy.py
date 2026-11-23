@@ -52,5 +52,6 @@ class ELFLoaderCopyTests(unittest.TestCase):
         self.assertIn("guard let relaFileOffset = self.fileOffset(", relocation)
         self.assertNotIn("guard let relaFileOffset = fileOffset(", relocation)
 
+
 if __name__ == "__main__":
     unittest.main()

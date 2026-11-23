@@ -36,8 +36,9 @@ on:
           - Main
 
 permissions:
-  contents: write
-  actions: write
+  # Checkouts and reusable workflows need repository read access.
+  # Only the release publisher receives contents: write below.
+  contents: read
 
 
 jobs:
@@ -271,6 +272,8 @@ jobs:
 
   release:
     name: Publish combined ${{ matrix.channel }} release
+    permissions:
+      contents: write
     needs: build
     concurrency:
       # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
