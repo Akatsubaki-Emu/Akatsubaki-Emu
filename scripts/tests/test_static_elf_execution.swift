@@ -35,7 +35,245 @@ enum GuestEngineError: Error {
     case invalidState(String)
 }
 
+enum KenranButoAOTExitReason: Equatable {
+    case none, memoryReadFault, memoryWriteFault, invalidState
+}
+
+struct KenranButoAOTExecutionResult {
+    let guestBytesConsumed: Int
+    let instructionCount: Int
+    let exitReason: KenranButoAOTExitReason
+    let exitRip: UInt64
+    let exitAddress: UInt64
+}
+
+protocol KenranButoAOTExecuting: AnyObject {
+    var isAvailable: Bool { get }
+    func refreshAvailability() -> Bool
+    func execute(guestCode: Data, registers: inout [UInt64], rip: UInt64,
+                 rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
+                 memory: GuestMemory, maximumInstructions: Int) -> KenranButoAOTExecutionResult?
+    func invalidateAll()
+}
+
 final class GuestMemory {
+    let size: UInt64
+    private var bytes: [UInt8]
+    private let pageSize: UInt64 = 4096
+    private var permissionsEnabled = false
+    private var pagePermissions: [UInt64: UInt8] = [:]
+
+    init(size: UInt64) {
+        self.size = size
+        bytes = [UInt8](repeating: 0, count: Int(size))
+    }
+
+    private func hasPermission(offset: UInt64, length: UInt64, required: UInt8) -> Bool {
+        guard length > 0 else { return true }
+        guard offset <= size, length <= size - offset else { return false }
+        if !permissionsEnabled { return true }
+        let first = offset / pageSize
+        let last = (offset + length - 1) / pageSize
+        for page in first...last {
+            guard let current = pagePermissions[page], current & required == required else { return false }
+        }
+        return true
+    }
+
+    func clear() {
+        bytes = [UInt8](repeating: 0, count: Int(size))
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = false
+    }
+
+    func beginMapping() -> Bool {
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = true
+        return true
+    }
+
+    func map(offset: UInt64, length: UInt64, permissions: UInt8, merge: Bool = false) -> Bool {
+        guard permissionsEnabled, permissions & ~UInt8(7) == 0,
+              length > 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / pageSize
+        let last = (offset + length - 1) / pageSize
+        if !merge {
+            for page in first...last where pagePermissions[page] != nil { return false }
+        }
+        for page in first...last {
+            let old = pagePermissions[page] ?? 0
+            pagePermissions[page] = merge ? old | permissions : permissions
+        }
+        return true
+    }
+
+    func protect(offset: UInt64, length: UInt64, permissions: UInt8) -> Bool {
+        guard permissionsEnabled, permissions & ~UInt8(7) == 0,
+              offset % pageSize == 0, length > 0,
+              offset <= size, length <= size - offset else { return false }
+        let first = offset / pageSize
+        let last = (offset + length - 1) / pageSize
+        for page in first...last where pagePermissions[page] == nil { return false }
+        for page in first...last { pagePermissions[page] = permissions }
+        return true
+    }
+
+    func unmap(offset: UInt64, length: UInt64) -> Bool {
+        guard permissionsEnabled, offset % pageSize == 0, length > 0,
+              offset <= size, length <= size - offset else { return false }
+        let first = offset / pageSize
+        let last = (offset + length - 1) / pageSize
+        for page in first...last {
+            pagePermissions.removeValue(forKey: page)
+            let start = page * pageSize
+            let end = min(size, start + pageSize)
+            if start < end {
+                bytes.replaceSubrange(Int(start)..<Int(end),
+                                      with: repeatElement(0, count: Int(end - start)))
+            }
+        }
+        return true
+    }
+
+    func hasMappedPages(offset: UInt64, length: UInt64) -> Bool {
+        guard length > 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / pageSize
+        let last = (offset + length - 1) / pageSize
+        return (first...last).contains { pagePermissions[$0] != nil }
+    }
+
+    func permission(at offset: UInt64) -> UInt8? { pagePermissions[offset / pageSize] }
+
+    func zero(offset: UInt64, length: UInt64) -> Bool {
+        guard offset <= size, length <= size - offset, length <= UInt64(Int.max) else { return false }
+        let start = Int(offset), end = start + Int(length)
+        bytes.replaceSubrange(start..<end, with: repeatElement(0, count: end - start))
+        return true
+    }
+
+    func readByte(offset: UInt64) -> UInt8? {
+        guard offset < size, hasPermission(offset: offset, length: 1, required: 1) else { return nil }
+        return bytes[Int(offset)]
+    }
+
+    func readExecuteByte(offset: UInt64) -> UInt8? {
+        guard offset < size, hasPermission(offset: offset, length: 1, required: 5) else { return nil }
+        return bytes[Int(offset)]
+    }
+
+    func readUInt16(offset: UInt64) -> UInt16? {
+        guard offset <= size, size - offset >= 2,
+              hasPermission(offset: offset, length: 2, required: 1) else { return nil }
+        let index = Int(offset)
+        return UInt16(bytes[index]) | UInt16(bytes[index + 1]) << 8
+    }
+
+    func writeByte(_ value: UInt8, offset: UInt64) -> Bool {
+        guard offset < size, hasPermission(offset: offset, length: 1, required: 2) else { return false }
+        bytes[Int(offset)] = value
+        return true
+    }
+
+    func readPrefix(offset: UInt64, maximumLength: Int? = nil, into buffer: inout [UInt8]) -> Int? {
+        guard offset <= size else { return nil }
+        let requested = min(buffer.count, max(0, maximumLength ?? buffer.count))
+        let count = Int(min(UInt64(requested), size - offset))
+        var completed = 0
+        while completed < count {
+            let address = offset + UInt64(completed)
+            guard hasPermission(offset: address, length: 1, required: 5) else { break }
+            let pageRemaining = Int(pageSize - address % pageSize)
+            let amount = min(count - completed, pageRemaining)
+            let start = Int(address)
+            for index in 0..<amount { buffer[completed + index] = bytes[start + index] }
+            completed += amount
+        }
+        return completed
+    }
+
+    func readExecuteUInt32(offset: UInt64) -> UInt32? {
+        guard offset <= size, size - offset >= 4,
+              hasPermission(offset: offset, length: 4, required: 5) else { return nil }
+        let i = Int(offset)
+        return UInt32(bytes[i]) | UInt32(bytes[i + 1]) << 8
+            | UInt32(bytes[i + 2]) << 16 | UInt32(bytes[i + 3]) << 24
+    }
+
+    func readExecuteUInt64(offset: UInt64) -> UInt64? {
+        guard offset <= size, size - offset >= 8,
+              hasPermission(offset: offset, length: 8, required: 5) else { return nil }
+        let i = Int(offset)
+        var value: UInt64 = 0
+        for shift in 0..<8 { value |= UInt64(bytes[i + shift]) << (shift * 8) }
+        return value
+    }
+
+    func readUInt32(offset: UInt64) -> UInt32? {
+        guard offset <= size, size - offset >= 4,
+              hasPermission(offset: offset, length: 4, required: 1) else { return nil }
+        let i = Int(offset)
+        return UInt32(bytes[i]) | UInt32(bytes[i + 1]) << 8
+            | UInt32(bytes[i + 2]) << 16 | UInt32(bytes[i + 3]) << 24
+    }
+
+    func readUInt64(offset: UInt64) -> UInt64? {
+        guard offset <= size, size - offset >= 8,
+              hasPermission(offset: offset, length: 8, required: 1) else { return nil }
+        let i = Int(offset)
+        var value: UInt64 = 0
+        for shift in 0..<8 { value |= UInt64(bytes[i + shift]) << (shift * 8) }
+        return value
+    }
+
+    func writeUInt32(_ value: UInt32, offset: UInt64) -> Bool {
+        guard offset <= size, size - offset >= 4,
+              hasPermission(offset: offset, length: 4, required: 2) else { return false }
+        let index = Int(offset)
+        for shift in 0..<4 {
+            bytes[index + shift] = UInt8(truncatingIfNeeded: value >> (shift * 8))
+        }
+        return true
+    }
+
+    func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool {
+        guard offset <= size, size - offset >= 16,
+              hasPermission(offset: offset, length: 16, required: 2) else { return false }
+        let start = Int(offset)
+        for index in 0..<8 {
+            bytes[start + index] = UInt8(truncatingIfNeeded: first >> (index * 8))
+            bytes[start + 8 + index] = UInt8(truncatingIfNeeded: second >> (index * 8))
+        }
+        return true
+    }
+
+    func writeUInt64(_ value: UInt64, offset: UInt64) -> Bool {
+        guard offset <= size, size - offset >= 8,
+              hasPermission(offset: offset, length: 8, required: 2) else { return false }
+        let i = Int(offset)
+        for shift in 0..<8 { bytes[i + shift] = UInt8(truncatingIfNeeded: value >> (shift * 8)) }
+        return true
+    }
+
+    func read(offset: UInt64, length: Int) -> Data? {
+        guard length >= 0, offset <= size, UInt64(length) <= size - offset,
+              hasPermission(offset: offset, length: UInt64(length), required: 1) else { return nil }
+        return Data(bytes[Int(offset)..<Int(offset) + length])
+    }
+
+    func write(_ data: Data, offset: UInt64) -> Bool {
+        guard offset <= size, UInt64(data.count) <= size - offset,
+              hasPermission(offset: offset, length: UInt64(data.count), required: 2) else { return false }
+        bytes.replaceSubrange(Int(offset)..<Int(offset) + data.count, with: data)
+        return true
+    }
+
+    func write(_ data: Data, sourceRange: Range<Int>, offset: UInt64) -> Bool {
+        guard sourceRange.lowerBound >= 0, sourceRange.upperBound <= data.count,
+              sourceRange.lowerBound <= sourceRange.upperBound else { return false }
+        return write(data.subdata(in: sourceRange), offset: offset)
+    }
+}
+
     let size: UInt64
     private var bytes: [UInt8]
 
