@@ -757,10 +757,10 @@ required = {
     ],
     "src/Core/RuntimeSettings.swift": [
         "?? .linuxVM",
-        "TCG with a 128 MiB translation-block cache and split-WX enabled",
+        "case .qemuInterpreter, .hypervisor: return false",
         "case qemuInterpreter = \"QEMU TCI (no JIT)\"",
-        "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG",
-        "stored selections fall back to QEMU TCI (no JIT)",
+        "Unavailable: the separate no-JIT TCI runtime has not been built and packaged.",
+        "return stored.isAvailable ? stored : .automatic",
     ],
     "src/Core/VMConfiguration.swift": [
         "static var defaultAccelerator: Accelerator",
@@ -1427,6 +1427,13 @@ else:
         print("release workflow: must not silently publish IPA without QEMU", file=sys.stderr)
         failed = True
 
+
+# JIT and TCI are mutually exclusive bridge ABIs; reject either mode's wrong export set.
+native_bridge_source = Path("iSteam/QEMUNativeBridge.c").read_text(encoding="utf-8")
+for token in ("has_jit_callbacks == requires_jit", "unexpected isteam_qemu_set_jit_callbacks"):
+    if token not in native_bridge_source:
+        print(f"native QEMU bridge: missing mode/export parity guard {token!r}", file=sys.stderr)
+        failed = True
 
 # The no-JIT bridge test must use a fake library that truly lacks the JIT callback.
 fake_qemu_runtime = Path("scripts/tests/fake_qemu_runtime.c").read_text(encoding="utf-8")
