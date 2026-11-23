@@ -209,16 +209,14 @@ jobs:
             test -s "$RUNTIME_DIR/$runtime_path" || { echo "Manifest points to a missing QEMU library: $runtime_path" >&2; exit 1; }
           done
           for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request; do
-            grep -Fq "$symbol" "$JIT_EXPORTS" || { echo "JIT QEMU export is missing: $symbol" >&2; exit 1; }
-            grep -Fq "$symbol" "$TCI_EXPORTS" || { echo "TCI QEMU export is missing: $symbol" >&2; exit 1; }
+            grep -Eq " _?$symbol$" "$JIT_EXPORTS" || { echo "JIT QEMU export is missing: $symbol" >&2; exit 1; }
+            grep -Eq " _?$symbol$" "$TCI_EXPORTS" || { echo "TCI QEMU export is missing: $symbol" >&2; exit 1; }
           done
           grep -Eq ' _?isteam_qemu_set_jit_callbacks$' "$JIT_EXPORTS" || { echo "QEMU StikDebug JIT callback export is missing from JIT mode." >&2; exit 1; }
           if grep -Eq ' _?isteam_qemu_set_jit_callbacks$' "$TCI_EXPORTS"; then
             echo "No-JIT TCI runtime must not export the StikDebug JIT callback." >&2
             exit 1
           fi
-          RUNTIME_REL="$JIT_RUNTIME_REL"
-
           # The IPA must contain both runtime modes, not just validate an artifact
           # that is left behind in the runner workspace.
           mkdir -p "$APP/Frameworks" "$APP/QEMU"
@@ -234,6 +232,10 @@ jobs:
           cmp -s "$APP/QEMU/JIT/runtime-library-path.txt" "$JIT_MANIFEST" || { echo "Embedded JIT manifest differs from the validated artifact." >&2; exit 1; }
           cmp -s "$APP/QEMU/TCI/runtime-library-path.txt" "$TCI_MANIFEST" || { echo "Embedded TCI manifest differs from the validated artifact." >&2; exit 1; }
           test -s "$APP/QEMU/runtime-mode-manifest.txt" || { echo "Embedded QEMU mode manifest is missing." >&2; exit 1; }
+          grep -Fq "JIT=$JIT_RUNTIME_REL" "$APP/QEMU/runtime-mode-manifest.txt" || { echo "Embedded mode manifest does not identify the JIT library." >&2; exit 1; }
+          grep -Fq "TCI=$TCI_RUNTIME_REL" "$APP/QEMU/runtime-mode-manifest.txt" || { echo "Embedded mode manifest does not identify the TCI library." >&2; exit 1; }
+          cmp -s "$APP/QEMU/JIT/exports.txt" "$JIT_EXPORTS" || { echo "Embedded JIT exports differ from the validated artifact." >&2; exit 1; }
+          cmp -s "$APP/QEMU/TCI/exports.txt" "$TCI_EXPORTS" || { echo "Embedded TCI exports differ from the validated artifact." >&2; exit 1; }
           test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
 
           mkdir -p build/Payload
