@@ -42,5 +42,15 @@ class ELFLoaderCopyTests(unittest.TestCase):
         self.assertNotIn("loadSegments.contains(where:", relocations)
 
 
+    def test_static_pie_relocation_lookup_disambiguates_shadowed_helper(self):
+        root = Path(__file__).resolve().parents[2]
+        loader = (root / "src" / "Runtime" / "ELF64Loader.swift").read_text(encoding="utf-8")
+        relocation = loader.split("private func applyStaticPIERelocations(", 1)[1].split(
+            "private func loadSegment(containing", 1
+        )[0]
+        self.assertIn("fileOffset: UInt64", relocation)
+        self.assertIn("guard let relaFileOffset = self.fileOffset(", relocation)
+        self.assertNotIn("guard let relaFileOffset = fileOffset(", relocation)
+
 if __name__ == "__main__":
     unittest.main()
