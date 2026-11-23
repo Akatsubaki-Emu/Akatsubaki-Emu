@@ -20,36 +20,69 @@ OBJC_ARGUMENTS = {
 }
 
 
-def patch_objc_compile_flag(source: str) -> str:
-    if source.count(OBJC_BLOCK_MARKER) != 1:
-        raise SystemExit("QEMU meson.build changed: Objective-C compiler block not found exactly once")
-    block_start = source.find(OBJC_BLOCK_MARKER)
-    block_end = source.find("endif", block_start)
-    if block_end < 0:
-        raise SystemExit("QEMU meson.build changed: Objective-C compiler block is unterminated")
-    block = source[block_start:block_end]
+def _objc_conditional_blocks(source: str):
+    """Return complete Objective-C conditional blocks without assuming there is only one."""
+    lines = source.splitlines(keepends=True)
+    blocks = []
+    for start, line in enumerate(lines):
+        if line.strip() != OBJC_BLOCK_MARKER:
+            continue
+        depth = 1
+        end = start + 1
+        while end < len(lines) and depth:
+            token = lines[end].strip()
+            if token.startswith("if "):
+                depth += 1
+            elif token == "endif":
+                depth -= 1
+            end += 1
+        if depth:
+            raise SystemExit("QEMU meson.build changed: Objective-C conditional block is unterminated")
+        blocks.append((start, end, "".join(lines[start:end])))
+    return lines, blocks
 
-    patched_forms = [value for value in OBJC_ARGUMENTS.values() if value in block]
-    patched_outside_block = [
-        value for value in OBJC_ARGUMENTS.values()
-        if source.count(value) != block.count(value)
+
+def patch_objc_compile_flag(source: str) -> str:
+    lines, blocks = _objc_conditional_blocks(source)
+    if not blocks:
+        raise SystemExit("QEMU meson.build changed: Objective-C compiler-argument block not found")
+
+    anchors = [anchor for anchor in OBJC_ARGUMENTS if source.count(anchor)]
+    if len(anchors) > 1 or any(source.count(anchor) > 1 for anchor in OBJC_ARGUMENTS):
+        raise SystemExit("QEMU meson.build changed: duplicate Objective-C compiler argument anchor")
+
+    patched_forms = [form for form in OBJC_ARGUMENTS.values() if source.count(form)]
+    if len(patched_forms) > 1 or any(source.count(form) > 1 for form in OBJC_ARGUMENTS.values()):
+        raise SystemExit("QEMU meson.build changed: duplicate Objective-C compiler flag patch")
+
+    target_blocks = [
+        (start, end, block)
+        for start, end, block in blocks
+        if any(anchor in block for anchor in OBJC_ARGUMENTS)
+        or any(form in block for form in OBJC_ARGUMENTS.values())
     ]
-    if patched_outside_block:
-        raise SystemExit("QEMU meson.build changed: Objective-C compiler flag is outside its compiler block")
+    if len(target_blocks) != 1:
+        raise SystemExit("QEMU meson.build changed: Objective-C compiler-argument block not found exactly once")
+
+    block_start, block_end, block = target_blocks[0]
     if patched_forms:
-        if len(patched_forms) != 1 or block.count(patched_forms[0]) != 1:
-            raise SystemExit("QEMU meson.build changed: duplicate Objective-C compiler flag patch")
-        if any(anchor in block for anchor in OBJC_ARGUMENTS):
-            raise SystemExit("QEMU meson.build changed: unpatched Objective-C compiler call remains")
+        patched = patched_forms[0]
+        if block.count(patched) != 1 or anchors:
+            raise SystemExit("QEMU meson.build changed: mixed or misplaced Objective-C compiler flag patch")
         return source
 
-    matches = [anchor for anchor in OBJC_ARGUMENTS if block.count(anchor) == 1]
-    if len(matches) != 1 or any(block.count(anchor) for anchor in OBJC_ARGUMENTS if anchor not in matches):
+    if len(anchors) != 1:
         raise SystemExit("QEMU meson.build changed: Objective-C compiler argument anchor not found exactly once")
-    anchor = matches[0]
+    anchor = anchors[0]
+    if block.count(anchor) != 1:
+        raise SystemExit("QEMU meson.build changed: Objective-C compiler argument anchor is outside its compiler block")
+
     patched = OBJC_ARGUMENTS[anchor]
-    position = block_start + block.find(anchor)
-    return source[:position] + patched + source[position + len(anchor):]
+    position = block_start
+    block_offset = block.find(anchor)
+    line_offset = sum(len(item) for item in lines[:block_start])
+    insertion = line_offset + block_offset
+    return source[:insertion] + patched + source[insertion + len(anchor):]
 
 
 def patch_source(source: str, runtime_path: str) -> str:
@@ -112,8 +145,10 @@ def patch_source(source: str, runtime_path: str) -> str:
     patched = "\n".join(lines) + ("\n" if source.endswith("\n") else "")
     if new_probe not in patched or marker not in patched:
         raise SystemExit("QEMU meson.build patch verification failed")
-    if patched.count(OBJC_BLOCK_MARKER) != 1 or not any(value in patched for value in OBJC_ARGUMENTS.values()):
-        raise SystemExit("QEMU meson.build patch verification failed: Objective-C compiler flag was not applied")
+    if (not _objc_conditional_blocks(patched)[1]
+            or sum(patched.count(value) for value in OBJC_ARGUMENTS.values()) != 1
+            or any(patched.count(anchor) for anchor in OBJC_ARGUMENTS)):
+        raise SystemExit("QEMU meson.build patch verification failed: Objective-C compiler flag was not applied exactly once")
     if "add_project_link_arguments('-Wl,-force_load,'" in patched:
         raise SystemExit("Obsolete project-level compiler-runtime patch remains")
     return patched
