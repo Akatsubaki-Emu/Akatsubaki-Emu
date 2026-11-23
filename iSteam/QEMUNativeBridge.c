@@ -129,7 +129,6 @@ bool isteam_qemu_validate_library(const char *library_path, bool requires_jit,
         if (error_buffer && error_capacity > 0) {
             snprintf(error_buffer, (size_t)error_capacity,
                      "QEMU library has missing lifecycle exports or an incompatible JIT mode: %s%s%s%s%s",
-                     requires_jit ? "lifecycle/JIT" : "lifecycle",
                      has_init ? "" : "qemu_init ",
                      has_main_loop ? "" : "qemu_main_loop ",
                      has_cleanup ? "" : "qemu_cleanup ",
@@ -207,7 +206,6 @@ bool isteam_qemu_start(int argc, const char * const *argv,
         if (error_buffer && error_capacity > 0) {
             snprintf(error_buffer, (size_t)error_capacity,
                      "QEMU library has missing lifecycle exports or an incompatible JIT mode (qemu_init, qemu_main_loop, qemu_cleanup, qemu_system_shutdown_request%s)",
-                     requires_jit ? "lifecycle/JIT" : "lifecycle",
                      requires_jit ? ", isteam_qemu_set_jit_callbacks" : "");
         }
         clear_starting();
