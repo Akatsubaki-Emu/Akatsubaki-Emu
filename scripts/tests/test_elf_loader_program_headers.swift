@@ -15,7 +15,62 @@ final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
     init(size: UInt64) { self.size = size; bytes = [UInt8](repeating: 0, count: Int(size)) }
-    func clear() { bytes = [UInt8](repeating: 0, count: Int(size)) }
+    static let pageSize: UInt64 = 4096
+    private var permissionsEnabled = false
+    private var pagePermissions: [UInt64: UInt8] = [:]
+
+    func clear() {
+        bytes = [UInt8](repeating: 0, count: Int(size))
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = false
+    }
+
+    // Mirror the production GuestMemory page-permission API used by ELF64Loader.
+    func beginMapping() -> Bool {
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = true
+        return true
+    }
+
+    func map(offset: UInt64, length: UInt64, permissions: UInt8, merge: Bool = false) -> Bool {
+        guard permissionsEnabled, permissions & ~UInt8(7) == 0,
+              length > 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / Self.pageSize
+        let last = (offset + length - 1) / Self.pageSize
+        for page in first...last {
+            let previous = pagePermissions[page] ?? 0
+            pagePermissions[page] = merge ? previous | permissions : permissions
+        }
+        return true
+    }
+
+    func protect(offset: UInt64, length: UInt64, permissions: UInt8) -> Bool {
+        guard permissionsEnabled, permissions & ~UInt8(7) == 0,
+              offset % Self.pageSize == 0, length > 0,
+              offset <= size, length <= size - offset else { return false }
+        let first = offset / Self.pageSize
+        let last = (offset + length - 1) / Self.pageSize
+        for page in first...last where pagePermissions[page] == nil { return false }
+        for page in first...last { pagePermissions[page] = permissions }
+        return true
+    }
+
+    func unmap(offset: UInt64, length: UInt64) -> Bool {
+        guard permissionsEnabled, offset % Self.pageSize == 0, length > 0,
+              offset <= size, length <= size - offset else { return false }
+        let first = offset / Self.pageSize
+        let last = (offset + length - 1) / Self.pageSize
+        for page in first...last {
+            pagePermissions.removeValue(forKey: page)
+            let start = page * Self.pageSize
+            let end = min(size, start + Self.pageSize)
+            if start < end {
+                bytes.replaceSubrange(Int(start)..<Int(end),
+                                      with: repeatElement(0, count: Int(end - start)))
+            }
+        }
+        return true
+    }
     func zero(offset: UInt64, length: UInt64) -> Bool {
         guard offset <= size, length <= size - offset else { return false }
         let start = Int(offset), end = start + Int(length)
