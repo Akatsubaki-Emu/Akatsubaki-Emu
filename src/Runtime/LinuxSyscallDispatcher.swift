@@ -11,6 +11,7 @@ final class LinuxSyscallDispatcher {
     private var initialProgramBreak: UInt64 = 0
     private var programBreak: UInt64 = 0
     private var mmapCursor: UInt64 = 0
+    private var minimumMmapCursor: UInt64 = 0
     private var stackBase: UInt64 = 0
     private var mappedRanges: [Range<UInt64>] = []
     private var closedStandardDescriptorMask: UInt8 = 0
@@ -31,6 +32,7 @@ final class LinuxSyscallDispatcher {
         self.stackBase = stackBase
         let (rawCursor, overflow) = initial.addingReportingOverflow(0x10000)
         let minimumCursor = overflow ? UInt64.max : Self.alignUp(rawCursor)
+        minimumMmapCursor = minimumCursor
         let preferred = max(minimumCursor, 0x10000000)
         mmapCursor = preferred < stackBase ? preferred : minimumCursor
         mappedRanges.removeAll(keepingCapacity: true)
@@ -51,6 +53,7 @@ final class LinuxSyscallDispatcher {
         closedStandardDescriptorMask = 0
         let (rawCursor, overflow) = initialProgramBreak.addingReportingOverflow(0x10000)
         let minimumCursor = overflow ? UInt64.max : Self.alignUp(rawCursor)
+        minimumMmapCursor = minimumCursor
         let preferred = max(minimumCursor, 0x10000000)
         mmapCursor = preferred < stackBase ? preferred : minimumCursor
     }
@@ -220,22 +223,28 @@ final class LinuxSyscallDispatcher {
         let upperLimit = min(firstMapping, stackGuard)
         guard requested >= initialProgramBreak, requested <= upperLimit,
               requested <= memory.size else { return programBreak }
-        let oldPageEnd = Self.alignUp(programBreak)
+        let previousBreak = programBreak
+        let oldPageEnd = Self.alignUp(previousBreak)
         let newPageEnd = Self.alignUp(requested)
-        if requested > programBreak {
-            guard memory.zero(offset: programBreak, length: requested - programBreak) else { return programBreak }
+        if requested > previousBreak {
+            guard memory.zero(offset: previousBreak, length: requested - previousBreak) else { return previousBreak }
             if newPageEnd > oldPageEnd,
                !memory.map(offset: oldPageEnd, length: newPageEnd - oldPageEnd, permissions: 3) {
-                return programBreak
+                return previousBreak
             }
-        } else if requested < programBreak {
-            guard memory.zero(offset: requested, length: programBreak - requested) else { return programBreak }
+        } else if requested < previousBreak {
+            guard memory.zero(offset: requested, length: previousBreak - requested) else { return previousBreak }
             if oldPageEnd > newPageEnd,
                !memory.unmap(offset: newPageEnd, length: oldPageEnd - newPageEnd) {
-                return programBreak
+                return previousBreak
             }
         }
         programBreak = requested
+        if requested < previousBreak {
+            // Reuse the range released by brk shrink. The free-address search
+            // still skips every live mapping and every mapped guest page.
+            mmapCursor = max(minimumMmapCursor, Self.alignUp(requested))
+        }
         return programBreak
     }
 
