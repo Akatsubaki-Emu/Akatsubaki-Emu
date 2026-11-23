@@ -29,10 +29,7 @@ final class LinuxSyscallDispatcher {
         initialProgramBreak = initial
         self.programBreak = initial
         self.stackBase = stackBase
-        let (rawCursor, overflow) = initial.addingReportingOverflow(0x10000)
-        let minimumCursor = overflow ? UInt64.max : Self.alignUp(rawCursor)
-        let preferred = max(minimumCursor, 0x10000000)
-        mmapCursor = preferred < stackBase ? preferred : minimumCursor
+        mmapCursor = defaultMmapCursor(for: initial)
         mappedRanges.removeAll(keepingCapacity: true)
         closedStandardDescriptorMask = 0
     }
@@ -47,10 +44,7 @@ final class LinuxSyscallDispatcher {
         programBreak = initialProgramBreak
         mappedRanges.removeAll(keepingCapacity: true)
         closedStandardDescriptorMask = 0
-        let (rawCursor, overflow) = initialProgramBreak.addingReportingOverflow(0x10000)
-        let minimumCursor = overflow ? UInt64.max : Self.alignUp(rawCursor)
-        let preferred = max(minimumCursor, 0x10000000)
-        mmapCursor = preferred < stackBase ? preferred : minimumCursor
+        mmapCursor = defaultMmapCursor(for: initialProgramBreak)
     }
 
     func dispatch(number: UInt64, arguments: [UInt64]) -> Outcome? {
@@ -213,17 +207,31 @@ final class LinuxSyscallDispatcher {
 
     private func setBreak(_ requested: UInt64) -> UInt64 {
         if requested == 0 { return programBreak }
-        let firstMapping = mappedRanges.first?.lowerBound ?? mmapCursor
-        let upperLimit = min(firstMapping, stackBase >= 4096 ? stackBase - 4096 : 0)
+        let stackGuard = stackBase >= 4096 ? stackBase - 4096 : 0
+        let firstMapping = mappedRanges.first?.lowerBound ?? stackGuard
+        let upperLimit = min(firstMapping, stackGuard)
         guard requested >= initialProgramBreak, requested <= upperLimit,
               requested <= memory.size else { return programBreak }
-        if requested > programBreak {
-            guard memory.zero(offset: programBreak, length: requested - programBreak) else { return programBreak }
-        } else if requested < programBreak {
-            guard memory.zero(offset: requested, length: programBreak - requested) else { return programBreak }
+        let previousBreak = programBreak
+        if requested > previousBreak {
+            guard memory.zero(offset: previousBreak, length: requested - previousBreak) else { return programBreak }
+        } else if requested < previousBreak {
+            guard memory.zero(offset: requested, length: previousBreak - requested) else { return programBreak }
         }
         programBreak = requested
+        if requested > previousBreak {
+            mmapCursor = max(mmapCursor, Self.alignUp(requested))
+        } else if mappedRanges.isEmpty {
+            mmapCursor = defaultMmapCursor(for: requested)
+        }
         return programBreak
+    }
+
+    private func defaultMmapCursor(for programBreak: UInt64) -> UInt64 {
+        let (rawCursor, overflow) = programBreak.addingReportingOverflow(0x10000)
+        let minimumCursor = overflow ? UInt64.max : Self.alignUp(rawCursor)
+        let preferred = max(minimumCursor, 0x10000000)
+        return preferred < stackBase ? preferred : minimumCursor
     }
 
     private func mapAnonymous(address requested: UInt64, length: UInt64, flags: UInt64) -> UInt64 {
