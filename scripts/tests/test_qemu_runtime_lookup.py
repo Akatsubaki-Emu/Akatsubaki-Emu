@@ -80,9 +80,31 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertIn("validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory,", inspect)
         self.assertNotIn("validateLoadableLibrary", locate)
         self.assertIn("return .ready(libraryURL: library, dataDirectory: dataDirectory)", locate)
-        self.assertIn("switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", runtime)
+        self.assertIn("var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", runtime)
         self.assertNotIn("switch QEMURuntimeStatus.locate()", runtime)
 
+
+    def test_jit_request_falls_back_to_packaged_tci_when_jit_is_unavailable(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        start = runtime.split("func start(configuration:", 1)[1].split(
+            "private static func containedRegularFile", 1
+        )[0]
+        self.assertIn("let requestedJIT = configuration.accelerator == .jit", start)
+        self.assertIn("var effectiveConfiguration = configuration", start)
+        self.assertIn("if requiresJIT && !JITCoordinator.shared.isQEMUJITReady", start)
+        self.assertIn("requiresJIT = false", start)
+        self.assertIn("effectiveConfiguration.accelerator = .tcg", start)
+        self.assertIn("var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", start)
+        self.assertIn("if case .unavailable(let jitReason) = runtimeStatus, requiresJIT", start)
+        self.assertIn("let tciStatus = QEMURuntimeStatus.inspect(requiresJIT: false)", start)
+        self.assertIn("case .ready:", start)
+        self.assertIn("runtimeStatus = tciStatus", start)
+        self.assertIn("Neither QEMU execution mode is available", start)
+        self.assertIn("QEMUCommandBuilder(configuration: effectiveConfiguration)", start)
+        self.assertIn("libraryPath, requiresJIT, error", start)
+        self.assertLess(start.index("runtimeStatus = tciStatus"),
+                        start.index("QEMUCommandBuilder(configuration: effectiveConfiguration)"))
 
     def test_explicit_firmware_uses_only_its_same_directory_variable_store(self):
         root = Path(__file__).resolve().parents[2]
