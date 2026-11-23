@@ -307,6 +307,51 @@ struct LinuxSyscallDispatcherTests {
         precondition(preservedSuffixResult == 0)
         precondition(memory.permission(at: 0x49000) == 1)
 
+        // With no mmap ranges, the fallback mmap cursor is only a hint.
+        // A 256 MiB guest must be able to grow its heap well beyond the
+        // initial 64 KiB cursor gap, while keeping mmap above the new break.
+        let largeGuestSize: UInt64 = 256 * 1024 * 1024
+        let largeMemory = GuestMemory(size: largeGuestSize)
+        precondition(largeMemory.beginMapping())
+        let largeDispatcher = LinuxSyscallDispatcher(memory: largeMemory)
+        let largeInitialBreak: UInt64 = 4 * 1024 * 1024
+        try largeDispatcher.configure(programBreak: largeInitialBreak, stackBase: largeGuestSize)
+        let expandedBreak = largeDispatcher.dispatch(
+            number: 12, arguments: [8 * 1024 * 1024, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let expandedBreakValue) = expandedBreak else { preconditionFailure() }
+        precondition(expandedBreakValue == 8 * 1024 * 1024)
+        precondition(largeMemory.permission(at: largeInitialBreak) == 3)
+
+        let mmapAfterExpandedBreak = largeDispatcher.dispatch(
+            number: 9, arguments: [0, 4096, 3, 0x22, UInt64.max, 0]
+        )!
+        guard case .returned(let mmapAfterExpandedBreakAddress) = mmapAfterExpandedBreak else {
+            preconditionFailure()
+        }
+        precondition(mmapAfterExpandedBreakAddress == expandedBreakValue)
+        let blockedByFirstMapping = largeDispatcher.dispatch(
+            number: 12, arguments: [9 * 1024 * 1024, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let blockedBreakValue) = blockedByFirstMapping else { preconditionFailure() }
+        precondition(blockedBreakValue == expandedBreakValue)
+
+        // With no mmap ranges, the stack guard remains an independent ceiling.
+        let guardMemory = GuestMemory(size: 32 * 1024 * 1024)
+        precondition(guardMemory.beginMapping())
+        let guardDispatcher = LinuxSyscallDispatcher(memory: guardMemory)
+        try guardDispatcher.configure(programBreak: 4 * 1024 * 1024, stackBase: guardMemory.size)
+        let atStackGuard = guardDispatcher.dispatch(
+            number: 12, arguments: [guardMemory.size - 4096, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let atStackGuardValue) = atStackGuard else { preconditionFailure() }
+        precondition(atStackGuardValue == guardMemory.size - 4096)
+        let beyondStackGuard = guardDispatcher.dispatch(
+            number: 12, arguments: [guardMemory.size, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let beyondStackGuardValue) = beyondStackGuard else { preconditionFailure() }
+        precondition(beyondStackGuardValue == atStackGuardValue)
+
         let outputLog = EmulationLog()
         let outputDispatcher = LinuxSyscallDispatcher(memory: memory, log: outputLog)
         try outputDispatcher.configure(programBreak: 0x41000, stackBase: 0x3F0000)
