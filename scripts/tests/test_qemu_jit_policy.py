@@ -39,9 +39,9 @@ class QEMUJITPolicyTests(unittest.TestCase):
     def test_build_documentation_does_not_claim_a_tci_fallback(self):
         root = Path(__file__).resolve().parents[2]
         docs = (root / "docs" / "QEMU_BUILD_WORKFLOW.md").read_text(encoding="utf-8")
-        self.assertIn("Only the JIT-backed QEMU runtime is currently built and packaged.", docs)
-        self.assertIn("The no-JIT TCI runtime is not currently built or packaged.", docs)
-        self.assertIn("Settings UI disables the unsupported TCI option", docs)
+        self.assertIn("configured to build and package both JIT and threaded-TCI variants", docs)
+        self.assertIn("no successful dual-runtime artifact or physical-device guest boot has been verified", docs)
+        self.assertIn("Settings UI keeps TCI unavailable until", docs)
 
 
 if __name__ == "__main__":
