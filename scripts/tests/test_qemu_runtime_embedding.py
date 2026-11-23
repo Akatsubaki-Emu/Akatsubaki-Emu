@@ -10,7 +10,7 @@ CALLBACK = "isteam_qemu_set_jit_callbacks"
 
 
 def export_report(symbols):
-    return "".join(f"0000000000000000 T _{symbol}\\n" for symbol in symbols)
+    return "".join(f"0000000000000000 T _{symbol}\n" for symbol in symbols)
 
 
 class QEMURuntimeEmbeddingTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class QEMURuntimeEmbeddingTests(unittest.TestCase):
             ("TCI", "Frameworks/TCI/QEMU.framework/QEMU"),
         ):
             qemu = self.runtime / "QEMU" / mode
-            (qemu / "runtime-library-path.txt").write_text(relative + "\\n", encoding="utf-8")
+            (qemu / "runtime-library-path.txt").write_text(relative + "\n", encoding="utf-8")
             symbols = LIFECYCLE + ([CALLBACK] if mode == "JIT" else [])
             (qemu / "exports.txt").write_text(export_report(symbols), encoding="utf-8")
             (qemu / "bios.bin").write_bytes(mode.encode())
@@ -78,7 +78,7 @@ class QEMURuntimeEmbeddingTests(unittest.TestCase):
 
     def test_rejects_manifest_path_traversal(self):
         manifest = self.runtime / "QEMU/TCI/runtime-library-path.txt"
-        manifest.write_text("Frameworks/../../outside.dylib\\n", encoding="utf-8")
+        manifest.write_text("Frameworks/../../outside.dylib\n", encoding="utf-8")
         result = self.run_embed()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unsafe component", result.stderr)
@@ -98,6 +98,12 @@ class QEMURuntimeEmbeddingTests(unittest.TestCase):
         result = self.run_embed()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("TCI runtime-library-path.txt is missing", result.stderr)
+
+    def test_release_workflow_uses_mode_aware_embedding_script(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        self.assertIn('bash scripts/embed-qemu-runtime.sh "$RUNTIME_DIR" "$APP"', workflow)
+        self.assertNotIn('RUNTIME_DIR/QEMU/runtime-library-path.txt', workflow)
 
 
 if __name__ == "__main__":
