@@ -101,6 +101,7 @@ jobs:
           test ! -e .gitlab-ci.yml || { echo "GitLab CI must not be maintained; GitHub Actions owns validation." >&2; exit 1; }
           grep -Fq "swift-runtime-tests:" .github/workflows/validate-repository.yml
           grep -Fq "test_static_elf_execution.swift" .github/workflows/validate-repository.yml
+          grep -Fq "test_guest_memory_native_integration.swift" .github/workflows/validate-repository.yml
           grep -Fq "python -m unittest discover -s scripts/tests -p 'test_*.py'" .github/workflows/validate-repository.yml
           grep -Fq "test-native-guest-memory" .github/workflows/validate-repository.yml
           grep -Fq "test-qemu-native-bridge" .github/workflows/validate-repository.yml
@@ -297,6 +298,14 @@ jobs:
 
       - name: Verify Swift toolchain
         run: swiftc --version
+
+      - name: Compile and run production Swift/C++ guest-memory integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ -std=c++17 -Wall -Wextra -Werror -pthread -I iSteam -c iSteam/NativeGuestMemory.cpp -o "$RUNNER_TEMP/native-guest-memory.o"
+          swiftc -parse-as-library -swift-version 5 -import-objc-header iSteam/NativeGuestMemory.h src/Runtime/GuestMemory.swift src/Runtime/LinuxSyscallDispatcher.swift scripts/tests/test_guest_memory_native_integration.swift "$RUNNER_TEMP/native-guest-memory.o" -Xlinker -lc++ -o "$RUNNER_TEMP/test-guest-memory-native-integration"
+          "$RUNNER_TEMP/test-guest-memory-native-integration"
 
       - name: Compile and run Swift runtime tests
         shell: bash
