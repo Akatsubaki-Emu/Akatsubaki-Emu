@@ -45,8 +45,8 @@ if path_is_within "$OUT" "$ARCHIVE_ROOT" || path_is_within "$ARCHIVE_ROOT" "$OUT
   echo "Refusing output directory that overlaps the input UTM archive: $OUT" >&2
   exit 2
 fi
-APP="$ARCHIVE_ROOT/Products/Applications/UTM.app"
-test -d "$APP" || { echo "UTM.app missing from archive: $APP" >&2; exit 1; }
+APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"
+test -d "$APP" || { echo "UTM SE.app missing from archive: $APP" >&2; exit 1; }
 
 rm -rf "$OUT"
 mkdir -p "$OUT/QEMU" "$OUT/Frameworks"
