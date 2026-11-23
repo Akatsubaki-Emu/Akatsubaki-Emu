@@ -601,5 +601,15 @@ build unrelated.dylib: c_LINKER other
             verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
 
 
+    def test_tci_build_uses_upstream_ios_se_scheme_and_product(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        packager = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
+        self.assertIn("./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI", workflow)
+        self.assertIn("UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app", workflow)
+        self.assertNotIn("-s iOS-TCI", workflow)
+        self.assertIn('APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"', packager)
+
+
 if __name__ == "__main__":
     unittest.main()

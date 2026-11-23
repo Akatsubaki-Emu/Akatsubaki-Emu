@@ -213,6 +213,7 @@ required = {
         "iSteam/JIT26Protocol.c",
     ],
     "scripts/tests/test_qemu_build_patches.py": [
+        "test_tci_build_uses_upstream_ios_se_scheme_and_product",
         "test_qemu_dependency_cache_version_matches_validation_contracts",
         "test_qemu_runtime_pr_workflow_calls_reusable_build",
         "test_qemu_stikjit_patcher_exports_required_runtime_symbols",
@@ -1116,7 +1117,25 @@ required = {
         "- sdk: IOKit.framework",
         "-Wl,-exported_symbol,_iSteamJITGetProtocolMode",
     ],
+    "scripts/patch_qemu_tci_exports.py": [
+        "REQUIRED_EXPORTS",
+        "SHUTDOWN_EXPORT",
+        "JIT_CALLBACK_EXPORT",
+        "def patch_exported_symbols(source: str) -> str",
+        "QEMU TCI shutdown export verification failed",
+        "QEMU TCI export list still contains the StikJIT callback",
+    ],
+    "scripts/tests/test_qemu_tci_exports.py": [
+        "def test_tci_exports_add_shutdown_and_remove_jit_callback",
+        "def test_patch_is_idempotent",
+        "def test_missing_lifecycle_export_is_rejected",
+        "def test_duplicate_shutdown_export_is_rejected",
+        "def test_duplicate_jit_callback_is_rejected",
+        "def test_export_file_is_updated_idempotently",
+    ],
     "scripts/patch_utm_qemu_ios.py": [
+        "ISTEAM_QEMU_TCI_EXPORT_PATCHER is required for TCI mode",
+        'python3 "$ISTEAM_QEMU_TCI_EXPORT_PATCHER" "$QEMU_DIR/system/qemu.symbols"',
         "has_function_posix_memalign = true",
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',

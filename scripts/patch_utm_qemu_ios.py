@@ -3,6 +3,13 @@
 from pathlib import Path
 import sys
 
+TCI_BUILD_FAMILY_MARKER = 'PLATFORM_FAMILY_NAME="$PLATFORM_FAMILY_PREFIX-TCI"'
+
+
+def validate_tci_build_directory(source: str) -> None:
+    if "ios-tci" not in source or TCI_BUILD_FAMILY_MARKER not in source:
+        raise SystemExit("UTM build_dependencies.sh no longer isolates the iOS TCI build directory")
+
 
 def replace_once(source: str, old: str, new: str, label: str) -> str:
     if new in source:
@@ -54,7 +61,8 @@ def patch_script(source: str) -> str:
     qemu_build = 'build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS'
     qemu_patch_call = (
         'case "$PLATFORM" in\n'
-        '    *-tci) echo "TCI mode: skipping the StikJIT executable-region patch." ;;\n'
+        '    *-tci) : "${ISTEAM_QEMU_TCI_EXPORT_PATCHER:?ISTEAM_QEMU_TCI_EXPORT_PATCHER is required for TCI mode}"\n'
+        '           python3 "$ISTEAM_QEMU_TCI_EXPORT_PATCHER" "$QEMU_DIR/system/qemu.symbols" ;;\n'
         '    *) : "${ISTEAM_QEMU_JIT_PATCHER:?ISTEAM_QEMU_JIT_PATCHER is required for JIT mode}"\n'
         '       python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c" ;;\n'
         'esac\n'
@@ -86,7 +94,8 @@ def patch_script(source: str) -> str:
         'https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}',
         cross_override,
         '*-tci) ;; # TCI_BUILD_FLAGS already selects the threaded interpreter and guest targets.',
-        "TCI mode: skipping the StikJIT executable-region patch.",
+        "ISTEAM_QEMU_TCI_EXPORT_PATCHER is required for TCI mode",
+        'python3 "$ISTEAM_QEMU_TCI_EXPORT_PATCHER" "$QEMU_DIR/system/qemu.symbols"',
         "--target-list=x86_64-softmmu",
         'python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"',
         'python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"',
@@ -103,6 +112,7 @@ def main() -> None:
         raise SystemExit("usage: patch_utm_qemu_ios.py /path/to/UTM/scripts/build_dependencies.sh")
     path = Path(sys.argv[1])
     source = path.read_text(encoding="utf-8")
+    validate_tci_build_directory(source)
     patched = patch_script(source)
     path.write_text(patched, encoding="utf-8")
     print("Installed idempotent iOS QEMU JIT/TCI, Meson-link and pre-build verification hooks.")
