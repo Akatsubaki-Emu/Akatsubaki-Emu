@@ -36,8 +36,7 @@ on:
           - Main
 
 permissions:
-  contents: write
-  actions: write
+  # Default every job to read-only. Only the release publisher may write tags/releases.
 
 
 jobs:
@@ -271,6 +270,8 @@ jobs:
 
   release:
     name: Publish combined ${{ matrix.channel }} release
+    permissions:
+      contents: write
     needs: build
     concurrency:
       # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
