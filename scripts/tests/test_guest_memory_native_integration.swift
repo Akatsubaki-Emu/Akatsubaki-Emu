@@ -21,7 +21,7 @@ struct GuestMemoryNativeIntegrationTests {
         // A read/write page must not be fetchable as guest instructions.
         precondition(memory.readExecuteByte(offset: page) == nil)
         var instructionBytes = [UInt8](repeating: 0, count: 1)
-        precondition(memory.readPrefix(offset: page, maximumLength: 1, into: &instructionBytes) == nil)
+        precondition(memory.readPrefix(offset: page, maximumLength: 1, into: &instructionBytes) == 0)
 
         // RX protection enables instruction fetch but rejects guest writes.
         precondition(memory.protect(offset: page, length: length, permissions: 5))
