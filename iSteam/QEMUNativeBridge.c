@@ -124,17 +124,18 @@ bool isteam_qemu_validate_library(const char *library_path, bool requires_jit,
     bool has_jit_callbacks = dlsym(library, "isteam_qemu_set_jit_callbacks") != NULL;
     dlclose(library);
 
-    if (!has_init || !has_main_loop || !has_cleanup || !has_shutdown
-        || (requires_jit && !has_jit_callbacks)) {
+    const bool jit_export_matches_mode = has_jit_callbacks == requires_jit;
+    if (!has_init || !has_main_loop || !has_cleanup || !has_shutdown || !jit_export_matches_mode) {
         if (error_buffer && error_capacity > 0) {
+            const char *mode_policy_error = "";
+            if (requires_jit && !has_jit_callbacks) mode_policy_error = "missing isteam_qemu_set_jit_callbacks";
+            else if (!requires_jit && has_jit_callbacks) mode_policy_error = "unexpected isteam_qemu_set_jit_callbacks";
             snprintf(error_buffer, (size_t)error_capacity,
-                     "QEMU library is missing required %s exports: %s%s%s%s%s",
-                     requires_jit ? "lifecycle/JIT" : "lifecycle",
-                     has_init ? "" : "qemu_init ",
-                     has_main_loop ? "" : "qemu_main_loop ",
-                     has_cleanup ? "" : "qemu_cleanup ",
-                     has_shutdown ? "" : "qemu_system_shutdown_request ",
-                     (!requires_jit || has_jit_callbacks) ? "" : "isteam_qemu_set_jit_callbacks");
+                     "QEMU %s runtime export validation failed: %s%s%s%s%s%s",
+                     requires_jit ? "JIT" : "TCI",
+                     has_init ? "" : "qemu_init ", has_main_loop ? "" : "qemu_main_loop ",
+                     has_cleanup ? "" : "qemu_cleanup ", has_shutdown ? "" : "qemu_system_shutdown_request ",
+                     mode_policy_error[0] ? "; " : "", mode_policy_error);
         }
         return false;
     }
@@ -201,14 +202,20 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     qemu_cleanup_fn cleanup_fn = (qemu_cleanup_fn)dlsym(library, "qemu_cleanup");
     qemu_shutdown_request_fn shutdown_fn = (qemu_shutdown_request_fn)dlsym(library, "qemu_system_shutdown_request");
     qemu_set_jit_callbacks_fn set_jit_callbacks = (qemu_set_jit_callbacks_fn)dlsym(library, "isteam_qemu_set_jit_callbacks");
-    if (!init_fn || !loop_fn || !cleanup_fn || !shutdown_fn
-        || (requires_jit && !set_jit_callbacks)) {
+    const bool has_jit_callbacks = set_jit_callbacks != NULL;
+    const bool jit_export_matches_mode = has_jit_callbacks == requires_jit;
+    if (!init_fn || !loop_fn || !cleanup_fn || !shutdown_fn || !jit_export_matches_mode) {
         dlclose(library);
         if (error_buffer && error_capacity > 0) {
+            const char *mode_policy_error = "";
+            if (requires_jit && !has_jit_callbacks) mode_policy_error = "missing isteam_qemu_set_jit_callbacks";
+            else if (!requires_jit && has_jit_callbacks) mode_policy_error = "unexpected isteam_qemu_set_jit_callbacks";
             snprintf(error_buffer, (size_t)error_capacity,
-                     "QEMU library lacks required %s exports (qemu_init, qemu_main_loop, qemu_cleanup, qemu_system_shutdown_request%s)",
-                     requires_jit ? "lifecycle/JIT" : "lifecycle",
-                     requires_jit ? ", isteam_qemu_set_jit_callbacks" : "");
+                     "QEMU %s runtime export validation failed: %s%s%s%s%s%s",
+                     requires_jit ? "JIT" : "TCI",
+                     init_fn ? "" : "qemu_init ", loop_fn ? "" : "qemu_main_loop ",
+                     cleanup_fn ? "" : "qemu_cleanup ", shutdown_fn ? "" : "qemu_system_shutdown_request ",
+                     mode_policy_error[0] ? "; " : "", mode_policy_error);
         }
         clear_starting();
         return false;
