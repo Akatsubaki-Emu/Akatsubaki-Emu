@@ -232,6 +232,7 @@ required = {
         "#define mach_vm_protect vm_protect",
         "#define mach_vm_deallocate vm_deallocate",
         "test_release_publication_is_serialized_and_skips_stale_main_builds",
+        "test_release_workflow_embeds_both_qemu_runtime_modes",
     ],
     "scripts/tests/test_jit_coordinator.py": [
         "test_stikdebug_availability_is_limited_to_physical_ios_devices",
