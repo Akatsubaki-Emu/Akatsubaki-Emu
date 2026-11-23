@@ -13,14 +13,12 @@ static atomic_int cleanup_status = -1;
 static atomic_int shutdown_cause = -1;
 static atomic_int shutdown_count = 0;
 static atomic_int stop_requested = 0;
-#ifndef FAKE_QEMU_NO_JIT_CALLBACK
 static atomic_int jit_callbacks_installed = 0;
 
 void isteam_qemu_set_jit_callbacks(bool (*ready)(void), void *(*prepare)(void *, size_t), void (*detach)(void)) {
     if (ready && prepare && detach) atomic_fetch_add(&jit_callbacks_installed, 1);
 }
 int fake_qemu_jit_callbacks_installed(void) { return atomic_load(&jit_callbacks_installed); }
-#endif
 
 static void pause_briefly(void) {
     const struct timespec delay = {.tv_sec = 0, .tv_nsec = 1 * 1000 * 1000};
