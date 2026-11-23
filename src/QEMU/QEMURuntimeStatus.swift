@@ -36,7 +36,7 @@ enum QEMURuntimeStatus {
               dataIsDirectory.boolValue else {
             return .unavailable(requiresJIT
                 ? "The QEMU JIT data directory is missing or unsafe in the app bundle."
-                : "The no-JIT QEMU TCI runtime is not packaged. Build and embed the ios-tci-arm64 runtime.")
+                : "The no-JIT QEMU TCI data directory is missing or unsafe in the app bundle.")
         }
 
         func matchesRuntimeMode(_ candidate: URL) -> Bool {
@@ -114,7 +114,7 @@ enum QEMURuntimeStatus {
         guard let library = candidates.compactMap(validatedRegularLibrary).first else {
             return .unavailable(requiresJIT
                 ? "No embedded x86_64 QEMU JIT device library was found. Run the UTM runtime packaging workflow and code-sign nested code."
-                : "No embedded x86_64 QEMU TCI device library was found. Build the ios-tci-arm64 runtime and embed its TCI framework and data.")
+                : "No embedded x86_64 QEMU TCI device library was found. Rebuild and embed the iOS TCI runtime and data.")
         }
         return .ready(libraryURL: library, dataDirectory: dataDirectory)
     }
