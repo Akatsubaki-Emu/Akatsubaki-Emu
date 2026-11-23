@@ -45,8 +45,8 @@ if path_is_within "$OUT" "$ARCHIVE_ROOT" || path_is_within "$ARCHIVE_ROOT" "$OUT
   echo "Refusing output directory that overlaps the input UTM archive: $OUT" >&2
   exit 2
 fi
-APP="$ARCHIVE_ROOT/Products/Applications/UTM.app"
-test -d "$APP" || { echo "UTM.app missing from archive: $APP" >&2; exit 1; }
+APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"
+test -d "$APP" || { echo "UTM SE.app missing from archive: $APP" >&2; exit 1; }
 
 rm -rf "$OUT"
 mkdir -p "$OUT/QEMU" "$OUT/Frameworks"
@@ -142,7 +142,7 @@ case "$candidate" in
     fi
     ;;
   *)
-    echo "TCI QEMU candidate is outside UTM.app/Frameworks: $candidate" >&2
+    echo "TCI QEMU candidate is outside UTM SE.app/Frameworks: $candidate" >&2
     exit 3
     ;;
 esac
@@ -179,7 +179,7 @@ while IFS= read -r firmware_file; do
   case "$source_dir" in
     "$APP") relative_dir="root" ;;
     "$APP"/*) relative_dir="${source_dir#"$APP"/}" ;;
-    *) echo "Refusing firmware path outside UTM.app: $firmware_file" >&2; exit 5 ;;
+    *) echo "Refusing firmware path outside UTM SE.app: $firmware_file" >&2; exit 5 ;;
   esac
   case "/$relative_dir/" in
     *"/../"*|*"/./"*) echo "Refusing unsafe firmware directory: $relative_dir" >&2; exit 5 ;;
@@ -199,6 +199,7 @@ Target: physical iOS arm64
 Library source: $candidate
 Packaged library path: $runtime_relative
 Architectures: $ARCHS
+Runtime mode: UTM TCI threaded interpreter (no executable-memory JIT)
 Lifecycle and graceful-shutdown exports: verified by nm; StikJIT callback export absent by design
 Data source: $data_dir
 Package layout: Frameworks/ (UTM dependencies), QEMU/ (QEMU data files and runtime manifest)
