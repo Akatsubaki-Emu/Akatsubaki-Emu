@@ -632,7 +632,6 @@ required = {
         "error_buffer && error_capacity > 0",
     ],
     "scripts/tests/fake_qemu_runtime.c": [
-        "#ifndef FAKE_QEMU_NO_JIT_CALLBACK",
         "void isteam_qemu_set_jit_callbacks",
         "fake_qemu_jit_callbacks_installed",
         "void qemu_init(int argc, char *argv[])",
@@ -642,6 +641,13 @@ required = {
         "void qemu_cleanup(int status)",
         "atomic_store(&cleanup_status, status);",
         "atomic_store(&shutdown_cause, cause);",
+    ],
+    "scripts/tests/fake_qemu_runtime_tci.c": [
+        "void qemu_init(int argc, char *argv[])",
+        "int qemu_main_loop(void)",
+        "void qemu_cleanup(int status)",
+        "void qemu_system_shutdown_request(int cause)",
+        "fake_qemu_shutdown_count",
     ],
     "scripts/package-utm-qemu-runtime.sh": [
         " _?isteam_qemu_set_jit_callbacks$",
