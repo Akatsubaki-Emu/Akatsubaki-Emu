@@ -28,6 +28,7 @@ final class ELF64Loader {
         case truncatedHeader, invalidProgramHeaderTable, noLoadableSegments
         case invalidSegment, segmentOutsideGuestMemory, unsupportedMachine(UInt16)
         case unsupportedFileType(UInt16), unsupportedDynamicImage, programHeadersNotMapped, fileTooLarge
+        case memoryPermissionsUnavailable
 
         var errorDescription: String? {
             switch self {
@@ -44,12 +45,15 @@ final class ELF64Loader {
             case .unsupportedFileType(let type): return "Unsupported ELF file type: \(type). Only ET_EXEC and self-contained static ET_DYN images are supported."
             case .unsupportedDynamicImage: return "Dynamic interpreters, dependencies, TLS and non-relative relocations are not supported."
             case .programHeadersNotMapped: return "The ELF program-header table is not mapped inside a loadable segment."
+            case .memoryPermissionsUnavailable: return "ELF page permissions could not be installed safely."
             }
         }
     }
 
     func load(_ url: URL, into memory: GuestMemory,
               expectedArchitecture: VMConfiguration.Architecture) throws -> Image {
+        var mappingCommitted = false
+        defer { if !mappingCommitted { memory.clear() } }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let values: URLResourceValues
@@ -250,6 +254,28 @@ final class ELF64Loader {
                 memory: memory
             )
         }
+        // Keep permissions disabled while the loader writes segments and applies
+        // relocations. Install merged final PT_LOAD permissions before execution.
+        guard memory.beginMapping() else { throw LoadError.memoryPermissionsUnavailable }
+        for segment in segments where segment.memorySize > 0 {
+            let pageStart = segment.guestAddress & ~UInt64(4095)
+            let (segmentEnd, segmentOverflow) = segment.guestAddress.addingReportingOverflow(segment.memorySize)
+            guard !segmentOverflow, segmentEnd <= memory.size else {
+                throw LoadError.segmentOutsideGuestMemory
+            }
+            let (roundedEnd, roundingOverflow) = segmentEnd.addingReportingOverflow(4095)
+            let pageEnd = roundingOverflow ? memory.size : min(roundedEnd & ~UInt64(4095), memory.size)
+            guard pageEnd > pageStart else { throw LoadError.segmentOutsideGuestMemory }
+            var permissions: UInt8 = 0
+            if segment.flags & 0x7 != 0 { permissions |= 1 }
+            if segment.flags & 0x2 != 0 { permissions |= 2 }
+            if segment.flags & 0x1 != 0 { permissions |= 4 }
+            guard memory.map(offset: pageStart, length: pageEnd - pageStart,
+                             permissions: permissions, merge: true) else {
+                throw LoadError.memoryPermissionsUnavailable
+            }
+        }
+        mappingCommitted = true
         let maximumGuestAddress = orderedSegments.reduce(UInt64(0)) { max($0, $1.guestAddress + $1.memorySize) }
         return Image(entryPoint: loadedEntryPoint, machine: machine, segments: segments, loadedByteCount: total,
                      programHeaderAddress: phdrAddress, programHeaderEntrySize: phentsize,
