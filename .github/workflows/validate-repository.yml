@@ -280,8 +280,8 @@ jobs:
           set -euo pipefail
           cc -std=c11 -Wall -Wextra -Werror -pthread -fPIC -shared \
             scripts/tests/fake_qemu_runtime.c -o "$RUNNER_TEMP/libfakeqemu-jit.so"
-          cc -std=c11 -Wall -Wextra -Werror -pthread -DFAKE_QEMU_NO_JIT_CALLBACK -fPIC -shared \
-            scripts/tests/fake_qemu_runtime.c -o "$RUNNER_TEMP/libfakeqemu-tci.so"
+          cc -std=c11 -Wall -Wextra -Werror -pthread -fPIC -shared \
+            scripts/tests/fake_qemu_runtime_tci.c -o "$RUNNER_TEMP/libfakeqemu-tci.so"
           cc -std=c11 -Wall -Wextra -Werror -pthread -I iSteam \
             iSteam/QEMUNativeBridge.c scripts/tests/test_qemu_native_bridge.c -ldl \
             -o "$RUNNER_TEMP/test-qemu-native-bridge"
