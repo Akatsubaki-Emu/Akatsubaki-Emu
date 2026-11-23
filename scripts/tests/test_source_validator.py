@@ -721,5 +721,20 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn(ignored_path, paths_ignore)
         self.assertIn(ignored_path, freshness)
 
+    def test_aot_workflow_gates_native_runtime_steps_on_provider_presence(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
+        self.assertIn("id: native_aot", workflow)
+        self.assertIn(
+            "if [[ -s iSteam/KenranButoAOTExecutableMemory.c && -s src/Runtime/KenranButoAOTExecution.swift ]]; then",
+            workflow,
+        )
+        self.assertEqual(
+            workflow.count("if: steps.native_aot.outputs.available == 'true'"),
+            3,
+        )
+        self.assertIn("Native AOT runtime integration is not present on this branch", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
