@@ -92,7 +92,19 @@ jobs:
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
 
+      - name: Detect W^X executable-memory provider
+        id: executable-memory-provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f iSteam/KenranButoAOTExecutableMemory.c && -f iSteam/JIT26Protocol.h ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping native AOT execution checks: the executable-memory provider is not part of this source revision."
+          fi
       - name: Compile W^X executable-memory provider
+        if: steps.executable-memory-provider.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -100,6 +112,7 @@ jobs:
             -c iSteam/KenranButoAOTExecutableMemory.c \
             -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
       - name: Execute ABI, AOT block and interpreter side-exit tests on ARM64
+        if: steps.executable-memory-provider.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -120,6 +133,7 @@ jobs:
           "$RUNNER_TEMP/test-x86-64-interpreter-aot"
 
       - name: Run a real static ELF guest through the hybrid interpreter/AOT path
+        if: steps.executable-memory-provider.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
