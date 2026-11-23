@@ -61,8 +61,12 @@ def patch_objc_compile_flag(source: str) -> str:
         if any(anchor in block for anchor in OBJC_ARGUMENTS)
         or any(form in block for form in OBJC_ARGUMENTS.values())
     ]
+    if not target_blocks:
+        if patched_forms:
+            raise SystemExit("QEMU meson.build changed: Objective-C compiler flag is outside its compiler block")
+        raise SystemExit("QEMU meson.build changed: Objective-C compiler argument anchor not found exactly once")
     if len(target_blocks) != 1:
-        raise SystemExit("QEMU meson.build changed: Objective-C compiler-argument block not found exactly once")
+        raise SystemExit("QEMU meson.build changed: Objective-C compiler block not found exactly once")
 
     block_start, block_end, block = target_blocks[0]
     if patched_forms:
