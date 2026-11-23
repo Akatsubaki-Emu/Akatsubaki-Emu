@@ -95,6 +95,21 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let shrunkValue) = shrunk else { preconditionFailure() }
         precondition(shrunkValue == 0x41000)
 
+        // The mmap search cursor is not an allocation: brk may grow to the
+        // stack guard, and mmap must then begin above the expanded heap.
+        let expanded = dispatcher.dispatch(number: 12, arguments: [0x60000, 0, 0, 0, 0, 0])!
+        guard case .returned(let expandedValue) = expanded else { preconditionFailure() }
+        precondition(expandedValue == 0x60000)
+        let shrunkAfterExpansion = dispatcher.dispatch(number: 12, arguments: [0x41000, 0, 0, 0, 0, 0])!
+        guard case .returned(let shrunkAfterExpansionValue) = shrunkAfterExpansion else { preconditionFailure() }
+        precondition(shrunkAfterExpansionValue == 0x41000)
+        let regrown = dispatcher.dispatch(number: 12, arguments: [0x60000, 0, 0, 0, 0, 0])!
+        guard case .returned(let regrownValue) = regrown else { preconditionFailure() }
+        precondition(regrownValue == 0x60000)
+        let firstMappingAfterBrk = dispatcher.dispatch(number: 9, arguments: [0, 4096, 3, 0x22, UInt64.max, 0])!
+        guard case .returned(let firstMappingAddress) = firstMappingAfterBrk else { preconditionFailure() }
+        precondition(firstMappingAddress == 0x60000)
+
         precondition(memory.write(Data([0xAA, 0xBB]), offset: 0x40000))
         let heapUnmap = dispatcher.dispatch(number: 11, arguments: [0x40000, 4096, 0, 0, 0, 0])!
         guard case .returned(let heapUnmapValue) = heapUnmap else { preconditionFailure() }
