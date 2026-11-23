@@ -291,6 +291,13 @@ struct WindowsPEImage {
         private var nextOffset: Int?
         private var remainingBytes = 0
 
+        // The synthesized memberwise initializer is private because the cursor
+        // owns private mutable state. Call sites in WindowsPEImage need an
+        // explicit file-visible initializer to construct independent cursors.
+        fileprivate init(image: WindowsPEImage) {
+            self.image = image
+        }
+
         mutating func offset(forRVA rva: UInt32, length: Int) throws -> Int {
             guard length >= 0 else {
                 throw WindowsPEImage.ParseError.malformed("negative RVA length")
