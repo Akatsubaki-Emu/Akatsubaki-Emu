@@ -455,6 +455,10 @@ required = {
         "registers[11] = flags",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
+        "KENRAN_BUTO_AOT_TESTS",
+        "aotExecutor.refreshAvailability()",
+        "aotExecutor.blocksExecuted > 0",
+        "unsupported_LEA_and_syscall_side_exits=verified",
         "Static ET_EXEC execution and static PIE load-bias/relative-relocation checks passed",
         "hello from static ELF",
         "func writeUInt32(_ value: UInt32, offset: UInt64) -> Bool",
@@ -467,6 +471,10 @@ required = {
         "Image/stack overlap should fail.",
     ],
     "scripts/tests/test_x86_64_interpreter.swift": [
+        "KENRAN_BUTO_AOT_TESTS",
+        "aotExecutor.refreshAvailability()",
+        "aotExecutor.blocksExecuted > 0",
+        "interpreter_side_exit=verified",
         "stackPointerInterpreter.setInitialStackPointer(0x100)",
         "precondition(arithmetic.registerValue(3) == 2)",
         "precondition(signed.registerValue(3) == 2)",
