@@ -45,18 +45,18 @@ class QEMUBuildPatchTests(unittest.TestCase):
         # QEMU v10.0.12-utm has separate compiler-configuration and summary
         # blocks. Only the compiler call should receive the iOS workaround.
         source = (
-            "project('qemu', 'c')\\n"
-            "if 'objc' in all_languages\\n"
-            "  objc = meson.get_compiler('objc')\\n"
-            "  add_project_arguments(objc.get_supported_arguments(warn_flags), native: false, language: 'objc')\\n"
-            "endif\\n"
-            "if 'objc' in all_languages\\n"
-            "  summary_info += {'Objective-C compiler': ' '.join(meson.get_compiler('objc').cmd_array())}\\n"
-            "else\\n"
-            "  summary_info += {'Objective-C compiler': false}\\n"
-            "endif\\n"
-            "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\\n"
-            "emulator_link_args = []\\n"
+            "project('qemu', 'c')\n"
+            "if 'objc' in all_languages\n"
+            "  objc = meson.get_compiler('objc')\n"
+            "  add_project_arguments(objc.get_supported_arguments(warn_flags), native: false, language: 'objc')\n"
+            "endif\n"
+            "if 'objc' in all_languages\n"
+            "  summary_info += {'Objective-C compiler': ' '.join(meson.get_compiler('objc').cmd_array())}\n"
+            "else\n"
+            "  summary_info += {'Objective-C compiler': false}\n"
+            "endif\n"
+            "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
+            "emulator_link_args = []\n"
         )
         runtime = "/toolchain/libclang_rt.ios.a"
         once = patch_qemu_meson_ios.patch_source(source, runtime)
