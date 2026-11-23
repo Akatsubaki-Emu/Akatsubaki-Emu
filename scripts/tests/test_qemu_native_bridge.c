@@ -71,14 +71,26 @@ int main(int argc, char **argv) {
     char validation_error[512] = {0};
     assert(isteam_qemu_validate_library(library, requires_jit,
                                         validation_error, (int)sizeof(validation_error)));
-    if (!requires_jit) {
-        memset(validation_error, 0, sizeof(validation_error));
-        assert(!isteam_qemu_validate_library(library, true,
-                                             validation_error, (int)sizeof(validation_error)));
-        assert(strstr(validation_error, "isteam_qemu_set_jit_callbacks") != NULL);
-        assert(dlsym(probe, "isteam_qemu_set_jit_callbacks") == NULL);
-    } else {
+    const bool wrong_mode = !requires_jit;
+    memset(validation_error, 0, sizeof(validation_error));
+    assert(!isteam_qemu_validate_library(library, wrong_mode,
+                                         validation_error, (int)sizeof(validation_error)));
+    assert(strstr(validation_error, "isteam_qemu_set_jit_callbacks") != NULL);
+
+    // A rejected mode mismatch must not reserve the process's one-shot QEMU
+    // lifecycle; the same library must still start in its correct mode below.
+    const char *mode_arguments[] = {"qemu-system-x86_64"};
+    char mode_error[512] = {0};
+    assert(!isteam_qemu_start(1, mode_arguments, library, wrong_mode,
+                              mode_error, (int)sizeof(mode_error)));
+    assert(strstr(mode_error, "isteam_qemu_set_jit_callbacks") != NULL);
+    assert(!isteam_qemu_is_active());
+
+    if (requires_jit) {
+        assert(dlsym(probe, "isteam_qemu_set_jit_callbacks") != NULL);
         assert(read_counter(probe, "fake_qemu_jit_callbacks_installed") == 0);
+    } else {
+        assert(dlsym(probe, "isteam_qemu_set_jit_callbacks") == NULL);
     }
 
     char argumentError[512] = {0};
