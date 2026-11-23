@@ -30,7 +30,7 @@ final class QEMUNativeRuntime {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if requiresJIT && !JITCoordinator.shared.isQEMUJITReady {
             throw RuntimeError.runtimeUnavailable(
-                "The selected QEMU JIT runtime requires physical iOS 26+, the get-task-allow entitlement, and a supported StikDebug protocol. The no-JIT TCI runtime is not packaged yet; enable JIT and try again."
+                "The selected QEMU JIT runtime requires physical iOS 26+, the get-task-allow entitlement, and a supported StikDebug protocol. The no-JIT TCI runtime is packaged but remains unavailable until a physical iOS guest boot is verified; enable JIT and try again."
             )
         }
         #endif
