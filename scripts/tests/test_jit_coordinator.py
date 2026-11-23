@@ -75,6 +75,27 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn('CFSTR("get-task-allow")', protocol_source)
         self.assertNotIn("var hasGetTaskAllow: Bool { false }", source)
 
+    def test_no_jit_tci_is_available_and_unsupported_modes_fall_back_to_tci(self):
+        root = Path(__file__).resolve().parents[2]
+        settings = (root / "src" / "Core" / "RuntimeSettings.swift").read_text(encoding="utf-8")
+        self.assertIn("case .automatic, .qemuJIT, .qemuInterpreter: return true", settings)
+        self.assertIn("case .hypervisor: return false", settings)
+        self.assertIn("return stored.isAvailable ? stored : .qemuInterpreter", settings)
+        self.assertIn("Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG.", settings)
+        self.assertNotIn("no-JIT TCI runtime is not packaged yet", settings)
+
+    def test_launch_ui_falls_back_to_tci_after_jit_handoff_failure(self):
+        root = Path(__file__).resolve().parents[2]
+        launch = (root / "iSteam" / "LaunchSetupViewController.swift").read_text(encoding="utf-8")
+        failure = launch.split("JITCoordinator.shared.requestJIT(from: self, onFailure:", 1)[1].split(
+            "}) { [weak self] in", 1
+        )[0]
+        self.assertIn("QEMURuntimeStatus.inspect(requiresJIT: false)", failure)
+        self.assertIn("var fallbackConfiguration = config", failure)
+        self.assertIn("fallbackConfiguration.accelerator = .tcg", failure)
+        self.assertIn("completeLaunch(configuration: fallbackConfiguration", failure)
+        self.assertIn("No-JIT TCI fallback unavailable", failure)
+
     def test_vm_launch_waits_for_jit_before_starting_qemu(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
