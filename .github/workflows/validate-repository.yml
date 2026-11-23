@@ -298,6 +298,18 @@ jobs:
       - name: Verify Swift toolchain
         run: swiftc --version
 
+      - name: Compile and run production Swift/C++ guest-memory integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ -std=c++17 -Wall -Wextra -Werror -pthread -I iSteam \\
+            -c iSteam/NativeGuestMemory.cpp -o "$RUNNER_TEMP/native-guest-memory.o"
+          swiftc -parse-as-library -swift-version 5 -import-objc-header iSteam/NativeGuestMemory.h \\
+            src/Runtime/GuestMemory.swift scripts/tests/test_guest_memory_native_integration.swift \\
+            "$RUNNER_TEMP/native-guest-memory.o" -Xlinker -lc++ \\
+            -o "$RUNNER_TEMP/test-guest-memory-native-integration"
+          "$RUNNER_TEMP/test-guest-memory-native-integration"
+
       - name: Compile and run Swift runtime tests
         shell: bash
         run: |
