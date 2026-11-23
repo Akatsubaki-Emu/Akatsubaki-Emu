@@ -92,16 +92,26 @@ jobs:
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
 
-      - name: Detect W^X executable-memory provider
+      - name: Validate native AOT provider source set
         id: executable-memory-provider
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -f iSteam/KenranButoAOTExecutableMemory.c && -f iSteam/JIT26Protocol.h ]]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
+          provider=0
+          abi=0
+          adapter=0
+          [[ -f iSteam/KenranButoAOTExecutableMemory.c ]] && provider=1
+          [[ -f iSteam/JIT26Protocol.h ]] && abi=1
+          [[ -f src/Runtime/KenranButoAOTExecution.swift ]] && adapter=1
+          if (( provider == 0 && adapter == 0 )); then
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping native AOT execution checks: the executable-memory provider is not part of this source revision."
+            echo "::notice::Native AOT execution checks are skipped because the provider and execution adapter are not integrated on this revision. Decoder and translation-cache tests still run."
+          elif (( provider == 1 && abi == 1 && adapter == 1 )); then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "All native AOT provider and ABI sources are present."
+          else
+            echo "::error::Native AOT provider integration is partial; provider C source, JIT26 ABI header, and execution adapter must be present together."
+            exit 1
           fi
       - name: Compile W^X executable-memory provider
         if: steps.executable-memory-provider.outputs.available == 'true'
