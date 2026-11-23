@@ -918,6 +918,46 @@ struct InterpreterTests {
         precondition(fsSegment.registerValue(0) == 0x5A)
         precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)
 
+        // ARCH_SET_GS / ARCH_GET_GS must mirror the existing FS path.
+        let gsSegmentMemory = GuestMemory(size: 0x2000)
+        let gsSegmentProgram: [UInt8] = [
+            0xBF, 0x01, 0x10, 0x00, 0x00,
+            0x48, 0xBE, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xB8, 0x9E, 0x00, 0x00, 0x00,
+            0x0F, 0x05,
+            0x65, 0xC6, 0x04, 0x25, 0x20, 0x00, 0x00, 0x00, 0x6B,
+            0xBF, 0x04, 0x10, 0x00, 0x00,
+            0x48, 0xBE, 0x80, 0x1A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xB8, 0x9E, 0x00, 0x00, 0x00,
+            0x0F, 0x05,
+            0x65, 0x8A, 0x04, 0x25, 0x20, 0x00, 0x00, 0x00,
+            0xF4
+        ]
+        precondition(gsSegmentMemory.write(Data(gsSegmentProgram), offset: 0))
+        let gsSegment = X86_64Interpreter(memory: gsSegmentMemory)
+        try gsSegment.reset(entryPoint: 0)
+        let gsSegmentExit = try gsSegment.run(maxInstructions: 11)
+        precondition(gsSegmentExit == .halted)
+        precondition(gsSegmentMemory.readByte(offset: 0x1820) == 0x6B)
+        precondition(gsSegment.registerValue(0) == 0x6B)
+        precondition(gsSegmentMemory.readUInt64(offset: 0x1A80) == 0x1800)
+
+        // Non-canonical user GS bases must fail with -EINVAL and leave execution alive.
+        let invalidGSBaseMemory = GuestMemory(size: 64)
+        let invalidGSBaseProgram: [UInt8] = [
+            0xBF, 0x01, 0x10, 0x00, 0x00,
+            0x48, 0xBE, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00,
+            0xB8, 0x9E, 0x00, 0x00, 0x00,
+            0x0F, 0x05,
+            0xF4
+        ]
+        precondition(invalidGSBaseMemory.write(Data(invalidGSBaseProgram), offset: 0))
+        let invalidGSBase = X86_64Interpreter(memory: invalidGSBaseMemory)
+        try invalidGSBase.reset(entryPoint: 0)
+        let invalidGSBaseExit = try invalidGSBase.run(maxInstructions: 5)
+        precondition(invalidGSBaseExit == .halted)
+        precondition(invalidGSBase.registerValue(0) == UInt64(bitPattern: Int64(-22)))
+
         let unsupportedMemory = GuestMemory(size: 4)
         precondition(unsupportedMemory.write(Data([0x0F, 0x0B]), offset: 0))
         let unsupported = X86_64Interpreter(memory: unsupportedMemory)
