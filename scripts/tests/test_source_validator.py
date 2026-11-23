@@ -556,12 +556,15 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("QEMU TCG + JIT", settings)
         self.assertIn("QEMU TCI (no JIT)", settings)
         self.assertIn("Threaded TCG interpreter (TCI); does not require executable-memory JIT", settings)
+        self.assertIn("case .automatic, .qemuInterpreter: return true", settings)
+        self.assertIn("case .qemuJIT: return JITCoordinator.shared.isQEMUJITReady", settings)
+        self.assertIn("stored selections fall back to QEMU TCI (no JIT)", settings)
         self.assertIn("?? .linuxVM", settings)
         self.assertNotIn("Slower compatibility fallback", settings)
         self.assertIn('configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg"', builder)
         self.assertNotIn("tcg,tb-size=64,split-wx=on", builder)
         self.assertIn("QEMU TCG uses JIT code generation", docs)
-        self.assertIn("The runtime workflow now builds the `iOS` and `iOS-TCI` archives and packages both under `QEMU/JIT` and `QEMU/TCI`", docs)
+        self.assertIn("The runtime workflow now builds the `iOS` JIT archive and the `iOS-SE` TCI archive and packages both under `QEMU/JIT` and `QEMU/TCI`", docs)
         self.assertIn("successful hosted dual-runtime build and physical guest boot remain unverified", docs)
 
     def test_linux_arm32_translator_requires_linux_syscall_abi(self):
