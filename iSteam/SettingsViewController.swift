@@ -113,7 +113,7 @@ final class SettingsViewController: UITableViewController {
             cell.accessoryView = makeSwitch(isOn: UserDefaults.standard.bool(forKey: "iSteam.androidExperiment"), action: #selector(toggleAndroidExperiment(_:)))
         case 9:
             c.text = "\(UIDevice.current.model) · iOS \(UIDevice.current.systemVersion)"
-            c.secondaryText = "Hypervisor.framework is unavailable to ordinary iOS apps. The packaged QEMU path requires physical iOS 26+ and a supported StikDebug JIT session; the no-JIT TCI runtime is not packaged yet. macOS guest boot is disabled on iOS."
+            c.secondaryText = "Hypervisor.framework is unavailable to ordinary iOS apps. QEMU JIT requires physical iOS 26+ and a supported StikDebug session; the packaged QEMU TCI interpreter runs without executable-memory JIT and is the automatic fallback. Physical-device guest boot is not yet verified. macOS guest boot is disabled on iOS."
             c.secondaryTextProperties.numberOfLines = 0
         case 10:
             c.text = "DroidDeck feature status"
