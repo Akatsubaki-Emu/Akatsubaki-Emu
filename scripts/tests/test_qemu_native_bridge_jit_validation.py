@@ -19,8 +19,10 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
     def test_jit_callback_export_is_required_only_for_jit_runtime(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
-        self.assertIn("(requires_jit && !has_jit_callbacks)", source)
-        self.assertIn("requires_jit ? \"lifecycle/JIT\" : \"lifecycle\"", source)
+        self.assertIn("has_jit_callbacks == requires_jit", source)
+        self.assertIn("jit_export_mode_issue(requires_jit, has_jit_callbacks)", source)
+        self.assertIn("jit_export_mode_issue(requires_jit, set_jit_callbacks != NULL)", source)
+        self.assertIn("unexpected isteam_qemu_set_jit_callbacks", source)
         self.assertIn("if (requires_jit) {", source)
         self.assertIn("isteam_qemu_set_jit_callbacks", source)
         self.assertIn(
@@ -36,6 +38,7 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         tci_fake = (root / "scripts" / "tests" / "fake_qemu_runtime_tci.c").read_text(encoding="utf-8")
         self.assertIn("int qemu_main_loop(void)", tci_fake)
         self.assertNotIn("isteam_qemu_set_jit_callbacks", tci_fake)
+        self.assertIn("#ifndef FAKE_QEMU_NO_JIT_CALLBACK", fake)
         harness = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
         self.assertIn('strcmp(argv[1], "tci")', harness)
         self.assertIn("requires_jit", harness)
