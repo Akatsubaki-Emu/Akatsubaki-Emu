@@ -441,6 +441,39 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let reopenedStdinValue) = reopenedStdinRead else { preconditionFailure() }
         precondition(reopenedStdinValue == 0)
 
-        print("Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/identity and reset tests passed")
+        // A 256 MiB guest must grow brk beyond the initial mmap hint, then
+        // reuse released heap space without reusing the initial mmap gap.
+        let largeGuestSize: UInt64 = 256 * 1024 * 1024
+        let largeMemory = GuestMemory(size: largeGuestSize)
+        precondition(largeMemory.beginMapping())
+        let largeDispatcher = LinuxSyscallDispatcher(memory: largeMemory)
+        try largeDispatcher.configure(programBreak: 0x400000, stackBase: largeGuestSize)
+
+        func largeReturned(_ number: UInt64, _ arguments: [UInt64]) -> UInt64 {
+            let outcome = largeDispatcher.dispatch(number: number, arguments: arguments)!
+            guard case .returned(let value) = outcome else { preconditionFailure() }
+            return value
+        }
+
+        precondition(largeReturned(12, [0, 0, 0, 0, 0, 0]) == 0x400000)
+        precondition(largeReturned(12, [0x800000, 0, 0, 0, 0, 0]) == 0x800000)
+        let mappingAboveGrownHeap = largeReturned(9, [0, 0x1000, 3, 0x22, UInt64.max, 0])
+        precondition(mappingAboveGrownHeap == 0x800000)
+
+        precondition(largeReturned(12, [0x500000, 0, 0, 0, 0, 0]) == 0x500000)
+        let reusedShrunkHeap = largeReturned(9, [0, 0x1000, 3, 0x22, UInt64.max, 0])
+        precondition(reusedShrunkHeap == 0x500000)
+
+        precondition(largeReturned(12, [0x400000, 0, 0, 0, 0, 0]) == 0x400000)
+        let preservedInitialGap = largeReturned(9, [0, 0x1000, 3, 0x22, UInt64.max, 0])
+        precondition(preservedInitialGap == 0x410000)
+
+        // The live mappings remain reserved after shrinking the heap.
+        precondition(largeReturned(12, [0x900000, 0, 0, 0, 0, 0]) == 0x400000)
+        largeDispatcher.reset()
+        let stackGuard = largeGuestSize - 4096
+        precondition(largeReturned(12, [stackGuard + 1, 0, 0, 0, 0, 0]) == 0x400000)
+
+        print("Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/identity and reset plus 256 MiB brk/mmap cursor tests passed")
     }
 }
