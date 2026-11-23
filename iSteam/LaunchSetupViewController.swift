@@ -277,6 +277,29 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         let writableDiskURL = selectedWritableDiskURL
         let permitsTCIFallback = RuntimeSettings.shared.acceleration == .automatic
 #if !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        if config.accelerator == .jit {
+            switch QEMURuntimeStatus.inspect(requiresJIT: true) {
+            case .ready:
+                break
+            case .unavailable(let reason):
+                guard permitsTCIFallback else {
+                    statusLabel.text = "QEMU JIT runtime unavailable • \(reason). The selected JIT-only mode does not fall back to TCI."
+                    return
+                }
+                switch QEMURuntimeStatus.inspect(requiresJIT: false) {
+                case .ready:
+                    var fallbackConfiguration = config
+                    fallbackConfiguration.accelerator = .tcg
+                    statusLabel.text = "QEMU JIT runtime unavailable; using the bundled TCI interpreter (no JIT)."
+                    completeLaunch(configuration: fallbackConfiguration, diskURL: diskURL,
+                                   writableDiskURL: writableDiskURL)
+                    return
+                case .unavailable(let tciReason):
+                    statusLabel.text = "QEMU JIT runtime unavailable • \(reason). TCI fallback unavailable • \(tciReason)"
+                    return
+                }
+            }
+        }
         if config.accelerator == .jit && !JITCoordinator.shared.isQEMUJITReady {
             launchInProgress = true
             statusLabel.text = "Akatsubaki is checking executable-memory readiness. Complete the JIT handoff if prompted; the VM will start automatically."
