@@ -28,6 +28,27 @@ enum GuestEngineError: Error {
     case invalidState(String)
 }
 
+enum KenranButoAOTExitReason: Equatable {
+    case none, memoryReadFault, memoryWriteFault, invalidState
+}
+
+struct KenranButoAOTExecutionResult {
+    let guestBytesConsumed: Int
+    let instructionCount: Int
+    let exitReason: KenranButoAOTExitReason
+    let exitRip: UInt64
+    let exitAddress: UInt64
+}
+
+protocol KenranButoAOTExecuting: AnyObject {
+    var isAvailable: Bool { get }
+    func refreshAvailability() -> Bool
+    func execute(guestCode: Data, registers: inout [UInt64], rip: UInt64,
+                 rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
+                 memory: GuestMemory, maximumInstructions: Int) -> KenranButoAOTExecutionResult?
+    func invalidateAll()
+}
+
 final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
@@ -1424,6 +1445,26 @@ struct InterpreterTests {
         try crossPage.reset(entryPoint: 4093)
         let crossPageExit = try crossPage.run(maxInstructions: 1)
         precondition(crossPageExit == .memoryFault(address: 4095))
+
+        // Exercise ARCH_SET_FS and ARCH_GET_FS through the real SYSCALL path.
+        let archPrctlFSMemory = GuestMemory(size: 0x10000)
+        let archPrctlFSProgram: [UInt8] = [
+            0xB8, 0x9E, 0x00, 0x00, 0x00,       // mov eax, 158 (arch_prctl)
+            0xBF, 0x02, 0x10, 0x00, 0x00,       // mov edi, ARCH_SET_FS
+            0xBE, 0x00, 0x20, 0x00, 0x00,       // mov esi, 0x2000
+            0x0F, 0x05,
+            0xB8, 0x9E, 0x00, 0x00, 0x00,
+            0xBF, 0x03, 0x10, 0x00, 0x00,       // mov edi, ARCH_GET_FS
+            0xBE, 0x00, 0x30, 0x00, 0x00,       // mov esi, 0x3000
+            0x0F, 0x05,
+            0xF4
+        ]
+        precondition(archPrctlFSMemory.write(Data(archPrctlFSProgram), offset: 0))
+        let archPrctlFS = X86_64Interpreter(memory: archPrctlFSMemory)
+        try archPrctlFS.reset(entryPoint: 0)
+        let archPrctlFSExit = try archPrctlFS.run(maxInstructions: 16)
+        precondition(archPrctlFSExit == .halted)
+        precondition(archPrctlFSMemory.readUInt64(offset: 0x3000) == 0x2000)
 
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
