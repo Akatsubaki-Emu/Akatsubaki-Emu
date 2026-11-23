@@ -26,23 +26,31 @@ enum VMAccelerationBackend: String, CaseIterable {
     case qemuInterpreter = "QEMU TCI (no JIT)"
     case hypervisor = "Hypervisor.framework"
 
-    /// Only the JIT-backed QEMU runtime is currently packaged for iOS.
-    /// Keep unsupported choices visible for migration, but do not offer them.
+    /// Offer a backend only when its matching runtime artifact is present.
+    /// JIT session readiness is checked separately when a VM is launched.
     var isAvailable: Bool {
         switch self {
-        case .automatic, .qemuJIT: return true
-        case .qemuInterpreter, .hypervisor: return false
+        case .automatic:
+            return true
+        case .qemuJIT:
+            if case .ready = QEMURuntimeStatus.locate(requiresJIT: true) { return true }
+            return false
+        case .qemuInterpreter:
+            if case .ready = QEMURuntimeStatus.locate(requiresJIT: false) { return true }
+            return false
+        case .hypervisor:
+            return false
         }
     }
 
     var detail: String {
         switch self {
         case .automatic:
-            return "Uses the packaged QEMU TCG + JIT runtime; requires physical-device JIT readiness. A no-JIT TCI runtime is not packaged yet."
+            return "Prefers QEMU TCG + JIT when the JIT session is ready; otherwise falls back to the bundled no-JIT TCI runtime. Stored selections fall back to QEMU TCI (no JIT) when JIT is unavailable."
         case .qemuJIT:
-            return "TCG with a 128 MiB translation-block cache and split-WX; requires physical iOS 26+ and a supported StikDebug JIT session."
+            return "TCG with a 128 MiB translation-block cache and split-WX enabled; requires physical iOS 26+ and a supported StikDebug JIT session. This mode does not fall back to TCI."
         case .qemuInterpreter:
-            return "Unavailable: the separate no-JIT TCI runtime has not been built and packaged."
+            return "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG."
         case .hypervisor:
             return "Unavailable on standard iOS; Hypervisor.framework is not exposed to ordinary iOS apps."
         }
