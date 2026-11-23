@@ -26,8 +26,8 @@ enum VMAccelerationBackend: String, CaseIterable {
     case qemuInterpreter = "QEMU TCI (no JIT)"
     case hypervisor = "Hypervisor.framework"
 
-    /// Only the JIT-backed QEMU runtime is currently packaged for iOS.
-    /// Keep unsupported choices visible for migration, but do not offer them.
+    /// TCI is built and embedded by the release workflow, but stays hidden
+    /// until a physical iOS guest boot validates the no-JIT execution path.
     var isAvailable: Bool {
         switch self {
         case .automatic, .qemuJIT: return true
@@ -38,11 +38,11 @@ enum VMAccelerationBackend: String, CaseIterable {
     var detail: String {
         switch self {
         case .automatic:
-            return "Uses the packaged QEMU TCG + JIT runtime; requires physical-device JIT readiness. A no-JIT TCI runtime is not packaged yet."
+            return "Uses the packaged QEMU TCG + JIT runtime; requires physical-device JIT readiness. The packaged no-JIT TCI path remains disabled until a physical guest boot is verified."
         case .qemuJIT:
             return "TCG with a 128 MiB translation-block cache and split-WX; requires physical iOS 26+ and a supported StikDebug JIT session."
         case .qemuInterpreter:
-            return "Unavailable: the separate no-JIT TCI runtime has not been built and packaged."
+            return "Unavailable until a physical iOS guest boot validates the packaged no-JIT TCI runtime."
         case .hypervisor:
             return "Unavailable on standard iOS; Hypervisor.framework is not exposed to ordinary iOS apps."
         }
