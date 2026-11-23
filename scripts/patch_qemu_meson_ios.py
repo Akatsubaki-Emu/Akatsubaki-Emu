@@ -33,7 +33,7 @@ def patch_objc_compile_flag(source: str) -> str:
             raise SystemExit("QEMU meson.build changed: unpatched Objective-C compiler call remains")
         position = source.find(patched_forms[0])
         block_start = source.rfind(OBJC_BLOCK_MARKER, 0, position)
-        block_end = source.find("\\nendif", position)
+        block_end = source.find("endif", position)
         if block_start < 0 or block_end < 0:
             raise SystemExit("QEMU meson.build changed: patched Objective-C compiler call is outside its compiler block")
         if patched_forms[0] not in source[block_start:block_end]:
@@ -48,7 +48,7 @@ def patch_objc_compile_flag(source: str) -> str:
     anchor = matches[0]
     position = source.find(anchor)
     block_start = source.rfind(OBJC_BLOCK_MARKER, 0, position)
-    block_end = source.find("\\nendif", position)
+    block_end = source.find("endif", position)
     if block_start < 0 or block_end < 0:
         raise SystemExit("QEMU meson.build changed: Objective-C compiler argument is outside its compiler block")
     block = source[block_start:block_end]
