@@ -114,6 +114,21 @@ class QEMURuntimeLookupTests(unittest.TestCase):
         self.assertNotIn("switch QEMURuntimeStatus.locate()", runtime)
 
 
+    def test_jit_request_falls_back_to_tci_before_building_qemu_arguments(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        start = runtime.split("func start(configuration:", 1)[1].split(
+            "private static func containedRegularFile", 1
+        )[0]
+        self.assertIn("let requestedJIT = configuration.accelerator == .jit", start)
+        self.assertIn("var effectiveConfiguration = configuration", start)
+        self.assertIn("if requiresJIT && !JITCoordinator.shared.isQEMUJITReady", start)
+        self.assertIn("var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", start)
+        self.assertIn("let tciStatus = QEMURuntimeStatus.inspect(requiresJIT: false)", start)
+        self.assertIn("runtimeStatus = tciStatus", start)
+        self.assertIn("effectiveConfiguration.accelerator = requiresJIT ? .jit : .tcg", start)
+        self.assertIn("QEMUCommandBuilder(configuration: effectiveConfiguration)", start)
+
     def test_explicit_firmware_uses_only_its_same_directory_variable_store(self):
         root = Path(__file__).resolve().parents[2]
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
