@@ -199,7 +199,7 @@ Target: physical iOS arm64
 Library source: $candidate
 Packaged library path: $runtime_relative
 Architectures: $ARCHS
-Lifecycle and graceful-shutdown exports: verified by nm; StikJIT callback export absent by design
+Lifecycle and graceful-shutdown exports: verified by nm; StikJIT callback export: absent by design
 Data source: $data_dir
 Package layout: Frameworks/ (UTM dependencies), QEMU/ (QEMU data files and runtime manifest)
 Important: embed and code-sign nested code in Akatsubaki Emu and boot-test on a physical device before claiming runtime support.
