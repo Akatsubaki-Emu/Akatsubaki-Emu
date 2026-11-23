@@ -200,6 +200,11 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("QEMU-TCI.framework", tci_packager)
         self.assertIn('scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci_packager)
 
+        runtime_validator = (root / "scripts/validate-qemu-runtime.sh").read_text(encoding="utf-8")
+        self.assertIn('if [[ "$mode" == "tci" ]] && grep -Eq', runtime_validator)
+        self.assertIn('<<<"$symbols"; then', runtime_validator)
+        self.assertIn("TCI runtime must not export the StikJIT callback.", runtime_validator)
+
     def test_qemu_packagers_reject_output_paths_that_overlap_the_archive(self):
         root = Path(__file__).resolve().parents[2]
         for relative in (
@@ -609,6 +614,19 @@ build unrelated.dylib: c_LINKER other
         self.assertIn("UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app", workflow)
         self.assertNotIn("-s iOS-TCI", workflow)
         self.assertIn('APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"', packager)
+
+
+    def test_release_workflow_embeds_both_qemu_runtime_modes(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        embedding = (root / "scripts/embed-qemu-runtime.sh").read_text(encoding="utf-8")
+        self.assertIn('bash scripts/embed-qemu-runtime.sh "$RUNTIME_DIR" "$APP"', workflow)
+        self.assertIn("runtime-mode-manifest.txt", embedding)
+        self.assertIn("validate_mode JIT", embedding)
+        self.assertIn("validate_mode TCI", embedding)
+        self.assertIn("TCI runtime unexpectedly exports the StikJIT callback", embedding)
+        self.assertNotIn('test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt"', workflow)
+        self.assertNotIn('test -s "$RUNTIME_DIR/exports.txt"', workflow)
 
 
 if __name__ == "__main__":

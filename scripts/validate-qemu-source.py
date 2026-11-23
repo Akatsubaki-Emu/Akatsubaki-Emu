@@ -202,6 +202,24 @@ required = {
         "min(UInt64(999_999)",
 
             ],
+    "scripts/embed-qemu-runtime.sh": [
+        "validate_mode JIT",
+        "validate_mode TCI",
+        "runtime-mode-manifest.txt",
+        "combined JIT manifest does not match",
+        "combined TCI manifest does not match",
+        "TCI runtime unexpectedly exports the StikJIT callback",
+    ],
+    "scripts/tests/test_qemu_runtime_embedding.py": [
+        "test_embeds_both_modes_using_their_own_manifests",
+        "test_rejects_tci_runtime_with_stikjit_callback",
+        "test_rejects_mismatched_combined_mode_manifest",
+        "test_rejects_library_symlink_that_escapes_runtime_package",
+        "test_release_workflow_uses_mode_aware_embedding_script",
+    ],
+    ".github/workflows/release.yml": [
+        "bash scripts/embed-qemu-runtime.sh \"$RUNTIME_DIR\" \"$APP\"",
+    ],
     ".github/workflows/build-qemu-runtime.yml": [
     ],
     ".github/workflows/validate-qemu-runtime-pr.yml": [
@@ -237,6 +255,7 @@ required = {
         "#define mach_vm_protect vm_protect",
         "#define mach_vm_deallocate vm_deallocate",
         "test_release_publication_is_serialized_and_skips_stale_main_builds",
+        "test_release_workflow_embeds_both_qemu_runtime_modes",
     ],
     "scripts/tests/test_jit_coordinator.py": [
         "test_stikdebug_availability_is_limited_to_physical_ios_devices",
@@ -655,6 +674,9 @@ required = {
         "MODE_DIRECTORY",
         "QEMU-TCI.framework",
         "vtool -show-build",
+        'if [[ "$mode" == "tci" ]] && grep -Eq',
+        '<<<"$symbols"; then',
+        "TCI runtime must not export the StikJIT callback.",
         "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
         'source_dir="$(dirname "$firmware_file")"',
