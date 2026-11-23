@@ -28,6 +28,27 @@ enum GuestEngineError: Error {
     case invalidState(String)
 }
 
+enum KenranButoAOTExitReason: Equatable {
+    case none, memoryReadFault, memoryWriteFault, invalidState
+}
+
+struct KenranButoAOTExecutionResult {
+    let guestBytesConsumed: Int
+    let instructionCount: Int
+    let exitReason: KenranButoAOTExitReason
+    let exitRip: UInt64
+    let exitAddress: UInt64
+}
+
+protocol KenranButoAOTExecuting: AnyObject {
+    var isAvailable: Bool { get }
+    func refreshAvailability() -> Bool
+    func execute(guestCode: Data, registers: inout [UInt64], rip: UInt64,
+                 rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
+                 memory: GuestMemory, maximumInstructions: Int) -> KenranButoAOTExecutionResult?
+    func invalidateAll()
+}
+
 final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
