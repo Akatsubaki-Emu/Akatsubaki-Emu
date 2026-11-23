@@ -135,7 +135,7 @@ final class RuntimeSettings {
     var acceleration: VMAccelerationBackend {
         get {
             let stored = VMAccelerationBackend(rawValue: defaults.string(forKey: "iSteam.acceleration") ?? "") ?? .automatic
-            // Stored selections fall back to QEMU TCI (no JIT) when the JIT handshake is unavailable.
+            // stored selections fall back to QEMU TCI (no JIT) when the JIT handshake is unavailable.
             return stored.isAvailable ? stored : .qemuInterpreter
         }
         set { defaults.set(newValue.rawValue, forKey: "iSteam.acceleration") }
