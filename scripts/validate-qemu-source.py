@@ -212,6 +212,11 @@ required = {
         "src/QEMU/**",
         "iSteam/JIT26Protocol.c",
     ],
+    "scripts/tests/test_qemu_runtime_lookup.py": [
+        "test_fallback_runtime_scan_filters_jit_and_tci_artifacts",
+        "test_capability_probe_accepts_tci_when_jit_runtime_is_missing",
+        "test_runtime_start_falls_back_to_tci_when_jit_is_unavailable",
+    ],
     "scripts/tests/test_qemu_build_patches.py": [
         "test_tci_build_uses_upstream_ios_se_scheme_and_product",
         "test_qemu_dependency_cache_version_matches_validation_contracts",
@@ -633,7 +638,6 @@ required = {
         "error_buffer && error_capacity > 0",
     ],
     "scripts/tests/fake_qemu_runtime.c": [
-        "#ifndef FAKE_QEMU_NO_JIT_CALLBACK",
         "void isteam_qemu_set_jit_callbacks",
         "fake_qemu_jit_callbacks_installed",
         "void qemu_init(int argc, char *argv[])",
@@ -643,6 +647,12 @@ required = {
         "void qemu_cleanup(int status)",
         "atomic_store(&cleanup_status, status);",
         "atomic_store(&shutdown_cause, cause);",
+    ],
+    "scripts/tests/fake_qemu_runtime_tci.c": [
+        "void qemu_init(int argc, char *argv[])",
+        "int qemu_main_loop(void)",
+        "void qemu_cleanup(int status)",
+        "void qemu_system_shutdown_request(int cause)",
     ],
     "scripts/package-utm-qemu-runtime.sh": [
         " _?isteam_qemu_set_jit_callbacks$",
@@ -665,11 +675,12 @@ required = {
         "runtime-library-path.txt",
     ],
     "scripts/merge-qemu-runtime-variants.sh": [
-        'grep -q \'isteam_qemu_set_jit_callbacks\' "$JIT_DIR/exports.txt"',
-        'if grep -q \'isteam_qemu_set_jit_callbacks\' "$TCI_DIR/exports.txt"; then',
-        'mkdir -p "$OUT/Frameworks" "$OUT/QEMU/JIT" "$OUT/QEMU/TCI"',
-        'cp -a "$JIT_DIR/QEMU/." "$OUT/QEMU/JIT/"',
-        'cp -a "$TCI_DIR/QEMU/." "$OUT/QEMU/TCI/"',
+        'grep -Fq \'isteam_qemu_set_jit_callbacks\' "$JIT_DIR/exports.txt"',
+        'if grep -Fq \'isteam_qemu_set_jit_callbacks\' "$TCI_DIR/exports.txt"; then',
+        'mkdir -p "$TEMP_OUT/Frameworks" "$TEMP_OUT/QEMU/JIT" "$TEMP_OUT/QEMU/TCI"',
+        'cp -a "$JIT_DIR/QEMU/." "$TEMP_OUT/QEMU/JIT/"',
+        'cp -a "$TCI_DIR/QEMU/." "$TEMP_OUT/QEMU/TCI/"',
+        'printf \'%s\\n\' "$jit_library" > "$TEMP_OUT/QEMU/runtime-library-path.txt"',
     ],
     "scripts/validate-qemu-runtime.sh": [
         "for tool in file lipo nm codesign vtool; do",
@@ -697,6 +708,8 @@ required = {
         "validateLoadableLibrary(libraryURL, dataDirectory: dataDirectory,",
         "requiresJIT: requiresJIT",
         "QEMU-TCI.framework/QEMU",
+        "let modeDirectory = qemuRoot.appendingPathComponent(requiresJIT ? \"JIT\" : \"TCI\", isDirectory: true)",
+        "runtime-library-path.txt",
         "The no-JIT QEMU TCI runtime is not packaged.",
         "The bundled QEMU library failed its load/export validation.",
     ],
@@ -1277,10 +1290,14 @@ for token in (
     "UTM/build-iOS-TCI-arm64",
     "UTM/sysroot-iOS-TCI-arm64",
     "./scripts/build_dependencies.sh -p ios-tci -a arm64",
-    "./scripts/build_utm.sh -k iphoneos -s iOS-TCI -a arm64 -o UTMBuildTCI",
-    "build/qemu-runtime-tci/QEMU/TCI",
-    "for mode in JIT TCI; do",
-    "Physical iOS arm64 runtime variants: JIT and TCI",
+    "./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI",
+    "UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app",
+    'test -s "$package/QEMU/runtime-library-path.txt"',
+    "build/qemu-runtime/QEMU/runtime-library-path.txt",
+    "build/qemu-runtime/QEMU/JIT/runtime-library-path.txt",
+    "build/qemu-runtime/QEMU/TCI/runtime-library-path.txt",
+    "build/qemu-runtime/QEMU/JIT/exports.txt",
+    "build/qemu-runtime/QEMU/TCI/exports.txt",
 ):
     if token not in qemu_workflow:
         print(f"QEMU workflow: TCI build/package contract is missing {token!r}", file=sys.stderr)
@@ -1428,17 +1445,18 @@ fake_qemu_runtime = Path("scripts/tests/fake_qemu_runtime.c").read_text(encoding
 native_bridge_test = Path("scripts/tests/test_qemu_native_bridge.c").read_text(encoding="utf-8")
 validation_workflow = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
 for token in (
-    "-DFAKE_QEMU_NO_JIT_CALLBACK",
     'test-qemu-native-bridge" jit',
     'test-qemu-native-bridge" tci',
+    "scripts/tests/fake_qemu_runtime_tci.c",
     "libfakeqemu-jit.so",
     "libfakeqemu-tci.so",
 ):
     if token not in validation_workflow:
         print(f"repository validation workflow: missing JIT/TCI bridge test {token!r}", file=sys.stderr)
         failed = True
-if "#ifndef FAKE_QEMU_NO_JIT_CALLBACK" not in fake_qemu_runtime:
-    print("fake QEMU runtime: no-JIT fixture does not omit the callback export", file=sys.stderr)
+fake_qemu_tci_runtime = Path("scripts/tests/fake_qemu_runtime_tci.c").read_text(encoding="utf-8")
+if "isteam_qemu_set_jit_callbacks" in fake_qemu_tci_runtime:
+    print("fake QEMU TCI runtime: unexpected StikJIT callback export", file=sys.stderr)
     failed = True
 for token in ('assert(argc == 3);', 'strcmp(argv[1], "jit")', 'strcmp(argv[1], "tci")'):
     if token not in native_bridge_test:
