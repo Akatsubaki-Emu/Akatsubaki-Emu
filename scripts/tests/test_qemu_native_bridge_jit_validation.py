@@ -19,7 +19,7 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
     def test_jit_callback_export_is_required_only_for_jit_runtime(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
-        self.assertIn("(requires_jit && !has_jit_callbacks)", source)
+        self.assertIn("has_jit_callbacks != requires_jit", source)
         self.assertIn("requires_jit ? \"lifecycle/JIT\" : \"lifecycle\"", source)
         self.assertIn("if (requires_jit) {", source)
         self.assertIn("isteam_qemu_set_jit_callbacks", source)
@@ -39,6 +39,12 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         harness = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
         self.assertIn('strcmp(argv[1], "tci")', harness)
         self.assertIn("requires_jit", harness)
+        self.assertIn("unexpected isteam_qemu_set_jit_callbacks", harness)
+        workflow = (root / ".github" / "workflows" / "validate-repository.yml").read_text(encoding="utf-8")
+        self.assertIn('test-qemu-native-bridge" jit', workflow)
+        self.assertIn('test-qemu-native-bridge" tci', workflow)
+        self.assertIn("libfakeqemu-jit.so", workflow)
+        self.assertIn("libfakeqemu-tci.so", workflow)
         patcher = (root / "scripts" / "patch_qemu_stikjit_ios.py").read_text(encoding="utf-8")
         self.assertIn("void isteam_qemu_set_jit_callbacks(", patcher)
         self.assertIn("isteam_jit_ready_callback = ready;", patcher)
