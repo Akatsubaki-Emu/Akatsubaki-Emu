@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Patch QEMU iOS features, Objective-C compilation, and emulator link configuration."""
 from pathlib import Path
+import re
 import os
 import sys
 
@@ -20,21 +21,38 @@ OBJC_ARGUMENTS = {
 }
 
 
-def patch_objc_compile_flag(source: str) -> str:
-    if source.count(OBJC_BLOCK_MARKER) != 1:
-        raise SystemExit("QEMU meson.build changed: Objective-C compiler block not found exactly once")
-    block_start = source.find(OBJC_BLOCK_MARKER)
-    block_end = source.find("endif", block_start)
-    if block_end < 0:
-        raise SystemExit("QEMU meson.build changed: Objective-C compiler block is unterminated")
-    block = source[block_start:block_end]
+def _objc_compiler_argument_block(source: str) -> tuple[int, int, str]:
+    starts = [match.start() for match in re.finditer(re.escape(OBJC_BLOCK_MARKER), source)]
+    candidates = []
+    for block_start in starts:
+        terminator = re.search(r"(?m)^\s*endif\b", source[block_start:])
+        if terminator is None:
+            raise SystemExit("QEMU meson.build changed: Objective-C compiler block is unterminated")
+        block_end = block_start + terminator.start()
+        block = source[block_start:block_end]
+        if any(anchor in block for anchor in OBJC_ARGUMENTS) or any(
+            patched in block for patched in OBJC_ARGUMENTS.values()
+        ):
+            candidates.append((block_start, block_end, block))
+    if len(candidates) != 1:
+        raise SystemExit(
+            "QEMU meson.build changed: Objective-C compiler argument block not found exactly once"
+        )
+    return candidates[0]
 
+
+def patch_objc_compile_flag(source: str) -> str:
+    block_start, _block_end, block = _objc_compiler_argument_block(source)
     patched_forms = [value for value in OBJC_ARGUMENTS.values() if value in block]
     patched_outside_block = [
         value for value in OBJC_ARGUMENTS.values()
         if source.count(value) != block.count(value)
     ]
-    if patched_outside_block:
+    anchors_outside_block = [
+        anchor for anchor in OBJC_ARGUMENTS
+        if source.count(anchor) != block.count(anchor)
+    ]
+    if patched_outside_block or anchors_outside_block:
         raise SystemExit("QEMU meson.build changed: Objective-C compiler flag is outside its compiler block")
     if patched_forms:
         if len(patched_forms) != 1 or block.count(patched_forms[0]) != 1:
@@ -112,7 +130,10 @@ def patch_source(source: str, runtime_path: str) -> str:
     patched = "\n".join(lines) + ("\n" if source.endswith("\n") else "")
     if new_probe not in patched or marker not in patched:
         raise SystemExit("QEMU meson.build patch verification failed")
-    if patched.count(OBJC_BLOCK_MARKER) != 1 or not any(value in patched for value in OBJC_ARGUMENTS.values()):
+    _block_start, _block_end, objc_block = _objc_compiler_argument_block(patched)
+    if not any(value in objc_block for value in OBJC_ARGUMENTS.values()) or any(
+        anchor in objc_block for anchor in OBJC_ARGUMENTS
+    ):
         raise SystemExit("QEMU meson.build patch verification failed: Objective-C compiler flag was not applied")
     if "add_project_link_arguments('-Wl,-force_load,'" in patched:
         raise SystemExit("Obsolete project-level compiler-runtime patch remains")

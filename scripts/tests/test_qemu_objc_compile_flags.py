@@ -13,14 +13,23 @@ import verify_qemu_meson_link
 class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
     def meson_source(self):
         return (
-            "project('qemu', 'c')\n"
-            "if 'objc' in all_languages\n"
-            "  add_project_arguments(objc.get_supported_arguments(warn_flags),\n"
-            "      native: false, language: 'objc')\n"
-            "endif\n"
-            "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
-            "emulator_link_args = []\n"
-            "emulator_link_args += ['-Wl,-force_load,libqemuutil.a']\n"
+            "project('qemu', 'c')\\n"
+            "if 'objc' in all_languages\\n"
+            "  add_project_arguments(objc.get_supported_arguments(warn_flags),\\n"
+            "      native: false, language: 'objc')\\n"
+            "endif\\n"
+            "if 'objc' in all_languages\\n"
+            "  message('Objective-C compiler: ' + objc.get_id())\\n"
+            "endif\\n"
+            "if 'objc' in all_languages\\n"
+            "  summary('OBJCFLAGS', ' '.join(OBJCFLAGS))\\n"
+            "endif\\n"
+            "if 'objc' in all_languages\\n"
+            "  summary('QEMU_OBJCFLAGS', ' '.join(QEMU_OBJCFLAGS))\\n"
+            "endif\\n"
+            "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\\n"
+            "emulator_link_args = []\\n"
+            "emulator_link_args += ['-Wl,-force_load,libqemuutil.a']\\n"
         )
 
     def ninja_source(self, compile_flags):
@@ -39,10 +48,19 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
         self.assertIn("checked: 'require'", once)
 
     def test_meson_patcher_changes_only_the_objc_compiler_block(self):
-        source = "objc.get_supported_arguments(warn_flags)\n" + self.meson_source()
-        patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+        source = self.meson_source()
+        patched = patch_qemu_meson_ios.patch_objc_compile_flag(source)
+        expected = source.replace(
+            "objc.get_supported_arguments(warn_flags)",
+            patch_qemu_meson_ios.OBJC_ARGUMENTS["objc.get_supported_arguments(warn_flags)"],
+            1,
+        )
+        self.assertEqual(patched, expected)
+        self.assertEqual(source.count(patch_qemu_meson_ios.OBJC_BLOCK_MARKER), 4)
+        self.assertEqual(patched.count(patch_qemu_meson_ios.OBJC_BLOCK_MARKER), 4)
         self.assertEqual(patched.count("-fno-objc-msgsend-class-selector-stubs"), 1)
-        self.assertTrue(patched.startswith("objc.get_supported_arguments(warn_flags)\n"))
+        self.assertIn("summary('OBJCFLAGS', ' '.join(OBJCFLAGS))", patched)
+        self.assertIn("summary('QEMU_OBJCFLAGS', ' '.join(QEMU_OBJCFLAGS))", patched)
 
     def test_meson_patcher_handles_qemu_common_flags_variant(self):
         source = self.meson_source().replace(
@@ -67,7 +85,7 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
 
     def test_meson_patcher_fails_closed_if_objc_block_is_missing(self):
         source = self.meson_source().replace("if 'objc' in all_languages" + chr(10), "").replace("endif" + chr(10), "")
-        with self.assertRaisesRegex(SystemExit, "Objective-C compiler block not found exactly once"):
+        with self.assertRaisesRegex(SystemExit, "Objective-C compiler argument block not found exactly once"):
             patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
 
     def test_meson_patcher_rejects_duplicate_objc_blocks(self):
