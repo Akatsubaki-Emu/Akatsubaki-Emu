@@ -61,24 +61,38 @@ static void wait_for_counter(void *handle, const char *symbol, int expected) {
 }
 
 int main(int argc, char **argv) {
-    assert(argc == 3);
+    assert(argc == 4);
     const bool requires_jit = strcmp(argv[1], "jit") == 0;
     assert(requires_jit || strcmp(argv[1], "tci") == 0);
     const char *library = argv[2];
+    const char *opposite_library = argv[3];
 
     void *probe = dlopen(library, RTLD_NOW | RTLD_LOCAL);
-    assert(probe != NULL);
+    void *opposite_probe = dlopen(opposite_library, RTLD_NOW | RTLD_LOCAL);
+    assert(probe != NULL && opposite_probe != NULL);
+    assert((dlsym(probe, "isteam_qemu_set_jit_callbacks") != NULL) == requires_jit);
+    assert((dlsym(opposite_probe, "isteam_qemu_set_jit_callbacks") != NULL) != requires_jit);
+
     char validation_error[512] = {0};
     assert(isteam_qemu_validate_library(library, requires_jit,
                                         validation_error, (int)sizeof(validation_error)));
-    if (!requires_jit) {
-        memset(validation_error, 0, sizeof(validation_error));
-        assert(!isteam_qemu_validate_library(library, true,
-                                             validation_error, (int)sizeof(validation_error)));
-        assert(strstr(validation_error, "isteam_qemu_set_jit_callbacks") != NULL);
-        assert(dlsym(probe, "isteam_qemu_set_jit_callbacks") == NULL);
-    } else {
+    memset(validation_error, 0, sizeof(validation_error));
+    assert(!isteam_qemu_validate_library(opposite_library, requires_jit,
+                                         validation_error, (int)sizeof(validation_error)));
+    assert(strstr(validation_error, "isteam_qemu_set_jit_callbacks") != NULL);
+
+    const char *rejected_arguments[] = {"qemu-system-x86_64"};
+    char mode_error[512] = {0};
+    assert(!isteam_qemu_start(1, rejected_arguments, opposite_library, requires_jit,
+                              mode_error, (int)sizeof(mode_error)));
+    assert(strstr(mode_error, "incompatible runtime mode") != NULL);
+    assert(!isteam_qemu_is_active());
+    dlclose(opposite_probe);
+
+    if (requires_jit) {
         assert(read_counter(probe, "fake_qemu_jit_callbacks_installed") == 0);
+    } else {
+        assert(dlsym(probe, "fake_qemu_jit_callbacks_installed") == NULL);
     }
 
     char argumentError[512] = {0};
@@ -150,6 +164,6 @@ int main(int argc, char **argv) {
     assert(strstr(error, "cannot safely restart") != NULL);
 
     dlclose(probe);
-    printf("QEMU native bridge %s mode lifecycle, concurrency and argument bounds passed.\n", argv[1]);
+    printf("QEMU native bridge %s mode parity, lifecycle, concurrency and argument bounds passed.\n", argv[1]);
     return 0;
 }
