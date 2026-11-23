@@ -36,7 +36,7 @@ enum QEMURuntimeStatus {
               dataIsDirectory.boolValue else {
             return .unavailable(requiresJIT
                 ? "The QEMU JIT data directory is missing or unsafe in the app bundle."
-                : "The no-JIT QEMU TCI runtime is not packaged. Build and embed the ios-tci-arm64 runtime.")
+                : "The no-JIT QEMU TCI data directory is missing or unsafe in the app bundle.")
         }
 
         func matchesRuntimeMode(_ candidate: URL) -> Bool {
