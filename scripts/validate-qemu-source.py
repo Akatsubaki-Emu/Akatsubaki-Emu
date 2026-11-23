@@ -1467,6 +1467,15 @@ guest_memory_contract = {
     "src/Runtime/LinuxProcessStackBuilder.swift": ["memory.map("],
     "src/Runtime/LinuxSyscallDispatcher.swift": ["memory.protect(", "memory.unmap(", "memory.map("],
     "src/Runtime/X86_64Interpreter.swift": ["readExecuteByte(offset: rip)"],
+    "scripts/tests/test_guest_memory_cabi.swift": [
+        "GuestMemoryCABIIntegrationTests",
+        "LinuxSyscallDispatcher(memory: syscallMemory)",
+        "MAP_FIXED_NOREPLACE must reject existing mappings with EEXIST.",
+        "MAP_FIXED must still replace it, while NOREPLACE must reject it atomically.",
+        "brk must grow to the stack guard when no mmap ranges exist.",
+        "After brk shrink, mmap should reuse the released range before later mappings.",
+    ],
+
 }
 for contract_path, contract_tokens in guest_memory_contract.items():
     contract_content = Path(contract_path).read_text(encoding="utf-8")
