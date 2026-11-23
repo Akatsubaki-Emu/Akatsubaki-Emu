@@ -6,8 +6,8 @@ This document describes the QEMU runtime artifacts used by Akatsubaki Emu. The e
 
 `.github/workflows/build-qemu-runtime.yml` builds two physical-iOS arm64 UTM archives:
 
-- `iOS`: native TCG/JIT runtime. It requires the StikDebug callback ABI.
-- `iOS-TCI`: threaded TCG interpreter runtime. It does not require executable-memory JIT.
+- `iOS` scheme (`UTM.app`): native TCG/JIT runtime. It requires the StikDebug callback ABI.
+- `iOS-SE` scheme (`UTM SE.app`, built with the `ios-tci` dependency target): threaded TCG interpreter runtime. It does not require executable-memory JIT. `ios-tci` is the dependency platform, not the Xcode scheme name.
 
 The packaging steps are mode-specific:
 

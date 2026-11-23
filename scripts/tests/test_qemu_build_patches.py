@@ -605,10 +605,15 @@ build unrelated.dylib: c_LINKER other
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
         packager = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
+        validator = (root / "scripts/validate-qemu-source.py").read_text(encoding="utf-8")
         self.assertIn("./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI", workflow)
         self.assertIn("UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app", workflow)
         self.assertNotIn("-s iOS-TCI", workflow)
         self.assertIn('APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"', packager)
+        self.assertIn("./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI", validator)
+        self.assertIn("test -d 'UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app'", validator)
+        self.assertIn('APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"', validator)
+        self.assertNotIn("-s iOS-TCI", validator)
 
 
 if __name__ == "__main__":
