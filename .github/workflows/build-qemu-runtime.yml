@@ -265,11 +265,21 @@ jobs:
           cp UTM/UTMBuild.xcarchive/Info.plist build/qemu-runtime-jit/UTM-archive-Info.plist
           cp UTM/UTMBuildTCI.xcarchive/Info.plist build/qemu-runtime-tci/UTM-archive-Info.plist
 
+          # Fail before merging if either package omitted its mode metadata.
+          for package in build/qemu-runtime-jit build/qemu-runtime-tci; do
+            test -s "$package/UTM-SOURCE-REVISION.txt"
+            test -s "$package/QEMU/runtime-library-path.txt"
+            test -s "$package/exports.txt"
+          done
+
           bash scripts/merge-qemu-runtime-variants.sh build/qemu-runtime-jit build/qemu-runtime-tci build/qemu-runtime
+          test -s build/qemu-runtime/QEMU/runtime-library-path.txt
+          test -s build/qemu-runtime/QEMU/runtime-mode-manifest.txt
           test -s build/qemu-runtime/QEMU/JIT/runtime-library-path.txt
           test -s build/qemu-runtime/QEMU/TCI/runtime-library-path.txt
           test -s build/qemu-runtime/QEMU/JIT/exports.txt
           test -s build/qemu-runtime/QEMU/TCI/exports.txt
+          cmp -s build/qemu-runtime/QEMU/runtime-library-path.txt build/qemu-runtime/QEMU/JIT/runtime-library-path.txt
 
       - name: Upload verified QEMU runtime artifact
         if: steps.freshness.outputs.build == 'true'
