@@ -59,6 +59,8 @@ The development strategy is to reuse mature upstream implementations wherever th
 
 ### Integration sequence — optimise for the first playable build
 
+The runtime workflow now builds the `iOS` JIT archive and the `iOS-SE` TCI archive and packages both under `QEMU/JIT` and `QEMU/TCI`. QEMU TCG uses JIT code generation; QEMU TCI is the interpreter fallback and does not require executable memory. The successful hosted dual-runtime build and physical guest boot remain unverified until the latest Actions runs and a physical iPad test complete.
+
 **Track A — first physical guest (continues immediately):**
 1. Verify the upstream iOS-SE TCI no-JIT archive, merged runtime manifests and iOS device-arm64 dependencies in a fresh hosted build.
 2. Build the unsigned iOS IPA, install it on a physical iPad, and boot a known-good small Linux guest.
