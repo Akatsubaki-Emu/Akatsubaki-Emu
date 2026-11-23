@@ -92,7 +92,11 @@ jobs:
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
 
+      - name: Report unavailable native AOT integration
+        if: hashFiles('iSteam/KenranButoAOTExecutableMemory.c') == '' || hashFiles('iSteam/KenranButoAOTExecutableMemory.h') == '' || hashFiles('iSteam/JIT26Protocol.h') == ''
+        run: echo "::notice::Native AOT execution tests are skipped because the executable-memory C provider and ABI headers are not present in this revision. Decoder and translation-cache tests still run."
       - name: Compile W^X executable-memory provider
+        if: hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != '' && hashFiles('iSteam/KenranButoAOTExecutableMemory.h') != '' && hashFiles('iSteam/JIT26Protocol.h') != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -100,6 +104,7 @@ jobs:
             -c iSteam/KenranButoAOTExecutableMemory.c \
             -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
       - name: Execute ABI, AOT block and interpreter side-exit tests on ARM64
+        if: hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != '' && hashFiles('iSteam/KenranButoAOTExecutableMemory.h') != '' && hashFiles('iSteam/JIT26Protocol.h') != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -120,6 +125,7 @@ jobs:
           "$RUNNER_TEMP/test-x86-64-interpreter-aot"
 
       - name: Run a real static ELF guest through the hybrid interpreter/AOT path
+        if: hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != '' && hashFiles('iSteam/KenranButoAOTExecutableMemory.h') != '' && hashFiles('iSteam/JIT26Protocol.h') != ''
         shell: bash
         run: |
           set -euo pipefail
