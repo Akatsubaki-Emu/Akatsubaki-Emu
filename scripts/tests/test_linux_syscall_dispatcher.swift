@@ -330,11 +330,27 @@ struct LinuxSyscallDispatcherTests {
             preconditionFailure()
         }
         precondition(mmapAfterExpandedBreakAddress == expandedBreakValue)
+
+        // Shrinking brk must rewind the mmap hint into the released heap range.
+        // The existing 8 MiB mapping remains live while the 5 MiB range is reused.
+        let shrunkBreak = largeDispatcher.dispatch(
+            number: 12, arguments: [5 * 1024 * 1024, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let shrunkBreakValue) = shrunkBreak else { preconditionFailure() }
+        precondition(shrunkBreakValue == 5 * 1024 * 1024)
+        let mmapAfterShrink = largeDispatcher.dispatch(
+            number: 9, arguments: [0, 4096, 3, 0x22, UInt64.max, 0]
+        )!
+        guard case .returned(let mmapAfterShrinkAddress) = mmapAfterShrink else {
+            preconditionFailure()
+        }
+        precondition(mmapAfterShrinkAddress == shrunkBreakValue)
+
         let blockedByFirstMapping = largeDispatcher.dispatch(
             number: 12, arguments: [9 * 1024 * 1024, 0, 0, 0, 0, 0]
         )!
         guard case .returned(let blockedBreakValue) = blockedByFirstMapping else { preconditionFailure() }
-        precondition(blockedBreakValue == expandedBreakValue)
+        precondition(blockedBreakValue == shrunkBreakValue)
 
         // With no mmap ranges, the stack guard remains an independent ceiling.
         let guardMemory = GuestMemory(size: 32 * 1024 * 1024)
