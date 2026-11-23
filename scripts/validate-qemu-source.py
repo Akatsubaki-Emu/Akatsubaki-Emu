@@ -816,7 +816,7 @@ required = {
 
         "if (requires_jit != has_jit_callbacks)",
         "unexpected isteam_qemu_set_jit_callbacks in TCI runtime",
-        "workflow = (root / ".github" / "workflows" / "validate-repository.yml")",
+        "validate-repository.yml",
     ],
     "scripts/tests/test_qemu_native_bridge.c": [
         "tooManyArguments[4097]",
