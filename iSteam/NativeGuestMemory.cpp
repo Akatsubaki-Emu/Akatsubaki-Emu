@@ -350,7 +350,7 @@ bool isteam_guest_memory_map(ISteamGuestMemory *memory, uint64_t offset,
         previous.reserve(static_cast<size_t>(lastPage - firstPage + 1));
         for (uint64_t page = firstPage; page <= lastPage; ++page) {
             const auto found = memory->pagePermissions.find(page);
-            previous.push_back({page, found == memory->pagePermissions.end() ? 0 : found->second,
+            previous.push_back({page, found == memory->pagePermissions.end() ? uint8_t{0} : found->second,
                                 found != memory->pagePermissions.end()});
         }
         try {
