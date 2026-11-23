@@ -129,17 +129,26 @@ final class GuestMemory {
         return Data(bytes[Int(offset)..<Int(offset) + length])
     }
 
+    func read(offset: UInt64, length: Int, into data: inout Data,
+              destinationOffset: Int) -> Bool {
+        guard length >= 0, destinationOffset >= 0,
+              destinationOffset <= data.count,
+              length <= data.count - destinationOffset,
+              offset <= size, UInt64(length) <= size - offset else { return false }
+        guard length > 0 else { return true }
+        let sourceStart = Int(offset)
+        data.replaceSubrange(
+            destinationOffset..<(destinationOffset + length),
+            with: bytes[sourceStart..<(sourceStart + length)]
+        )
+        return true
+    }
+
     func write(_ data: Data, offset: UInt64) -> Bool {
         guard offset <= size, UInt64(data.count) <= size - offset else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset) + data.count, with: data)
         return true
     }
-}
-
-final class EmulationLog {
-    static let shared = EmulationLog()
-    private(set) var messages: [String] = []
-    func write(_ message: String) { messages.append(message) }
 }
 
 final class TestAOTExecutor: KenranButoAOTExecuting {
@@ -208,12 +217,22 @@ struct InterpreterTests {
         precondition(readyAOT.executeCalls == 0)
         precondition(unsupportedStartMemory.readPrefixCalls == 1)
 
+        let guestOutputReceived = DispatchSemaphore(value: 0)
+        let guestOutputObserver = NotificationCenter.default.addObserver(
+            forName: .emulationLogDidWrite, object: EmulationLog.shared, queue: nil
+        ) { notification in
+            if notification.userInfo?["message"] as? String == "[guest stdout] hello world\n" {
+                guestOutputReceived.signal()
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(guestOutputObserver) }
+
         let interpreter = X86_64Interpreter(memory: memory)
         try interpreter.reset(entryPoint: 0)
         let interpreterExit = try interpreter.run(maxInstructions: 32)
         precondition(interpreterExit == .halted)
         precondition(interpreter.instructionCount == 9)
-        precondition(EmulationLog.shared.messages.contains("[guest stdout] hello world\n"))
+        precondition(guestOutputReceived.wait(timeout: .now() + .seconds(2)) == .success)
 
         let budgetMemory = GuestMemory(size: 32)
         precondition(budgetMemory.write(Data([0x90, 0x90]), offset: 0))
@@ -1317,8 +1336,8 @@ struct InterpreterTests {
             iSteamAOTGuestMemoryWrite(&callbackState, 132, UnsafeRawPointer(p.baseAddress!), p.count)
         }
         precondition(writeOK)
-        var fault:UInt8=0
-        let faultOK = withUnsafeMutablePointer(to:&fault) { p in
+        var faultByte: UInt8 = 0
+        let faultOK = withUnsafeMutablePointer(to: &faultByte) { p in
             iSteamAOTGuestMemoryRead(&callbackState, 4096, UnsafeMutableRawPointer(p), 1)
         }
         precondition(!faultOK && callbackState.exit_reason == 7)
