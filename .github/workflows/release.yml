@@ -199,14 +199,41 @@ jobs:
           grep -Eq ' _?qemu_system_shutdown_request$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU graceful-shutdown export is missing." >&2; exit 1; }
           grep -Eq ' _?isteam_qemu_set_jit_callbacks$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU StikDebug JIT callback export is missing." >&2; exit 1; }
 
-          # The IPA must contain the runtime, not just validate an artifact
-          # that is left behind in the runner workspace.
+          # Validate the separately packaged no-JIT TCI runtime as well as the
+          # legacy root JIT manifest. The merged IPA must carry both modes.
+          JIT_RUNTIME_DIR="$RUNTIME_DIR/QEMU/JIT"
+          test -s "$JIT_RUNTIME_DIR/runtime-library-path.txt" || { echo "JIT runtime manifest is missing." >&2; exit 1; }
+          JIT_RUNTIME_REL="$(head -n 1 "$JIT_RUNTIME_DIR/runtime-library-path.txt")"
+          test "$JIT_RUNTIME_REL" = "$RUNTIME_REL" || { echo "Root runtime manifest does not match the JIT manifest." >&2; exit 1; }
+          TCI_RUNTIME_DIR="$RUNTIME_DIR/QEMU/TCI"
+          test -s "$TCI_RUNTIME_DIR/runtime-library-path.txt" || { echo "TCI runtime manifest is missing." >&2; exit 1; }
+          test -s "$TCI_RUNTIME_DIR/exports.txt" || { echo "TCI export manifest is missing." >&2; exit 1; }
+          TCI_RUNTIME_REL="$(head -n 1 "$TCI_RUNTIME_DIR/runtime-library-path.txt")"
+          case "$TCI_RUNTIME_REL" in
+            Frameworks/*) ;;
+            *) echo "Unexpected QEMU TCI runtime path: $TCI_RUNTIME_REL" >&2; exit 1 ;;
+          esac
+          test -s "$RUNTIME_DIR/$TCI_RUNTIME_REL" || { echo "TCI manifest points to a missing QEMU library: $TCI_RUNTIME_REL" >&2; exit 1; }
+          for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request; do
+            grep -Eq " _?${symbol}$" "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI export is missing: $symbol" >&2; exit 1; }
+          done
+          if grep -Eq ' _?isteam_qemu_set_jit_callbacks$' "$TCI_RUNTIME_DIR/exports.txt"; then
+            echo "TCI runtime must not export the StikDebug JIT callback." >&2
+            exit 1
+          fi
+
+          # Embed both variants, not only the runner's validated artifact.
           mkdir -p "$APP/Frameworks" "$APP/QEMU"
           cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
           cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
           EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
-          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
-          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
+          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU JIT library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
+          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded JIT compatibility manifest is missing." >&2; exit 1; }
+          test -s "$APP/QEMU/JIT/runtime-library-path.txt" || { echo "Embedded JIT mode manifest is missing." >&2; exit 1; }
+          test -s "$APP/QEMU/TCI/runtime-library-path.txt" || { echo "Embedded TCI mode manifest is missing." >&2; exit 1; }
+          test -s "$APP/$TCI_RUNTIME_REL" || { echo "Embedded QEMU TCI library is missing: $TCI_RUNTIME_REL" >&2; exit 1; }
+          test -s "$APP/QEMU/TCI/exports.txt" || { echo "Embedded TCI export manifest is missing." >&2; exit 1; }
+          test -s "$APP/QEMU/runtime-mode-manifest.txt" || { echo "Embedded runtime mode manifest is missing." >&2; exit 1; }
           test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
 
           mkdir -p build/Payload
