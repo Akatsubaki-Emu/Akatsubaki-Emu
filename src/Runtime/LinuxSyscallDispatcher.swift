@@ -213,26 +213,37 @@ final class LinuxSyscallDispatcher {
 
     private func setBreak(_ requested: UInt64) -> UInt64 {
         if requested == 0 { return programBreak }
-        let firstMapping = mappedRanges.first?.lowerBound ?? mmapCursor
-        let upperLimit = min(firstMapping, stackBase >= 4096 ? stackBase - 4096 : 0)
+        let stackGuard = stackBase >= 4096 ? stackBase - 4096 : 0
+        // mmapCursor is a placement hint, not an address-space boundary. With
+        // no live mappings, the stack guard is the real upper limit for brk.
+        let firstMapping = mappedRanges.first?.lowerBound ?? stackGuard
+        let upperLimit = min(firstMapping, stackGuard)
         guard requested >= initialProgramBreak, requested <= upperLimit,
               requested <= memory.size else { return programBreak }
-        let oldPageEnd = Self.alignUp(programBreak)
+        let previousBreak = programBreak
+        let oldPageEnd = Self.alignUp(previousBreak)
         let newPageEnd = Self.alignUp(requested)
-        if requested > programBreak {
-            guard memory.zero(offset: programBreak, length: requested - programBreak) else { return programBreak }
+        if requested > previousBreak {
+            guard memory.zero(offset: previousBreak, length: requested - previousBreak) else { return previousBreak }
             if newPageEnd > oldPageEnd,
                !memory.map(offset: oldPageEnd, length: newPageEnd - oldPageEnd, permissions: 3) {
-                return programBreak
+                return previousBreak
             }
-        } else if requested < programBreak {
-            guard memory.zero(offset: requested, length: programBreak - requested) else { return programBreak }
+        } else if requested < previousBreak {
+            guard memory.zero(offset: requested, length: previousBreak - requested) else { return previousBreak }
             if oldPageEnd > newPageEnd,
                !memory.unmap(offset: newPageEnd, length: oldPageEnd - newPageEnd) {
-                return programBreak
+                return previousBreak
             }
         }
         programBreak = requested
+        if requested < previousBreak {
+            // Reuse the released heap range without crossing the minimum
+            // allocator cursor or any still-live mapping.
+            let (minimumRaw, overflow) = initialProgramBreak.addingReportingOverflow(0x10000)
+            let minimumCursor = overflow ? UInt64.max : Self.alignUp(minimumRaw)
+            mmapCursor = max(minimumCursor, Self.alignUp(requested))
+        }
         return programBreak
     }
 
