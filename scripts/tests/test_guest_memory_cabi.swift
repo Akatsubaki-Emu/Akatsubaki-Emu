@@ -1,8 +1,21 @@
 import Foundation
 
+// The standalone dispatcher target only needs configure's error case; the app
+// defines the complete GuestEngineError in GuestMachine.swift.
+enum GuestEngineError: Error {
+    case invalidState(String)
+}
+
 @main
 struct GuestMemoryCABIIntegrationTests {
-    static func main() {
+    private static func returned(_ outcome: LinuxSyscallDispatcher.Outcome?) -> UInt64 {
+        guard case let .returned(value)? = outcome else {
+            preconditionFailure("Expected a returned Linux syscall result.")
+        }
+        return value
+    }
+
+    static func main() throws {
         let page = GuestMemory.pageSize
         let memory = GuestMemory(size: page * 4)
         precondition(memory.isAvailable, "Production GuestMemory C ABI allocation failed.")
@@ -69,6 +82,62 @@ struct GuestMemoryCABIIntegrationTests {
                                  permissions: 0x3))
         precondition(!memory.protect(offset: page * 3, length: page, permissions: 0x5))
         precondition(memory.read(offset: page, length: 2) == boundarySuffix)
+
+        // Exercise the production Linux syscall dispatcher against the same
+        // Swift wrapper and native C++ page-permission implementation.
+        let syscallMemory = GuestMemory(size: 16 * 1024 * 1024)
+        precondition(syscallMemory.isAvailable)
+        precondition(syscallMemory.beginMapping())
+        let dispatcher = LinuxSyscallDispatcher(memory: syscallMemory)
+        try dispatcher.configure(programBreak: 1 * 1024 * 1024,
+                                 stackBase: 8 * 1024 * 1024)
+
+        func syscall(_ number: UInt64,
+                     _ arg0: UInt64 = 0, _ arg1: UInt64 = 0,
+                     _ arg2: UInt64 = 0, _ arg3: UInt64 = 0,
+                     _ arg4: UInt64 = 0, _ arg5: UInt64 = 0) -> UInt64 {
+            Self.returned(dispatcher.dispatch(number: number,
+                                              arguments: [arg0, arg1, arg2, arg3, arg4, arg5]))
+        }
+
+        let initialBreak: UInt64 = 1 * 1024 * 1024
+        let expandedBreak: UInt64 = 7 * 1024 * 1024
+        let shrinkBreak: UInt64 = 3 * 1024 * 1024 / 2
+        let stackGuard: UInt64 = 8 * 1024 * 1024 - page
+        precondition(syscall(12, expandedBreak) == expandedBreak,
+                     "brk must grow to the stack guard when no mmap ranges exist.")
+        precondition(syscallMemory.hasMappedPages(offset: initialBreak,
+                                                  length: expandedBreak - initialBreak))
+
+        // First mmap must start at or above the expanded break, and NOREPLACE
+        // must fail atomically when the requested pages are already mapped.
+        let firstMapping = syscall(9, 0, page, 0x3, 0x22, UInt64.max, 0)
+        precondition(firstMapping >= expandedBreak && firstMapping < stackGuard)
+        precondition(syscallMemory.hasMappedPages(offset: firstMapping, length: page))
+        precondition(syscallMemory.writeByte(0xAB, offset: firstMapping))
+        let noReplace = syscall(9, firstMapping, page, 0x3, 0x100022, UInt64.max, 0)
+        precondition(noReplace == UInt64(bitPattern: Int64(-17)),
+                     "MAP_FIXED_NOREPLACE must reject existing mappings with EEXIST.")
+
+        // MAP_FIXED replaces the mapping and must not expose the previous bytes.
+        let replacement = syscall(9, firstMapping, page, 0x3, 0x32, UInt64.max, 0)
+        precondition(replacement == firstMapping)
+        precondition(syscallMemory.read(offset: firstMapping, length: 1) == Data([0]))
+        precondition(syscall(10, firstMapping, page, 0x5) == 0)
+        precondition(syscallMemory.readExecuteByte(offset: firstMapping) == 0)
+        precondition(!syscallMemory.writeByte(0xAB, offset: firstMapping))
+
+        // brk may shrink below an existing mapping but must never grow into it.
+        precondition(syscall(12, firstMapping + page) == expandedBreak)
+        precondition(syscall(12, shrinkBreak) == shrinkBreak)
+        let secondMapping = syscall(9, 0, page, 0x3, 0x22, UInt64.max, 0)
+        precondition(secondMapping == shrinkBreak,
+                     "After brk shrink, mmap should reuse the released range before later mappings.")
+        precondition(syscall(11, secondMapping, page) == 0)
+        precondition(syscall(11, firstMapping, page) == 0)
+        precondition(!syscallMemory.hasMappedPages(offset: firstMapping, length: page))
+        precondition(syscall(12, stackGuard) == stackGuard,
+                     "brk must reach the stack guard again after all mmap ranges are removed.")
 
         print("Production Swift GuestMemory + NativeGuestMemory C ABI permission, execute-fetch, mmap/mprotect/munmap and remap integration passed.")
     }
