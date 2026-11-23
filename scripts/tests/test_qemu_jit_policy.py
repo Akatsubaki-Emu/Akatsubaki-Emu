@@ -10,13 +10,12 @@ class QEMUJITPolicyTests(unittest.TestCase):
             "#if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)",
             1,
         )[1].split("#endif", 1)[0]
-        self.assertIn("guard JITCoordinator.shared.isQEMUJITReady else", gate)
-        self.assertIn("The selected QEMU JIT runtime requires physical iOS 26+", gate)
-        self.assertIn("get-task-allow entitlement", gate)
-        self.assertIn("supported StikDebug protocol", gate)
-        self.assertIn("Select QEMU TCI (no JIT)", gate)
+        self.assertIn("if requiresJIT && !JITCoordinator.shared.isQEMUJITReady", gate)
+        self.assertIn("QEMU JIT is unavailable; falling back to the TCI no-JIT runtime.", gate)
+        self.assertIn("QEMU JIT runtime failed preflight; falling back to TCI:", gate)
+        self.assertIn("effectiveConfiguration.accelerator = requiresJIT ? .jit : .tcg", runtime)
         self.assertLess(
-            runtime.index("guard JITCoordinator.shared.isQEMUJITReady else"),
+            runtime.index("if requiresJIT && !JITCoordinator.shared.isQEMUJITReady"),
             runtime.index("switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)"),
         )
         coordinator = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
