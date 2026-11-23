@@ -1385,6 +1385,75 @@ struct InterpreterTests {
         let crossPageExit = try crossPage.run(maxInstructions: 1)
         precondition(crossPageExit == .memoryFault(address: 4095))
 
+#if KENRAN_BUTO_AOT_TESTING
+        // Execute real ARM64 code generated from x86-64 MOV instructions.
+        // ADD and HLT are deliberately unsupported by the translator and must
+        // side-exit to the interpreter at the exact guest RIP.
+        let aotMemory = GuestMemory(size: 4096)
+        precondition(aotMemory.beginMapping())
+        precondition(aotMemory.map(offset: 0, length: 4096, permissions: 7))
+        let aotProgram: [UInt8] = [
+            0xB8, 0xFF, 0xFF, 0xFF, 0xFF,       // mov eax, 0xffffffff (AOT)
+            0x83, 0xC0, 0x01,                   // add eax, 1 (interpreter side exit)
+            0xBB, 0x78, 0x56, 0x34, 0x12,       // mov ebx, 0x12345678 (AOT)
+            0xF4                                // hlt (interpreter side exit)
+        ]
+        precondition(aotMemory.write(Data(aotProgram), offset: 0))
+        let aotExecutor = KenranButoAOTExecutor()
+        precondition(aotExecutor.refreshAvailability())
+        let hybridInterpreter = X86_64Interpreter(memory: aotMemory, aotExecutor: aotExecutor)
+        try hybridInterpreter.reset(entryPoint: 0)
+        let hybridExit = try hybridInterpreter.run(maxInstructions: 4)
+        precondition(hybridExit == .halted)
+        precondition(aotExecutor.blocksExecuted == 2)
+        precondition(aotExecutor.cachedBlockCount == 2)
+        precondition(hybridInterpreter.registerValue(0) == 0)
+        precondition(hybridInterpreter.registerValue(3) == 0x12345678)
+        precondition(hybridInterpreter.conditionFlags & X86_64ALU.zero != 0)
+        precondition(hybridInterpreter.conditionFlags & X86_64ALU.carry != 0)
+        precondition(hybridInterpreter.instructionCount == 4)
+
+        // AOT must not swallow a memory instruction: it exits at the exact
+        // unsupported opcode and lets the interpreter report the real fault.
+        let aotFaultMemory = GuestMemory(size: 4096)
+        precondition(aotFaultMemory.beginMapping())
+        precondition(aotFaultMemory.map(offset: 0, length: 4096, permissions: 7))
+        let aotFaultProgram: [UInt8] = [
+            0x48, 0xBB, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov rbx, 0x1000
+            0x48, 0x8B, 0x03                                              // mov rax, [rbx]
+        ]
+        precondition(aotFaultMemory.write(Data(aotFaultProgram), offset: 0))
+        let aotFaultExecutor = KenranButoAOTExecutor()
+        let aotFaultInterpreter = X86_64Interpreter(memory: aotFaultMemory, aotExecutor: aotFaultExecutor)
+        try aotFaultInterpreter.reset(entryPoint: 0)
+        let aotFaultExit = try aotFaultInterpreter.run(maxInstructions: 4)
+        precondition(aotFaultExit == .memoryFault(address: 4096))
+        precondition(aotFaultExecutor.blocksExecuted == 1)
+        precondition(aotFaultInterpreter.instructionCount == 2)
+
+        // Identical blocks are cached and reused; invalidation releases them.
+        let cacheMemory = GuestMemory(size: 4096)
+        let cacheExecutor = KenranButoAOTExecutor()
+        precondition(cacheExecutor.refreshAvailability())
+        var cacheRegisters = [UInt64](repeating: 0, count: 16)
+        let cacheCode = Data([0x90, 0x90])
+        let firstCachedRun = cacheExecutor.execute(
+            guestCode: cacheCode, registers: &cacheRegisters, rip: 0, rflags: 2,
+            fsBase: 0, gsBase: 0, memory: cacheMemory, maximumInstructions: 1
+        )
+        let secondCachedRun = cacheExecutor.execute(
+            guestCode: cacheCode, registers: &cacheRegisters, rip: 0, rflags: 2,
+            fsBase: 0, gsBase: 0, memory: cacheMemory, maximumInstructions: 1
+        )
+        precondition(firstCachedRun?.instructionCount == 1)
+        precondition(secondCachedRun?.instructionCount == 1)
+        precondition(cacheExecutor.cachedBlockCount == 1)
+        precondition(cacheExecutor.blocksExecuted == 2)
+        cacheExecutor.invalidateAll()
+        precondition(cacheExecutor.cachedBlockCount == 0)
+        precondition(cacheExecutor.cachedExecutableBytes == 0)
+#endif
+
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
 }
