@@ -97,14 +97,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -s iSteam/KenranButoAOTExecutableMemory.c && -s src/Runtime/KenranButoAOTExecution.swift ]]; then
+          if [[ -s iSteam/KenranButoAOTExecutableMemory.c && -s iSteam/KenranButoAOTExecutableMemory.h && -s iSteam/JIT26Protocol.h && -s src/Runtime/KenranButoAOTExecution.swift ]]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Explain optional native AOT runtime tests
         if: steps.native_aot.outputs.available != 'true'
-        run: echo "Native AOT runtime integration is not present on this branch; translator and cache tests ran."
+        run: echo "Native AOT runtime integration is incomplete on this revision; translator and cache tests ran, while native execution tests were explicitly skipped."
       - name: Compile W^X executable-memory provider
         if: steps.native_aot.outputs.available == 'true'
         shell: bash
