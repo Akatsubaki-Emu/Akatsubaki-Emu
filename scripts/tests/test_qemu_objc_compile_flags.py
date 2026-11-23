@@ -40,9 +40,8 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
 
     def test_meson_patcher_changes_only_the_objc_compiler_block(self):
         source = "objc.get_supported_arguments(warn_flags)\n" + self.meson_source()
-        patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
-        self.assertEqual(patched.count("-fno-objc-msgsend-class-selector-stubs"), 1)
-        self.assertTrue(patched.startswith("objc.get_supported_arguments(warn_flags)\n"))
+        with self.assertRaisesRegex(SystemExit, "duplicate Objective-C compiler argument anchor"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
 
     def test_meson_patcher_handles_qemu_common_flags_variant(self):
         source = self.meson_source().replace(
@@ -117,6 +116,117 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
                 ninja,
                 "/toolchain/libclang_rt.ios.a",
                 require_objc_compile=True,
+            )
+
+    def four_conditional_source(self, compiler_call="objc.get_supported_arguments(warn_flags)"):
+        return (
+            "if 'objc' in all_languages\n"
+            "  summary_info += {'Objective-C compiler': true}\n"
+            "endif\n"
+            "if 'objc' in all_languages\n"
+            "  summary_info += {'OBJCFLAGS': true}\n"
+            "endif\n"
+            "if 'objc' in all_languages\n"
+            "  " + compiler_call + "\n"
+            "endif\n"
+            "if 'objc' in all_languages\n"
+            "  summary_info += {'QEMU_OBJCFLAGS': true}\n"
+            "endif\n"
+            "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\n"
+            "emulator_link_args = []\n"
+        )
+
+    def test_meson_patcher_selects_only_compiler_block_among_four_conditionals(self):
+        patched = patch_qemu_meson_ios.patch_source(
+            self.four_conditional_source(), "/toolchain/libclang_rt.ios.a"
+        )
+        self.assertEqual(patched.count("if 'objc' in all_languages"), 4)
+        self.assertEqual(patched.count("-fno-objc-msgsend-class-selector-stubs"), 1)
+        self.assertIn("summary_info += {'Objective-C compiler': true}", patched)
+        self.assertIn("summary_info += {'OBJCFLAGS': true}", patched)
+        self.assertIn("summary_info += {'QEMU_OBJCFLAGS': true}", patched)
+
+    def test_meson_patcher_four_conditional_patch_is_idempotent(self):
+        source = self.four_conditional_source()
+        once = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+        self.assertEqual(
+            patch_qemu_meson_ios.patch_source(once, "/toolchain/libclang_rt.ios.a"),
+            once,
+        )
+
+    def test_meson_patcher_four_conditional_supports_common_flags_variant(self):
+        source = self.four_conditional_source(
+            "objc.get_supported_arguments(qemu_common_flags + warn_flags)"
+        )
+        patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+        self.assertIn(
+            "objc.get_supported_arguments(qemu_common_flags + warn_flags + "
+            "['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')",
+            patched,
+        )
+
+    def test_meson_patcher_four_conditional_missing_anchor_fails_closed(self):
+        source = self.four_conditional_source().replace(
+            "objc.get_supported_arguments(warn_flags)\n", ""
+        )
+        with self.assertRaisesRegex(SystemExit, "Objective-C compiler argument anchor"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+    def test_meson_patcher_four_conditional_duplicate_anchor_fails_closed(self):
+        source = self.four_conditional_source().replace(
+            "objc.get_supported_arguments(warn_flags)",
+            "objc.get_supported_arguments(warn_flags)\n  objc.get_supported_arguments(warn_flags)",
+        )
+        with self.assertRaisesRegex(SystemExit, "duplicate Objective-C compiler argument anchor"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+    def test_meson_patcher_four_conditional_unterminated_block_fails_closed(self):
+        source = self.four_conditional_source().replace(
+            "objc.get_supported_arguments(warn_flags)\nendif",
+            "objc.get_supported_arguments(warn_flags)",
+        )
+        with self.assertRaisesRegex(SystemExit, "conditional block is unterminated"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+    def test_meson_patcher_four_conditional_duplicate_target_blocks_fail_closed(self):
+        source = self.four_conditional_source() + (
+            "if 'objc' in all_languages\n"
+            "  objc.get_supported_arguments(warn_flags)\n"
+            "endif\n"
+        )
+        with self.assertRaisesRegex(SystemExit, "duplicate Objective-C compiler argument anchor"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+    def test_meson_patcher_four_conditional_preserves_summary_blocks(self):
+        patched = patch_qemu_meson_ios.patch_source(
+            self.four_conditional_source(), "/toolchain/libclang_rt.ios.a"
+        )
+        for token in (
+            "summary_info += {'Objective-C compiler': true}",
+            "summary_info += {'OBJCFLAGS': true}",
+            "summary_info += {'QEMU_OBJCFLAGS': true}",
+        ):
+            self.assertEqual(patched.count(token), 1)
+
+    def test_meson_patcher_four_conditional_rejects_patched_form_outside_target(self):
+        source = self.four_conditional_source() + (
+            patch_qemu_meson_ios.OBJC_ARGUMENTS["objc.get_supported_arguments(warn_flags)"] + "\n"
+        )
+        with self.assertRaisesRegex(SystemExit, "outside its compiler block"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+    def test_meson_patcher_four_conditional_rejects_mixed_patch_state(self):
+        patched = patch_qemu_meson_ios.OBJC_ARGUMENTS["objc.get_supported_arguments(warn_flags)"]
+        source = self.four_conditional_source(
+            patched + "\n  objc.get_supported_arguments(warn_flags)"
+        )
+        with self.assertRaisesRegex(SystemExit, "unpatched Objective-C compiler call remains"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+    def test_meson_patcher_four_conditional_missing_all_blocks_fails_closed(self):
+        with self.assertRaisesRegex(SystemExit, "Objective-C compiler block not found exactly once"):
+            patch_qemu_meson_ios.patch_source(
+                "project('qemu', 'c')\n", "/toolchain/libclang_rt.ios.a"
             )
 
 
