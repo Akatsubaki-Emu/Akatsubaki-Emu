@@ -71,15 +71,31 @@ int main(int argc, char **argv) {
     char validation_error[512] = {0};
     assert(isteam_qemu_validate_library(library, requires_jit,
                                         validation_error, (int)sizeof(validation_error)));
+    const char *arguments[] = {"qemu-system-x86_64"};
+    char mode_error[512] = {0};
     if (!requires_jit) {
         memset(validation_error, 0, sizeof(validation_error));
         assert(!isteam_qemu_validate_library(library, true,
                                              validation_error, (int)sizeof(validation_error)));
         assert(strstr(validation_error, "isteam_qemu_set_jit_callbacks") != NULL);
         assert(dlsym(probe, "isteam_qemu_set_jit_callbacks") == NULL);
+        assert(!isteam_qemu_start(1, arguments, library, true,
+                                  mode_error, (int)sizeof(mode_error)));
+        assert(strstr(mode_error, "isteam_qemu_set_jit_callbacks") != NULL);
     } else {
         assert(read_counter(probe, "fake_qemu_jit_callbacks_installed") == 0);
+        memset(validation_error, 0, sizeof(validation_error));
+        assert(!isteam_qemu_validate_library(library, false,
+                                             validation_error, (int)sizeof(validation_error)));
+        assert(strstr(validation_error, "unexpected isteam_qemu_set_jit_callbacks") != NULL);
+        assert(dlsym(probe, "isteam_qemu_set_jit_callbacks") != NULL);
+        assert(!isteam_qemu_start(1, arguments, library, false,
+                                  mode_error, (int)sizeof(mode_error)));
+        assert(strstr(mode_error, "unexpected isteam_qemu_set_jit_callbacks") != NULL);
     }
+    // A wrong-mode attempt must release the startup reservation without
+    // consuming the process's one-shot QEMU lifecycle.
+    assert(!isteam_qemu_is_active());
 
     char argumentError[512] = {0};
     const char *tooManyArguments[4097];
@@ -144,7 +160,6 @@ int main(int argc, char **argv) {
     assert(read_counter(probe, "fake_qemu_shutdown_count") == 1);
 
     char error[512] = {0};
-    const char *arguments[] = {"qemu-system-x86_64"};
     assert(!isteam_qemu_start(1, arguments, library, requires_jit,
                               error, (int)sizeof(error)));
     assert(strstr(error, "cannot safely restart") != NULL);
