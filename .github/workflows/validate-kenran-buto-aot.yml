@@ -99,12 +99,12 @@ jobs:
           clang -std=c11 -Wall -Wextra -Werror -I iSteam \
             -c iSteam/KenranButoAOTExecutableMemory.c \
             -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
-      - name: Execute ABI, AOT block and interpreter side-exit tests on ARM64
+      - name: Execute native AOT blocks, ABI, cache and interpreter side-exit tests on ARM64
         shell: bash
         run: |
           set -euo pipefail
           test "$(uname -m)" = "arm64" || { echo "Native AOT execution requires an ARM64 runner." >&2; exit 1; }
-          swiftc -parse-as-library -swift-version 5 \
+          swiftc -parse-as-library -swift-version 5 -D KENRAN_BUTO_AOT_TESTING \
             -import-objc-header iSteam/JIT26Protocol.h \
             src/Core/EmulationLog.swift \
             src/Performance/TranslationCache.swift \
