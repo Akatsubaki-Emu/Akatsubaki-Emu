@@ -89,7 +89,7 @@ final class LinuxSyscallDispatcher {
             return .returned(0)
         case 9:
             guard arg4 == UInt64.max, arg5 == 0 else { return .returned(errno(22)) }
-            return .returned(mapAnonymous(address: arg0, length: arg1, flags: arg3))
+            return .returned(mapAnonymous(address: arg0, length: arg1, protection: arg2, flags: arg3))
         case 10:
             // Guest page permissions are not enforced by the current memory/ELF/mmap path.
             // Never report mprotect success until those restrictions are actually applied.
@@ -226,10 +226,18 @@ final class LinuxSyscallDispatcher {
         return programBreak
     }
 
-    private func mapAnonymous(address requested: UInt64, length: UInt64, flags: UInt64) -> UInt64 {
+    private func mapAnonymous(address requested: UInt64, length: UInt64,
+                              protection: UInt64, flags: UInt64) -> UInt64 {
         let mapType = flags & 0x03
+        // This memory backend does not enforce per-page guest permissions yet.
+        // Only anonymous read/write mappings are safe to expose; reject all
+        // other valid Linux protections until the native permission model lands.
+        let supportedFlags: UInt64 = 0x03 | 0x10 | 0x20 | 0x100000
         guard length > 0, length <= memory.size, flags & 0x20 != 0,
-              mapType == 1 || mapType == 2 else { return errno(22) }
+              flags & ~supportedFlags == 0,
+              protection == 0x3,
+              mapType == 1 || mapType == 2,
+              !(flags & 0x10 != 0 && flags & 0x100000 != 0) else { return errno(22) }
         let (rounded, overflow) = length.addingReportingOverflow(4095)
         guard !overflow else { return errno(12) }
         let size = rounded & ~UInt64(4095)
