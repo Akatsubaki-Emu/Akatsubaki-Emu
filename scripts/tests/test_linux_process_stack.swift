@@ -3,15 +3,49 @@ import Foundation
 final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
+    private var permissionsEnabled = false
+    private var pagePermissions: [UInt64: UInt8] = [:]
+    private static let pageSize: UInt64 = 4096
 
     init(size: UInt64) {
         self.size = size
         bytes = [UInt8](repeating: 0, count: Int(size))
     }
 
+    func beginMapping() -> Bool {
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = true
+        return true
+    }
+
+    func map(offset: UInt64, length: UInt64, permissions: UInt8, merge: Bool = true) -> Bool {
+        guard permissionsEnabled, offset % Self.pageSize == 0, length > 0,
+              length % Self.pageSize == 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / Self.pageSize
+        let last = (offset + length - 1) / Self.pageSize
+        for page in first...last {
+            if merge { pagePermissions[page, default: 0] |= permissions }
+            else { pagePermissions[page] = permissions }
+        }
+        return true
+    }
+
+    func permission(at offset: UInt64) -> UInt8? {
+        guard offset < size, permissionsEnabled else { return nil }
+        return pagePermissions[offset / Self.pageSize]
+    }
+
+    private func hasPermission(offset: UInt64, length: UInt64, required: UInt8) -> Bool {
+        guard length > 0, offset <= size, length <= size - offset else { return false }
+        guard permissionsEnabled else { return true }
+        let first = offset / Self.pageSize
+        let last = (offset + length - 1) / Self.pageSize
+        return (first...last).allSatisfy { (pagePermissions[$0] ?? 0) & required == required }
+    }
+
     func write(_ data: Data, sourceRange: Range<Int>, offset: UInt64) -> Bool {
         guard sourceRange.lowerBound >= 0, sourceRange.upperBound <= data.count,
-              offset <= size, UInt64(sourceRange.count) <= size - offset else { return false }
+              hasPermission(offset: offset, length: UInt64(sourceRange.count), required: 2) else { return false }
         let destination = Int(offset)
         for index in sourceRange {
             bytes[destination + index - sourceRange.lowerBound] = data[index]
@@ -20,18 +54,18 @@ final class GuestMemory {
     }
 
     func write(_ data: Data, offset: UInt64) -> Bool {
-        guard offset <= size, UInt64(data.count) <= size - offset else { return false }
+        guard hasPermission(offset: offset, length: UInt64(data.count), required: 2) else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset) + data.count, with: data)
         return true
     }
 
     func readByte(offset: UInt64) -> UInt8? {
-        guard offset < size else { return nil }
+        guard hasPermission(offset: offset, length: 1, required: 1) else { return nil }
         return bytes[Int(offset)]
     }
 
     func readUInt64(offset: UInt64) -> UInt64? {
-        guard offset <= size, size - offset >= 8 else { return nil }
+        guard hasPermission(offset: offset, length: 8, required: 1) else { return nil }
         let index = Int(offset)
         var value: UInt64 = 0
         for shift in 0..<8 { value |= UInt64(bytes[index + shift]) << (shift * 8) }
@@ -39,10 +73,11 @@ final class GuestMemory {
     }
 
     func readString(offset: UInt64) -> String? {
-        guard offset < size else { return nil }
+        guard hasPermission(offset: offset, length: 1, required: 1) else { return nil }
         var result: [UInt8] = []
         var index = Int(offset)
         while index < bytes.count && bytes[index] != 0 {
+            guard hasPermission(offset: UInt64(index), length: 1, required: 1) else { return nil }
             result.append(bytes[index])
             index += 1
         }
@@ -54,6 +89,7 @@ final class GuestMemory {
 struct LinuxProcessStackTests {
     static func main() throws {
         let memory = GuestMemory(size: 4 * 1024 * 1024)
+        precondition(memory.beginMapping())
         let random = Data(repeating: 0xA5, count: 16)
         let result = try LinuxProcessStackBuilder().build(
             executablePath: "/bin/hello",
@@ -68,6 +104,7 @@ struct LinuxProcessStackTests {
 
         precondition(result.stackPointer & 0xF == 0)
         precondition(result.stackBase == 0x300000)
+        precondition(memory.permission(at: result.stackBase) == 3) // stack is readable/writable, never executable
         precondition(memory.readUInt64(offset: result.stackPointer) == 2)
         precondition(memory.readString(offset: memory.readUInt64(offset: result.argumentVectorAddress)!) == "/bin/hello")
         precondition(memory.readString(offset: memory.readUInt64(offset: result.argumentVectorAddress + 8)!) == "--version")
