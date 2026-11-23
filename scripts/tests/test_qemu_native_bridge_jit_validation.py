@@ -59,8 +59,10 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertIn('requiresJIT ? "JIT" : "TCI"', status)
         self.assertIn('QEMU-TCI.framework/QEMU', status)
         self.assertIn("libraryPath, requiresJIT, baseAddress", status)
-        self.assertIn("let requiresJIT = configuration.accelerator == .jit", runtime)
-        self.assertIn("QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", runtime)
+        self.assertIn("let requestedJIT = configuration.accelerator == .jit", runtime)
+        self.assertIn("var requiresJIT = requestedJIT", runtime)
+        self.assertIn("var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", runtime)
+        self.assertIn("switch runtimeStatus", runtime)
         self.assertIn("libraryPath, requiresJIT, error", runtime)
 
     def test_qemu_init_uses_the_upstream_void_abi(self):
