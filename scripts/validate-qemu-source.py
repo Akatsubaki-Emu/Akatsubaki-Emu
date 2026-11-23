@@ -623,6 +623,7 @@ required = {
         'dlsym(library, "qemu_system_shutdown_request")',
         'dlsym(library, "isteam_qemu_set_jit_callbacks")',
         "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
+        "has_jit_callbacks != requires_jit",
         "static bool g_starting = false;",
         "static _Thread_local char error_copy",
         "ISTEAM_QEMU_MAX_ARGUMENTS 4096",
@@ -632,7 +633,6 @@ required = {
         "error_buffer && error_capacity > 0",
     ],
     "scripts/tests/fake_qemu_runtime.c": [
-        "#ifndef FAKE_QEMU_NO_JIT_CALLBACK",
         "void isteam_qemu_set_jit_callbacks",
         "fake_qemu_jit_callbacks_installed",
         "void qemu_init(int argc, char *argv[])",
@@ -642,6 +642,12 @@ required = {
         "void qemu_cleanup(int status)",
         "atomic_store(&cleanup_status, status);",
         "atomic_store(&shutdown_cause, cause);",
+    ],
+    "scripts/tests/fake_qemu_runtime_tci.c": [
+        "void qemu_init(int argc, char *argv[])",
+        "int qemu_main_loop(void)",
+        "void qemu_cleanup(int status)",
+        "void qemu_system_shutdown_request(int cause)",
     ],
     "scripts/package-utm-qemu-runtime.sh": [
         " _?isteam_qemu_set_jit_callbacks$",
@@ -801,10 +807,13 @@ required = {
         "poison_nonzero_return_register();",
         "self.assertIn(\"malloc(total_argument_bytes)\", start)",
         "def test_jit_callback_export_is_required_only_for_jit_runtime(self):",
+        "has_jit_callbacks != requires_jit",
         "typedef void (*qemu_set_jit_callbacks_fn)",
         "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
     ],
     "scripts/tests/test_qemu_native_bridge.c": [
+        "const bool wrong_mode = !requires_jit;",
+        "assert(!isteam_qemu_is_active());",
         "tooManyArguments[4097]",
         "oversizedArgument",
         "QEMU arguments exceed the configured size limits",
@@ -1406,10 +1415,12 @@ else:
 
 # The no-JIT bridge test must use a fake library that truly lacks the JIT callback.
 fake_qemu_runtime = Path("scripts/tests/fake_qemu_runtime.c").read_text(encoding="utf-8")
+fake_qemu_runtime_tci = Path("scripts/tests/fake_qemu_runtime_tci.c").read_text(encoding="utf-8")
 native_bridge_test = Path("scripts/tests/test_qemu_native_bridge.c").read_text(encoding="utf-8")
 validation_workflow = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
 for token in (
-    "-DFAKE_QEMU_NO_JIT_CALLBACK",
+    "scripts/tests/fake_qemu_runtime.c",
+    "scripts/tests/fake_qemu_runtime_tci.c",
     'test-qemu-native-bridge" jit',
     'test-qemu-native-bridge" tci',
     "libfakeqemu-jit.so",
@@ -1418,8 +1429,11 @@ for token in (
     if token not in validation_workflow:
         print(f"repository validation workflow: missing JIT/TCI bridge test {token!r}", file=sys.stderr)
         failed = True
-if "#ifndef FAKE_QEMU_NO_JIT_CALLBACK" not in fake_qemu_runtime:
-    print("fake QEMU runtime: no-JIT fixture does not omit the callback export", file=sys.stderr)
+if "void isteam_qemu_set_jit_callbacks" not in fake_qemu_runtime:
+    print("fake QEMU JIT runtime: callback export is missing", file=sys.stderr)
+    failed = True
+if "isteam_qemu_set_jit_callbacks" in fake_qemu_runtime_tci:
+    print("fake QEMU TCI runtime: must not export the JIT callback", file=sys.stderr)
     failed = True
 for token in ('assert(argc == 3);', 'strcmp(argv[1], "jit")', 'strcmp(argv[1], "tci")'):
     if token not in native_bridge_test:
