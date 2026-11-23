@@ -148,6 +148,8 @@ printf '%s\n' "$jit_library" > "$TEMP_OUT/QEMU/JIT/runtime-library-path.txt"
 printf '%s\n' "$tci_library_merged" > "$TEMP_OUT/QEMU/TCI/runtime-library-path.txt"
 cp "$JIT_DIR/exports.txt" "$TEMP_OUT/QEMU/JIT/exports.txt"
 cp "$TCI_DIR/exports.txt" "$TEMP_OUT/QEMU/TCI/exports.txt"
+# Preserve the pre-variant app contract: the root manifest selects JIT by default.
+printf '%s\n' "$jit_library" > "$TEMP_OUT/QEMU/runtime-library-path.txt"
 cp "$JIT_DIR/UTM-SOURCE-REVISION.txt" "$TEMP_OUT/UTM-SOURCE-REVISION.txt"
 cp "$JIT_DIR/UTM-archive-Info.plist" "$TEMP_OUT/UTM-JIT-archive-Info.plist" 2>/dev/null || true
 cp "$TCI_DIR/UTM-archive-Info.plist" "$TEMP_OUT/UTM-TCI-archive-Info.plist" 2>/dev/null || true
