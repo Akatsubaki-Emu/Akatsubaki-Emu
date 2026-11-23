@@ -95,6 +95,23 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let shrunkValue) = shrunk else { preconditionFailure() }
         precondition(shrunkValue == 0x41000)
 
+        // brk must grow beyond the initial mmap hint when no mmap is live.
+        let extended = dispatcher.dispatch(number: 12, arguments: [0x90000, 0, 0, 0, 0, 0])!
+        guard case .returned(let extendedValue) = extended else { preconditionFailure() }
+        precondition(extendedValue == 0x90000)
+        let shrunkAgain = dispatcher.dispatch(number: 12, arguments: [0x41000, 0, 0, 0, 0, 0])!
+        guard case .returned(let shrunkAgainValue) = shrunkAgain else { preconditionFailure() }
+        precondition(shrunkAgainValue == 0x41000)
+
+        // A successful shrink rewinds mmap's search hint to the first free
+        // page after the minimum reservation, rather than retaining 0x90000.
+        let rewoundMapping = dispatcher.dispatch(number: 9, arguments: [0, 4096, 3, 0x22, UInt64.max, 0])!
+        guard case .returned(let rewoundAddress) = rewoundMapping else { preconditionFailure() }
+        precondition(rewoundAddress == 0x50000)
+        let rewoundUnmap = dispatcher.dispatch(number: 11, arguments: [rewoundAddress, 4096, 0, 0, 0, 0])!
+        guard case .returned(let rewoundUnmapValue) = rewoundUnmap else { preconditionFailure() }
+        precondition(rewoundUnmapValue == 0)
+
         precondition(memory.write(Data([0xAA, 0xBB]), offset: 0x40000))
         let heapUnmap = dispatcher.dispatch(number: 11, arguments: [0x40000, 4096, 0, 0, 0, 0])!
         guard case .returned(let heapUnmapValue) = heapUnmap else { preconditionFailure() }
