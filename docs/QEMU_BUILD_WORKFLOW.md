@@ -68,7 +68,7 @@ The normal workflow invokes the Meson patcher only after UTM has downloaded the 
 Run `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` for the deterministic patcher tests. The full CI workflow additionally validates YAML with duplicate-key rejection, checks the release/runtime artifact contract, validates QEMU source integration, and compiles the iOS/tvOS/visionOS simulator schemes. A successful simulator or source-validation job is not evidence of a physical iPad guest boot.
 
 
-The host JIT protocol is now tri-state and uses StikJIT's IOKit memory-map query. Standard devices use the existing split-WX allocator; confirmed TXM devices use the exported QEMU callback setter and StikDebug breakpoint allocator; unknown devices fail closed. The IOKit-linked host changes and QEMU selector still require a fresh macOS/Xcode build and physical-device validation.
+The current mainline host JIT protocol remains a tri-state IOKit-based detector. It is not yet reconciled with the upstream-aligned model-identifier and app-initiated TXM handoff in PR #107; do not claim TXM JIT support until that branch is rebased and validated. The upstream-aligned TXM policy retains debugger attachment for the process lifetime; `iSteamJITDetach` is intentionally a no-op on TXM, while standard devices continue using split-WX. Unknown or malformed device/protocol state must fail closed for JIT. The current host changes and QEMU selector still require a fresh macOS/Xcode build and physical-device validation.
 
 
 ## Objective-C class-selector compile verification
