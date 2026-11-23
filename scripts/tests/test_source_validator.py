@@ -96,7 +96,9 @@ class SourceValidatorTests(unittest.TestCase):
             "isteam_qemu_set_jit_callbacks",
         ):
             with self.subTest(symbol=symbol):
-                self.assertIn(f"grep -Eq ' _?{symbol}$'", ios_package)
+                self.assertIn(symbol, ios_package)
+        self.assertIn('grep -Fq "$SYMBOL" "$MODE_DIR/exports.txt"', ios_package)
+        self.assertIn("grep -Fq 'isteam_qemu_set_jit_callbacks'", ios_package)
 
     def test_qemu_packager_has_one_complete_candidate_scan(self):
         root = Path(__file__).resolve().parents[2]
