@@ -107,7 +107,9 @@ jobs:
             -o "$RUNNER_TEMP/native-guest-memory.o"
           swiftc -parse-as-library -swift-version 5 \
             -import-objc-header iSteam/NativeGuestMemory.h \
+            src/Core/EmulationLog.swift \
             src/Runtime/GuestMemory.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
             scripts/tests/test_guest_memory_cabi.swift \
             "$RUNNER_TEMP/native-guest-memory.o" \
             -Xlinker -lc++ \
