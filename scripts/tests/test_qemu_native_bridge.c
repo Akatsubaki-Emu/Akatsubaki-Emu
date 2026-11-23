@@ -45,6 +45,13 @@ static void wait_for_state(bool active) {
     assert(0 && "QEMU bridge did not reach the expected lifecycle state");
 }
 
+static bool library_is_loaded(const char *path) {
+    void *handle = dlopen(path, RTLD_NOW | RTLD_NOLOAD);
+    if (!handle) return false;
+    dlclose(handle);
+    return true;
+}
+
 static int read_counter(void *handle, const char *symbol) {
     int (*read_value)(void) = (int (*)(void))dlsym(handle, symbol);
     assert(read_value != NULL);
@@ -61,11 +68,22 @@ static void wait_for_counter(void *handle, const char *symbol, int expected) {
 }
 
 int main(int argc, char **argv) {
-    assert(argc == 4);
+    assert(argc == 3);
     const bool requires_jit = strcmp(argv[1], "jit") == 0;
     assert(requires_jit || strcmp(argv[1], "tci") == 0);
     const char *library = argv[2];
-    const char *wrong_mode_library = argv[3];
+    const char *expected_suffix = requires_jit ? "jit.so" : "tci.so";
+    const char *wrong_suffix = requires_jit ? "tci.so" : "jit.so";
+    const size_t library_length = strlen(library);
+    const size_t expected_suffix_length = strlen(expected_suffix);
+    assert(library_length >= expected_suffix_length);
+    assert(strcmp(library + library_length - expected_suffix_length,
+                  expected_suffix) == 0);
+    char wrong_mode_library[1024] = {0};
+    const size_t prefix_length = library_length - expected_suffix_length;
+    assert(prefix_length + strlen(wrong_suffix) + 1 <= sizeof(wrong_mode_library));
+    memcpy(wrong_mode_library, library, prefix_length);
+    strcpy(wrong_mode_library + prefix_length, wrong_suffix);
 
     void *probe = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     assert(probe != NULL);
@@ -76,10 +94,13 @@ int main(int argc, char **argv) {
                                         validation_error, (int)sizeof(validation_error)));
     assert((dlsym(probe, "isteam_qemu_set_jit_callbacks") != NULL) == requires_jit);
     assert((dlsym(wrong_mode_probe, "isteam_qemu_set_jit_callbacks") != NULL) != requires_jit);
+    dlclose(wrong_mode_probe);
+    wrong_mode_probe = NULL;
     memset(validation_error, 0, sizeof(validation_error));
     assert(!isteam_qemu_validate_library(wrong_mode_library, requires_jit,
                                          validation_error, (int)sizeof(validation_error)));
     assert(strstr(validation_error, "incompatible JIT mode") != NULL);
+    assert(!library_is_loaded(wrong_mode_library));
 
     // Reject a mismatched library before reserving the one-shot process
     // lifecycle, so a subsequent correctly matched launch remains possible.
@@ -89,6 +110,7 @@ int main(int argc, char **argv) {
                               mismatch_error, (int)sizeof(mismatch_error)));
     assert(strstr(mismatch_error, "incompatible JIT mode") != NULL);
     assert(!isteam_qemu_is_active());
+    assert(!library_is_loaded(wrong_mode_library));
 
     char argumentError[512] = {0};
     const char *tooManyArguments[4097];
@@ -158,7 +180,6 @@ int main(int argc, char **argv) {
                               error, (int)sizeof(error)));
     assert(strstr(error, "cannot safely restart") != NULL);
 
-    dlclose(wrong_mode_probe);
     dlclose(probe);
     printf("QEMU native bridge %s mode parity, lifecycle, concurrency and argument bounds passed.\n", argv[1]);
     return 0;
