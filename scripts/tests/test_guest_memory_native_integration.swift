@@ -37,7 +37,7 @@ struct GuestMemoryNativeIntegrationTests {
         precondition(memory.readByte(offset: page) == 0x90)
         precondition(memory.readExecuteByte(offset: page) == nil)
         instructionBytes[0] = 0
-        precondition(memory.readPrefix(offset: page, maximumLength: 1, into: &instructionBytes) == nil)
+        precondition(memory.readPrefix(offset: page, maximumLength: 1, into: &instructionBytes) == 0)
 
         // Unmapping must remove both the permission metadata and backing page.
         precondition(memory.unmap(offset: page, length: length))
