@@ -54,7 +54,9 @@ final class GuestMemory {
         let first = offset / pageSize
         let last = (offset + length - 1) / pageSize
         for page in first...last {
-            pagePermissions.removeValue(forKey: page)
+            // An unmapped page has no guest backing to discard. Preserve its
+            // test-buffer bytes when munmap spans an unmapped hole.
+            guard pagePermissions.removeValue(forKey: page) != nil else { continue }
             let start = page * pageSize
             let end = min(size, start + pageSize)
             if start < end {
@@ -133,6 +135,9 @@ enum GuestEngineError: Error {
 struct LinuxSyscallDispatcherTests {
     static func main() throws {
         let memory = GuestMemory(size: 4 * 1024 * 1024)
+        precondition(memory.beginMapping())
+        precondition(memory.map(offset: 0x1000, length: 4096, permissions: 5))
+        precondition(memory.map(offset: 0x3F0000, length: 0x10000, permissions: 3))
         let dispatcher = LinuxSyscallDispatcher(memory: memory)
         try dispatcher.configure(programBreak: 0x40000, stackBase: 0x3F0000)
 
@@ -421,7 +426,7 @@ struct LinuxSyscallDispatcherTests {
         precondition(permissionMemory.beginMapping())
         precondition(permissionMemory.map(offset: 0x1000, length: 4096, permissions: 5))
         precondition(permissionMemory.map(offset: 0x2000, length: 4096, permissions: 3))
-        precondition(permissionMemory.map(offset: 0xEF000, length: 4096, permissions: 3))
+        precondition(permissionMemory.map(offset: 0xF0000, length: 0x10000, permissions: 3))
         let permissionDispatcher = LinuxSyscallDispatcher(memory: permissionMemory)
         try permissionDispatcher.configure(programBreak: 0x2000, stackBase: 0xF0000)
 
@@ -429,18 +434,23 @@ struct LinuxSyscallDispatcherTests {
             guard case .returned(let value) = outcome else { preconditionFailure("Expected a returned syscall value") }
             return value
         }
-        let fixedELF = syscallResult(permissionDispatcher.dispatch(
-            number: 9, arg0: 0x1000, arg1: 4096, arg2: 3, arg3: 0x32,
-            arg4: UInt64.max, arg5: 0
-        ))
-        precondition(fixedELF == 0x1000)
-        precondition(permissionMemory.permission(at: 0x1000) == 3)
-
+        precondition(permissionMemory.write(Data([0xA1]), offset: 0x1000))
         let noReplaceELF = syscallResult(permissionDispatcher.dispatch(
             number: 9, arg0: 0x1000, arg1: 4096, arg2: 3, arg3: 0x100022,
             arg4: UInt64.max, arg5: 0
         ))
         precondition(noReplaceELF == UInt64(bitPattern: Int64(-17)))
+        precondition(permissionMemory.read(offset: 0x1000, length: 1) == Data([0xA1]))
+        precondition(permissionMemory.permission(at: 0x1000) == 5)
+
+        precondition(permissionMemory.write(Data([0xB1]), offset: 0x1000))
+        let fixedELF = syscallResult(permissionDispatcher.dispatch(
+            number: 9, arg0: 0x1000, arg1: 4096, arg2: 3, arg3: 0x32,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(fixedELF == 0x1000)
+        precondition(permissionMemory.read(offset: 0x1000, length: 1) == Data([0]))
+        precondition(permissionMemory.permission(at: 0x1000) == 3)
 
         precondition(syscallResult(permissionDispatcher.dispatch(
             number: 10, arg0: 0x1000, arg1: 4096, arg2: 1, arg3: 0, arg4: 0, arg5: 0
@@ -450,28 +460,45 @@ struct LinuxSyscallDispatcherTests {
             number: 10, arg0: 0x3000, arg1: 4096, arg2: 1, arg3: 0, arg4: 0, arg5: 0
         )) == UInt64(bitPattern: Int64(-12)))
 
+        precondition(permissionMemory.write(Data([0xA2]), offset: 0x2000))
+        let noReplaceHeap = syscallResult(permissionDispatcher.dispatch(
+            number: 9, arg0: 0x2000, arg1: 4096, arg2: 3, arg3: 0x100022,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(noReplaceHeap == UInt64(bitPattern: Int64(-17)))
+        precondition(permissionMemory.read(offset: 0x2000, length: 1) == Data([0xA2]))
+        precondition(permissionMemory.permission(at: 0x2000) == 3)
+
+        precondition(permissionMemory.write(Data([0xB2]), offset: 0x2000))
         let fixedHeap = syscallResult(permissionDispatcher.dispatch(
             number: 9, arg0: 0x2000, arg1: 4096, arg2: 1, arg3: 0x32,
             arg4: UInt64.max, arg5: 0
         ))
         precondition(fixedHeap == 0x2000)
+        precondition(permissionMemory.read(offset: 0x2000, length: 1) == Data([0]))
         precondition(permissionMemory.permission(at: 0x2000) == 1)
 
-        let fixedStack = syscallResult(permissionDispatcher.dispatch(
-            number: 9, arg0: 0xEF000, arg1: 4096, arg2: 5, arg3: 0x32,
-            arg4: UInt64.max, arg5: 0
-        ))
-        precondition(fixedStack == 0xEF000)
-        precondition(permissionMemory.permission(at: 0xEF000) == 5)
+        precondition(permissionMemory.write(Data([0xA3]), offset: 0xF0000))
         let noReplaceStack = syscallResult(permissionDispatcher.dispatch(
-            number: 9, arg0: 0xEF000, arg1: 4096, arg2: 3, arg3: 0x100022,
+            number: 9, arg0: 0xF0000, arg1: 4096, arg2: 3, arg3: 0x100022,
             arg4: UInt64.max, arg5: 0
         ))
         precondition(noReplaceStack == UInt64(bitPattern: Int64(-17)))
+        precondition(permissionMemory.read(offset: 0xF0000, length: 1) == Data([0xA3]))
+        precondition(permissionMemory.permission(at: 0xF0000) == 3)
+
+        precondition(permissionMemory.write(Data([0xB3]), offset: 0xF0000))
+        let fixedStack = syscallResult(permissionDispatcher.dispatch(
+            number: 9, arg0: 0xF0000, arg1: 4096, arg2: 5, arg3: 0x32,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(fixedStack == 0xF0000)
+        precondition(permissionMemory.read(offset: 0xF0000, length: 1) == Data([0]))
+        precondition(permissionMemory.permission(at: 0xF0000) == 5)
         precondition(syscallResult(permissionDispatcher.dispatch(
-            number: 11, arg0: 0xEF000, arg1: 4096, arg2: 0, arg3: 0, arg4: 0, arg5: 0
+            number: 11, arg0: 0xF0000, arg1: 4096, arg2: 0, arg3: 0, arg4: 0, arg5: 0
         )) == 0)
-        precondition(!permissionMemory.hasMappedPages(offset: 0xEF000, length: 4096))
+        precondition(!permissionMemory.hasMappedPages(offset: 0xF0000, length: 4096))
 
         let threePages = syscallResult(permissionDispatcher.dispatch(
             number: 9, arg0: 0x90000, arg1: 3 * 4096, arg2: 3, arg3: 0x22,
@@ -487,6 +514,40 @@ struct LinuxSyscallDispatcherTests {
             number: 28, arg0: 0x90000, arg1: 3 * 4096, arg2: 0, arg3: 0, arg4: 0, arg5: 0
         )) == 0)
 
-        print("Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/identity and reset tests passed")
+        // Regression: a 256 MiB guest must grow brk well beyond the old
+        // 64 KiB mmap hint, then reuse the first free range after shrinking.
+        let largeGuestSize: UInt64 = 256 * 1024 * 1024
+        let largeMemory = GuestMemory(size: largeGuestSize)
+        precondition(largeMemory.beginMapping())
+        let largeDispatcher = LinuxSyscallDispatcher(memory: largeMemory)
+        let largeInitialBreak: UInt64 = 4 * 1024 * 1024
+        try largeDispatcher.configure(programBreak: largeInitialBreak, stackBase: largeGuestSize)
+        let expanded = syscallResult(largeDispatcher.dispatch(
+            number: 12, arg0: 8 * 1024 * 1024, arg1: 0, arg2: 0, arg3: 0, arg4: 0, arg5: 0
+        ))
+        precondition(expanded == 8 * 1024 * 1024)
+        precondition(largeMemory.permission(at: largeInitialBreak) == 3)
+        let firstLargeMapping = syscallResult(largeDispatcher.dispatch(
+            number: 9, arg0: 0, arg1: 1024 * 1024, arg2: 3, arg3: 0x22,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(firstLargeMapping == expanded)
+        let shrunk = syscallResult(largeDispatcher.dispatch(
+            number: 12, arg0: largeInitialBreak, arg1: 0, arg2: 0, arg3: 0, arg4: 0, arg5: 0
+        ))
+        precondition(shrunk == largeInitialBreak)
+        precondition(!largeMemory.hasMappedPages(offset: largeInitialBreak, length: 4096))
+        let mappingAfterShrink = syscallResult(largeDispatcher.dispatch(
+            number: 9, arg0: 0, arg1: 4096, arg2: 3, arg3: 0x22,
+            arg4: UInt64.max, arg5: 0
+        ))
+        precondition(mappingAfterShrink == largeInitialBreak + 0x10000)
+        precondition(largeMemory.permission(at: mappingAfterShrink) == 3)
+        let blockedGrowth = syscallResult(largeDispatcher.dispatch(
+            number: 12, arg0: 9 * 1024 * 1024, arg1: 0, arg2: 0, arg3: 0, arg4: 0, arg5: 0
+        ))
+        precondition(blockedGrowth == largeInitialBreak)
+
+        print("Linux x86-64 page permissions, fixed mappings, 256 MiB brk, mmap/munmap/mprotect, writev, time, random, identity and reset tests passed")
     }
 }
