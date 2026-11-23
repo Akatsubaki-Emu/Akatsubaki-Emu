@@ -671,6 +671,8 @@ required = {
         'cp "$firmware_file" "$target_dir/"',
     ],
     "scripts/package-utm-qemu-tci-runtime.sh": [
+        'APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"',
+        "UTM SE.app missing from archive",
         "has_jit_callbacks=false",
         "QEMU-TCI.framework",
         'bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci',
@@ -1290,7 +1292,8 @@ for token in (
     "UTM/build-iOS-TCI-arm64",
     "UTM/sysroot-iOS-TCI-arm64",
     "./scripts/build_dependencies.sh -p ios-tci -a arm64",
-    "./scripts/build_utm.sh -k iphoneos -s iOS-TCI -a arm64 -o UTMBuildTCI",
+    "./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI",
+    "test -d 'UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app'",
     "build/qemu-runtime-tci/QEMU/TCI",
     "for mode in JIT TCI; do",
     "Physical iOS arm64 runtime variants: JIT and TCI",
