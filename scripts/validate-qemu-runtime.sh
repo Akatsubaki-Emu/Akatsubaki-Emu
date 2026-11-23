@@ -23,7 +23,7 @@ done
 
 echo "== File type =="
 file_description="$(file "$library")"
-printf '%s\\n' "$file_description"
+printf '%s\n' "$file_description"
 if [[ "$file_description" != *"Mach-O"* || "$file_description" != *"dynamically linked shared library"* ]]; then
   echo "Runtime is not a Mach-O dynamic library." >&2
   exit 3
@@ -31,7 +31,7 @@ fi
 
 echo "== Device architecture =="
 architectures="$(lipo -archs "$library")"
-printf '%s\\n' "$architectures"
+printf '%s\n' "$architectures"
 case " $architectures " in
   *" arm64 "*) ;;
   *)
@@ -42,7 +42,7 @@ esac
 
 echo "== Mach-O build platform =="
 build_info="$(vtool -show-build "$library")"
-printf '%s\\n' "$build_info"
+printf '%s\n' "$build_info"
 if ! grep -Eq 'platform[[:space:]]+IOS([[:space:]]|$)' <<<"$build_info"; then
   echo "Runtime is not built for physical iOS." >&2
   exit 3
