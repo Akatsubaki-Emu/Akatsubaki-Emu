@@ -1,5 +1,11 @@
 import Foundation
 
+// The standalone dispatcher target only needs configure's error case; the app
+// defines the complete GuestEngineError in GuestMachine.swift.
+enum GuestEngineError: Error {
+    case invalidState(String)
+}
+
 @main
 struct GuestMemoryCABIIntegrationTests {
     private static func returned(_ outcome: LinuxSyscallDispatcher.Outcome?) -> UInt64 {
@@ -90,9 +96,8 @@ struct GuestMemoryCABIIntegrationTests {
                      _ arg0: UInt64 = 0, _ arg1: UInt64 = 0,
                      _ arg2: UInt64 = 0, _ arg3: UInt64 = 0,
                      _ arg4: UInt64 = 0, _ arg5: UInt64 = 0) -> UInt64 {
-            Self.returned(dispatcher.dispatch(number: number, arg0: arg0, arg1: arg1,
-                                              arg2: arg2, arg3: arg3,
-                                              arg4: arg4, arg5: arg5))
+            Self.returned(dispatcher.dispatch(number: number,
+                                              arguments: [arg0, arg1, arg2, arg3, arg4, arg5]))
         }
 
         let initialBreak: UInt64 = 1 * 1024 * 1024
