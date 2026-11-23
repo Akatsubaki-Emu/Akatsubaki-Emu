@@ -213,8 +213,11 @@ final class LinuxSyscallDispatcher {
 
     private func setBreak(_ requested: UInt64) -> UInt64 {
         if requested == 0 { return programBreak }
-        let firstMapping = mappedRanges.first?.lowerBound ?? mmapCursor
-        let upperLimit = min(firstMapping, stackBase >= 4096 ? stackBase - 4096 : 0)
+        let stackGuard = stackBase >= 4096 ? stackBase - 4096 : 0
+        // mmapCursor is only a placement hint. When no mapping exists, it
+        // must not cap brk growth; the stack guard is the real heap ceiling.
+        let firstMapping = mappedRanges.first?.lowerBound ?? stackGuard
+        let upperLimit = min(firstMapping, stackGuard)
         guard requested >= initialProgramBreak, requested <= upperLimit,
               requested <= memory.size else { return programBreak }
         let oldPageEnd = Self.alignUp(programBreak)
