@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -13,6 +14,7 @@ sys.path.insert(0, str(SCRIPTS))
 import patch_qemu_meson_ios
 import patch_qemu_stikjit_ios
 import patch_utm_qemu_ios
+import patch_qemu_tci_exports
 import verify_qemu_meson_link
 
 
@@ -126,11 +128,62 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("http://ftp.gnu.org/gnu/libiconv/*", twice)
         self.assertIn("https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}", twice)
         self.assertIn('case "$PLATFORM" in', twice)
-        self.assertIn('*-tci) ;; # TCI_BUILD_FLAGS already selects the threaded interpreter and guest targets.', twice)
-        self.assertIn("TCI mode: skipping the StikJIT executable-region patch.", twice)
+        self.assertIn('*-tci) : "\${ISTEAM_QEMU_TCI_EXPORT_PATCHER:?ISTEAM_QEMU_TCI_EXPORT_PATCHER is required for TCI mode}"', twice)
+        self.assertIn('python3 "$ISTEAM_QEMU_TCI_EXPORT_PATCHER" "$QEMU_DIR/system/qemu.symbols"', twice)
         self.assertIn("$TCI_BUILD_FLAGS", twice)
         shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
         self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
+
+    def test_tci_build_directory_isolated_before_patching(self):
+        valid = (
+            'case "$PLATFORM" in\n'
+            '  ios-tci) PLATFORM_FAMILY_NAME="$PLATFORM_FAMILY_PREFIX-TCI" ;;\n'
+            'esac\n'
+        )
+        patch_utm_qemu_ios.validate_tci_build_directory(valid)
+        with self.assertRaisesRegex(SystemExit, "isolates the iOS TCI build directory"):
+            patch_utm_qemu_ios.validate_tci_build_directory(valid.replace("-TCI", ""))
+
+    def test_tci_export_patcher_is_idempotent_and_removes_jit_callback(self):
+        base = "{\n  qemu_init;\n  qemu_main_loop;\n  qemu_cleanup;\n};\n"
+        with_callback = base.replace("};", "  isteam_qemu_set_jit_callbacks;\n};")
+        patched = patch_qemu_tci_exports.patch_exported_symbols(with_callback)
+        self.assertIn("qemu_system_shutdown_request;", patched)
+        self.assertNotIn("isteam_qemu_set_jit_callbacks;", patched)
+        self.assertEqual(patched, patch_qemu_tci_exports.patch_exported_symbols(patched))
+        with self.assertRaisesRegex(SystemExit, "qemu_cleanup"):
+            patch_qemu_tci_exports.patch_exported_symbols(base.replace("  qemu_cleanup;\n", ""))
+
+    def test_tci_build_uses_upstream_ios_se_scheme_and_product(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        packager = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
+        self.assertIn("./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI", workflow)
+        self.assertIn("test -d 'UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app'", workflow)
+        self.assertNotIn("-s iOS-TCI", workflow)
+        self.assertIn('APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"', packager)
+
+    def test_tci_runtime_fallback_and_capability_probe_are_explicit(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        registry = (root / "src/Runtime/RuntimeCapabilityRegistry.swift").read_text(encoding="utf-8")
+        self.assertIn("QEMURuntimeStatus.inspect(requiresJIT: false)", runtime)
+        self.assertIn("effectiveConfiguration.accelerator = requiresJIT ? .jit : .tcg", runtime)
+        self.assertIn("QEMUCommandBuilder(configuration: effectiveConfiguration)", runtime)
+        self.assertIn("QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: false)", registry)
+        self.assertIn("The bundled QEMU TCI no-JIT library loads", registry)
+
+    def test_qemu_tci_swift_sources_parse(self):
+        if shutil.which("swiftc") is None:
+            self.skipTest("Swift compiler unavailable; Xcode validation covers these sources")
+        root = Path(__file__).resolve().parents[2]
+        for relative in ("src/QEMU/QEMUNativeRuntime.swift", "src/Runtime/RuntimeCapabilityRegistry.swift"):
+            result = subprocess.run(
+                ["swiftc", "-frontend", "-parse", str(root / relative)],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, f"{relative}: {result.stderr}")
 
     def test_fresh_launch_defaults_to_ubuntu(self):
         root = Path(__file__).resolve().parents[2]
@@ -182,7 +235,8 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("self.launchInProgress = false", launch_method)
         self.assertNotIn("waitForJIT", launch)
         self.assertIn("VMDisplayViewController(configuration: configuration", complete_method)
-        self.assertIn("if requiresJIT && !JITCoordinator.shared.isQEMUJITReady", native)
+        self.assertIn("if requestedJIT && !JITCoordinator.shared.isQEMUJITReady", native)
+        self.assertIn("QEMU JIT is unavailable; falling back to the TCI no-JIT runtime.", native)
 
     def test_qemu_runtime_packaging_scripts_have_valid_shell_syntax(self):
         root = Path(__file__).resolve().parents[2]
@@ -198,6 +252,8 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         tci_packager = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
         self.assertIn('[ "$has_jit_callbacks" = false ]', tci_packager)
         self.assertIn("QEMU-TCI.framework", tci_packager)
+        self.assertIn('APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"', tci_packager)
+        self.assertIn("Runtime mode: UTM TCI threaded interpreter (no executable-memory JIT)", tci_packager)
         self.assertIn('scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci_packager)
 
     def test_qemu_packagers_reject_output_paths_that_overlap_the_archive(self):
