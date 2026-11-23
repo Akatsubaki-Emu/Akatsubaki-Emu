@@ -619,17 +619,14 @@ build unrelated.dylib: c_LINKER other
     def test_release_workflow_embeds_both_qemu_runtime_modes(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
-        self.assertIn('runtime-mode-manifest.txt', workflow)
-        self.assertIn('JIT_RUNTIME_DIR="$RUNTIME_DIR/QEMU/JIT"', workflow)
-        self.assertIn('TCI_RUNTIME_DIR="$RUNTIME_DIR/QEMU/TCI"', workflow)
-        self.assertIn('Frameworks/TCI/*)', workflow)
-        self.assertIn('EMBEDDED_TCI_LIBRARY="$APP/$TCI_RUNTIME_REL"', workflow)
-        self.assertIn('QEMU/JIT/runtime-library-path.txt', workflow)
-        self.assertIn('QEMU/TCI/runtime-library-path.txt', workflow)
-        self.assertIn('cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"', workflow)
+        embedding = (root / "scripts/embed-qemu-runtime.sh").read_text(encoding="utf-8")
+        self.assertIn('bash scripts/embed-qemu-runtime.sh "$RUNTIME_DIR" "$APP"', workflow)
+        self.assertIn("runtime-mode-manifest.txt", embedding)
+        self.assertIn("validate_mode JIT", embedding)
+        self.assertIn("validate_mode TCI", embedding)
+        self.assertIn("TCI runtime unexpectedly exports the StikJIT callback", embedding)
         self.assertNotIn('test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt"', workflow)
         self.assertNotIn('test -s "$RUNTIME_DIR/exports.txt"', workflow)
-
 
 
 if __name__ == "__main__":
