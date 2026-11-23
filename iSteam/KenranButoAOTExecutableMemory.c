@@ -138,7 +138,9 @@ iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate(const void *code,size
  r->finalized=true;set_error(error,capacity,"");return r;
 }
 bool iSteamAOTExecutableMemoryInvoke(iSteamAOTExecutableRegion *r,KenranButoAOTGuestState *s){
- typedef void(*Entry)(KenranButoAOTGuestState *);if(!r||!r->finalized||!r->execute_address||!iSteamAOTGuestStateIsValid(s))return false;
+ typedef void(*Entry)(KenranButoAOTGuestState *);
+ /* JIT/debugger readiness can change after the Swift-side availability snapshot. */
+ if(!r||!r->finalized||!r->execute_address||!iSteamAOTExecutableMemoryIsAvailable()||!iSteamAOTGuestStateIsValid(s))return false;
  s->instructions_executed=0;s->exit_reason=KENRAN_BUTO_AOT_EXIT_NONE;s->exit_address=0;s->exit_rip=s->rip;Entry entry=(Entry)r->execute_address;entry(s);return true;
 }
 size_t iSteamAOTExecutableMemorySize(const iSteamAOTExecutableRegion *r){
