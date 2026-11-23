@@ -144,6 +144,9 @@ fi
 tci_library_merged="Frameworks/TCI/$tci_framework_relative"
 cp -a "$JIT_DIR/QEMU/." "$TEMP_OUT/QEMU/JIT/"
 cp -a "$TCI_DIR/QEMU/." "$TEMP_OUT/QEMU/TCI/"
+# Preserve the historical root manifest as a JIT alias for release tooling;
+# mode-aware runtime discovery uses the explicit JIT/ and TCI/ manifests.
+cp "$JIT_DIR/QEMU/runtime-library-path.txt" "$TEMP_OUT/QEMU/runtime-library-path.txt"
 printf '%s\n' "$jit_library" > "$TEMP_OUT/QEMU/JIT/runtime-library-path.txt"
 printf '%s\n' "$tci_library_merged" > "$TEMP_OUT/QEMU/TCI/runtime-library-path.txt"
 cp "$JIT_DIR/exports.txt" "$TEMP_OUT/QEMU/JIT/exports.txt"
