@@ -19,7 +19,8 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
     def test_jit_callback_export_is_required_only_for_jit_runtime(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
-        self.assertIn("(requires_jit && !has_jit_callbacks)", source)
+        self.assertIn("has_jit_callbacks != requires_jit", source)
+        self.assertIn("has_jit_callbacks == requires_jit", source)
         self.assertIn("requires_jit ? \"lifecycle/JIT\" : \"lifecycle\"", source)
         self.assertIn("if (requires_jit) {", source)
         self.assertIn("isteam_qemu_set_jit_callbacks", source)
