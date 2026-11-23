@@ -116,10 +116,6 @@ required = {
         "SteamOS Gaming Mode",
         "VMConfiguration.defaultSteamOS",
     ],
-    "scripts/tests/test_imported_os_selection.py": [
-        "test_imported_os_image_is_preselected_in_launch_setup",
-        "Launch Setup will preselect it as boot media",
-    ],
     "src/Performance/TranslationCache.swift": [
         "SHA256.hash(data: Data(key.utf8))",
     ],
