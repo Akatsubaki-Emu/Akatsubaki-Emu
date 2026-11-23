@@ -197,7 +197,1259 @@ jobs:
           grep -Eq ' _?qemu_main_loop$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU main-loop export is missing." >&2; exit 1; }
           grep -Eq ' _?qemu_cleanup$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU cleanup export is missing." >&2; exit 1; }
           grep -Eq ' _?qemu_system_shutdown_request$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU graceful-shutdown export is missing." >&2; exit 1; }
-          grep -Eq ' _?isteam_qemu_set_jit_callbacks$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU StikDebug JIT callback export is missing." >&2; exit 1; }
+          grep -Eq ' _?isteam_qemu_set_jit_callbacks
+          # that is left behind in the runner workspace.
+          mkdir -p "$APP/Frameworks" "$APP/QEMU"
+          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
+          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
+          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
+          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
+          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
+          test -s "$APP/QEMU/TCI/runtime-library-path.txt" || { echo "Embedded QEMU TCI manifest is missing." >&2; exit 1; }
+          test -s "$APP/QEMU/TCI/exports.txt" || { echo "Embedded QEMU TCI export manifest is missing." >&2; exit 1; }
+          test -s "$APP/$TCI_RUNTIME_REL" || { echo "Embedded QEMU TCI library is missing: $TCI_RUNTIME_REL" >&2; exit 1; }
+          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
+
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/iSteam.app
+          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
+          unzip -t build/iSteam-ios.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
+
+      - name: Build and package tvOS IPA
+        if: matrix.platform == 'tvOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamTV -configuration Release -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath "$PWD/build/tvDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/tvDerivedData/Build/Products/Release-appletvos/iSteamTV.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/tvPayload/Payload
+          cp -R "$APP" build/tvPayload/Payload/iSteamTV.app
+          ditto -c -k --sequesterRsrc --keepParent build/tvPayload/Payload build/iSteam-tvOS.ipa
+          unzip -t build/iSteam-tvOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-tvOS.ipa iSteamTV.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-tvOS.ipa > build/iSteam-tvOS.ipa.sha256
+
+      - name: Build and package visionOS app
+        if: matrix.platform == 'visionOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/visionDerivedData/Build/Products/Release-xros/iSteamVision.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/visionPayload/Payload
+          cp -R "$APP" build/visionPayload/Payload/iSteamVision.app
+          ditto -c -k --sequesterRsrc --keepParent build/visionPayload/Payload build/iSteam-visionOS.ipa
+          unzip -t build/iSteam-visionOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-visionOS.ipa > build/iSteam-visionOS.ipa.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: AkatsubakiEmu-${{ matrix.platform }}-${{ matrix.channel }}
+          path: |
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish combined ${{ matrix.channel }} release
+    permissions:
+      contents: write
+    needs: build
+    concurrency:
+      # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
+      group: isteam-release-publish-${{ matrix.channel }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
+    env:
+      RELEASE_CHANNEL: ${{ matrix.channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check that this run still targets the latest main commit
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Download iOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-iOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download tvOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-tvOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download visionOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-visionOS-${{ matrix.channel }}
+          path: build
+
+      - name: Verify combined release assets
+        if: steps.freshness.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          for asset in iSteam-ios iSteam-tvOS iSteam-visionOS; do
+            test -s "build/$asset.ipa"
+            test -s "build/$asset.ipa.sha256"
+            unzip -t "build/$asset.ipa" >/dev/null
+            sha256sum -c "build/$asset.ipa.sha256"
+          done
+
+      # Downloads and checksum verification can take time. Recheck immediately
+      # before mutating the rolling release so a newer main commit wins.
+      - name: Re-check freshness immediately before publishing
+        if: steps.freshness.outputs.publish == 'true'
+        id: final-freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Set release metadata
+        if: steps.final-freshness.outputs.publish == 'true'
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            echo "title=$VERSION Main (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=$VERSION Nightly (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish combined release
+        if: steps.final-freshness.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.meta.outputs.title }}
+          prerelease: ${{ env.RELEASE_CHANNEL == 'nightly' }}
+          make_latest: ${{ env.RELEASE_CHANNEL == 'main' && 'true' || 'false' }}
+          overwrite_files: true
+          files: |
+            build/iSteam-ios.ipa
+            build/iSteam-ios.ipa.sha256
+            build/iSteam-tvOS.ipa
+            build/iSteam-tvOS.ipa.sha256
+            build/iSteam-visionOS.ipa
+            build/iSteam-visionOS.ipa.sha256
+          body: |
+            Akatsubaki Emu ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
+
+            Includes unsigned prototype builds:
+            - **iOS:** `iSteam-ios.ipa`
+            - **tvOS:** `iSteam-tvOS.ipa`
+            - **visionOS:** `iSteam-visionOS.ipa`
+
+            These are unsigned prototype builds. Sign them with a compatible signer before installing.
+
+      # softprops/action-gh-release creates a tag at target_commitish only
+      # when the tag is new. Move the rolling channel ref after the assets publish
+      # so existing main/nightly tags always resolve to this exact build commit.
+      - name: Update rolling channel tag
+        if: steps.final-freshness.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$RELEASE_CHANNEL"
+
+      # Official AltStore/PAL feeds are refreshed from published GitHub releases
+      # by the website repository's update-xthrx-alt-source.yml workflow.
+ "$RUNTIME_DIR/exports.txt" || { echo "QEMU StikDebug JIT callback export is missing." >&2; exit 1; }
+
+          # Validate the separate no-JIT TCI library and its export contract.
+          TCI_RUNTIME_DIR="$RUNTIME_DIR/QEMU/TCI"
+          test -s "$TCI_RUNTIME_DIR/runtime-library-path.txt" || { echo "QEMU TCI runtime manifest is missing." >&2; exit 1; }
+          test -s "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI export manifest is missing." >&2; exit 1; }
+          TCI_RUNTIME_REL="$(head -n 1 "$TCI_RUNTIME_DIR/runtime-library-path.txt")"
+          case "$TCI_RUNTIME_REL" in
+            Frameworks/*) ;;
+            *) echo "Unexpected QEMU TCI runtime path: $TCI_RUNTIME_REL" >&2; exit 1 ;;
+          esac
+          test -s "$RUNTIME_DIR/$TCI_RUNTIME_REL" || { echo "Manifest points to a missing QEMU TCI library: $TCI_RUNTIME_REL" >&2; exit 1; }
+          grep -Eq ' _?qemu_init
+          # that is left behind in the runner workspace.
+          mkdir -p "$APP/Frameworks" "$APP/QEMU"
+          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
+          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
+          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
+          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
+          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
+          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
+
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/iSteam.app
+          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
+          unzip -t build/iSteam-ios.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
+
+      - name: Build and package tvOS IPA
+        if: matrix.platform == 'tvOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamTV -configuration Release -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath "$PWD/build/tvDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/tvDerivedData/Build/Products/Release-appletvos/iSteamTV.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/tvPayload/Payload
+          cp -R "$APP" build/tvPayload/Payload/iSteamTV.app
+          ditto -c -k --sequesterRsrc --keepParent build/tvPayload/Payload build/iSteam-tvOS.ipa
+          unzip -t build/iSteam-tvOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-tvOS.ipa iSteamTV.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-tvOS.ipa > build/iSteam-tvOS.ipa.sha256
+
+      - name: Build and package visionOS app
+        if: matrix.platform == 'visionOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/visionDerivedData/Build/Products/Release-xros/iSteamVision.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/visionPayload/Payload
+          cp -R "$APP" build/visionPayload/Payload/iSteamVision.app
+          ditto -c -k --sequesterRsrc --keepParent build/visionPayload/Payload build/iSteam-visionOS.ipa
+          unzip -t build/iSteam-visionOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-visionOS.ipa > build/iSteam-visionOS.ipa.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: AkatsubakiEmu-${{ matrix.platform }}-${{ matrix.channel }}
+          path: |
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish combined ${{ matrix.channel }} release
+    permissions:
+      contents: write
+    needs: build
+    concurrency:
+      # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
+      group: isteam-release-publish-${{ matrix.channel }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
+    env:
+      RELEASE_CHANNEL: ${{ matrix.channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check that this run still targets the latest main commit
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Download iOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-iOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download tvOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-tvOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download visionOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-visionOS-${{ matrix.channel }}
+          path: build
+
+      - name: Verify combined release assets
+        if: steps.freshness.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          for asset in iSteam-ios iSteam-tvOS iSteam-visionOS; do
+            test -s "build/$asset.ipa"
+            test -s "build/$asset.ipa.sha256"
+            unzip -t "build/$asset.ipa" >/dev/null
+            sha256sum -c "build/$asset.ipa.sha256"
+          done
+
+      # Downloads and checksum verification can take time. Recheck immediately
+      # before mutating the rolling release so a newer main commit wins.
+      - name: Re-check freshness immediately before publishing
+        if: steps.freshness.outputs.publish == 'true'
+        id: final-freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Set release metadata
+        if: steps.final-freshness.outputs.publish == 'true'
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            echo "title=$VERSION Main (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=$VERSION Nightly (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish combined release
+        if: steps.final-freshness.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.meta.outputs.title }}
+          prerelease: ${{ env.RELEASE_CHANNEL == 'nightly' }}
+          make_latest: ${{ env.RELEASE_CHANNEL == 'main' && 'true' || 'false' }}
+          overwrite_files: true
+          files: |
+            build/iSteam-ios.ipa
+            build/iSteam-ios.ipa.sha256
+            build/iSteam-tvOS.ipa
+            build/iSteam-tvOS.ipa.sha256
+            build/iSteam-visionOS.ipa
+            build/iSteam-visionOS.ipa.sha256
+          body: |
+            Akatsubaki Emu ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
+
+            Includes unsigned prototype builds:
+            - **iOS:** `iSteam-ios.ipa`
+            - **tvOS:** `iSteam-tvOS.ipa`
+            - **visionOS:** `iSteam-visionOS.ipa`
+
+            These are unsigned prototype builds. Sign them with a compatible signer before installing.
+
+      # softprops/action-gh-release creates a tag at target_commitish only
+      # when the tag is new. Move the rolling channel ref after the assets publish
+      # so existing main/nightly tags always resolve to this exact build commit.
+      - name: Update rolling channel tag
+        if: steps.final-freshness.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$RELEASE_CHANNEL"
+
+      # Official AltStore/PAL feeds are refreshed from published GitHub releases
+      # by the website repository's update-xthrx-alt-source.yml workflow.
+ "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI init export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_main_loop
+          # that is left behind in the runner workspace.
+          mkdir -p "$APP/Frameworks" "$APP/QEMU"
+          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
+          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
+          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
+          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
+          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
+          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
+
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/iSteam.app
+          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
+          unzip -t build/iSteam-ios.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
+
+      - name: Build and package tvOS IPA
+        if: matrix.platform == 'tvOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamTV -configuration Release -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath "$PWD/build/tvDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/tvDerivedData/Build/Products/Release-appletvos/iSteamTV.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/tvPayload/Payload
+          cp -R "$APP" build/tvPayload/Payload/iSteamTV.app
+          ditto -c -k --sequesterRsrc --keepParent build/tvPayload/Payload build/iSteam-tvOS.ipa
+          unzip -t build/iSteam-tvOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-tvOS.ipa iSteamTV.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-tvOS.ipa > build/iSteam-tvOS.ipa.sha256
+
+      - name: Build and package visionOS app
+        if: matrix.platform == 'visionOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/visionDerivedData/Build/Products/Release-xros/iSteamVision.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/visionPayload/Payload
+          cp -R "$APP" build/visionPayload/Payload/iSteamVision.app
+          ditto -c -k --sequesterRsrc --keepParent build/visionPayload/Payload build/iSteam-visionOS.ipa
+          unzip -t build/iSteam-visionOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-visionOS.ipa > build/iSteam-visionOS.ipa.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: AkatsubakiEmu-${{ matrix.platform }}-${{ matrix.channel }}
+          path: |
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish combined ${{ matrix.channel }} release
+    permissions:
+      contents: write
+    needs: build
+    concurrency:
+      # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
+      group: isteam-release-publish-${{ matrix.channel }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
+    env:
+      RELEASE_CHANNEL: ${{ matrix.channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check that this run still targets the latest main commit
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Download iOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-iOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download tvOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-tvOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download visionOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-visionOS-${{ matrix.channel }}
+          path: build
+
+      - name: Verify combined release assets
+        if: steps.freshness.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          for asset in iSteam-ios iSteam-tvOS iSteam-visionOS; do
+            test -s "build/$asset.ipa"
+            test -s "build/$asset.ipa.sha256"
+            unzip -t "build/$asset.ipa" >/dev/null
+            sha256sum -c "build/$asset.ipa.sha256"
+          done
+
+      # Downloads and checksum verification can take time. Recheck immediately
+      # before mutating the rolling release so a newer main commit wins.
+      - name: Re-check freshness immediately before publishing
+        if: steps.freshness.outputs.publish == 'true'
+        id: final-freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Set release metadata
+        if: steps.final-freshness.outputs.publish == 'true'
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            echo "title=$VERSION Main (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=$VERSION Nightly (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish combined release
+        if: steps.final-freshness.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.meta.outputs.title }}
+          prerelease: ${{ env.RELEASE_CHANNEL == 'nightly' }}
+          make_latest: ${{ env.RELEASE_CHANNEL == 'main' && 'true' || 'false' }}
+          overwrite_files: true
+          files: |
+            build/iSteam-ios.ipa
+            build/iSteam-ios.ipa.sha256
+            build/iSteam-tvOS.ipa
+            build/iSteam-tvOS.ipa.sha256
+            build/iSteam-visionOS.ipa
+            build/iSteam-visionOS.ipa.sha256
+          body: |
+            Akatsubaki Emu ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
+
+            Includes unsigned prototype builds:
+            - **iOS:** `iSteam-ios.ipa`
+            - **tvOS:** `iSteam-tvOS.ipa`
+            - **visionOS:** `iSteam-visionOS.ipa`
+
+            These are unsigned prototype builds. Sign them with a compatible signer before installing.
+
+      # softprops/action-gh-release creates a tag at target_commitish only
+      # when the tag is new. Move the rolling channel ref after the assets publish
+      # so existing main/nightly tags always resolve to this exact build commit.
+      - name: Update rolling channel tag
+        if: steps.final-freshness.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$RELEASE_CHANNEL"
+
+      # Official AltStore/PAL feeds are refreshed from published GitHub releases
+      # by the website repository's update-xthrx-alt-source.yml workflow.
+ "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI main-loop export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_cleanup
+          # that is left behind in the runner workspace.
+          mkdir -p "$APP/Frameworks" "$APP/QEMU"
+          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
+          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
+          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
+          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
+          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
+          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
+
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/iSteam.app
+          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
+          unzip -t build/iSteam-ios.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
+
+      - name: Build and package tvOS IPA
+        if: matrix.platform == 'tvOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamTV -configuration Release -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath "$PWD/build/tvDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/tvDerivedData/Build/Products/Release-appletvos/iSteamTV.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/tvPayload/Payload
+          cp -R "$APP" build/tvPayload/Payload/iSteamTV.app
+          ditto -c -k --sequesterRsrc --keepParent build/tvPayload/Payload build/iSteam-tvOS.ipa
+          unzip -t build/iSteam-tvOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-tvOS.ipa iSteamTV.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-tvOS.ipa > build/iSteam-tvOS.ipa.sha256
+
+      - name: Build and package visionOS app
+        if: matrix.platform == 'visionOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/visionDerivedData/Build/Products/Release-xros/iSteamVision.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/visionPayload/Payload
+          cp -R "$APP" build/visionPayload/Payload/iSteamVision.app
+          ditto -c -k --sequesterRsrc --keepParent build/visionPayload/Payload build/iSteam-visionOS.ipa
+          unzip -t build/iSteam-visionOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-visionOS.ipa > build/iSteam-visionOS.ipa.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: AkatsubakiEmu-${{ matrix.platform }}-${{ matrix.channel }}
+          path: |
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish combined ${{ matrix.channel }} release
+    permissions:
+      contents: write
+    needs: build
+    concurrency:
+      # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
+      group: isteam-release-publish-${{ matrix.channel }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
+    env:
+      RELEASE_CHANNEL: ${{ matrix.channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check that this run still targets the latest main commit
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Download iOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-iOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download tvOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-tvOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download visionOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-visionOS-${{ matrix.channel }}
+          path: build
+
+      - name: Verify combined release assets
+        if: steps.freshness.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          for asset in iSteam-ios iSteam-tvOS iSteam-visionOS; do
+            test -s "build/$asset.ipa"
+            test -s "build/$asset.ipa.sha256"
+            unzip -t "build/$asset.ipa" >/dev/null
+            sha256sum -c "build/$asset.ipa.sha256"
+          done
+
+      # Downloads and checksum verification can take time. Recheck immediately
+      # before mutating the rolling release so a newer main commit wins.
+      - name: Re-check freshness immediately before publishing
+        if: steps.freshness.outputs.publish == 'true'
+        id: final-freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Set release metadata
+        if: steps.final-freshness.outputs.publish == 'true'
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            echo "title=$VERSION Main (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=$VERSION Nightly (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish combined release
+        if: steps.final-freshness.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.meta.outputs.title }}
+          prerelease: ${{ env.RELEASE_CHANNEL == 'nightly' }}
+          make_latest: ${{ env.RELEASE_CHANNEL == 'main' && 'true' || 'false' }}
+          overwrite_files: true
+          files: |
+            build/iSteam-ios.ipa
+            build/iSteam-ios.ipa.sha256
+            build/iSteam-tvOS.ipa
+            build/iSteam-tvOS.ipa.sha256
+            build/iSteam-visionOS.ipa
+            build/iSteam-visionOS.ipa.sha256
+          body: |
+            Akatsubaki Emu ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
+
+            Includes unsigned prototype builds:
+            - **iOS:** `iSteam-ios.ipa`
+            - **tvOS:** `iSteam-tvOS.ipa`
+            - **visionOS:** `iSteam-visionOS.ipa`
+
+            These are unsigned prototype builds. Sign them with a compatible signer before installing.
+
+      # softprops/action-gh-release creates a tag at target_commitish only
+      # when the tag is new. Move the rolling channel ref after the assets publish
+      # so existing main/nightly tags always resolve to this exact build commit.
+      - name: Update rolling channel tag
+        if: steps.final-freshness.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$RELEASE_CHANNEL"
+
+      # Official AltStore/PAL feeds are refreshed from published GitHub releases
+      # by the website repository's update-xthrx-alt-source.yml workflow.
+ "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI cleanup export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_system_shutdown_request
+          # that is left behind in the runner workspace.
+          mkdir -p "$APP/Frameworks" "$APP/QEMU"
+          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
+          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
+          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
+          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
+          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
+          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
+
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/iSteam.app
+          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
+          unzip -t build/iSteam-ios.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
+
+      - name: Build and package tvOS IPA
+        if: matrix.platform == 'tvOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamTV -configuration Release -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath "$PWD/build/tvDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/tvDerivedData/Build/Products/Release-appletvos/iSteamTV.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/tvPayload/Payload
+          cp -R "$APP" build/tvPayload/Payload/iSteamTV.app
+          ditto -c -k --sequesterRsrc --keepParent build/tvPayload/Payload build/iSteam-tvOS.ipa
+          unzip -t build/iSteam-tvOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-tvOS.ipa iSteamTV.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-tvOS.ipa > build/iSteam-tvOS.ipa.sha256
+
+      - name: Build and package visionOS app
+        if: matrix.platform == 'visionOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/visionDerivedData/Build/Products/Release-xros/iSteamVision.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/visionPayload/Payload
+          cp -R "$APP" build/visionPayload/Payload/iSteamVision.app
+          ditto -c -k --sequesterRsrc --keepParent build/visionPayload/Payload build/iSteam-visionOS.ipa
+          unzip -t build/iSteam-visionOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-visionOS.ipa > build/iSteam-visionOS.ipa.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: AkatsubakiEmu-${{ matrix.platform }}-${{ matrix.channel }}
+          path: |
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish combined ${{ matrix.channel }} release
+    permissions:
+      contents: write
+    needs: build
+    concurrency:
+      # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
+      group: isteam-release-publish-${{ matrix.channel }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
+    env:
+      RELEASE_CHANNEL: ${{ matrix.channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check that this run still targets the latest main commit
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Download iOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-iOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download tvOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-tvOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download visionOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-visionOS-${{ matrix.channel }}
+          path: build
+
+      - name: Verify combined release assets
+        if: steps.freshness.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          for asset in iSteam-ios iSteam-tvOS iSteam-visionOS; do
+            test -s "build/$asset.ipa"
+            test -s "build/$asset.ipa.sha256"
+            unzip -t "build/$asset.ipa" >/dev/null
+            sha256sum -c "build/$asset.ipa.sha256"
+          done
+
+      # Downloads and checksum verification can take time. Recheck immediately
+      # before mutating the rolling release so a newer main commit wins.
+      - name: Re-check freshness immediately before publishing
+        if: steps.freshness.outputs.publish == 'true'
+        id: final-freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Set release metadata
+        if: steps.final-freshness.outputs.publish == 'true'
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            echo "title=$VERSION Main (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=$VERSION Nightly (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish combined release
+        if: steps.final-freshness.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.meta.outputs.title }}
+          prerelease: ${{ env.RELEASE_CHANNEL == 'nightly' }}
+          make_latest: ${{ env.RELEASE_CHANNEL == 'main' && 'true' || 'false' }}
+          overwrite_files: true
+          files: |
+            build/iSteam-ios.ipa
+            build/iSteam-ios.ipa.sha256
+            build/iSteam-tvOS.ipa
+            build/iSteam-tvOS.ipa.sha256
+            build/iSteam-visionOS.ipa
+            build/iSteam-visionOS.ipa.sha256
+          body: |
+            Akatsubaki Emu ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
+
+            Includes unsigned prototype builds:
+            - **iOS:** `iSteam-ios.ipa`
+            - **tvOS:** `iSteam-tvOS.ipa`
+            - **visionOS:** `iSteam-visionOS.ipa`
+
+            These are unsigned prototype builds. Sign them with a compatible signer before installing.
+
+      # softprops/action-gh-release creates a tag at target_commitish only
+      # when the tag is new. Move the rolling channel ref after the assets publish
+      # so existing main/nightly tags always resolve to this exact build commit.
+      - name: Update rolling channel tag
+        if: steps.final-freshness.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$RELEASE_CHANNEL"
+
+      # Official AltStore/PAL feeds are refreshed from published GitHub releases
+      # by the website repository's update-xthrx-alt-source.yml workflow.
+ "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI graceful-shutdown export is missing." >&2; exit 1; }
+          if grep -Eq ' _?isteam_qemu_set_jit_callbacks
+          # that is left behind in the runner workspace.
+          mkdir -p "$APP/Frameworks" "$APP/QEMU"
+          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
+          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
+          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
+          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
+          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
+          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
+
+          mkdir -p build/Payload
+          cp -R "$APP" build/Payload/iSteam.app
+          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
+          unzip -t build/iSteam-ios.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
+
+      - name: Build and package tvOS IPA
+        if: matrix.platform == 'tvOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.tvos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamTV -configuration Release -sdk appletvos -destination 'generic/platform=tvOS' -derivedDataPath "$PWD/build/tvDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/tvDerivedData/Build/Products/Release-appletvos/iSteamTV.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/tvPayload/Payload
+          cp -R "$APP" build/tvPayload/Payload/iSteamTV.app
+          ditto -c -k --sequesterRsrc --keepParent build/tvPayload/Payload build/iSteam-tvOS.ipa
+          unzip -t build/iSteam-tvOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-tvOS.ipa iSteamTV.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-tvOS.ipa > build/iSteam-tvOS.ipa.sha256
+
+      - name: Build and package visionOS app
+        if: matrix.platform == 'visionOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos"
+          else
+            EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"
+          fi
+          xcodebuild -project iSteam.xcodeproj -scheme iSteamVision -configuration Release -sdk xros -destination 'generic/platform=visionOS' -derivedDataPath "$PWD/build/visionDerivedData" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 build
+          APP="build/visionDerivedData/Build/Products/Release-xros/iSteamVision.app"
+          test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          mkdir -p build/visionPayload/Payload
+          cp -R "$APP" build/visionPayload/Payload/iSteamVision.app
+          ditto -c -k --sequesterRsrc --keepParent build/visionPayload/Payload build/iSteam-visionOS.ipa
+          unzip -t build/iSteam-visionOS.ipa >/dev/null
+          bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"
+          shasum -a 256 build/iSteam-visionOS.ipa > build/iSteam-visionOS.ipa.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: AkatsubakiEmu-${{ matrix.platform }}-${{ matrix.channel }}
+          path: |
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa
+            build/iSteam-${{ matrix.platform == 'iOS' && 'ios' || matrix.platform == 'tvOS' && 'tvOS' || 'visionOS' }}.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish combined ${{ matrix.channel }} release
+    permissions:
+      contents: write
+    needs: build
+    concurrency:
+      # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
+      group: isteam-release-publish-${{ matrix.channel }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' && inputs.channel == 'Main' && 'main' || 'nightly')) }}
+    env:
+      RELEASE_CHANNEL: ${{ matrix.channel }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check that this run still targets the latest main commit
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Download iOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-iOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download tvOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-tvOS-${{ matrix.channel }}
+          path: build
+
+      - name: Download visionOS build
+        if: steps.freshness.outputs.publish == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: AkatsubakiEmu-visionOS-${{ matrix.channel }}
+          path: build
+
+      - name: Verify combined release assets
+        if: steps.freshness.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          for asset in iSteam-ios iSteam-tvOS iSteam-visionOS; do
+            test -s "build/$asset.ipa"
+            test -s "build/$asset.ipa.sha256"
+            unzip -t "build/$asset.ipa" >/dev/null
+            sha256sum -c "build/$asset.ipa.sha256"
+          done
+
+      # Downloads and checksum verification can take time. Recheck immediately
+      # before mutating the rolling release so a newer main commit wins.
+      - name: Re-check freshness immediately before publishing
+        if: steps.freshness.outputs.publish == 'true'
+        id: final-freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
+          echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
+          if [ "$publish_current" != "true" ]; then
+            echo "Skipping release publication because a newer build-relevant main commit exists."
+          fi
+
+      - name: Set release metadata
+        if: steps.final-freshness.outputs.publish == 'true'
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"
+          if [ "$RELEASE_CHANNEL" = "main" ]; then
+            echo "title=$VERSION Main (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=$VERSION Nightly (iOS + tvOS + visionOS)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish combined release
+        if: steps.final-freshness.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.meta.outputs.title }}
+          prerelease: ${{ env.RELEASE_CHANNEL == 'nightly' }}
+          make_latest: ${{ env.RELEASE_CHANNEL == 'main' && 'true' || 'false' }}
+          overwrite_files: true
+          files: |
+            build/iSteam-ios.ipa
+            build/iSteam-ios.ipa.sha256
+            build/iSteam-tvOS.ipa
+            build/iSteam-tvOS.ipa.sha256
+            build/iSteam-visionOS.ipa
+            build/iSteam-visionOS.ipa.sha256
+          body: |
+            Akatsubaki Emu ${{ matrix.channel }} build ${{ steps.meta.outputs.version }}.
+
+            Includes unsigned prototype builds:
+            - **iOS:** `iSteam-ios.ipa`
+            - **tvOS:** `iSteam-tvOS.ipa`
+            - **visionOS:** `iSteam-visionOS.ipa`
+
+            These are unsigned prototype builds. Sign them with a compatible signer before installing.
+
+      # softprops/action-gh-release creates a tag at target_commitish only
+      # when the tag is new. Move the rolling channel ref after the assets publish
+      # so existing main/nightly tags always resolve to this exact build commit.
+      - name: Update rolling channel tag
+        if: steps.final-freshness.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$RELEASE_CHANNEL"
+
+      # Official AltStore/PAL feeds are refreshed from published GitHub releases
+      # by the website repository's update-xthrx-alt-source.yml workflow.
+ "$TCI_RUNTIME_DIR/exports.txt"; then
+            echo "QEMU TCI runtime unexpectedly exports the StikDebug JIT callback." >&2
+            exit 1
+          fi
 
           # The IPA must contain the runtime, not just validate an artifact
           # that is left behind in the runner workspace.
