@@ -10,7 +10,6 @@ on:
       - "src/Runtime/LinuxSyscallDispatcher.swift"
       - "src/Runtime/X86_64ALU.swift"
       - "iSteam/JIT26Protocol.c"
-      - "iSteam/KenranButoAOTExecutableMemory.h"
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
       - "src/Runtime/X86_64Interpreter.swift"
@@ -19,6 +18,7 @@ on:
       - "src/QEMU/QEMUNativeRuntime.swift"
       - "iSteam/JIT26Protocol.h"
       - "iSteam/KenranButoAOTExecutableMemory.c"
+      - ".github/workflows/validate-kenran-buto-aot.yml"
       - "scripts/tests/test_x86_64_interpreter.swift"
       - "scripts/validate-qemu-source.py"
       - "scripts/tests/test_static_elf_execution.swift"
@@ -36,7 +36,6 @@ on:
       - "src/Runtime/LinuxSyscallDispatcher.swift"
       - "src/Runtime/X86_64ALU.swift"
       - "iSteam/JIT26Protocol.c"
-      - "iSteam/KenranButoAOTExecutableMemory.h"
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
       - "src/Runtime/X86_64Interpreter.swift"
@@ -93,6 +92,7 @@ jobs:
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
 
       - name: Compile W^X executable-memory provider
+        if: hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -100,6 +100,7 @@ jobs:
             -c iSteam/KenranButoAOTExecutableMemory.c \
             -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
       - name: Execute ABI, AOT block and interpreter side-exit tests on ARM64
+        if: hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -120,6 +121,7 @@ jobs:
           "$RUNNER_TEMP/test-x86-64-interpreter-aot"
 
       - name: Run a real static ELF guest through the hybrid interpreter/AOT path
+        if: hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != ''
         shell: bash
         run: |
           set -euo pipefail
