@@ -123,6 +123,9 @@ struct GuestMemoryCABIIntegrationTests {
         let replacement = syscall(9, firstMapping, page, 0x3, 0x32, UInt64.max, 0)
         precondition(replacement == firstMapping)
         precondition(syscallMemory.read(offset: firstMapping, length: 1) == Data([0]))
+        precondition(syscall(10, firstMapping, page, 0x5) == 0)
+        precondition(syscallMemory.readExecuteByte(offset: firstMapping) == 0)
+        precondition(!syscallMemory.writeByte(0xAB, offset: firstMapping))
 
         // brk may shrink below an existing mapping but must never grow into it.
         precondition(syscall(12, firstMapping + page) == expandedBreak)
