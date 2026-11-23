@@ -127,7 +127,7 @@ final class VMDisplayViewController: UIViewController {
         if configuration.accelerator == .jit {
             guard JITCoordinator.shared.isQEMUProtocolAvailable else {
                 status.text = "QEMU JIT unavailable • use the no-JIT TCI interpreter or configure StikDebug"
-                EmulationLog.shared.write(status.text)
+                EmulationLog.shared.write(status.text ?? "QEMU JIT unavailable")
                 return
             }
             if !JITCoordinator.shared.isQEMUJITReady {
