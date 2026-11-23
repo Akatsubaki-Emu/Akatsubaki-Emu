@@ -220,7 +220,7 @@ jobs:
             RUNTIME_REL="$(head -n 1 "$MODE_DIR/runtime-library-path.txt")"
             test -s "$APP/$RUNTIME_REL" || { echo "Embedded $MODE QEMU library is missing: $RUNTIME_REL" >&2; exit 1; }
           done
-          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
+          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
 
           mkdir -p build/Payload
           cp -R "$APP" build/Payload/iSteam.app
