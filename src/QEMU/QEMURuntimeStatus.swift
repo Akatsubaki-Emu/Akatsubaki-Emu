@@ -101,11 +101,17 @@ enum QEMURuntimeStatus {
            ) {
             for case let url as URL in enumerator {
                 let name = url.lastPathComponent.lowercased()
-                if matchesRuntimeMode(url) &&
-                    (name.contains("qemu-x86_64-softmmu")
-                     || name == "libqemu-system-x86_64.dylib"
-                     || name == "libqemu-system-x86_64-tci.dylib"
-                     || (name == "qemu" && url.path.contains("/QEMU.framework/"))) {
+                let path = url.path.lowercased()
+                let isTCIArtifact = name.contains("-tci")
+                    || path.contains("/tci/")
+                    || path.contains("/qemu-tci.framework/")
+                let isRuntimeLibrary = name.contains("qemu-x86_64-softmmu")
+                    || name == "libqemu-system-x86_64.dylib"
+                    || (name == "qemu" && (
+                        path.contains("/qemu.framework/")
+                            || path.contains("/qemu-tci.framework/")
+                    ))
+                if isRuntimeLibrary && (requiresJIT ? !isTCIArtifact : isTCIArtifact) {
                     candidates.append(url)
                 }
             }

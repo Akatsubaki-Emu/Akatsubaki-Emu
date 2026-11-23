@@ -212,6 +212,11 @@ required = {
         "src/QEMU/**",
         "iSteam/JIT26Protocol.c",
     ],
+    "scripts/tests/test_qemu_runtime_lookup.py": [
+        "test_fallback_runtime_scan_filters_jit_and_tci_artifacts",
+        "test_capability_probe_accepts_tci_when_jit_runtime_is_missing",
+        "test_runtime_start_falls_back_to_tci_when_jit_is_unavailable",
+    ],
     "scripts/tests/test_qemu_build_patches.py": [
         "test_tci_build_uses_upstream_ios_se_scheme_and_product",
         "test_qemu_dependency_cache_version_matches_validation_contracts",
