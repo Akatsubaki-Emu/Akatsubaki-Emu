@@ -197,28 +197,7 @@ jobs:
           grep -Eq ' _?qemu_main_loop$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU main-loop export is missing." >&2; exit 1; }
           grep -Eq ' _?qemu_cleanup$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU cleanup export is missing." >&2; exit 1; }
           grep -Eq ' _?qemu_system_shutdown_request$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU graceful-shutdown export is missing." >&2; exit 1; }
-          grep -Eq ' _?isteam_qemu_set_jit_callbacks
-          # The IPA must contain the runtime, not just validate an artifact
-          # that is left behind in the runner workspace.
-          mkdir -p "$APP/Frameworks" "$APP/QEMU"
-          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
-          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
-          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
-          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
-          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
-          test -s "$APP/QEMU/TCI/runtime-library-path.txt" || { echo "Embedded QEMU TCI manifest is missing." >&2; exit 1; }
-          test -s "$APP/QEMU/TCI/exports.txt" || { echo "Embedded QEMU TCI export manifest is missing." >&2; exit 1; }
-          test -s "$APP/$TCI_RUNTIME_REL" || { echo "Embedded QEMU TCI library is missing: $TCI_RUNTIME_REL" >&2; exit 1; }
-          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
-
-          mkdir -p build/Payload
-          cp -R "$APP" build/Payload/iSteam.app
-          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
-          unzip -t build/iSteam-ios.ipa >/dev/null
-          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
-          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
-
- "$RUNTIME_DIR/exports.txt" || { echo "QEMU StikDebug JIT callback export is missing." >&2; exit 1; }
+          grep -Eq ' _?isteam_qemu_set_jit_callbacks$' "$RUNTIME_DIR/exports.txt" || { echo "QEMU StikDebug JIT callback export is missing." >&2; exit 1; }
 
           # Validate the separate no-JIT TCI library and its export contract.
           TCI_RUNTIME_DIR="$RUNTIME_DIR/QEMU/TCI"
@@ -233,101 +212,11 @@ jobs:
             *"/../"*|*"/./"*) echo "Unsafe QEMU TCI runtime path: $TCI_RUNTIME_REL" >&2; exit 1 ;;
           esac
           test -s "$RUNTIME_DIR/$TCI_RUNTIME_REL" || { echo "Manifest points to a missing QEMU TCI library: $TCI_RUNTIME_REL" >&2; exit 1; }
-          grep -Eq ' _?qemu_init
-          # The IPA must contain the runtime, not just validate an artifact
-          # that is left behind in the runner workspace.
-          mkdir -p "$APP/Frameworks" "$APP/QEMU"
-          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
-          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
-          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
-          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
-          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
-          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
-
-          mkdir -p build/Payload
-          cp -R "$APP" build/Payload/iSteam.app
-          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
-          unzip -t build/iSteam-ios.ipa >/dev/null
-          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
-          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
-
- "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI init export is missing." >&2; exit 1; }
-          grep -Eq ' _?qemu_main_loop
-          # The IPA must contain the runtime, not just validate an artifact
-          # that is left behind in the runner workspace.
-          mkdir -p "$APP/Frameworks" "$APP/QEMU"
-          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
-          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
-          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
-          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
-          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
-          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
-
-          mkdir -p build/Payload
-          cp -R "$APP" build/Payload/iSteam.app
-          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
-          unzip -t build/iSteam-ios.ipa >/dev/null
-          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
-          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
-
- "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI main-loop export is missing." >&2; exit 1; }
-          grep -Eq ' _?qemu_cleanup
-          # The IPA must contain the runtime, not just validate an artifact
-          # that is left behind in the runner workspace.
-          mkdir -p "$APP/Frameworks" "$APP/QEMU"
-          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
-          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
-          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
-          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
-          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
-          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
-
-          mkdir -p build/Payload
-          cp -R "$APP" build/Payload/iSteam.app
-          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
-          unzip -t build/iSteam-ios.ipa >/dev/null
-          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
-          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
-
- "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI cleanup export is missing." >&2; exit 1; }
-          grep -Eq ' _?qemu_system_shutdown_request
-          # The IPA must contain the runtime, not just validate an artifact
-          # that is left behind in the runner workspace.
-          mkdir -p "$APP/Frameworks" "$APP/QEMU"
-          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
-          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
-          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
-          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
-          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
-          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
-
-          mkdir -p build/Payload
-          cp -R "$APP" build/Payload/iSteam.app
-          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
-          unzip -t build/iSteam-ios.ipa >/dev/null
-          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
-          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
-
- "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI graceful-shutdown export is missing." >&2; exit 1; }
-          if grep -Eq ' _?isteam_qemu_set_jit_callbacks
-          # The IPA must contain the runtime, not just validate an artifact
-          # that is left behind in the runner workspace.
-          mkdir -p "$APP/Frameworks" "$APP/QEMU"
-          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
-          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
-          EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
-          test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
-          test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
-          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
-
-          mkdir -p build/Payload
-          cp -R "$APP" build/Payload/iSteam.app
-          ditto -c -k --sequesterRsrc --keepParent build/Payload build/iSteam-ios.ipa
-          unzip -t build/iSteam-ios.ipa >/dev/null
-          bash scripts/validate-apple-package.sh build/iSteam-ios.ipa iSteam.app "$EXPECTED_BUNDLE"
-          shasum -a 256 build/iSteam-ios.ipa > build/iSteam-ios.ipa.sha256
-
- "$TCI_RUNTIME_DIR/exports.txt"; then
+          grep -Eq ' _?qemu_init$' "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI init export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_main_loop$' "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI main-loop export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_cleanup$' "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI cleanup export is missing." >&2; exit 1; }
+          grep -Eq ' _?qemu_system_shutdown_request$' "$TCI_RUNTIME_DIR/exports.txt" || { echo "QEMU TCI graceful-shutdown export is missing." >&2; exit 1; }
+          if grep -Eq ' _?isteam_qemu_set_jit_callbacks$' "$TCI_RUNTIME_DIR/exports.txt"; then
             echo "QEMU TCI runtime unexpectedly exports the StikDebug JIT callback." >&2
             exit 1
           fi
@@ -340,6 +229,9 @@ jobs:
           EMBEDDED_LIBRARY="$APP/$RUNTIME_REL"
           test -s "$EMBEDDED_LIBRARY" || { echo "Embedded QEMU library is missing: $EMBEDDED_LIBRARY" >&2; exit 1; }
           test -s "$APP/QEMU/runtime-library-path.txt" || { echo "Embedded QEMU library manifest is missing." >&2; exit 1; }
+          test -s "$APP/QEMU/TCI/runtime-library-path.txt" || { echo "Embedded QEMU TCI manifest is missing." >&2; exit 1; }
+          test -s "$APP/QEMU/TCI/exports.txt" || { echo "Embedded QEMU TCI export manifest is missing." >&2; exit 1; }
+          test -s "$APP/$TCI_RUNTIME_REL" || { echo "Embedded QEMU TCI library is missing: $TCI_RUNTIME_REL" >&2; exit 1; }
           test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
 
           mkdir -p build/Payload
