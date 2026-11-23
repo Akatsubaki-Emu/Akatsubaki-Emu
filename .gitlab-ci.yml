@@ -1,0 +1,51 @@
+# Source/runtime validation only. Signed iOS/tvOS/visionOS builds run in GitHub Actions.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+stages:
+  - validate
+
+default:
+  interruptible: true
+  retry:
+    max: 1
+    when: runner_system_failure
+
+swift-aot-translator:
+  stage: validate
+  image: swift:6.0
+  timeout: 10m
+  script:
+    - swiftc -parse-as-library -swift-version 5 src/Runtime/X86_64AOTTranslator.swift scripts/tests/test_kenran_buto_aot_translator.swift -o /tmp/test-kenran-buto-aot
+    - /tmp/test-kenran-buto-aot
+
+native-memory-tests:
+  stage: validate
+  image: gcc:14
+  timeout: 10m
+  script:
+    - g++ -std=c++17 -Wall -Wextra -Werror -pthread -IiSteam iSteam/NativeGuestMemory.cpp scripts/tests/test_native_guest_memory.cpp -o /tmp/test-native-memory
+    - /tmp/test-native-memory
+
+native-qemu-bridge-tests:
+  stage: validate
+  image: gcc:14
+  timeout: 10m
+  script:
+    - cc -std=c11 -Wall -Wextra -Werror -pthread -IiSteam iSteam/QEMUNativeBridge.c scripts/tests/test_qemu_native_bridge.c -ldl -o /tmp/test-qemu-native-bridge
+    - cc -std=c11 -Wall -Wextra -Werror -fPIC -shared scripts/tests/fake_qemu_runtime.c -o /tmp/libfake-qemu-runtime.so
+    - /tmp/test-qemu-native-bridge /tmp/libfake-qemu-runtime.so
+
+python-source-contracts:
+  stage: validate
+  image: python:3.12-slim
+  timeout: 10m
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends bash build-essential && rm -rf /var/lib/apt/lists/*
+  script:
+    - bash -n scripts/package-utm-qemu-runtime.sh scripts/package-utm-qemu-tci-runtime.sh scripts/validate-qemu-runtime.sh scripts/validate-apple-package.sh
+    - python -m py_compile scripts/validate-qemu-source.py
+    - python scripts/validate-qemu-source.py
+    - python -m unittest discover -s scripts/tests -p 'test_*.py'
