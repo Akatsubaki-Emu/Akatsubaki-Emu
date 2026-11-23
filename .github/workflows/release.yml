@@ -36,7 +36,9 @@ on:
           - Main
 
 permissions:
-  # Default every job to read-only. Only the release publisher may write tags/releases.
+  # Checkouts and reusable workflows need repository read access.
+  # Only the release publisher receives contents: write below.
+  contents: read
 
 
 jobs:
