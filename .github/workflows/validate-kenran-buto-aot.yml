@@ -92,8 +92,35 @@ jobs:
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
 
+      - name: Validate native AOT provider source set
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            iSteam/KenranButoAOTExecutableMemory.c
+            iSteam/KenranButoAOTExecutableMemory.h
+            iSteam/JIT26Protocol.h
+            src/Runtime/KenranButoAOTExecution.swift
+          )
+          present=0
+          missing=0
+          for file in "${files[@]}"; do
+            if [[ -f "$file" ]]; then
+              present=$((present + 1))
+            else
+              missing=$((missing + 1))
+            fi
+          done
+          if (( present > 0 && missing > 0 )); then
+            echo "::error::Native AOT provider integration is partial; all four provider/ABI files must be present together."
+            exit 1
+          fi
+          if (( present == 0 )); then
+            echo "::notice::Native AOT execution tests are skipped because the provider and ABI are not integrated on this revision. Decoder and translation-cache tests still run."
+          fi
+
       - name: Compile W^X executable-memory provider
-        if: ${{ hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != '' && hashFiles('iSteam/KenranButoAOTExecutableMemory.h') != '' && hashFiles('src/Runtime/KenranButoAOTExecution.swift') != '' }}
+        if: ${{ hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != '' && hashFiles('iSteam/KenranButoAOTExecutableMemory.h') != '' && hashFiles('iSteam/JIT26Protocol.h') != '' && hashFiles('src/Runtime/KenranButoAOTExecution.swift') != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -101,7 +128,7 @@ jobs:
             -c iSteam/KenranButoAOTExecutableMemory.c \
             -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
       - name: Execute ABI, AOT block and interpreter side-exit tests on ARM64
-        if: ${{ hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != '' && hashFiles('iSteam/KenranButoAOTExecutableMemory.h') != '' && hashFiles('src/Runtime/KenranButoAOTExecution.swift') != '' }}
+        if: ${{ hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != '' && hashFiles('iSteam/KenranButoAOTExecutableMemory.h') != '' && hashFiles('iSteam/JIT26Protocol.h') != '' && hashFiles('src/Runtime/KenranButoAOTExecution.swift') != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -122,7 +149,7 @@ jobs:
           "$RUNNER_TEMP/test-x86-64-interpreter-aot"
 
       - name: Run a real static ELF guest through the hybrid interpreter/AOT path
-        if: ${{ hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != '' && hashFiles('iSteam/KenranButoAOTExecutableMemory.h') != '' && hashFiles('src/Runtime/KenranButoAOTExecution.swift') != '' }}
+        if: ${{ hashFiles('iSteam/KenranButoAOTExecutableMemory.c') != '' && hashFiles('iSteam/KenranButoAOTExecutableMemory.h') != '' && hashFiles('iSteam/JIT26Protocol.h') != '' && hashFiles('src/Runtime/KenranButoAOTExecution.swift') != '' }}
         shell: bash
         run: |
           set -euo pipefail
