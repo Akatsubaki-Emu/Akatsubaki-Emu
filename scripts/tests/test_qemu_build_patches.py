@@ -200,6 +200,11 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("QEMU-TCI.framework", tci_packager)
         self.assertIn('scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci_packager)
 
+        runtime_validator = (root / "scripts/validate-qemu-runtime.sh").read_text(encoding="utf-8")
+        self.assertIn('if [[ "$mode" == "tci" ]] && grep -Eq', runtime_validator)
+        self.assertIn('<<<"$symbols"; then', runtime_validator)
+        self.assertIn("TCI runtime must not export the StikJIT callback.", runtime_validator)
+
     def test_qemu_packagers_reject_output_paths_that_overlap_the_archive(self):
         root = Path(__file__).resolve().parents[2]
         for relative in (
