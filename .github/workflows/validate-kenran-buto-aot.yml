@@ -10,7 +10,6 @@ on:
       - "src/Runtime/LinuxSyscallDispatcher.swift"
       - "src/Runtime/X86_64ALU.swift"
       - "iSteam/JIT26Protocol.c"
-      - "iSteam/KenranButoAOTExecutableMemory.h"
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
       - "src/Runtime/X86_64Interpreter.swift"
@@ -36,7 +35,6 @@ on:
       - "src/Runtime/LinuxSyscallDispatcher.swift"
       - "src/Runtime/X86_64ALU.swift"
       - "iSteam/JIT26Protocol.c"
-      - "iSteam/KenranButoAOTExecutableMemory.h"
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
       - "src/Runtime/X86_64Interpreter.swift"
@@ -92,7 +90,30 @@ jobs:
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
           "$RUNNER_TEMP/test-kenran-buto-aot-cache"
 
+      - name: Detect complete W^X executable-memory provider
+        id: executable-memory-provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          provider_present=false
+          adapter_present=false
+          [[ ! -f iSteam/KenranButoAOTExecutableMemory.c ]] || provider_present=true
+          [[ ! -f src/Runtime/KenranButoAOTExecution.swift ]] || adapter_present=true
+          if [[ "$provider_present" == false && "$adapter_present" == false ]]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Native AOT execution is not integrated in this revision; decoder and translation-cache tests still run."
+          elif [[ "$provider_present" == true && "$adapter_present" == true ]]; then
+            if [[ ! -f iSteam/JIT26Protocol.h ]]; then
+              echo "::error::Native AOT provider is present without the required JIT26Protocol ABI header."
+              exit 1
+            fi
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Native AOT provider integration is partial; the C provider and Swift execution adapter must be present together."
+            exit 1
+          fi
       - name: Compile W^X executable-memory provider
+        if: steps.executable-memory-provider.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -100,6 +121,7 @@ jobs:
             -c iSteam/KenranButoAOTExecutableMemory.c \
             -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
       - name: Execute ABI, AOT block and interpreter side-exit tests on ARM64
+        if: steps.executable-memory-provider.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -120,6 +142,7 @@ jobs:
           "$RUNNER_TEMP/test-x86-64-interpreter-aot"
 
       - name: Run a real static ELF guest through the hybrid interpreter/AOT path
+        if: steps.executable-memory-provider.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
