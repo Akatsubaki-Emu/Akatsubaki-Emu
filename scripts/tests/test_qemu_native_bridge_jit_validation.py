@@ -16,10 +16,10 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertNotIn("malloc(argument_length + 1)", start)
         self.assertIn("g_argument_storage = argument_storage", start)
 
-    def test_jit_callback_export_is_required_only_for_jit_runtime(self):
+    def test_jit_callback_export_matches_runtime_mode_in_both_directions(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
-        self.assertIn("(requires_jit && !has_jit_callbacks)", source)
+        self.assertIn("has_jit_callbacks != requires_jit", source)
         self.assertIn("requires_jit ? \"lifecycle/JIT\" : \"lifecycle\"", source)
         self.assertIn("if (requires_jit) {", source)
         self.assertIn("isteam_qemu_set_jit_callbacks", source)
@@ -53,8 +53,9 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertIn('requiresJIT ? "JIT" : "TCI"', status)
         self.assertIn('QEMU-TCI.framework/QEMU', status)
         self.assertIn("libraryPath, requiresJIT, baseAddress", status)
-        self.assertIn("let requiresJIT = configuration.accelerator == .jit", runtime)
-        self.assertIn("QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", runtime)
+        self.assertIn("let requestedJIT = configuration.accelerator == .jit", runtime)
+        self.assertIn("var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", runtime)
+        self.assertIn("QEMUCommandBuilder(configuration: effectiveConfiguration)", runtime)
         self.assertIn("libraryPath, requiresJIT, error", runtime)
 
     def test_qemu_init_uses_the_upstream_void_abi(self):
