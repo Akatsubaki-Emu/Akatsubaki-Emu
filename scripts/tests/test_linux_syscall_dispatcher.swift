@@ -222,6 +222,41 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let adviceValue) = advice else { preconditionFailure() }
         precondition(adviceValue == 0)
 
+        // MAP_FIXED_NOREPLACE checks every mapped page, including PT_LOAD,
+        // heap and stack pages that are not in the anonymous mmap range index.
+        for (address, marker, expectedPermissions) in [
+            (UInt64(0x1000), UInt8(0xA1), UInt8(5)),
+            (UInt64(0x40000), UInt8(0xA2), UInt8(3)),
+            (UInt64(0x3F0000), UInt8(0xA3), UInt8(3))
+        ] {
+            precondition(memory.write(Data([marker]), offset: address))
+            let rejected = dispatcher.dispatch(
+                number: 9, arguments: [address, 4096, 3, 0x100022, UInt64.max, 0]
+            )!
+            guard case .returned(let rejectedValue) = rejected else { preconditionFailure() }
+            precondition(rejectedValue == UInt64(bitPattern: Int64(-17)))
+            precondition(memory.read(offset: address, length: 1) == Data([marker]))
+            precondition(memory.permission(at: address) == expectedPermissions)
+        }
+
+        // MAP_FIXED replaces existing PT_LOAD, heap and stack pages and installs
+        // the requested permissions after clearing their old backing contents.
+        for (address, marker) in [
+            (UInt64(0x1000), UInt8(0xB1)),
+            (UInt64(0x40000), UInt8(0xB2)),
+            (UInt64(0x3F0000), UInt8(0xB3))
+        ] {
+            precondition(memory.write(Data([marker]), offset: address))
+            let replaced = dispatcher.dispatch(
+                number: 9, arguments: [address, 4096, 1, 0x32, UInt64.max, 0]
+            )!
+            guard case .returned(let replacedAddress) = replaced else { preconditionFailure() }
+            precondition(replacedAddress == address)
+            precondition(memory.read(offset: address, length: 1) == Data([0]))
+            precondition(memory.permission(at: address) == 1)
+        }
+
+
         // MAP_FIXED_NOREPLACE must see every mapped page, not only anonymous
         // mmap ranges tracked by this syscall dispatcher (PT_LOAD, heap, stack).
         for (address, marker, expectedPermissions) in [
