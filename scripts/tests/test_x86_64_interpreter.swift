@@ -1385,6 +1385,36 @@ struct InterpreterTests {
         let crossPageExit = try crossPage.run(maxInstructions: 1)
         precondition(crossPageExit == .memoryFault(address: 4095))
 
-        print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
+        // Exercise ARCH_SET_FS/GET_FS and ARCH_SET_GS/GET_GS through the
+        // actual SYSCALL instruction path used by static Linux executables.
+        let archPrctlMemory = GuestMemory(size: 0x10000)
+        let archPrctlProgram: [UInt8] = [
+            0xB8, 0x9E, 0x00, 0x00, 0x00,       // mov eax, 158 (arch_prctl)
+            0xBF, 0x02, 0x10, 0x00, 0x00,       // mov edi, ARCH_SET_FS
+            0xBE, 0x00, 0x20, 0x00, 0x00,       // mov esi, 0x2000
+            0x0F, 0x05,                         // syscall
+            0xB8, 0x9E, 0x00, 0x00, 0x00,
+            0xBF, 0x03, 0x10, 0x00, 0x00,       // mov edi, ARCH_GET_FS
+            0xBE, 0x00, 0x30, 0x00, 0x00,       // mov esi, 0x3000
+            0x0F, 0x05,
+            0xB8, 0x9E, 0x00, 0x00, 0x00,
+            0xBF, 0x01, 0x10, 0x00, 0x00,       // mov edi, ARCH_SET_GS
+            0xBE, 0x00, 0x40, 0x00, 0x00,       // mov esi, 0x4000
+            0x0F, 0x05,
+            0xB8, 0x9E, 0x00, 0x00, 0x00,
+            0xBF, 0x04, 0x10, 0x00, 0x00,       // mov edi, ARCH_GET_GS
+            0xBE, 0x10, 0x30, 0x00, 0x00,       // mov esi, 0x3010
+            0x0F, 0x05,
+            0xF4                              // hlt
+        ]
+        precondition(archPrctlMemory.write(Data(archPrctlProgram), offset: 0))
+        let archPrctl = X86_64Interpreter(memory: archPrctlMemory)
+        try archPrctl.reset(entryPoint: 0)
+        let archPrctlExit = try archPrctl.run(maxInstructions: 32)
+        precondition(archPrctlExit == .halted)
+        precondition(archPrctlMemory.readUInt64(offset: 0x3000) == 0x2000)
+        precondition(archPrctlMemory.readUInt64(offset: 0x3010) == 0x4000)
+
+        print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk/arch_prctl syscalls, budget and fault tests passed")
     }
 }
