@@ -187,6 +187,8 @@ jobs:
           test -d "$RUNTIME_DIR/QEMU" || { echo "Required QEMU data directory is missing." >&2; exit 1; }
           # The combined artifact contains independent mode manifests. TCI is
           # the no-JIT route; JIT additionally requires the StikDebug callback.
+          # The combined artifact contains independent mode manifests. TCI is
+          # the no-JIT route; JIT additionally requires the StikDebug callback.
           for MODE in JIT TCI; do
             MODE_LOWER="$(printf '%s' "$MODE" | tr '[:upper:]' '[:lower:]')"
             MODE_DIR="$RUNTIME_DIR/QEMU/$MODE"
@@ -198,7 +200,29 @@ jobs:
               *) echo "Unexpected $MODE QEMU runtime path: $RUNTIME_REL" >&2; exit 1 ;;
             esac
             test -s "$RUNTIME_DIR/$RUNTIME_REL" || { echo "$MODE manifest points to a missing QEMU library: $RUNTIME_REL" >&2; exit 1; }
-            grep -Eq ' _?qemu_init
+            for SYMBOL in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request; do
+              grep -Fq "$SYMBOL" "$MODE_DIR/exports.txt" || { echo "$MODE QEMU export is missing: $SYMBOL" >&2; exit 1; }
+            done
+            if [[ "$MODE" == "JIT" ]]; then
+              grep -Fq 'isteam_qemu_set_jit_callbacks' "$MODE_DIR/exports.txt" || { echo "QEMU StikDebug JIT callback export is missing." >&2; exit 1; }
+            elif grep -Fq 'isteam_qemu_set_jit_callbacks' "$MODE_DIR/exports.txt"; then
+              echo "The no-JIT TCI runtime must not export StikJIT callbacks." >&2
+              exit 1
+            fi
+            bash scripts/validate-qemu-runtime.sh "$RUNTIME_DIR/$RUNTIME_REL" "$MODE_LOWER"
+          done
+
+          # The IPA must contain both runtimes and their mode-specific manifests.
+          mkdir -p "$APP/Frameworks" "$APP/QEMU"
+          cp -R "$RUNTIME_DIR/Frameworks/." "$APP/Frameworks/"
+          cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"
+          for MODE in JIT TCI; do
+            MODE_DIR="$APP/QEMU/$MODE"
+            test -s "$MODE_DIR/runtime-library-path.txt" || { echo "Embedded $MODE runtime manifest is missing." >&2; exit 1; }
+            RUNTIME_REL="$(head -n 1 "$MODE_DIR/runtime-library-path.txt")"
+            test -s "$APP/$RUNTIME_REL" || { echo "Embedded $MODE QEMU library is missing: $RUNTIME_REL" >&2; exit 1; }
+          done
+          test -n "$(find "$APP/QEMU" -type f -size +0c -print -quit)" || { echo "No QEMU data files were embedded." >&2; exit 1; }
 
           mkdir -p build/Payload
           cp -R "$APP" build/Payload/iSteam.app
