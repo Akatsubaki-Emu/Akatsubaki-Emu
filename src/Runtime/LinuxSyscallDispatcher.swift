@@ -213,8 +213,11 @@ final class LinuxSyscallDispatcher {
 
     private func setBreak(_ requested: UInt64) -> UInt64 {
         if requested == 0 { return programBreak }
-        let firstMapping = mappedRanges.first?.lowerBound ?? mmapCursor
-        let upperLimit = min(firstMapping, stackBase >= 4096 ? stackBase - 4096 : 0)
+        // mmapCursor is an allocation hint, not an occupied VMA. When no
+        // anonymous mappings exist, brk may grow up to the stack guard.
+        let stackGuard = stackBase >= 4096 ? stackBase - 4096 : 0
+        let firstMapping = mappedRanges.first?.lowerBound ?? stackGuard
+        let upperLimit = min(firstMapping, stackGuard)
         guard requested >= initialProgramBreak, requested <= upperLimit,
               requested <= memory.size else { return programBreak }
         let oldPageEnd = Self.alignUp(programBreak)
@@ -225,12 +228,16 @@ final class LinuxSyscallDispatcher {
                !memory.map(offset: oldPageEnd, length: newPageEnd - oldPageEnd, permissions: 3) {
                 return programBreak
             }
+            mmapCursor = max(mmapCursor, newPageEnd)
         } else if requested < programBreak {
             guard memory.zero(offset: requested, length: programBreak - requested) else { return programBreak }
             if oldPageEnd > newPageEnd,
                !memory.unmap(offset: newPageEnd, length: oldPageEnd - newPageEnd) {
                 return programBreak
             }
+            // Rewind the search hint when the heap contracts so released
+            // pages can be reused without scanning past the old break.
+            mmapCursor = min(mmapCursor, newPageEnd)
         }
         programBreak = requested
         return programBreak
