@@ -63,18 +63,21 @@ for symbol in "${required_symbols[@]}"; do
   echo "Found required export: $symbol"
 done
 
-if [[ "$mode" == "tci" ]] && grep -Eq '[[:space:]][A-Za-z][[:space:]]_?isteam_qemu_set_jit_callbacks
-codesign --verify --strict "$library"
-
-echo "QEMU $mode runtime dynamic-library type, iOS platform, arm64 architecture, required lifecycle/shutdown exports, mode-specific JIT policy, and code signature verified."
-echo "This does not prove dependent libraries load or that a guest boots."
- <<<"$symbols"; then
+if [[ "$mode" == "tci" ]] && grep -Eq '[[:space:]][A-Za-z][[:space:]]_?isteam_qemu_set_jit_callbacks$' <<<"$symbols"; then
   echo "TCI runtime must not export the StikJIT callback." >&2
   exit 3
 fi
 
 echo "== Code signature =="
-codesign --verify --strict "$library"
+signature_details="$(codesign -dv --verbose=2 "$library" 2>&1 || true)"
+if grep -Fq "code object is not signed at all" <<<"$signature_details"; then
+  echo "Unsigned archive intermediate accepted; the containing app must sign nested code before distribution."
+else
+  codesign --verify --strict "$library" || {
+    echo "Runtime has a present but invalid code signature." >&2
+    exit 3
+  }
+fi
 
-echo "QEMU $mode runtime dynamic-library type, iOS platform, arm64 architecture, required lifecycle/shutdown exports, mode-specific JIT policy, and code signature verified."
+echo "QEMU $mode runtime dynamic-library type, iOS platform, arm64 architecture, required lifecycle/shutdown exports, mode-specific JIT policy, and signature state validated."
 echo "This does not prove dependent libraries load or that a guest boots."
