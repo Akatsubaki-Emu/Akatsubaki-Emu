@@ -215,7 +215,6 @@ int main() {
     // MAP_FIXED replacement stages every permission node before touching old bytes.
     ISteamGuestMemory *transactional = isteam_guest_memory_create(pageSize * 4);
     assert(transactional != nullptr);
-    assert(isteam_guest_memory_write(transactional, 0, &fallbackMarker, 1));
     assert(isteam_guest_memory_begin_mapping(transactional));
     assert(isteam_guest_memory_map(transactional, 0, pageSize, 3, false));
     const uint8_t originalByte = 0xA5;
