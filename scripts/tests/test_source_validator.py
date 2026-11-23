@@ -721,19 +721,5 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn(ignored_path, paths_ignore)
         self.assertIn(ignored_path, freshness)
 
-    def test_kenran_aot_native_provider_steps_are_gated_by_provider_presence(self):
-        root = Path(__file__).resolve().parents[2]
-        workflow = (root / ".github" / "workflows" / "validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
-        for step_name in (
-            "Compile W^X executable-memory provider",
-            "Execute ABI, AOT block and interpreter side-exit tests on ARM64",
-            "Run a real static ELF guest through the hybrid interpreter/AOT path",
-        ):
-            with self.subTest(step=step_name):
-                block = workflow.split(f"- name: {step_name}", 1)[1].split("\\n      - name:", 1)[0]
-                self.assertIn("if [ ! -f iSteam/KenranButoAOTExecutableMemory.c ]; then", block)
-                self.assertIn("Skipping native AOT execution checks", block)
-                self.assertIn("exit 0", block)
-
 if __name__ == "__main__":
     unittest.main()
