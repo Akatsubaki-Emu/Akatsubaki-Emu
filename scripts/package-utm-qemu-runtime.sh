@@ -159,11 +159,93 @@ esac
 # The app resolves the runtime through this manifest rather than assuming
 # that every UTM revision names its loadable library the same way.
 printf '%s\n' "$runtime_relative" > "$MODE_DIR/runtime-library-path.txt"
-printf '%s\n' "$exports" | grep -E ' _?qemu_(init|main_loop|cleanup)$| _?qemu_system_shutdown_request$| _?isteam_qemu_set_jit_callbacks$' > "$MODE_DIR/exports.txt" || true
+printf '%s\n' "$exports" | grep -E ' _?qemu_(init|main_loop|cleanup)$| _?qemu_system_shutdown_request$| _?isteam_qemu_set_jit_callbacks
+
+data_dir=""
+found="$(find "$APP" -type f \( \
+  -name 'bios-256k.bin' -o -name 'vgabios-stdvga.bin' \
+  -o -name 'edk2-x86_64-code.fd' -o -name 'edk2-x86_64-code.secboot.fd' \
+  -o -name 'OVMF_CODE.fd' -o -name 'OVMF_CODE_4M.fd' \) -print -quit 2>/dev/null || true)"
+if [ -n "$found" ]; then data_dir="$(dirname "$found")"; fi
+if [ -z "$data_dir" ]; then
+  echo "QEMU lifecycle library was found, but no recognizable QEMU BIOS/firmware data files were found." >&2
+  exit 4
+fi
+cp -R "$data_dir"/. "$MODE_DIR/"
+
+# Preserve the generated path manifest if the source data directory happened
+# to contain a file with the same name.
+printf '%s\n' "$runtime_relative" > "$MODE_DIR/runtime-library-path.txt"
+while IFS= read -r firmware_file; do
+  [ -n "$firmware_file" ] || continue
+  source_dir="$(dirname "$firmware_file")"
+  # The primary data directory was already copied to QEMU/ above. Keep every
+  # other firmware bundle in its own relative directory: flattening these files
+  # can pair a code image with a variable store from an unrelated UTM bundle.
+  [ "$source_dir" = "$data_dir" ] && continue
+  case "$source_dir" in
+    "$APP") relative_dir="root" ;;
+    "$APP"/*) relative_dir="${source_dir#"$APP"/}" ;;
+    *) echo "Refusing firmware path outside UTM.app: $firmware_file" >&2; exit 5 ;;
+  esac
+  case "/$relative_dir/" in
+    *"/../"*|*"/./"*) echo "Refusing unsafe firmware directory: $relative_dir" >&2; exit 5 ;;
+  esac
+  # The legacy target_dir="$OUT/QEMU/firmware/$relative_dir" layout is kept under each mode root.
+  target_dir="$MODE_DIR/firmware/$relative_dir"
+  mkdir -p "$target_dir"
+  cp "$firmware_file" "$target_dir/"
+done < <(find "$APP" -type f \( \
+  -name 'OVMF_CODE.fd' -o -name 'OVMF_CODE_4M.fd' \
+  -o -name 'OVMF_VARS.fd' -o -name 'OVMF_VARS_4M.fd' \
+  -o -name 'edk2-x86_64-code.fd' -o -name 'edk2-x86_64-code.secboot.fd' \
+  -o -name 'edk2-x86_64-vars.fd' \) -print 2>/dev/null || true)
+
+cat > "$OUT/BUILD-INFO-$MODE.txt" <<EOF
+Source: utmapp/UTM at the revision checked out by the workflow
+Target: physical iOS arm64
+Runtime mode: $MODE
+Library source: $candidate
+Packaged library path: $runtime_relative
+Architectures: $ARCHS
+Lifecycle and graceful-shutdown exports: verified by nm before packaging
+StikDebug JIT callback export required: $([ "$MODE" = "jit" ] && echo yes || echo no)
+Data source: $data_dir
+Package layout: Frameworks/ (UTM dependencies), QEMU/$MODE_DIRECTORY/ (QEMU data files and runtime manifest)
+Important: embed and code-sign nested code in Akatsubaki Emu and boot-test on a physical device before claiming runtime support.
+EOF
+
+# Record the actual Mach-O linkage and runtime search paths. This report helps
+# distinguish a missing symbol from a missing @rpath dependency on-device.
+REPORT="$OUT/dependency-report-$MODE.txt"
+: > "$REPORT"
+for root in "$OUT/Frameworks" "$MODE_DIR"; do
+  [ -d "$root" ] || continue
+  while IFS= read -r -d '' binary; do
+    if file "$binary" | grep -q 'Mach-O'; then
+      {
+        printf '\n===== %s =====\n' "${binary#"$OUT/"}"
+        printf '%s\n' '-- architectures --'
+        lipo -archs "$binary" 2>&1 || true
+        printf '%s\n' '-- linked libraries --'
+        otool -L "$binary" 2>&1 || true
+        printf '%s\n' '-- LC_RPATH entries --'
+        otool -l "$binary" 2>/dev/null | awk '/cmd LC_RPATH/{getline; getline; print}' || true
+      } >> "$REPORT"
+    fi
+  done < <(find "$root" -type f -print0)
+done
+
+test -s "$REPORT"
+find "$OUT/Frameworks" -type f -size +0c -print -quit | grep -q .
+find "$MODE_DIR" -type f -size +0c -print -quit | grep -q .
+ > "$MODE_DIR/exports.txt"
+test -s "$MODE_DIR/exports.txt" || { echo "QEMU $MODE export manifest is empty." >&2; exit 3; }
 if [ "$MODE" = "jit" ]; then
   cp "$MODE_DIR/runtime-library-path.txt" "$OUT/QEMU/runtime-library-path.txt"
   cp "$MODE_DIR/exports.txt" "$OUT/exports.txt"
 fi
+bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" "$MODE" allow-unsigned
 
 data_dir=""
 found="$(find "$APP" -type f \( \
