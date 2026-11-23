@@ -26,23 +26,24 @@ enum VMAccelerationBackend: String, CaseIterable {
     case qemuInterpreter = "QEMU TCI (no JIT)"
     case hypervisor = "Hypervisor.framework"
 
-    /// Only the JIT-backed QEMU runtime is currently packaged for iOS.
-    /// Keep unsupported choices visible for migration, but do not offer them.
+    /// TCI is the no-JIT fallback packaged alongside the JIT runtime.
+    /// JIT is selectable only while the physical-device handshake is ready.
     var isAvailable: Bool {
         switch self {
-        case .automatic, .qemuJIT: return true
-        case .qemuInterpreter, .hypervisor: return false
+        case .automatic, .qemuInterpreter: return true
+        case .qemuJIT: return JITCoordinator.shared.isQEMUJITReady
+        case .hypervisor: return false
         }
     }
 
     var detail: String {
         switch self {
         case .automatic:
-            return "Uses the packaged QEMU TCG + JIT runtime; requires physical-device JIT readiness. A no-JIT TCI runtime is not packaged yet."
+            return "Uses QEMU JIT when ready; otherwise falls back to QEMU TCI (no JIT)."
         case .qemuJIT:
-            return "TCG with a 128 MiB translation-block cache and split-WX; requires physical iOS 26+ and a supported StikDebug JIT session."
+            return "TCG with a 128 MiB translation-block cache and split-WX enabled; requires physical iOS 26+ and a supported StikDebug JIT session."
         case .qemuInterpreter:
-            return "Unavailable: the separate no-JIT TCI runtime has not been built and packaged."
+            return "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG."
         case .hypervisor:
             return "Unavailable on standard iOS; Hypervisor.framework is not exposed to ordinary iOS apps."
         }
@@ -134,7 +135,8 @@ final class RuntimeSettings {
     var acceleration: VMAccelerationBackend {
         get {
             let stored = VMAccelerationBackend(rawValue: defaults.string(forKey: "iSteam.acceleration") ?? "") ?? .automatic
-            return stored.isAvailable ? stored : .automatic
+            // Stored selections fall back to QEMU TCI (no JIT) when the JIT handshake is unavailable.
+            return stored.isAvailable ? stored : .qemuInterpreter
         }
         set { defaults.set(newValue.rawValue, forKey: "iSteam.acceleration") }
     }
