@@ -585,6 +585,8 @@ required = {
     "src/QEMU/QEMUNativeRuntime.swift": [
         "let requestedJIT = configuration.accelerator == .jit",
         "var requiresJIT = requestedJIT",
+        "var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)",
+        "switch runtimeStatus",
         "isteam_qemu_start",
         "isteam_qemu_request_stop",
         "findUEFIFirmwarePair(in directory: URL)",
