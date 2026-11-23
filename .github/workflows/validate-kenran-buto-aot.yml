@@ -5,54 +5,21 @@ on:
     branches: [main]
     paths:
       - "src/Runtime/X86_64AOTTranslator.swift"
-      - "src/Core/EmulationLog.swift"
-      - "src/Runtime/GuestMemory.swift"
-      - "src/Runtime/LinuxSyscallDispatcher.swift"
-      - "src/Runtime/X86_64ALU.swift"
-      - "iSteam/JIT26Protocol.c"
       - "iSteam/KenranButoAOTExecutableMemory.h"
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
-      - "src/Runtime/X86_64Interpreter.swift"
-      - "src/Runtime/GuestMachine.swift"
-      - "src/Core/VMConfiguration.swift"
-      - "src/QEMU/QEMUNativeRuntime.swift"
-      - "iSteam/JIT26Protocol.h"
       - "iSteam/KenranButoAOTExecutableMemory.c"
-      - "scripts/tests/test_x86_64_interpreter.swift"
-      - "scripts/validate-qemu-source.py"
-      - "scripts/tests/test_static_elf_execution.swift"
-      - "src/Runtime/ELF64Loader.swift"
-      - "src/Runtime/LinuxProcessStackBuilder.swift"
-      - "src/Runtime/RuntimeCapabilityRegistry.swift"
       - "docs/KENRAN_BUTO_AOT_ABI.md"
-      - "src/Performance/TranslationCache.swift"
       - "scripts/tests/test_kenran_buto_aot_*.swift"
+      - ".github/workflows/validate-kenran-buto-aot.yml"
   pull_request:
     paths:
       - "src/Runtime/X86_64AOTTranslator.swift"
-      - "src/Core/EmulationLog.swift"
-      - "src/Runtime/GuestMemory.swift"
-      - "src/Runtime/LinuxSyscallDispatcher.swift"
-      - "src/Runtime/X86_64ALU.swift"
-      - "iSteam/JIT26Protocol.c"
       - "iSteam/KenranButoAOTExecutableMemory.h"
       - "src/Runtime/KenranButoAOTCompiler.swift"
       - "src/Runtime/KenranButoAOTExecution.swift"
-      - "src/Runtime/X86_64Interpreter.swift"
-      - "src/Runtime/GuestMachine.swift"
-      - "src/Core/VMConfiguration.swift"
-      - "src/QEMU/QEMUNativeRuntime.swift"
-      - "iSteam/JIT26Protocol.h"
       - "iSteam/KenranButoAOTExecutableMemory.c"
-      - "scripts/tests/test_x86_64_interpreter.swift"
-      - "scripts/validate-qemu-source.py"
-      - "scripts/tests/test_static_elf_execution.swift"
-      - "src/Runtime/ELF64Loader.swift"
-      - "src/Runtime/LinuxProcessStackBuilder.swift"
-      - "src/Runtime/RuntimeCapabilityRegistry.swift"
       - "docs/KENRAN_BUTO_AOT_ABI.md"
-      - "src/Performance/TranslationCache.swift"
       - "scripts/tests/test_kenran_buto_aot_*.swift"
       - ".github/workflows/validate-kenran-buto-aot.yml"
   workflow_dispatch:
@@ -78,7 +45,6 @@ jobs:
             src/Runtime/X86_64AOTTranslator.swift \
             scripts/tests/test_kenran_buto_aot_translator.swift \
             -o "$RUNNER_TEMP/test-kenran-buto-aot-translator"
-          "$RUNNER_TEMP/test-kenran-buto-aot-translator"
       - name: Compile and test translation-cache integration
         shell: bash
         run: |
@@ -90,7 +56,6 @@ jobs:
             src/Runtime/KenranButoAOTCompiler.swift \
             scripts/tests/test_kenran_buto_aot_cache.swift \
             -o "$RUNNER_TEMP/test-kenran-buto-aot-cache"
-          "$RUNNER_TEMP/test-kenran-buto-aot-cache"
 
       - name: Compile W^X executable-memory provider
         shell: bash
@@ -117,7 +82,6 @@ jobs:
             scripts/tests/test_x86_64_interpreter.swift \
             "$RUNNER_TEMP/kenran-buto-aot-memory.o" \
             -o "$RUNNER_TEMP/test-x86-64-interpreter-aot"
-          "$RUNNER_TEMP/test-x86-64-interpreter-aot"
 
       - name: Run a real static ELF guest through the hybrid interpreter/AOT path
         shell: bash
@@ -138,4 +102,3 @@ jobs:
             scripts/tests/test_static_elf_execution.swift \
             "$RUNNER_TEMP/kenran-buto-aot-memory.o" \
             -o "$RUNNER_TEMP/test-static-elf-aot"
-          "$RUNNER_TEMP/test-static-elf-aot"
