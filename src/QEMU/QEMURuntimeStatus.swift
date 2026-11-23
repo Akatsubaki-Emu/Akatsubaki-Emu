@@ -114,7 +114,7 @@ enum QEMURuntimeStatus {
         guard let library = candidates.compactMap(validatedRegularLibrary).first else {
             return .unavailable(requiresJIT
                 ? "No embedded x86_64 QEMU JIT device library was found. Run the UTM runtime packaging workflow and code-sign nested code."
-                : "No embedded x86_64 QEMU TCI device library was found. Build the ios-tci-arm64 runtime and embed its TCI framework and data.")
+                : "No embedded x86_64 QEMU TCI device library was found. Rebuild and embed the iOS TCI runtime and data.")
         }
         return .ready(libraryURL: library, dataDirectory: dataDirectory)
     }
