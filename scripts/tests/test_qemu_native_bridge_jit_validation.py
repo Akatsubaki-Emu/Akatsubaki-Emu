@@ -22,7 +22,7 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertIn("if (requires_jit != has_jit_callbacks)", source)
         self.assertIn("unexpected isteam_qemu_set_jit_callbacks in TCI runtime", source)
         self.assertEqual(source.count("jit_export_mismatch(requires_jit, has_jit_callbacks)"), 2)
-        self.assertIn("requires_jit ? \"lifecycle/JIT\" : \"lifecycle\"", source)
+        self.assertIn('requires_jit ? "JIT" : "TCI"', source)
         self.assertIn("if (requires_jit) {", source)
         self.assertIn("isteam_qemu_set_jit_callbacks", source)
         self.assertIn(
