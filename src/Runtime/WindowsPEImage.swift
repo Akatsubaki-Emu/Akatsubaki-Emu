@@ -274,14 +274,24 @@ struct WindowsPEImage {
             throw ParseError.unmappedRVA(rva)
         }
         let delta = UInt64(rva) - UInt64(section.virtualAddress)
-        if allowEnd {
-            guard delta <= UInt64(section.rawSize) else { throw ParseError.unmappedRVA(rva) }
+        let rawSize = UInt64(section.rawSize)
+        let virtualSpan = UInt64(max(section.virtualSize, section.rawSize))
+        // A zero-length cursor may land at the virtual end of a section whose
+        // zero-fill tail is larger than its file-backed data. Map that cursor
+        // to the end of the raw bytes without exposing the zero-fill tail.
+        let virtualEndCursor = allowEnd && delta > rawSize && delta == virtualSpan
+        if virtualEndCursor {
+            // The end cursor has no readable bytes; it only carries the raw EOF.
+        } else if allowEnd {
+            guard delta <= rawSize else { throw ParseError.unmappedRVA(rva) }
         } else {
-            guard delta < UInt64(section.rawSize) else { throw ParseError.unmappedRVA(rva) }
+            guard delta < rawSize else { throw ParseError.unmappedRVA(rva) }
         }
-        let rawOffset = UInt64(section.rawOffset) + delta
+        let rawDelta = virtualEndCursor ? rawSize : delta
+        let rawOffset = UInt64(section.rawOffset) + rawDelta
         guard rawOffset <= UInt64(file.count) else { throw ParseError.unmappedRVA(rva) }
-        let available = min(UInt64(section.rawSize) - delta, UInt64(file.count) - rawOffset)
+        let available = virtualEndCursor ? 0
+            : min(rawSize - rawDelta, UInt64(file.count) - rawOffset)
         return (Int(rawOffset), Int(available))
     }
 
@@ -319,10 +329,21 @@ struct WindowsPEImage {
 
     private func section(forRVA rva: UInt32, allowEnd: Bool = false) -> Section? {
         if allowEnd {
+            let address = UInt64(rva)
+            // Prefer the preceding section at a shared boundary. A zero-length
+            // cursor at the end of a section belongs to that section's raw end,
+            // not to the next section's first byte.
+            if let endingSection = sections.first(where: {
+                let start = UInt64($0.virtualAddress)
+                let end = start + UInt64(max($0.virtualSize, $0.rawSize))
+                return address > start && address == end
+            }) {
+                return endingSection
+            }
             for section in sections {
                 let start = UInt64(section.virtualAddress)
                 let end = start + UInt64(max(section.virtualSize, section.rawSize))
-                if UInt64(rva) >= start && UInt64(rva) <= end { return section }
+                if address >= start && address < end { return section }
             }
             return nil
         }
