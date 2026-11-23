@@ -613,6 +613,8 @@ required = {
     "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
         "dlopen(library_path, RTLD_NOW | RTLD_LOCAL)",
+        "has_jit_callbacks != requires_jit",
+        "((set_jit_callbacks != NULL) != requires_jit)",
         "char *argument_storage = malloc(total_argument_bytes);",
         "copied_argv[i] = argument_storage + argument_offset;",
         "memcpy(copied_argv[i], argv[i], argument_length + 1u)",
@@ -637,8 +639,14 @@ required = {
         "strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u)",
         "error_buffer && error_capacity > 0",
     ],
+    "scripts/tests/test_qemu_native_bridge.c": [
+        'assert(argc == 4);',
+        'strcmp(argv[1], "jit")',
+        'strcmp(argv[1], "tci")',
+        "opposite_library",
+        "incompatible runtime mode",
+    ],
     "scripts/tests/fake_qemu_runtime.c": [
-        "#ifndef FAKE_QEMU_NO_JIT_CALLBACK",
         "void isteam_qemu_set_jit_callbacks",
         "fake_qemu_jit_callbacks_installed",
         "void qemu_init(int argc, char *argv[])",
@@ -648,6 +656,12 @@ required = {
         "void qemu_cleanup(int status)",
         "atomic_store(&cleanup_status, status);",
         "atomic_store(&shutdown_cause, cause);",
+    ],
+    "scripts/tests/fake_qemu_runtime_tci.c": [
+        "void qemu_init(int argc, char *argv[])",
+        "int qemu_main_loop(void)",
+        "void qemu_cleanup(int status)",
+        "void qemu_system_shutdown_request(int cause)",
     ],
     "scripts/package-utm-qemu-runtime.sh": [
         " _?isteam_qemu_set_jit_callbacks$",
@@ -1428,27 +1442,38 @@ else:
         failed = True
 
 
-# The no-JIT bridge test must use a fake library that truly lacks the JIT callback.
+# JIT and TCI use separate fake libraries. TCI must not export the JIT callback.
 fake_qemu_runtime = Path("scripts/tests/fake_qemu_runtime.c").read_text(encoding="utf-8")
+fake_qemu_runtime_tci = Path("scripts/tests/fake_qemu_runtime_tci.c").read_text(encoding="utf-8")
 native_bridge_test = Path("scripts/tests/test_qemu_native_bridge.c").read_text(encoding="utf-8")
+native_bridge = Path("iSteam/QEMUNativeBridge.c").read_text(encoding="utf-8")
 validation_workflow = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
 for token in (
-    "-DFAKE_QEMU_NO_JIT_CALLBACK",
-    'test-qemu-native-bridge" jit',
-    'test-qemu-native-bridge" tci',
     "libfakeqemu-jit.so",
     "libfakeqemu-tci.so",
+    '"$RUNNER_TEMP/test-qemu-native-bridge" jit',
+    '"$RUNNER_TEMP/test-qemu-native-bridge" tci',
 ):
     if token not in validation_workflow:
         print(f"repository validation workflow: missing JIT/TCI bridge test {token!r}", file=sys.stderr)
         failed = True
-if "#ifndef FAKE_QEMU_NO_JIT_CALLBACK" not in fake_qemu_runtime:
-    print("fake QEMU runtime: no-JIT fixture does not omit the callback export", file=sys.stderr)
+if "void isteam_qemu_set_jit_callbacks" not in fake_qemu_runtime:
+    print("fake QEMU JIT fixture does not export the callback", file=sys.stderr)
     failed = True
-for token in ('assert(argc == 3);', 'strcmp(argv[1], "jit")', 'strcmp(argv[1], "tci")'):
+if "isteam_qemu_set_jit_callbacks" in fake_qemu_runtime_tci:
+    print("fake QEMU TCI fixture must not export the JIT callback", file=sys.stderr)
+    failed = True
+for token in ('assert(argc == 4);', 'strcmp(argv[1], "jit")', 'strcmp(argv[1], "tci")',
+              "opposite_library", "incompatible runtime mode"):
     if token not in native_bridge_test:
-        print(f"native QEMU bridge test: missing mode selection {token!r}", file=sys.stderr)
+        print(f"native QEMU bridge test: missing bidirectional mode-parity contract {token!r}", file=sys.stderr)
         failed = True
+if native_bridge.count("has_jit_callbacks != requires_jit") != 1:
+    print("QEMU native bridge validation must reject both missing JIT and unexpected TCI callbacks.", file=sys.stderr)
+    failed = True
+if "((set_jit_callbacks != NULL) != requires_jit)" not in native_bridge:
+    print("QEMU native bridge startup must enforce exact JIT/TCI callback parity.", file=sys.stderr)
+    failed = True
 
 
 # ENDBR64 support must remain exact: F3 0F 1E FA only, with malformed,
