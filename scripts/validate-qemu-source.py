@@ -1404,12 +1404,14 @@ else:
         failed = True
 
 
-# The no-JIT bridge test must use a fake library that truly lacks the JIT callback.
+# The JIT and TCI bridge tests use separate fake libraries so the TCI
+# fixture cannot accidentally export the JIT callback.
 fake_qemu_runtime = Path("scripts/tests/fake_qemu_runtime.c").read_text(encoding="utf-8")
+fake_qemu_runtime_tci = Path("scripts/tests/fake_qemu_runtime_tci.c").read_text(encoding="utf-8")
 native_bridge_test = Path("scripts/tests/test_qemu_native_bridge.c").read_text(encoding="utf-8")
+native_bridge_source = Path("iSteam/QEMUNativeBridge.c").read_text(encoding="utf-8")
 validation_workflow = Path(".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
 for token in (
-    "-DFAKE_QEMU_NO_JIT_CALLBACK",
     'test-qemu-native-bridge" jit',
     'test-qemu-native-bridge" tci',
     "libfakeqemu-jit.so",
@@ -1418,12 +1420,26 @@ for token in (
     if token not in validation_workflow:
         print(f"repository validation workflow: missing JIT/TCI bridge test {token!r}", file=sys.stderr)
         failed = True
-if "#ifndef FAKE_QEMU_NO_JIT_CALLBACK" not in fake_qemu_runtime:
-    print("fake QEMU runtime: no-JIT fixture does not omit the callback export", file=sys.stderr)
+if "void isteam_qemu_set_jit_callbacks" not in fake_qemu_runtime:
+    print("fake QEMU runtime: JIT fixture is missing its callback export", file=sys.stderr)
     failed = True
-for token in ('assert(argc == 3);', 'strcmp(argv[1], "jit")', 'strcmp(argv[1], "tci")'):
+if "isteam_qemu_set_jit_callbacks" in fake_qemu_runtime_tci:
+    print("fake QEMU TCI runtime: must not export the JIT callback", file=sys.stderr)
+    failed = True
+for token in ("has_jit_callbacks != requires_jit", "(set_jit_callbacks != NULL) != requires_jit"):
+    if token not in native_bridge_source:
+        print(f"native QEMU bridge: missing strict JIT/TCI mode parity {token!r}", file=sys.stderr)
+        failed = True
+for token in (
+    "assert(argc == 4);",
+    'strcmp(argv[1], "jit")',
+    'strcmp(argv[1], "tci")',
+    "wrong_mode_library",
+    "isteam_qemu_validate_library(wrong_mode_library",
+    "isteam_qemu_start(1, mismatch_arguments, wrong_mode_library",
+):
     if token not in native_bridge_test:
-        print(f"native QEMU bridge test: missing mode selection {token!r}", file=sys.stderr)
+        print(f"native QEMU bridge test: missing mode-parity regression {token!r}", file=sys.stderr)
         failed = True
 
 
