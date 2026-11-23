@@ -30,7 +30,8 @@ enum VMAccelerationBackend: String, CaseIterable {
     /// TCI remains available when the device cannot obtain executable memory.
     var isAvailable: Bool {
         switch self {
-        case .automatic, .qemuJIT, .qemuInterpreter: return true
+        case .automatic, .qemuInterpreter: return true
+        case .qemuJIT: return JITCoordinator.shared.isQEMUJITReady
         case .hypervisor: return false
         }
     }
@@ -134,7 +135,8 @@ final class RuntimeSettings {
     var acceleration: VMAccelerationBackend {
         get {
             let stored = VMAccelerationBackend(rawValue: defaults.string(forKey: "iSteam.acceleration") ?? "") ?? .automatic
-            return stored.isAvailable ? stored : .automatic
+            // stored selections fall back to QEMU TCI (no JIT) when the physical-device JIT handshake is unavailable.
+            return stored.isAvailable ? stored : .qemuInterpreter
         }
         set { defaults.set(newValue.rawValue, forKey: "iSteam.acceleration") }
     }
