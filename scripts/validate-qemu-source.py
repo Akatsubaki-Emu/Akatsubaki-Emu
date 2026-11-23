@@ -237,7 +237,9 @@ required = {
         "test_stikdebug_availability_is_limited_to_physical_ios_devices",
         "targetEnvironment(simulator)",
         "targetEnvironment(macCatalyst)",
-    ],
+
+        "test_no_jit_tci_is_available_and_unsupported_modes_fall_back_to_tci",
+        "test_launch_ui_falls_back_to_tci_after_jit_handoff_failure",    ],
     "scripts/tests/test_guest_time_pair.py": [
         "func writeUInt64Pair",
         "isteam_guest_memory_write(native, offset, base, 16)",
@@ -761,9 +763,12 @@ required = {
         "?? .linuxVM",
         "TCG with a 128 MiB translation-block cache and split-WX enabled",
         "case qemuInterpreter = \"QEMU TCI (no JIT)\"",
-        "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG",
-        "stored selections fall back to QEMU TCI (no JIT)",
-    ],
+        "case .automatic, .qemuJIT, .qemuInterpreter: return true",
+        "case .hypervisor: return false",
+        "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG.",
+        "Stored unsupported acceleration selections fall back to QEMU TCI (no JIT).",
+        "return stored.isAvailable ? stored : .qemuInterpreter",
+        ],
     "src/Core/VMConfiguration.swift": [
         "static var defaultAccelerator: Accelerator",
         "case .automatic, .qemuJIT: return .jit",
