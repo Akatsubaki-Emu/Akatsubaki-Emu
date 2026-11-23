@@ -147,7 +147,7 @@ case "$candidate" in
     ;;
 esac
 
-bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci
+bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci allow-unsigned
 
 # The app resolves the runtime through this manifest rather than assuming
 # that every UTM revision names its loadable library the same way.

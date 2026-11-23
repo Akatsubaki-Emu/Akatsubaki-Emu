@@ -156,6 +156,9 @@ case "$candidate" in
     ;;
 esac
 
+# UTM archives are built with CODE_SIGNING_ALLOWED=NO; the IPA signing stage signs nested code.
+bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" "$MODE" allow-unsigned
+
 # The app resolves the runtime through this manifest rather than assuming
 # that every UTM revision names its loadable library the same way.
 printf '%s\n' "$runtime_relative" > "$MODE_DIR/runtime-library-path.txt"

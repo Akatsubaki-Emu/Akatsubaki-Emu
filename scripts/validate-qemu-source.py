@@ -217,6 +217,13 @@ required = {
         "test_capability_probe_accepts_tci_when_jit_runtime_is_missing",
         "test_runtime_start_falls_back_to_tci_when_jit_is_unavailable",
     ],
+    "scripts/tests/test_qemu_runtime_release_contract.py": [
+        "test_release_ipa_validates_both_runtime_modes",
+        "test_unsigned_intermediate_policy_is_explicit",
+        "JIT_RUNTIME_DIR",
+        "TCI_RUNTIME_DIR",
+        "allow-unsigned",
+    ],
     "scripts/tests/test_qemu_build_patches.py": [
         "test_tci_build_uses_upstream_ios_se_scheme_and_product",
         "test_qemu_dependency_cache_version_matches_validation_contracts",
@@ -657,6 +664,7 @@ required = {
         "vtool -show-build",
         "platform[[:space:]]+IOS([[:space:]]|$)",
         "dynamically linked shared library",
+        'bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" "$MODE" allow-unsigned',
         'source_dir="$(dirname "$firmware_file")"',
         '[ "$source_dir" = "$data_dir" ] && continue',
         'target_dir="$OUT/QEMU/firmware/$relative_dir"',
@@ -665,7 +673,7 @@ required = {
     "scripts/package-utm-qemu-tci-runtime.sh": [
         "has_jit_callbacks=false",
         "QEMU-TCI.framework",
-        'bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci',
+        'bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci allow-unsigned',
         "StikJIT callback export: absent by design",
         "runtime-library-path.txt",
     ],
@@ -678,6 +686,9 @@ required = {
     ],
     "scripts/validate-qemu-runtime.sh": [
         "for tool in file lipo nm codesign vtool; do",
+        'signature_policy="${3:-require-signature}"',
+        'if codesign -d "$library" >/dev/null 2>&1; then',
+        'elif [[ "$signature_policy" == "allow-unsigned" ]]; then',
         "required_symbols=(qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request)",
         'if [[ "$mode" == "jit" ]]; then',
         "required_symbols+=(isteam_qemu_set_jit_callbacks)",
@@ -1404,21 +1415,27 @@ if ios_package_start < 0 or ios_package_end < 0:
 else:
     ios_package = release_workflow[ios_package_start:ios_package_end]
     for token in [
-        'test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt"',
-        'test -s "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_init$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_main_loop$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_cleanup$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_system_shutdown_request$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?isteam_qemu_set_jit_callbacks$\' "$RUNTIME_DIR/exports.txt"',
+        'JIT_RUNTIME_DIR="$RUNTIME_DIR/QEMU/JIT"',
         'TCI_RUNTIME_DIR="$RUNTIME_DIR/QEMU/TCI"',
+        'test -s "$JIT_RUNTIME_DIR/runtime-library-path.txt"',
+        'test -s "$JIT_RUNTIME_DIR/exports.txt"',
         'test -s "$TCI_RUNTIME_DIR/runtime-library-path.txt"',
         'test -s "$TCI_RUNTIME_DIR/exports.txt"',
+        'JIT_RUNTIME_REL="$(head -n 1 "$JIT_RUNTIME_DIR/runtime-library-path.txt")"',
         'TCI_RUNTIME_REL="$(head -n 1 "$TCI_RUNTIME_DIR/runtime-library-path.txt")"',
+        'test -s "$RUNTIME_DIR/$JIT_RUNTIME_REL"',
         'test -s "$RUNTIME_DIR/$TCI_RUNTIME_REL"',
+        'grep -Eq " _?$symbol$" "$JIT_RUNTIME_DIR/exports.txt"',
+        'grep -Eq " _?$symbol$" "$TCI_RUNTIME_DIR/exports.txt"',
+        'grep -Eq \' _?isteam_qemu_set_jit_callbacks$\' "$JIT_RUNTIME_DIR/exports.txt"',
+        'if grep -Eq \' _?isteam_qemu_set_jit_callbacks$\' "$TCI_RUNTIME_DIR/exports.txt"; then',
+        'test -s "$APP/QEMU/JIT/runtime-library-path.txt"',
+        'test -s "$APP/QEMU/JIT/exports.txt"',
         'test -s "$APP/QEMU/TCI/runtime-library-path.txt"',
-        'test -s "$APP/$TCI_RUNTIME_REL"',
         'test -s "$APP/QEMU/TCI/exports.txt"',
+        'test -s "$APP/QEMU/runtime-mode-manifest.txt"',
+        'test -s "$APP/$JIT_RUNTIME_REL"',
+        'test -s "$APP/$TCI_RUNTIME_REL"',
     ]:
         if token not in ios_package:
             print(f"release workflow: runtime packaging guard missing: {token}", file=sys.stderr)
