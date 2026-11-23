@@ -62,6 +62,8 @@ class MergeQEMURuntimeVariantsTests(unittest.TestCase):
                          "Frameworks/QEMU.framework/QEMU")
         self.assertEqual((output / "QEMU/TCI/runtime-library-path.txt").read_text().strip(),
                          "Frameworks/TCI/QEMU.framework/QEMU")
+        self.assertEqual((output / "QEMU/runtime-library-path.txt").read_text().strip(),
+                         "Frameworks/QEMU.framework/QEMU")
         self.assertTrue((output / "QEMU/JIT/bios.bin").is_file())
         self.assertTrue((output / "QEMU/TCI/bios.bin").is_file())
 
