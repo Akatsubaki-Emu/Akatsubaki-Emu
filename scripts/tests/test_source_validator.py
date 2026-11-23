@@ -726,14 +726,14 @@ class SourceValidatorTests(unittest.TestCase):
         workflow = (root / ".github" / "workflows" / "validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
         self.assertIn("id: native_aot", workflow)
         self.assertIn(
-            "if [[ -s iSteam/KenranButoAOTExecutableMemory.c && -s src/Runtime/KenranButoAOTExecution.swift ]]; then",
+            "if [[ -s iSteam/KenranButoAOTExecutableMemory.c && -s iSteam/KenranButoAOTExecutableMemory.h && -s iSteam/JIT26Protocol.h && -s src/Runtime/KenranButoAOTExecution.swift ]]; then",
             workflow,
         )
         self.assertEqual(
             workflow.count("if: steps.native_aot.outputs.available == 'true'"),
             3,
         )
-        self.assertIn("Native AOT runtime integration is not present on this branch", workflow)
+        self.assertIn("Native AOT runtime integration is incomplete on this revision; translator and cache tests ran, while native execution tests were explicitly skipped.", workflow)
 
 
 if __name__ == "__main__":
