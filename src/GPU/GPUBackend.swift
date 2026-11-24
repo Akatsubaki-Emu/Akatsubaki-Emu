@@ -22,5 +22,6 @@ protocol GPUBackend: AnyObject {
     var height: Int { get }
     func start()
     func stop()
-    func submit(frame: Data, width: Int, height: Int, dirtyRegion: GPUFrameRegion?)
+    func setSessionGeneration(_ generation: UInt64)
+    func submit(frame: Data, width: Int, height: Int, dirtyRegion: GPUFrameRegion?, sessionGeneration: UInt64)
 }
