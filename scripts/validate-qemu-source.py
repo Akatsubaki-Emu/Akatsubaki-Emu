@@ -306,6 +306,10 @@ required = {
         "memory.unmap(offset: address, length: size)",
         "firstMappedRangeEnding(after: candidate)",
         "firstMappedRangeEnding(after: initialProgramBreak)",
+        "mmapCursor = max(mmapCursor, Self.alignUp(requested))",
+        "mmapCursor = max(minimumMmapCursor, Self.alignUp(requested))",
+        "let hint = requested == 0 ? mmapCursor : requested & ~UInt64(0xFFF)",
+        "findFreeAddress(startingAt: hint, size: size, limit: limit)",
     ],
     "scripts/tests/test_native_guest_memory.cpp": [
         "1ULL << 30",
@@ -317,6 +321,10 @@ required = {
     "scripts/tests/test_linux_syscall_dispatcher.swift": [
         "Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/uname/identity and reset tests passed",
         "dispatcher.dispatch(number: 9999",
+        "let mappingAboveExpandedHeap = dispatcher.dispatch(number: 9",
+        "precondition(mappingAboveExpandedHeapAddress == 0x90000)",
+        "let unmapExpandedHeapMapping = dispatcher.dispatch(number: 11",
+        "precondition(unmapExpandedHeapValue == 0)",
         "precondition(hintedAddress == 0x48000)",
         "precondition(fixedAddress == mapped)",
         "precondition(noReplaceValue == UInt64(bitPattern: Int64(-17)))",
@@ -1927,7 +1935,8 @@ for token in ('static let translatorVersion = "8"', "case 0x90...0x97:",
 if "case 0x90...0x97:" not in xchg_interpreter_source:
     print("AOT XCHG block-entry eligibility is missing", file=sys.stderr)
     failed = True
-for token in ("0x4A010000", "0xCA080000", "0xCA0F000F", "extendedAccumulatorExchange"):
+for token in ("0x4A010000", "0xCA080000", "0xCA0F000F", "extendedAccumulatorExchange",
+              "exchange32HighWithUnsupportedIndex", "Data([0x43, 0x87, 0xC0])"):
     if token not in xchg_translator_tests:
         print(f"AOT XCHG encoding regression missing {token!r}", file=sys.stderr)
         failed = True

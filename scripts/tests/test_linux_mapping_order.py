@@ -19,6 +19,10 @@ class LinuxMappingOrderTests(unittest.TestCase):
         self.assertIn("firstMappedRangeEnding(after: initialProgramBreak)", source)
         self.assertNotIn("mappedRanges.sorted", source)
         self.assertNotIn("mappedRanges.firstIndex(where:", source)
+        self.assertIn("mmapCursor = max(mmapCursor, Self.alignUp(requested))", source)
+        self.assertIn("mmapCursor = max(minimumMmapCursor, Self.alignUp(requested))", source)
+        self.assertIn("let hint = requested == 0 ? mmapCursor : requested & ~UInt64(0xFFF)", source)
+        self.assertIn("findFreeAddress(startingAt: hint, size: size, limit: limit)", source)
 
         mapping = source.split("private func mapAnonymous", 1)[1].split(
             "private func mappedRangesAfterMapping", 1

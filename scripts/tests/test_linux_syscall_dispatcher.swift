@@ -241,6 +241,12 @@ struct LinuxSyscallDispatcherTests {
         let extended = dispatcher.dispatch(number: 12, arguments: [0x90000, 0, 0, 0, 0, 0])!
         guard case .returned(let extendedValue) = extended else { preconditionFailure() }
         precondition(extendedValue == 0x90000)
+        let mappingAboveExpandedHeap = dispatcher.dispatch(number: 9, arguments: [0, 4096, 3, 0x22, UInt64.max, 0])!
+        guard case .returned(let mappingAboveExpandedHeapAddress) = mappingAboveExpandedHeap else { preconditionFailure() }
+        precondition(mappingAboveExpandedHeapAddress == 0x90000)
+        let unmapExpandedHeapMapping = dispatcher.dispatch(number: 11, arguments: [mappingAboveExpandedHeapAddress, 4096, 0, 0, 0, 0])!
+        guard case .returned(let unmapExpandedHeapValue) = unmapExpandedHeapMapping else { preconditionFailure() }
+        precondition(unmapExpandedHeapValue == 0)
         let shrunkAgain = dispatcher.dispatch(number: 12, arguments: [0x41000, 0, 0, 0, 0, 0])!
         guard case .returned(let shrunkAgainValue) = shrunkAgain else { preconditionFailure() }
         precondition(shrunkAgainValue == 0x41000)
