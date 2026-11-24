@@ -39,8 +39,9 @@ struct KenranButoAOTTranslatorTests {
         precondition(word(registerMoves.machineCode, 0) == 0x2A0303E0) // ORR W0, WZR, W3
         precondition(word(registerMoves.machineCode, 1) == 0xAA0003E3) // ORR X3, XZR, X0
 
-        // Both REX.B variants of 90 are XCHG, not NOP.
-        for rex in [UInt8(0x41), UInt8(0x49)] {
+        // Every tested REX prefix with B=1 makes 90 an XCHG, not NOP.
+        // 0x43 also sets REX.X; the translator must still honor REX.B.
+        for rex in [UInt8(0x41), UInt8(0x43), UInt8(0x49)] {
             let exchange = translator.translate(Data([rex, 0x90]))
             precondition(exchange.stopReason == .unsupportedInstruction)
             precondition(exchange.guestBytesConsumed == 0)
