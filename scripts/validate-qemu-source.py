@@ -1507,6 +1507,98 @@ for token in ("endbr64Memory", "malformedEndbr64Memory", "truncatedEndbr64Memory
         print(f"x86-64 interpreter tests: missing ENDBR64 prefix regression {token!r}", file=sys.stderr)
         failed = True
 
+
+# Kenran Buto AOT ABI v1, split-WX provider and interpreter-cooperative dispatch.
+aot_header = Path("iSteam/JIT26Protocol.h").read_text(encoding="utf-8")
+aot_memory = Path("iSteam/KenranButoAOTExecutableMemory.c").read_text(encoding="utf-8")
+aot_execution = Path("src/Runtime/KenranButoAOTExecution.swift").read_text(encoding="utf-8")
+aot_interpreter = Path("src/Runtime/X86_64Interpreter.swift").read_text(encoding="utf-8")
+aot_guest_machine = Path("src/Runtime/GuestMachine.swift").read_text(encoding="utf-8")
+aot_launcher = Path("src/Steam/GameLauncher.swift").read_text(encoding="utf-8")
+aot_translator = Path("src/Runtime/X86_64AOTTranslator.swift").read_text(encoding="utf-8")
+for token in ("KENRAN_BUTO_AOT_ABI_VERSION", "KenranButoAOTGuestState",
+              "KenranButoAOTMemoryCallbacks", "iSteamAOTExecutableMemoryInvoke",
+              "iSteamAOTExecutableMemoryMappedSize", "iSteamAOTGuestMemoryRead",
+              "iSteamAOTGuestMemoryWrite"):
+    if token not in aot_header:
+        print(f"AOT ABI missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("_Static_assert(offsetof(KenranButoAOTGuestState,gpr)==8",
+              "_Static_assert(sizeof(KenranButoAOTGuestState)==96",
+              "iSteamAOTGuestStateIsValid(s)", "iSteamAOTGuestMemoryRead",
+              "iSteamAOTGuestMemoryWrite", "iSteamAOTExecutableMemoryMappedSize",
+              "r->mapped_size", "mprotect((void *)execute,mapped,PROT_READ|PROT_EXEC)",
+              "r->finalized=true"):
+    if token not in aot_memory:
+        print(f"AOT memory provider missing {token!r}", file=sys.stderr)
+        failed = True
+invoke = aot_memory.split("bool iSteamAOTExecutableMemoryInvoke", 1)[1].split(
+    "void iSteamAOTExecutableMemoryDestroy", 1
+)[0]
+if "iSteamAOTExecutableMemoryIsAvailable()" not in invoke:
+    print("AOT invoke does not recheck live executable-memory readiness", file=sys.stderr)
+    failed = True
+guard = aot_memory.find("if(status!=KERN_SUCCESS||(maximum&VM_PROT_WRITE)==0)")
+cleanup_end = aot_memory.find("return NULL;", guard)
+if guard < 0 or cleanup_end < 0 or "deallocate_mach_address(write,mapped)" not in aot_memory[guard:cleanup_end]:
+    print("AOT TXM remap failure path does not release writable alias", file=sys.stderr)
+    failed = True
+for token in ("KenranButoAOTGuestState", "makeMemoryCallbacks(for:memory)",
+              "iSteamAOTExecutableMemoryInvoke", "maximumCachedBlocks=64",
+              "iSteamAOTExecutableMemoryMappedSize(created)", "state.gpr==gpr",
+              "state.memory==cb", "state.rflags==rflags",
+              "state.instructions_executed<=UInt64(t.instructionCount)",
+              "candidate.allocatedBytes", "func refreshAvailability()"):
+    if token not in aot_execution:
+        print(f"AOT executor missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("aotExecutor.execute(", "rip = result.exitRip", "aotExecutor?.invalidateAll()",
+              "canStartAOTBlock()", "aotPageRemaining"):
+    if token not in aot_interpreter:
+        print(f"AOT interpreter integration missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("aotExecutor: KenranButoAOTExecuting? = nil",
+              "X86_64Interpreter(memory: self.memory, aotExecutor: aotExecutor)"):
+    if token not in aot_guest_machine:
+        print(f"GuestMachine AOT injection contract missing {token!r}", file=sys.stderr)
+        failed = True
+if "aotExecutor: KenranButoAOTExecutor()" not in aot_launcher:
+    print("Linux ELF launch boundary does not inject KenranButoAOTExecutor", file=sys.stderr)
+    failed = True
+for token in ("maximumInstructions", "maximumOutputBytes", "maximumGuestBytes",
+              "maximumInstructionBudget = 4096", "maximumOutputBudget = 1_048_576",
+              "maximumGuestByteBudget = 65_536", "guestCode.withUnsafeBytes { raw in",
+              "UnsafeBufferPointer(", "var output = [UInt32]()", "private struct EncodedWords",
+              "machineCode: code.withUnsafeBytes { Data($0) }", "output.append(word.littleEndian)"):
+    if token not in aot_translator:
+        print(f"AOT translator missing bounded/fixed-buffer contract {token!r}", file=sys.stderr)
+        failed = True
+aot_allocation_test = Path("scripts/tests/test_aot_translator_allocation_hot_path.py").read_text(encoding="utf-8")
+for token in ("test_guest_input_is_borrowed_without_copying_to_a_byte_array",
+              "test_translated_output_uses_one_word_buffer_and_one_final_data_copy",
+              "test_each_instruction_uses_a_fixed_four_word_emission_buffer",
+              "test_move_immediate_does_not_allocate_chunk_or_word_arrays",
+              "test_output_capacity_is_bounded_by_input_and_instruction_budgets",
+              "test_words_are_stored_in_little_endian"):
+    if token not in aot_allocation_test:
+        print(f"AOT allocation regression missing {token!r}", file=sys.stderr)
+        failed = True
+aot_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
+for token in ("#if KENRAN_BUTO_AOT_TESTS", "iSteamAOTGuestMemoryRead",
+              "sideExit!.exitRip == 0x100A",
+              "Kenran Butō AOT native block execution",
+              "cachedBlockCount", "cachedExecutableBytes"):
+    if token not in aot_tests:
+        print(f"AOT runtime regression missing {token!r}", file=sys.stderr)
+        failed = True
+aot_workflow = Path(".github/workflows/validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
+for token in ("KenranButoAOTExecutableMemory.c", "KenranButoAOTExecution.swift",
+              "test_x86_64_interpreter.swift", "test_aot_translator_allocation_hot_path.py",
+              "-D KENRAN_BUTO_AOT_TESTS"):
+    if token not in aot_workflow:
+        print(f"AOT workflow missing {token!r}", file=sys.stderr)
+        failed = True
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")
