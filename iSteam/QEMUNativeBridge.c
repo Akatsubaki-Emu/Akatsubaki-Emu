@@ -177,7 +177,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
         pthread_mutex_unlock(&g_lock);
         if (error_buffer && error_capacity > 0) {
             snprintf(error_buffer, (size_t)error_capacity,
-                     "A QEMU runtime is already initialized in this app process; reuse it through the local QMP control socket.");
+                     "A QEMU runtime is already initialized and cannot safely restart in this app process; reuse it through the local QMP control socket.");
         }
         return false;
     }
