@@ -1,8 +1,7 @@
 import Foundation
 
-/// Coordinates one QEMU session. UTM's iOS QEMU runtime is single-session per
-/// app process, so a stopped or failed QEMU session cannot be relaunched until
-/// the app process is restarted.
+/// Coordinates guest sessions over one process-lifetime QEMU runtime.
+/// Guest stop pauses the VM through QMP; the next launch resets and resumes it.
 final class VMEngine {
     enum State: Equatable {
         case stopped
@@ -71,12 +70,12 @@ final class VMEngine {
 
     private func checkStartup(_ candidate: QEMUBackend) {
         if case .stopping = state {
-            guard !candidate.isActive else { return }
+            guard !candidate.isRunning else { return }
             monitor?.cancel()
             monitor = nil
             backend = nil
             setState(.stopped)
-            EmulationLog.shared.write("QEMU session stopped; restart requires relaunching Akatsubaki Emu.")
+            EmulationLog.shared.write("QEMU guest paused; persistent runtime retained for the next launch.")
             return
         }
 
@@ -121,27 +120,23 @@ final class VMEngine {
         guard case .stopped = state else {
             setState(.stopping)
             startupDeadline = nil
-            backend?.stop()
+            monitor?.cancel()
+            monitor = nil
 
-            guard let candidate = backend, candidate.isActive else {
-                monitor?.cancel()
-                monitor = nil
-                backend = nil
+            guard let candidate = backend else {
                 setState(.stopped)
-                EmulationLog.shared.write("Stopped session: \(configuration.name)")
+                return
+            }
+            guard candidate.stop() else {
+                let message = candidate.lastError ?? "QEMU did not acknowledge the pause request."
+                setState(.failed("Unable to pause the QEMU guest: \(message)"))
+                EmulationLog.shared.write("QEMU pause failed: \(message)")
                 return
             }
 
-            monitor?.cancel()
-            let timer = DispatchSource.makeTimerSource(queue: .main)
-            timer.schedule(deadline: .now() + .milliseconds(100), repeating: .milliseconds(100))
-            timer.setEventHandler { [weak self, weak candidate] in
-                guard let self, let candidate else { return }
-                self.checkStartup(candidate)
-            }
-            monitor = timer
-            timer.resume()
-            EmulationLog.shared.write("QEMU stop requested; waiting for native cleanup.")
+            backend = nil
+            setState(.stopped)
+            EmulationLog.shared.write("Stopped guest session: \(configuration.name); QEMU process retained for repeat launches.")
             return
         }
     }
