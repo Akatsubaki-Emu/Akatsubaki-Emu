@@ -68,6 +68,7 @@ The source includes separate entries for iOS Main, iOS Nightly, tvOS Main, and t
 - Local VM/session configuration and last-session metadata.
 - File selection and shared-directory handling.
 - Bounded, read-only metadata inspection for Windows PE and Linux ELF files.
+- A bounded static x86-64 Linux ELF execution path through `GuestMachine`, native C-backed guest memory, a Linux syscall subset, and the x86-64 interpreter; host-side regression coverage exists, but physical iOS execution is not yet verified.
 - Guest-memory and block-device prototypes.
 - Early display, Metal presentation, frame-pacing, keyboard, controller, and JIT-related experiments.
 - Research into app-container and binary-execution approaches used by projects such as LiveContainer.
@@ -81,13 +82,11 @@ The tvOS target is an early Siri Remote-friendly interface preview. Its Launch s
 
 ### Runtime and native helpers
 
-The hybrid execution core is named **Kenran Butō (絢爛舞踏)**. Its planned components are Kenran Butō AOT (static x86-64 → ARM64 translation), Kenran Butō Cache (translated-code cache), Kenran Butō Router (backend selection and fallback), Kenran Butō Runtime (execution orchestration), and Kenran Butō Graphics (graphics translation). These names describe architectural responsibilities, not a claim that the corresponding engines are complete or integrated.
+The hybrid execution core is named **Kenran Butō (絢爛舞踏)**. Its AOT translator, translated-code cache, backend router, interpreter fallback, and runtime orchestration now have concrete implementations, but coverage remains deliberately bounded. AOT translates only a subset of x86-64 instructions to ARM64; unsupported instructions must fall back to the interpreter. The iOS JIT path uses a process-lifetime 32 MiB TXM executable arena with exact-allocation tracking and coalescing reuse; it requires a supported StikDebug/JIT session and has not yet been verified on a physical iPad.
 
-The repository contains exploratory components for guest memory, image/file inspection, storage, display, and host-device services. The Windows and bounded static Linux ELF game-launch boundaries now invoke the **Kenran Butō** hybrid execution planner that composes cached static translation, one selected dynamic translator, diagnostic fallback, Windows compatibility, independent graphics translation, and host services. QEMU remains the full-system route; a32rt and native ARM64 remain architecture-specific paths. This is still orchestration scaffolding: the planner does not make missing backends available, and launch remains blocked until concrete runtime adapters and required ABI layers are installed. The Windows PE parser is not yet a Windows x64-to-ARM64 instruction translator. The QEMU/UTM runtime build is being developed in `.github/workflows/build-qemu-runtime.yml`; no verified runtime artifact or physical-device guest boot is established here. A working full-system emulator, Box64 execution environment, Wine/Proton, Windows API compatibility layer, functional guest networking/input path, and production-ready 3D GPU translation are not yet integrated. Android selection is a UI experiment. Compatibility with arbitrary games or anti-cheat systems is not promised.
+A bounded static Linux x86-64 ELF execution path is present: \`GameLauncher\` routes imported static ELF files through \`LinuxELFRuntime\` and \`GuestMachine\`, using \`ELF64Loader\`, \`LinuxProcessStackBuilder\`, \`LinuxSyscallDispatcher\`, \`X86_64Interpreter\`, and native C-backed \`GuestMemory\`. Diagnostic guests exercise register exchange, \`uname\`, \`write\`, and \`exit\`. This is not a general Linux userland: dynamic linking, \`PT_INTERP\`, shared libraries, arbitrary applications, and full-system OS boot are not established. The in-app console currently exposes text output; the Kenran Butō path does not yet have a complete guest framebuffer and input pipeline.
 
-
-
-## Requirements
+The broader Windows and game-launch planner still contains orchestration scaffolding for dynamic translators, Windows compatibility, graphics translation, and host services; those adapters are not made available merely by the planner. The Windows PE parser is metadata inspection, not a Windows x64-to-ARM64 translator or Windows kernel. QEMU/UTM remains the full-system route under a separate licensing/build gate; Bochs is only a candidate for further iOS porting work. No current-main IPA, physical-device guest boot, production 3D GPU translation, Box64/FEXCore execution environment, Wine/Proton, Windows API layer, or functional guest networking/input path is verified. Android selection remains a UI experiment. Compatibility with arbitrary games or anti-cheat systems is not promised.
 
 ### To build from source
 
@@ -107,7 +106,7 @@ The project currently declares IOS 16 ~ IOS 27, tvOS 17, and visionOS 1.0 deploy
 
 ## Automatic JIT activation
 
-Akatsubaki can orchestrate JIT acquisition for its QEMU VM on supported physical iOS devices through LocalDevVPN and StikDebug. This sideload/developer workflow requires a valid `get-task-allow` entitlement. See [Automatic JIT activation](docs/JIT_ACTIVATION.md) for setup, lifecycle, failure handling and validation.
+Akatsubaki can orchestrate JIT acquisition for its QEMU VM and Kenran Butō AOT path on supported physical iOS devices through LocalDevVPN and StikDebug. This sideload/developer workflow requires a valid `get-task-allow` entitlement. See [Automatic JIT activation](docs/JIT_ACTIVATION.md) for setup, lifecycle, failure handling and validation.
 
 ## Building
 
@@ -153,6 +152,7 @@ Bug reports, documentation improvements, and focused pull requests are welcome. 
 - [QEMU iOS runtime build workflow](https://akatsubaki-emu.github.io/docs/qemu-build-workflow)
 - [Automatic JIT activation](https://akatsubaki-emu.github.io/docs/jit-activation)
 - [iOS memory entitlements](https://akatsubaki-emu.github.io/docs/ios-entitlements)
+- [First playable iOS acceptance and remaining feature backlog](docs/FIRST_PLAYABLE_IOS_ACCEPTANCE.md)
 - [tvOS status and roadmap](https://akatsubaki-emu.github.io/docs/tvos)
 - [DroidDeck feature-port plan](https://akatsubaki-emu.github.io/docs/droiddeck-port-plan)
 - [DroidDeck port status](https://akatsubaki-emu.github.io/docs/droiddeck-port-status)
