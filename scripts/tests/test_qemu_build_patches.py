@@ -41,6 +41,29 @@ class QEMUBuildPatchTests(unittest.TestCase):
         self.assertEqual(twice.count("emulator_link_args += "), 2)
         self.assertNotIn("add_project_link_arguments", twice)
 
+    def test_qemu_meson_patch_selects_the_compiler_block_among_multiple_objc_blocks(self):
+        source = (
+            "if 'objc' in all_languages\\n"
+            "  summary_info += {'Objective-C compiler': false}\\n"
+            "endif\\n"
+            "if 'objc' in all_languages\\n"
+            "  objc.get_supported_arguments(warn_flags)\\n"
+            "endif\\n"
+            "if 'objc' in all_languages\\n"
+            "  summary_info += {'OBJCFLAGS': ' '.join(get_option('objc_args'))}\\n"
+            "endif\\n"
+        )
+        patched = patch_qemu_meson_ios.patch_objc_compile_flag(source)
+        self.assertEqual(patched.count("if 'objc' in all_languages"), 3)
+        self.assertIn(
+            "objc.get_supported_arguments(warn_flags + ['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')",
+            patched,
+        )
+        self.assertIn("summary_info += {'Objective-C compiler': false}", patched)
+        self.assertIn("summary_info += {'OBJCFLAGS': ' '.join(get_option('objc_args'))}", patched)
+        self.assertEqual(patch_qemu_meson_ios.patch_objc_compile_flag(patched), patched)
+
+
     def test_qemu_meson_patch_replaces_a_stale_runtime_path(self):
         source = (
             "project('qemu', 'c')\n"
