@@ -187,3 +187,6 @@ This is useful evidence that a no-JIT Box64 user-mode path can be made to execut
 - The related WiSHbox/GameHubIOS public README describes a static-ELF-on-iPhone milestone, but the inspected public repository exposed no source tree or licence file; it is a reference only and supplies no code that can be safely reused.
 
 **Decision:** do not replace Kenran Butō or merge this game-specific fork. Keep Box64 as a secondary Linux x86-64 user-mode candidate. If evaluated further, pin and audit the full fork diff and every dependency, reproduce the no-JIT static-library build, and benchmark the same Akatsubaki smoke ELF and broader Linux test corpus on a physical iPad. FEXCore and Box64 remain alternatives for one process, never simultaneous translators for the same guest thread. This is user-mode execution, not full-system OS emulation.
+
+
+Track A now includes a second static guest, hybrid_runtime_smoke.elf, which exercises uname, write and exit through the no-JIT interpreter with separate RX/RW PT_LOAD segments. Verify its Linux/x86_64 output and exit status 0 on the physical device.

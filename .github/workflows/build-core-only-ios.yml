@@ -14,6 +14,7 @@ on:
       - 'src/Steam/**'
       - 'scripts/tests/**'
       - 'scripts/build_hybrid_xchg_smoke_elf.py'
+      - 'scripts/build_hybrid_runtime_smoke_elf.py'
       - 'scripts/validate-qemu-source.py'
 
 permissions:
@@ -157,8 +158,12 @@ jobs:
             -o "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-memory-integration"
           "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-memory-integration"
 
-      - name: Build diagnostic static Linux guest
-        run: python3 scripts/build_hybrid_xchg_smoke_elf.py "$RUNNER_TEMP/hybrid_xchg_smoke.elf"
+      - name: Build diagnostic static Linux guests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build_hybrid_xchg_smoke_elf.py "$RUNNER_TEMP/hybrid_xchg_smoke.elf"
+          python3 scripts/build_hybrid_runtime_smoke_elf.py "$RUNNER_TEMP/hybrid_runtime_smoke.elf"
 
       - name: Run static ELF loader and syscall execution tests
         shell: bash
@@ -172,7 +177,7 @@ jobs:
             src/Runtime/X86_64Interpreter.swift \
             scripts/tests/test_static_elf_execution.swift \
             -o "$RUNNER_TEMP/akatsubaki-core-tests/static-elf-tests"
-          "$RUNNER_TEMP/akatsubaki-core-tests/static-elf-tests" "$RUNNER_TEMP/hybrid_xchg_smoke.elf"
+          "$RUNNER_TEMP/akatsubaki-core-tests/static-elf-tests" "$RUNNER_TEMP/hybrid_xchg_smoke.elf" "$RUNNER_TEMP/hybrid_runtime_smoke.elf"
 
       - name: Run hybrid backend routing tests
         shell: bash
@@ -241,8 +246,14 @@ jobs:
           cp scripts/build_hybrid_xchg_smoke_elf.py "$DIST/build_hybrid_xchg_smoke_elf.py"
           cp scripts/tests/test_hybrid_xchg_smoke_elf.py "$DIST/test_hybrid_xchg_smoke_elf.py"
           shasum -a 256 "$DIST/hybrid_xchg_smoke.elf" > "$DIST/hybrid_xchg_smoke.elf.sha256"
+          cp "$RUNNER_TEMP/hybrid_runtime_smoke.elf" "$DIST/hybrid_runtime_smoke.elf"
+          cp scripts/build_hybrid_runtime_smoke_elf.py "$DIST/build_hybrid_runtime_smoke_elf.py"
+          cp scripts/tests/test_hybrid_runtime_smoke_elf.py "$DIST/test_hybrid_runtime_smoke_elf.py"
+          shasum -a 256 "$DIST/hybrid_runtime_smoke.elf" > "$DIST/hybrid_runtime_smoke.elf.sha256"
           echo "Smoke guest: hybrid_xchg_smoke.elf (static x86-64 Linux)" >> "$DIST/build-info.txt"
           echo "Smoke guest expected output: KENRAN_BUTO_XCHG_OK" >> "$DIST/build-info.txt"
+          echo "Runtime smoke guest: hybrid_runtime_smoke.elf (uname/write/exit, RX+RW PT_LOAD)" >> "$DIST/build-info.txt"
+          echo "Runtime smoke guest expected output: Linuxx86_64KENRAN_BUTO_RUNTIME_OK" >> "$DIST/build-info.txt"
 
       - name: Validate core-only IPA
         shell: bash

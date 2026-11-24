@@ -504,6 +504,19 @@ required = {
         "registers[1] = rip",
         "registers[11] = flags",
     ],
+    "scripts/build_hybrid_runtime_smoke_elf.py": [
+        "def build_elf() -> bytes:",
+        "DATA = 0x402000",
+        "mov_imm32(0xB8, 63)",
+        "KENRAN_BUTO_RUNTIME_OK",
+        "phdr_rw",
+    ],
+    "scripts/tests/test_hybrid_runtime_smoke_elf.py": [
+        "ET_EXEC",
+        "0x402000",
+        "KENRAN_BUTO_RUNTIME_OK",
+        "subprocess.run",
+    ],
     "scripts/tests/test_static_elf_execution.swift": [
         "KENRAN_BUTO_AOT_TESTS",
         "aotExecutor.refreshAvailability()",
@@ -518,6 +531,10 @@ required = {
         "func hasMappedPages(offset: UInt64, length: UInt64) -> Bool",
         "func mapTransaction(offset: UInt64, length: UInt64, permissions: UInt8,",
         "func resizeBreak(from oldBreak: UInt64, to newBreak: UInt64) -> GuestMemoryTransactionResult",
+        "static func testGeneratedRuntimeSmokeELF(at url: URL) throws",
+        "KENRAN_BUTO_RUNTIME_OK",
+        "runtime smoke guest did not exit with status 0",
+        "memory.readByte(offset: 0x402104)",
     ],
     "scripts/tests/test_linux_process_stack.swift": [
         "auxiliary[3] == 0x40040",

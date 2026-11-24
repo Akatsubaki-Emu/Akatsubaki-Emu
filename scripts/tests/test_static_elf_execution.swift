@@ -647,6 +647,41 @@ struct StaticELFExecutionTests {
         print("Generated hybrid XCHG smoke ELF executed through the no-JIT interpreter")
     }
 
+    static func testGeneratedRuntimeSmokeELF(at url: URL) throws {
+        let memory = GuestMemory(size: 16 * 1024 * 1024)
+        let image = try ELF64Loader().load(url, into: memory)
+        precondition(image.entryPoint == 0x401000, "Runtime smoke ELF entry point changed")
+
+        let stack = try LinuxProcessStackBuilder().build(
+            image: image,
+            arguments: [url.lastPathComponent],
+            environment: ["PATH": "/bin"],
+            memory: memory,
+            randomBytes: Data(repeating: 0x5A, count: 16)
+        )
+        let interpreter = X86_64Interpreter(memory: memory)
+        try interpreter.reset(entryPoint: image.entryPoint)
+        try interpreter.setInitialStackPointer(stack.stackPointer)
+        let (programBreak, overflow) = image.maximumGuestAddress.addingReportingOverflow(0x1000)
+        precondition(!overflow, "Runtime smoke ELF program break overflow")
+        try interpreter.configureLinuxProcess(
+            programBreak: programBreak,
+            stackBase: stack.stackBase,
+            randomBytes: Data(repeating: 0xA5, count: 16)
+        )
+
+        let previousMessageCount = EmulationLog.shared.messages.count
+        let exit = try interpreter.run(maxInstructions: 256)
+        precondition(exit == .exited(0), "Runtime smoke guest did not exit with status 0")
+        let output = EmulationLog.shared.messages.dropFirst(previousMessageCount).joined()
+        precondition(output.contains("Linux"), "uname sysname was not written to stdout")
+        precondition(output.contains("x86_64"), "uname machine was not written to stdout")
+        precondition(output.contains("KENRAN_BUTO_RUNTIME_OK"), "Runtime smoke marker was not written")
+        precondition(memory.readByte(offset: 0x402000) == 0x4C, "uname sysname buffer was not populated")
+        precondition(memory.readByte(offset: 0x402104) == 0x78, "uname machine buffer was not populated")
+        print("Generated runtime smoke ELF executed uname, write and exit through the interpreter")
+    }
+
     static func main() throws {
         let transferMemory = GuestMemory(size: 4096)
         let transferPayload = Data([0x10, 0x20, 0x30, 0x40])
@@ -663,6 +698,9 @@ struct StaticELFExecutionTests {
         try testFailedPIERelocationClearsGuestMemory()
         if let smokePath = CommandLine.arguments.dropFirst().first {
             try testGeneratedSmokeELF(at: URL(fileURLWithPath: smokePath))
+        }
+        if let runtimeSmokePath = CommandLine.arguments.dropFirst(2).first {
+            try testGeneratedRuntimeSmokeELF(at: URL(fileURLWithPath: runtimeSmokePath))
         }
         let (elfData, expectedOutput) = makeELF()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".elf")

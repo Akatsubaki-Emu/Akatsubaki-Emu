@@ -26,3 +26,14 @@ The diagnostic guest exercises 32-bit accumulator `XCHG EAX,ECX`; 64-bit accumul
 - The ELF interpreter is a bounded diagnostic bring-up path, not a complete Linux ABI. Dynamic ELF dependencies, PT_INTERP, PT_TLS, broad syscalls, and general userspace compatibility remain incomplete.
 - This workflow does not publish a GitHub Release or create a tag. The artifact is retained for seven days.
 - The separate GPL compatibility gate remains in force for any IPA or runtime that bundles QEMU.
+
+
+## Additional end-to-end runtime smoke guest
+
+The build now includes a second static guest, hybrid_runtime_smoke.elf. It calls Linux syscall 63 (uname) into a separate writable PT_LOAD segment, writes the virtual sysname and machine fields to stdout, writes KENRAN_BUTO_RUNTIME_OK, and exits with status 0.
+
+Expected console output includes Linux, x86_64, KENRAN_BUTO_RUNTIME_OK, and guest exit status 0.
+
+This guest checks separate RX and RW mappings, the zero-filled data segment, guest-memory write/read permissions, syscall dispatch, stdout and process-exit propagation in one no-JIT interpreter run. The XCHG guest remains the focused instruction/ALU smoke test.
+
+On a physical iPad, import both ELF files from the core-only IPA's smoke-kit artifact through Import Game / Executable, launch them from My Games, and verify both markers and exit statuses. Host execution of the Python-generated ELF is not a substitute for this device test.
