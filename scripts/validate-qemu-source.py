@@ -1768,6 +1768,27 @@ if "isteam_qemu_qmp_command" not in qmp_native_tests or "unsupported command" no
     print("Native QMP command whitelist regression is missing", file=sys.stderr)
     failed = True
 
+for token in ("QMPServer", "qmp_test_server", "tooLongSocketPath",
+              '"query-status"', '"system_reset"', "event_and_reply"):
+    if token not in qmp_native_tests:
+        print(f"Native QMP socket protocol regression missing {token!r}", file=sys.stderr)
+        failed = True
+if 'FileManager.default.temporaryDirectory.appendingPathComponent("q.sock").path' not in qmp_builder:
+    print("QEMU QMP socket must remain inside the app-container temporary directory", file=sys.stderr)
+    failed = True
+if "guard QEMUCommandBuilder.qmpSocketPath.utf8.count < 104 else" not in qmp_runtime:
+    print("QEMU runtime is missing the Darwin AF_UNIX socket-path length guard", file=sys.stderr)
+    failed = True
+qmp_docs = Path("docs/HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
+if "q.sock" not in qmp_docs or "/tmp/akatsubaki-qmp.sock" in qmp_docs:
+    print("Hybrid runtime documentation contains a stale or missing QMP socket path", file=sys.stderr)
+    failed = True
+xcode_guard_tests = Path("scripts/tests/test_xcode_version_guard.py").read_text(encoding="utf-8")
+for token in ("XCODE_VERSION_GUARDS", "27.10", "28.0", "27.0", "26.4"):
+    if token not in xcode_guard_tests:
+        print(f"Xcode version semantic regression missing {token!r}", file=sys.stderr)
+        failed = True
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")

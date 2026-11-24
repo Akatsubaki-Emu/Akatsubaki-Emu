@@ -27,6 +27,27 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("isteam_qemu_qmp_command", native_test)
         self.assertIn("unsupported command", native_test)
 
+    def test_qmp_uses_a_sandboxed_socket_and_enforces_af_unix_path_limits(self):
+        root = Path(__file__).resolve().parents[2]
+        builder = (root / "src" / "QEMU" / "QEMUCommandBuilder.swift").read_text(encoding="utf-8")
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
+        native_test = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
+        self.assertIn('FileManager.default.temporaryDirectory.appendingPathComponent("q.sock").path', builder)
+        self.assertIn("guard QEMUCommandBuilder.qmpSocketPath.utf8.count < 104 else", runtime)
+        self.assertIn("q.sock", docs)
+        self.assertNotIn("/tmp/akatsubaki-qmp.sock", docs)
+        self.assertIn("tooLongSocketPath", native_test)
+        self.assertIn("sun_path", native_test)
+
+    def test_native_qmp_protocol_exercises_real_socket_handshake_and_replies(self):
+        root = Path(__file__).resolve().parents[2]
+        native_test = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
+        for token in ("qmp_test_server", "qmp_capabilities", "query-status",
+                      "system_reset", "event_and_reply", "pthread_join"):
+            with self.subTest(token=token):
+                self.assertIn(token, native_test)
+
     def test_runtime_reuses_same_configuration_and_rejects_different_guests(self):
         root = Path(__file__).resolve().parents[2]
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
