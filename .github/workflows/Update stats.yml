@@ -15,10 +15,31 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
+  cancel-stale:
+    name: Cancel superseded metrics runs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel older metrics runs for this branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" \
+            --jq '.workflow_runs[] | select(.path == ".github/workflows/Update stats.yml" and .head_branch == "main" and .status != "completed") | .id' |
+          while IFS= read -r run_id; do
+            if [ "$run_id" -ge "$GITHUB_RUN_ID" ]; then
+              continue
+            fi
+            echo "Canceling superseded metrics run $run_id"
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
+          done
+
   overview:
+    needs: cancel-stale
     runs-on: ubuntu-latest
     if: github.actor != 'github-actions[bot]'
     steps:
