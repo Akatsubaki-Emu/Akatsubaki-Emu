@@ -212,8 +212,12 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("QEMU-TCI.framework", tci)
         self.assertIn('bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci)
         self.assertIn("StikJIT callback export: absent by design", tci)
-        self.assertIn("grep -q 'isteam_qemu_set_jit_callbacks' \"$JIT_DIR/exports.txt\"", merge)
-        self.assertIn("if grep -q 'isteam_qemu_set_jit_callbacks' \"$TCI_DIR/exports.txt\"; then", merge)
+        self.assertIn('grep -Eq "[[:space:]]_?${symbol}$" "$JIT_DIR/exports.txt"', merge)
+        self.assertIn('grep -Eq "[[:space:]]_?${symbol}$" "$TCI_DIR/exports.txt"', merge)
+        self.assertIn("grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks$' \"$JIT_DIR/exports.txt\"", merge)
+        self.assertIn("if grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks$' \"$TCI_DIR/exports.txt\"; then", merge)
+        self.assertIn("manifest_lines=\"$(awk 'END { print NR }' \"$package/QEMU/runtime-library-path.txt\")\"", merge)
+        self.assertIn('[[ "$manifest_lines" -eq 1 ]]', merge)
         self.assertIn('mkdir -p "$OUT/Frameworks" "$OUT/QEMU/JIT" "$OUT/QEMU/TCI"', merge)
 
     def test_guest_process_manager_validates_pe64_before_classification(self):
