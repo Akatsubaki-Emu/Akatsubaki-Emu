@@ -68,6 +68,37 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
         self.assertIn("summary_info += {'QEMU_OBJCFLAGS'", patched)
 
 
+    def test_meson_patcher_handles_nested_if_before_compiler_call(self):
+        compiler_call = (
+            "  add_project_arguments(objc.get_supported_arguments(warn_flags),\n"
+            "      native: false, language: 'objc')\n"
+        )
+        nested = (
+            "  if cc.has_argument('-fobjc-arc')\n"
+            "    add_project_arguments(['-fobjc-arc'], native: false, language: 'objc')\n"
+            "  endif # nested close\n"
+        )
+        source = self.meson_source().replace(compiler_call, nested + compiler_call)
+        patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+        self.assertEqual(patched.count("-fno-objc-msgsend-class-selector-stubs"), 1)
+        self.assertIn("if cc.has_argument('-fobjc-arc')", patched)
+        self.assertEqual(patch_qemu_meson_ios.patch_source(patched, "/toolchain/libclang_rt.ios.a"), patched)
+
+
+    def test_meson_patcher_rejects_unterminated_nested_if(self):
+        compiler_call = (
+            "  add_project_arguments(objc.get_supported_arguments(warn_flags),\n"
+            "      native: false, language: 'objc')\n"
+        )
+        nested = (
+            "  if cc.has_argument('-fobjc-arc')\n"
+            "    add_project_arguments(['-fobjc-arc'], native: false, language: 'objc')\n"
+        )
+        source = self.meson_source().replace(compiler_call, nested + compiler_call)
+        with self.assertRaisesRegex(SystemExit, "Objective-C compiler block is unterminated"):
+            patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+
+
     def test_meson_patcher_handles_qemu_common_flags_variant(self):
         source = self.meson_source().replace(
             "objc.get_supported_arguments(warn_flags)",
@@ -95,10 +126,13 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
             patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
 
     def test_meson_patcher_rejects_duplicate_objc_blocks(self):
-        source = self.meson_source().replace(
-            "if 'objc' in all_languages" + chr(10),
-            "if 'objc' in all_languages" + chr(10) + "if 'objc' in all_languages" + chr(10),
+        compiler_block = (
+            "if 'objc' in all_languages\n"
+            "  add_project_arguments(objc.get_supported_arguments(warn_flags),\n"
+            "      native: false, language: 'objc')\n"
+            "endif\n"
         )
+        source = self.meson_source().replace(compiler_block, compiler_block + compiler_block)
         with self.assertRaisesRegex(SystemExit, "exactly one Objective-C compiler configuration block"):
             patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
 
