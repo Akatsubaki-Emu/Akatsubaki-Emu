@@ -1616,7 +1616,9 @@ aot_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encodi
 for token in ("#if KENRAN_BUTO_AOT_TESTS", "iSteamAOTGuestMemoryRead",
               "sideExit!.exitRip == 0x100A",
               "Kenran Butō AOT native block execution",
-              "cachedBlockCount", "cachedExecutableBytes"):
+              "cachedBlockCount", "cachedExecutableBytes",
+              "unavailableAOT.executeCalls == 0",
+              "unsupportedStart.executeCalls == 0"):
     if token not in aot_tests:
         print(f"AOT runtime regression missing {token!r}", file=sys.stderr)
         failed = True
