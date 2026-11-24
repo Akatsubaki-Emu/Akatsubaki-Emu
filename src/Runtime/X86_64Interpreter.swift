@@ -1030,9 +1030,61 @@ final class X86_64Interpreter: GuestCPUBackend {
         case 0x89, 0x8B:
             guard cursor + 1 < instructionWindowLength else { return false }
             return instructionWindow[cursor + 1] >> 6 == 0b11
+        case 0x8D:
+            return canTranslateLEAAtCurrentWindow(opcodeOffset: cursor, rex: rex)
         default:
             return false
         }
+    }
+
+    /// Keep unsupported LEA forms on the interpreter path so one rejected
+    /// instruction does not disable later AOT blocks for the rest of the run.
+    private func canTranslateLEAAtCurrentWindow(opcodeOffset: Int, rex: UInt8) -> Bool {
+        let modRMOffset = opcodeOffset + 1
+        guard modRMOffset < instructionWindowLength else { return false }
+        let modRM = instructionWindow[modRMOffset]
+        let mode = modRM >> 6
+        guard mode != 0b11 else { return false }
+
+        let rmField = modRM & 0x07
+        let hasSIB = rmField == 0x04
+        var hasBase = true
+        var hasIndex = false
+
+        if hasSIB {
+            let sibOffset = modRMOffset + 1
+            guard sibOffset < instructionWindowLength else { return false }
+            let sib = instructionWindow[sibOffset]
+            let indexField = (sib >> 3) & 0x07
+            let baseField = sib & 0x07
+            hasIndex = indexField != 0x04 || (rex & 0x02) != 0
+            if mode == 0 && baseField == 0x05 {
+                hasBase = false
+            }
+        } else if mode == 0 && rmField == 0x05 {
+            // RIP-relative LEA needs the guest RIP in the translator input.
+            return false
+        }
+
+        let displacementBytes = mode == 1 ? 1 : ((mode == 2 || (mode == 0 && !hasBase)) ? 4 : 0)
+        let displacementOffset = modRMOffset + 1 + (hasSIB ? 1 : 0)
+        let instructionEnd = displacementOffset + displacementBytes
+        guard instructionEnd <= 15, instructionEnd <= instructionWindowLength else { return false }
+
+        if (hasBase || hasIndex) && displacementBytes > 0 {
+            let displacement: Int64
+            if displacementBytes == 1 {
+                displacement = Int64(Int8(bitPattern: instructionWindow[displacementOffset]))
+            } else {
+                let raw = UInt32(instructionWindow[displacementOffset])
+                    | (UInt32(instructionWindow[displacementOffset + 1]) << 8)
+                    | (UInt32(instructionWindow[displacementOffset + 2]) << 16)
+                    | (UInt32(instructionWindow[displacementOffset + 3]) << 24)
+                displacement = Int64(Int32(bitPattern: raw))
+            }
+            guard (-4095...4095).contains(displacement) else { return false }
+        }
+        return true
     }
 
     private func prepareInstructionWindow(at address: UInt64) {

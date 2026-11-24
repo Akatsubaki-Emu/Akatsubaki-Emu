@@ -1566,6 +1566,24 @@ struct InterpreterTests {
             }
             precondition(leaHybrid.registerValue(2) == 0x190)
 
+            // LEA must also be eligible when it is the first instruction in a block.
+            // This catches the interpreter's AOT start-probe lagging behind the decoder.
+            let leaFirstProgram = Data([0x48, 0x8D, 0x54, 0x88, 0x10, 0x0F, 0x0B])
+            let leaFirstMemory = GuestMemory(size: 8192)
+            precondition(leaFirstMemory.write(leaFirstProgram, offset: 0x1000))
+            let blocksBeforeLEAFirst = executor.blocksExecuted
+            let leaFirstBaseline = X86_64Interpreter(memory: leaFirstMemory)
+            try leaFirstBaseline.reset(entryPoint: 0x1000)
+            let leaFirstBaselineExit = try leaFirstBaseline.run(maxInstructions: 8)
+            let leaFirstHybrid = X86_64Interpreter(memory: leaFirstMemory, aotExecutor: executor)
+            try leaFirstHybrid.reset(entryPoint: 0x1000)
+            let leaFirstHybridExit = try leaFirstHybrid.run(maxInstructions: 8)
+            precondition(leaFirstHybridExit == leaFirstBaselineExit)
+            precondition(leaFirstHybridExit == .unsupportedInstruction(address: 0x1005))
+            precondition(leaFirstHybrid.instructionCount == leaFirstBaseline.instructionCount)
+            precondition(leaFirstHybrid.registerValue(2) == 16)
+            precondition(executor.blocksExecuted == blocksBeforeLEAFirst + 1)
+
             let baselineMemory = GuestMemory(size: 8192)
             precondition(baselineMemory.write(program, offset: 0x1000))
             let baseline = X86_64Interpreter(memory: baselineMemory)
