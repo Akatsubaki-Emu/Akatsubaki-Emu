@@ -15,9 +15,9 @@ The workflow installs XcodeGen and regenerates iSteam.xcodeproj from project.yml
 5. Copy a static x86-64 Linux ELF to the iPad. In the app choose **Import Game / Executable**, select the ELF, and launch it.
 6. Inspect the emulator runtime log for guest stdout and the final exit status.
 
-The same Akatsubaki-Emu-CoreOnly-iOS-* artifact includes hybrid_xchg_smoke.elf alongside the IPA, build information and Xcode build log. It prints hello and exits with status 0; import this file in step 5. The Ubuntu repository-validation test executes the guest directly and checks that deliberately broken 32-bit or 64-bit XCHG inputs take the nonzero failure exit. The Apple Silicon workflow also passes the same generated ELF to the Swift static-ELF harness, which executes it through the x86-64 interpreter without JIT; it never attempts native x86-64 execution on the ARM64 host.
+The same Akatsubaki-Emu-CoreOnly-iOS-* artifact includes hybrid_xchg_smoke.elf alongside the IPA, build information and Xcode build log. It prints hello and exits with status 0; import this file in step 5. The Ubuntu repository-validation test executes the guest directly and checks that deliberately broken inputs for all four 32-bit/64-bit accumulator and register-only ModRM XCHG forms take the nonzero failure exit. The Apple Silicon workflow also passes the same generated ELF to the Swift static-ELF harness, which executes it through the x86-64 interpreter without JIT; it never attempts native x86-64 execution on the ARM64 host.
 
-The companion hybrid_xchg_smoke.elf test artifact exercises 32-bit XCHG EAX,ECX, 64-bit XCHG RAX,R9, MOV immediate, CMP/JNE failure branches, RIP-relative LEA, and Linux write/exit syscalls. It is a diagnostic program, not a Linux distribution.
+The companion hybrid_xchg_smoke.elf test artifact exercises 32-bit accumulator XCHG EAX,ECX; 64-bit accumulator XCHG RAX,R9; 32-bit register-only ModRM XCHG R8D,R9D; 64-bit register-only ModRM XCHG R10,R11; MOV immediate; CMP/JNE interpreter-fallback checks; RIP-relative LEA; and Linux write/exit syscalls. It is a diagnostic program, not a Linux distribution.
 
 ## Limits
 

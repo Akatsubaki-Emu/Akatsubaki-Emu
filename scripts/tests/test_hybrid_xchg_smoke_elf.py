@@ -41,8 +41,9 @@ class HybridXCHGSmokeELFTests(unittest.TestCase):
 
             guest_code = image[0x1000:]
             self.assertEqual(guest_code[10], 0x91)
-            self.assertIn(bytes.fromhex("49 91"), guest_code)
-            self.assertEqual(guest_code.count(bytes.fromhex("83 f8 00 75")), 2)
+            for opcode in ("49 91", "45 87 c8", "4d 87 da"):
+                self.assertIn(bytes.fromhex(opcode), guest_code)
+            self.assertEqual(guest_code.count(bytes.fromhex("0f 85")), 8)
             lea = guest_code.index(bytes.fromhex("48 8d 35"))
             displacement = struct.unpack_from("<i", guest_code, lea + 3)[0]
             message_offset = lea + 7 + displacement
@@ -57,11 +58,18 @@ class HybridXCHGSmokeELFTests(unittest.TestCase):
                 self.assertEqual(completed.stdout, b"hello\n")
                 self.assertEqual(completed.stderr, b"")
 
-                # Corrupt each XCHG input independently: its CMP/JNE guard must
-                # take the failure path instead of printing a false success.
-                for label, immediate_offset in (("xchg32", 0x1000 + 6), ("xchg64", 0x1000 + 18)):
+                # Corrupt one operand for each XCHG encoding independently:
+                # every register-pair check must take the nonzero failure path.
+                cases = (
+                    ("accumulator32", bytes.fromhex("b9 00 00 00 00"), 1, 1),
+                    ("accumulator64", bytes.fromhex("49 b9 00 00 00 00 00 00 00 00"), 2, 1),
+                    ("modrm32", bytes.fromhex("41 b9 01 00 00 00"), 2, 0),
+                    ("modrm64", bytes.fromhex("49 bb 01 00 00 00 00 00 00 00"), 2, 0),
+                )
+                for label, instruction, immediate_offset, replacement in cases:
                     broken = bytearray(image)
-                    broken[immediate_offset] = 1
+                    instruction_offset = broken.index(instruction, 0x1000)
+                    broken[instruction_offset + immediate_offset] = replacement
                     broken_path = Path(temporary) / f"{label}-failure.elf"
                     broken_path.write_bytes(broken)
                     broken_path.chmod(0o755)

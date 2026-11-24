@@ -13,44 +13,78 @@ PAGE_SIZE = 0x1000
 
 def build_elf() -> bytes:
     code = bytearray()
-    jne_offsets = []
-    code.extend(bytes.fromhex("b8 01 00 00 00"))  # mov eax, 1
-    code.extend(bytes.fromhex("b9 00 00 00 00"))  # mov ecx, 0
-    code.extend(bytes.fromhex("91"))              # xchg eax, ecx (32-bit)
-    code.extend(bytes.fromhex("83 f8 00"))        # cmp eax, 0
-    jne_offsets.append(len(code))
-    code.extend(bytes.fromhex("75 00"))           # jne fail
+    labels: dict[str, int] = {}
+    fixups: list[tuple[int, str]] = []
 
-    code.extend(bytes.fromhex("49 b9 00 00 00 00 00 00 00 00"))  # mov r9, 0
-    code.extend(bytes.fromhex("b8 01 00 00 00"))  # mov eax, 1
-    code.extend(bytes.fromhex("49 91"))           # xchg rax, r9 (64-bit)
-    code.extend(bytes.fromhex("83 f8 00"))        # cmp eax, 0
-    jne_offsets.append(len(code))
-    code.extend(bytes.fromhex("75 00"))           # jne fail
+    def emit(instructions: str) -> None:
+        code.extend(bytes.fromhex(instructions))
 
-    code.extend(bytes.fromhex("bf 01 00 00 00"))  # mov edi, 1
+    def jne(label: str) -> None:
+        emit("0f 85")
+        fixups.append((len(code), label))
+        code.extend(bytes(4))
+
+    # 32-bit accumulator XCHG: eax=1, ecx=0 -> eax=0, ecx=1.
+    emit("b8 01 00 00 00")
+    emit("b9 00 00 00 00")
+    emit("91")
+    emit("83 f8 00")
+    jne("fail")
+    emit("83 f9 01")
+    jne("fail")
+
+    # 64-bit accumulator XCHG: rax=1, r9=0 -> rax=0, r9=1.
+    emit("49 b9 00 00 00 00 00 00 00 00")
+    emit("b8 01 00 00 00")
+    emit("49 91")
+    emit("48 83 f8 00")
+    jne("fail")
+    emit("49 83 f9 01")
+    jne("fail")
+
+    # 32-bit register-only ModRM XCHG: r8d=0, r9d=1 -> r8d=1, r9d=0.
+    emit("41 b8 00 00 00 00")
+    emit("41 b9 01 00 00 00")
+    emit("45 87 c8")
+    emit("41 83 f8 01")
+    jne("fail")
+    emit("41 83 f9 00")
+    jne("fail")
+
+    # 64-bit register-only ModRM XCHG: r10=0, r11=1 -> r10=1, r11=0.
+    emit("49 ba 00 00 00 00 00 00 00 00")
+    emit("49 bb 01 00 00 00 00 00 00 00")
+    emit("4d 87 da")
+    emit("49 83 fa 01")
+    jne("fail")
+    emit("49 83 fb 00")
+    jne("fail")
+
+    # Success: write hello and exit(0).
+    emit("bf 01 00 00 00")
     lea_offset = len(code)
-    code.extend(bytes.fromhex("48 8d 35 00 00 00 00"))  # lea rsi, [rip+disp32]
-    code.extend(bytes.fromhex("ba 06 00 00 00"))  # mov edx, 6
-    code.extend(bytes.fromhex("b8 01 00 00 00"))  # mov eax, 1 (write)
-    code.extend(bytes.fromhex("0f 05"))           # syscall: write
-    code.extend(bytes.fromhex("b8 3c 00 00 00"))  # mov eax, 60
-    code.extend(bytes.fromhex("31 ff"))           # xor edi, edi
-    code.extend(bytes.fromhex("0f 05"))           # syscall: exit 0
+    emit("48 8d 35 00 00 00 00")
+    emit("ba 06 00 00 00")
+    emit("b8 01 00 00 00")
+    emit("0f 05")
+    emit("b8 3c 00 00 00")
+    emit("31 ff")
+    emit("0f 05")
 
-    fail_offset = len(code)
-    code.extend(bytes.fromhex("b8 3c 00 00 00"))  # mov eax, 60
-    code.extend(bytes.fromhex("bf 01 00 00 00"))  # mov edi, 1
-    code.extend(bytes.fromhex("0f 05"))           # syscall: exit 1
+    # Any failed compare reaches exit(1).
+    labels["fail"] = len(code)
+    emit("b8 3c 00 00 00")
+    emit("bf 01 00 00 00")
+    emit("0f 05")
 
-    message = b"hello\n"
+    message = b"hello\\n"
     message_offset = len(code)
-    for offset in jne_offsets:
-        struct.pack_into("<b", code, offset + 1, fail_offset - (offset + 2))
     struct.pack_into("<i", code, lea_offset + 3, message_offset - (lea_offset + 7))
+    for displacement_offset, label in fixups:
+        struct.pack_into("<i", code, displacement_offset, labels[label] - (displacement_offset + 4))
     code.extend(message)
 
-    ident = b"\x7fELF" + bytes((2, 1, 1, 0)) + bytes(8)
+    ident = b"\\x7fELF" + bytes((2, 1, 1, 0)) + bytes(8)
     header = struct.pack("<16sHHIQQQIHHHHHH", ident, 2, 62, 1,
                          ENTRY_POINT, 64, 0, 0, 64, 56, 1, 0, 0, 0)
     total_size = CODE_OFFSET + len(code)
@@ -60,7 +94,6 @@ def build_elf() -> bytes:
     if padding_length < 0:
         raise RuntimeError("ELF headers exceed the code offset.")
     return header + phdr + bytes(padding_length) + bytes(code)
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
