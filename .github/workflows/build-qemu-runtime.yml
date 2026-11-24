@@ -22,6 +22,8 @@ permissions:
 
 jobs:
   build-utm-runtime:
+    # Do not publish QEMU runtime artifacts before qualified license review.
+    if: vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'
     runs-on: xcode-27
     timeout-minutes: 350
     steps:

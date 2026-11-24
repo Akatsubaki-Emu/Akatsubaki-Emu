@@ -83,7 +83,8 @@ jobs:
   # App jobs cannot start until the runtime is successfully compiled and packaged.
   qemu-runtime:
     needs: [validate-release-channel, check-push-freshness]
-    if: needs.check-push-freshness.outputs.build == 'true'
+    # QEMU is GPL-2.0-only; gate public runtime artifacts pending compatibility review.
+    if: needs.check-push-freshness.outputs.build == 'true' && vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'
     uses: ./.github/workflows/build-qemu-runtime.yml
     with:
       rebuild_dependencies: false
@@ -113,7 +114,8 @@ jobs:
 
   build:
     needs: [qemu-runtime, check-platform-build-freshness]
-    if: needs.check-platform-build-freshness.outputs.build == 'true'
+    # The combined GPL-3.0 IPA is gated pending QEMU compatibility review.
+    if: needs.check-platform-build-freshness.outputs.build == 'true' && vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'
     name: Build ${{ matrix.platform }} (${{ matrix.channel }})
     runs-on: xcode-27
     timeout-minutes: 45
@@ -226,6 +228,8 @@ jobs:
             test -s "$MODE_DIR/exports.txt" || { echo "Embedded QEMU $MODE exports are missing." >&2; exit 1; }
             RUNTIME_REL="$(head -n 1 "$MODE_DIR/runtime-library-path.txt")"
             test -s "$APP/$RUNTIME_REL" || { echo "Embedded QEMU $MODE library is missing: $RUNTIME_REL" >&2; exit 1; }
+            MODE_LOWER="$(printf '%s' "$MODE" | tr '[:upper:]' '[:lower:]')"
+            bash scripts/validate-qemu-runtime.sh "$APP/$RUNTIME_REL" "$MODE_LOWER"
             test -n "$(find "$MODE_DIR" -type f ! -name runtime-library-path.txt ! -name exports.txt -size +0c -print -quit)" || { echo "No QEMU $MODE data files were embedded." >&2; exit 1; }
           done
 
@@ -294,6 +298,7 @@ jobs:
     permissions:
       contents: write
     needs: build
+    if: vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true' && needs.build.result == 'success'
     concurrency:
       # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
       group: isteam-release-publish-${{ matrix.channel }}
@@ -410,16 +415,9 @@ jobs:
 
             These are unsigned prototype builds. Sign them with a compatible signer before installing.
 
-      # softprops/action-gh-release creates a tag at target_commitish only
-      # when the tag is new. Move the rolling channel ref after the assets publish
-      # so existing main/nightly tags always resolve to this exact build commit.
-      - name: Update rolling channel tag
-        if: steps.final-freshness.outputs.publish == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"
-          git push --force origin "refs/tags/$RELEASE_CHANNEL"
+            Source commit: ${{ github.sha }}
 
+      # Keep main/nightly channel tags immutable; release assets update in place.
+      # Record the exact source commit rather than force-pushing a tag reference.
       # Official AltStore/PAL feeds are refreshed from published GitHub releases
       # by the website repository's update-xthrx-alt-source.yml workflow.

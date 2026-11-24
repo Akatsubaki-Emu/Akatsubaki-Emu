@@ -97,3 +97,10 @@ The host JIT protocol is now tri-state and uses StikJIT's IOKit memory-map query
 ## Objective-C class-selector compile verification
 
 The Meson patcher now adds `-fno-objc-msgsend-class-selector-stubs` directly to QEMU's Objective-C project arguments with `checked: 'require'`. This is separate from the existing `OBJCFLAGS` environment fallback and the emulator link flags. The generated Ninja file is checked before compilation: the `spice-display-metal.m.o` Objective-C compile edge must contain the flag, and the QEMU dylib link edge must still contain `-objc_stubs_fast`, `-lobjc`, and the forced iOS compiler runtime. The build fails before the expensive compile if either edge is missing its required flags.
+
+
+## Publication gate and channel tags
+
+The GitHub Actions QEMU build and combined IPA release jobs require the repository Actions variable QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED to be set to the string true after qualified file-level and combined-work licensing review. Leave it unset until review is complete; while unset, QEMU runtime artifacts, IPA builds and release publication are skipped. The normal repository-validation workflow continues to run.
+
+The main and nightly release tag names are intentionally retained because the AltStore/PAL updater keys off those names. Release assets update in place, but tag references are never force-pushed; the release notes record the exact source commit.
