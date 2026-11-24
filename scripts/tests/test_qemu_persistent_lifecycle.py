@@ -40,6 +40,16 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("tooLongSocketPath", native_test)
         self.assertIn("sun_path", native_test)
 
+    def test_qemu_build_pins_the_verified_upstream_utm_revision(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
+        checkout = workflow.split("- name: Checkout UTM with submodules", 1)[1].split("- name: Select Xcode", 1)[0]
+        self.assertIn("repository: utmapp/UTM", checkout)
+        self.assertIn("ref: 3d4b8d8cb1ce93a8b1a9610695c12487685f0c15", checkout)
+        self.assertNotIn("ref: main", checkout)
+        self.assertIn("git -C UTM rev-parse HEAD > build/qemu-runtime-jit/UTM-SOURCE-REVISION.txt", workflow)
+        self.assertIn("git -C UTM rev-parse HEAD > build/qemu-runtime-tci/UTM-SOURCE-REVISION.txt", workflow)
+
     def test_qmp_socket_path_failure_releases_scoped_resources(self):
         root = Path(__file__).resolve().parents[2]
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")

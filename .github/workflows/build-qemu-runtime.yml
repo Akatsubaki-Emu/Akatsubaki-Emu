@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: utmapp/UTM
-          ref: main
+          ref: 3d4b8d8cb1ce93a8b1a9610695c12487685f0c15
           path: UTM
           submodules: recursive
           fetch-depth: 1

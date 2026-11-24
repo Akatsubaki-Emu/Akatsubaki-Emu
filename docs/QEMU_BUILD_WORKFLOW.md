@@ -11,6 +11,12 @@ This note documents the iOS device-arm64 QEMU runtime build in `.github/workflow
 
 `ios-tci` is the dependency/sysroot platform identifier. The corresponding Xcode scheme is `iOS-SE`, not `iOS-TCI`.
 
+## Pinned upstream source
+
+The runtime workflow checks out UTM at the immutable source revision [`3d4b8d8cb1ce93a8b1a9610695c12487685f0c15`](https://github.com/utmapp/UTM/commit/3d4b8d8cb1ce93a8b1a9610695c12487685f0c15), which reports UTM version **5.0.9**. It intentionally does not track the moving `main` branch. Recursive submodules are resolved from the pinned UTM tree, and the workflow records the actual checked-out superproject revision in both JIT and TCI artifacts.
+
+Update this pin only after reviewing the upstream changes, submodule revisions, iOS/iOS-SE schemes, dependency targets, local QEMU patch compatibility and applicable third-party notices. The JIT and TCI archives must both pass the runtime packagers and export checks before a new pin is accepted.
+
 ## Build flow
 
 1. Check out UTM and its submodules on the GitHub-hosted `xcode-27` arm64 runner with the active Xcode 27.x toolchain and the iOS device SDK (the current runner image supplies Xcode 27.3 beta; the workflow validates the installed major version and compiler probes instead of pinning a minor-version path); install both `spirv-tools` and `spirv-llvm-translator` because Mesa's iOS cross-build checks for the `SPIRV-Tools` pkg-config dependency.
