@@ -400,7 +400,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         # step remains outside that script and appears exactly once.
         package = source.split("      - name: Package and verify in-process QEMU runtime", 1)[1]
         package = package.split("      - name: Upload verified QEMU runtime artifact", 1)[0]
-        package_script = textwrap.dedent(package.split("        run: |\\n", 1)[1])
+        package_script = textwrap.dedent(package.split("        run: |\n", 1)[1])
         package_result = subprocess.run(
             ["bash", "-n"], input=package_script, text=True, capture_output=True
         )
