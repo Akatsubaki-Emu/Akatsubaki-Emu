@@ -47,7 +47,7 @@ class HybridXCHGSmokeELFTests(unittest.TestCase):
             lea = guest_code.index(bytes.fromhex("48 8d 35"))
             displacement = struct.unpack_from("<i", guest_code, lea + 3)[0]
             message_offset = lea + 7 + displacement
-            self.assertEqual(guest_code[message_offset:], b"hello\n")
+            self.assertEqual(guest_code[message_offset:], b"KENRAN_BUTO_XCHG_OK\n")
             self.assertEqual(guest_code.count(bytes.fromhex("0f 05")), 3)
 
             if sys.platform == "linux" and platform.machine().lower() in {"x86_64", "amd64"}:
@@ -55,7 +55,7 @@ class HybridXCHGSmokeELFTests(unittest.TestCase):
                     [str(output)], capture_output=True, check=False, timeout=5,
                 )
                 self.assertEqual(completed.returncode, 0)
-                self.assertEqual(completed.stdout, b"hello\n")
+                self.assertEqual(completed.stdout, b"KENRAN_BUTO_XCHG_OK\n")
                 self.assertEqual(completed.stderr, b"")
 
                 # Corrupt one operand for each XCHG encoding independently:

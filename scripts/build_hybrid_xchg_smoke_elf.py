@@ -60,11 +60,11 @@ def build_elf() -> bytes:
     emit("49 83 fb 00")
     jne("fail")
 
-    # Success: write hello and exit(0).
+    # Success: write the diagnostic marker and exit(0).
     emit("bf 01 00 00 00")
     lea_offset = len(code)
     emit("48 8d 35 00 00 00 00")
-    emit("ba 06 00 00 00")
+    emit("ba 14 00 00 00")
     emit("b8 01 00 00 00")
     emit("0f 05")
     emit("b8 3c 00 00 00")
@@ -77,7 +77,7 @@ def build_elf() -> bytes:
     emit("bf 01 00 00 00")
     emit("0f 05")
 
-    message = b"hello\n"
+    message = b"KENRAN_BUTO_XCHG_OK\n"
     message_offset = len(code)
     struct.pack_into("<i", code, lea_offset + 3, message_offset - (lea_offset + 7))
     for displacement_offset, label in fixups:

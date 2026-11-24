@@ -499,6 +499,13 @@ struct StaticELFExecutionTests {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
 
+        do {
+            _ = try ELF64Loader.OpenedFileSnapshot(url: directory)
+            preconditionFailure("A directory must not be accepted as an ELF executable")
+        } catch ELF64Loader.LoadError.unreadable {
+            print("Non-regular ELF source rejection passed")
+        }
+
         let executableURL = directory.appendingPathComponent("guest.elf")
         let replacementURL = directory.appendingPathComponent("replacement.elf")
         let displacedURL = directory.appendingPathComponent("displaced.elf")
@@ -590,7 +597,7 @@ struct StaticELFExecutionTests {
         precondition(exit == .halted, "Generated hybrid smoke guest did not exit cleanly")
         let smokeMessages = EmulationLog.shared.messages.dropFirst(previousMessageCount)
         // Guest output is stored as line-normalized log entries without newline delimiters.
-        precondition(smokeMessages.contains { $0.contains("hello") },
+        precondition(smokeMessages.contains { $0.contains("KENRAN_BUTO_XCHG_OK") },
                      "Generated hybrid smoke guest did not write its marker")
         print("Generated hybrid XCHG smoke ELF executed through the no-JIT interpreter")
     }
