@@ -172,3 +172,18 @@ The iOS/tvOS Linux profile chooses a 256–1024 MB guest-RAM default from `os_pr
 Immediately before QEMU startup, `VMConfiguration.validateForStart` rechecks current available memory. It requires guest RAM plus a host reserve of at least 512 MB or 25% of guest RAM, whichever is larger. If the budget is insufficient, launch fails with an actionable message rather than overcommitting memory and risking jetsam. The no-JIT TCI path does not require executable-memory JIT; JIT remains optional and respects the selected accelerator policy.
 
 The available-memory API is advisory and changes during the app lifecycle; the implementation rechecks at launch rather than caching a device-wide RAM figure. See [Apple's `os_proc_available_memory` documentation](https://developer.apple.com/documentation/os/os_proc_available_memory).
+
+
+## Evaluated iOS Box64 snapshot — reference only, not integrated
+
+A third-party [BoxiOS static-library snapshot](https://github.com/cloverfield11/box64-ios-library) was inspected because Box64 is already a planned alternate user-mode backend. Its port notes identify MIT licensing, an upstream Box64 base of `2deb99ae4aa4b326819806ac2541477273244741`, and a build-126 checkpoint validated on 2026-04-27. The notes report an ARM64 static library with JIT/dynarec disabled, a MetalGL rendering bridge, and Powder Toy input/rendering at approximately 4.5–5 FPS. The port documentation reports app-linked library SHA-256 `08155073e1ac68b3dba1cd93016efbb1613b067f42576599a3e0921bbd725bbb`.
+
+This is useful evidence that a no-JIT Box64 user-mode path can be made to execute an x86-64 ELF on iOS, but it is not a general-purpose drop-in backend:
+
+- The tested rendering and touch path is explicitly targeted to one Powder Toy binary; the input bridge is not a generic SDL input adapter.
+- The inspected iOS fork contains hard-coded guest instruction-address workarounds for that binary's LuaJIT path (including offsets around `0x69a2f5`, `0x69a31b` and `0x698c04`). These workarounds must not be transplanted into Kenran Butō.
+- The CMake file defines `BOX64_EMBEDDED_IOS`, but ARM64 configuration normally enables the ARM dynarec; a reproducible interpreter-only build must explicitly disable `ARM_DYNAREC` and verify the resulting binary contains no dynarec path.
+- The reported 4.5–5 FPS is a bring-up result, not a performance target. The snapshot is based on an older upstream revision and is not a substitute for an upstream-diff, dependency and physical-device audit.
+- The related WiSHbox/GameHubIOS public README describes a static-ELF-on-iPhone milestone, but the inspected public repository exposed no source tree or licence file; it is a reference only and supplies no code that can be safely reused.
+
+**Decision:** do not replace Kenran Butō or merge this game-specific fork. Keep Box64 as a secondary Linux x86-64 user-mode candidate. If evaluated further, pin and audit the full fork diff and every dependency, reproduce the no-JIT static-library build, and benchmark the same Akatsubaki smoke ELF and broader Linux test corpus on a physical iPad. FEXCore and Box64 remain alternatives for one process, never simultaneous translators for the same guest thread. This is user-mode execution, not full-system OS emulation.
