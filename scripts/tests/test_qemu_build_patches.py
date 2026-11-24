@@ -395,6 +395,17 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         script = textwrap.dedent(probe.split("        run: |\n", 1)[1])
         result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+        # Keep the final JIT/TCI packaging shell valid and ensure the upload
+        # step remains outside that script and appears exactly once.
+        package = source.split("      - name: Package and verify in-process QEMU runtime", 1)[1]
+        package = package.split("      - name: Upload verified QEMU runtime artifact", 1)[0]
+        package_script = textwrap.dedent(package.split("        run: |\\n", 1)[1])
+        package_result = subprocess.run(
+            ["bash", "-n"], input=package_script, text=True, capture_output=True
+        )
+        self.assertEqual(package_result.returncode, 0, package_result.stderr)
+
         for name in (
             "Verify Objective-C class-selector stub compatibility",
             "Verify iOS vm_map compatibility",
