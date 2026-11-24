@@ -39,6 +39,42 @@ struct KenranButoAOTTranslatorTests {
         precondition(word(registerMoves.machineCode, 0) == 0x2A0303E0) // ORR W0, WZR, W3
         precondition(word(registerMoves.machineCode, 1) == 0xAA0003E3) // ORR X3, XZR, X0
 
+        // C7 /0 register-only immediates preserve x86 MOV width semantics.
+        let movImmediate32 = translator.translate(Data([0xC7, 0xC0, 0x78, 0x56, 0x34, 0x12]))
+        precondition(movImmediate32.isComplete && movImmediate32.guestBytesConsumed == 6)
+        precondition(movImmediate32.instructionCount == 1)
+        precondition(word(movImmediate32.machineCode, 0) == 0x528ACF00) // MOVZ W0, #0x5678
+        precondition(word(movImmediate32.machineCode, 1) == 0x72A24680) // MOVK W0, #0x1234, LSL #16
+
+        let movImmediate64 = translator.translate(Data([0x48, 0xC7, 0xC0, 0x00, 0x00, 0x00, 0x80]))
+        precondition(movImmediate64.isComplete && movImmediate64.instructionCount == 1)
+        precondition(word(movImmediate64.machineCode, 0) == 0xD2B00000) // MOVZ X0, #0x8000, LSL #16
+        precondition(word(movImmediate64.machineCode, 1) == 0xF2DFFFE0) // MOVK X0, #0xFFFF, LSL #32
+        precondition(word(movImmediate64.machineCode, 2) == 0xF2FFFFE0) // MOVK X0, #0xFFFF, LSL #48
+
+        let movImmediateExtended = translator.translate(Data([0x41, 0xC7, 0xC0, 0x78, 0x56, 0x34, 0x12]))
+        precondition(movImmediateExtended.isComplete && movImmediateExtended.instructionCount == 1)
+        precondition(word(movImmediateExtended.machineCode, 0) == 0x528ACF08) // MOVZ W8, #0x5678
+        precondition(word(movImmediateExtended.machineCode, 1) == 0x72A24688) // MOVK W8, #0x1234, LSL #16
+
+        let movImmediateTruncated = translator.translate(Data([0xC7, 0xC0, 0x01, 0x02]))
+        precondition(movImmediateTruncated.stopReason == .truncatedInstruction)
+        precondition(movImmediateTruncated.guestBytesConsumed == 0)
+
+        let movImmediateInputLimited = translator.translate(
+            Data([0xC7, 0xC0, 0x01, 0x02, 0x03, 0x04]), maximumGuestBytes: 3
+        )
+        precondition(movImmediateInputLimited.stopReason == .inputLimit)
+        precondition(movImmediateInputLimited.guestBytesConsumed == 0)
+
+        let movImmediateMemory = translator.translate(Data([0xC7, 0x00, 0x01, 0x02, 0x03, 0x04]))
+        precondition(movImmediateMemory.stopReason == .unsupportedInstruction)
+        precondition(movImmediateMemory.guestBytesConsumed == 0)
+
+        let movImmediateOtherExtension = translator.translate(Data([0xC7, 0xC8, 0x01, 0x02, 0x03, 0x04]))
+        precondition(movImmediateOtherExtension.stopReason == .unsupportedInstruction)
+        precondition(movImmediateOtherExtension.guestBytesConsumed == 0)
+
         // LEA r64, [base + index*4 + disp8] emits flag-preserving AArch64 ADDs.
         let lea64Code = Data([0x48, 0x8D, 0x54, 0x88, 0x10])
         let lea64 = translator.translate(lea64Code)
@@ -167,7 +203,7 @@ struct KenranButoAOTTranslatorTests {
         precondition(multiInstructionBlock.guestBytesConsumed == 20)
         precondition(multiInstructionBlock.instructionCount == 4)
         precondition(multiInstructionBlock.fallbackOpcode == 0x0F)
-        precondition(X86_64AOTTranslator.translatorVersion == "4")
+        precondition(X86_64AOTTranslator.translatorVersion == "5")
         let oversizedBudgets = translator.translate(
             guest, maximumInstructions: Int.max,
             maximumOutputBytes: Int.max & ~3,

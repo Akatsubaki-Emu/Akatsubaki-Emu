@@ -50,7 +50,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
 struct X86_64AOTTranslator {
     static let translatorIdentifier = "kenran-buto-aot-arm64"
     // Bump whenever emitted code or decoding semantics change.
-    static let translatorVersion = "4"
+    static let translatorVersion = "5"
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
@@ -159,6 +159,49 @@ struct X86_64AOTTranslator {
                     immediate |= UInt64(bytes[cursor + index]) << (index * 8)
                 }
                 cursor += immediateBytes
+                words = Self.moveImmediate(immediate, to: register, is64Bit: is64Bit)
+
+            case 0xC7:
+                // MOV r/m32, imm32 and MOV r/m64, sign-extended imm32.
+                // Only register destinations are emitted; memory operands and
+                // non-/0 group extensions remain interpreter side exits.
+                guard cursor < bytes.count else {
+                    if bytes.count < guestCodeCount {
+                        return result(output, consumed: start, instructions: instructions,
+                                      reason: .inputLimit, fallbackOffset: start)
+                    }
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .truncatedInstruction, opcode: bytes[start])
+                }
+                let modRM = bytes[cursor]
+                cursor += 1
+                guard modRM >> 6 == 0b11, ((modRM >> 3) & 0x07) == 0,
+                      rex & 0x04 == 0 else {
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+                let register = Int(modRM & 0x07) | ((rex & 0x01) != 0 ? 8 : 0)
+                guard cursor - start <= Self.maximumX86InstructionLength - 4 else {
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+                guard bytes.count - cursor >= 4 else {
+                    if bytes.count < guestCodeCount {
+                        return result(output, consumed: start, instructions: instructions,
+                                      reason: .inputLimit, fallbackOffset: start)
+                    }
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .truncatedInstruction, opcode: bytes[start])
+                }
+                let immediate32 = UInt32(bytes[cursor])
+                    | (UInt32(bytes[cursor + 1]) << 8)
+                    | (UInt32(bytes[cursor + 2]) << 16)
+                    | (UInt32(bytes[cursor + 3]) << 24)
+                cursor += 4
+                let is64Bit = (rex & 0x08) != 0
+                let immediate = is64Bit
+                    ? UInt64(bitPattern: Int64(Int32(bitPattern: immediate32)))
+                    : UInt64(immediate32)
                 words = Self.moveImmediate(immediate, to: register, is64Bit: is64Bit)
 
             case 0x89, 0x8B:
