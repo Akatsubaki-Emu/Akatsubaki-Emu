@@ -48,6 +48,10 @@ def patch_objc_compile_flag(source: str) -> str:
         if any(anchor in item[2] for anchor in OBJC_ARGUMENTS)
         or any(form in item[2] for form in OBJC_ARGUMENTS.values())
     ]
+    if not candidates:
+        raise SystemExit(
+            "QEMU meson.build changed: Objective-C compiler argument anchor not found in a compiler block"
+        )
     if len(candidates) != 1:
         raise SystemExit(
             "QEMU meson.build changed: expected exactly one Objective-C compiler configuration block"
