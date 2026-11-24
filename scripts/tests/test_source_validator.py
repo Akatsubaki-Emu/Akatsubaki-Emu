@@ -116,6 +116,10 @@ class SourceValidatorTests(unittest.TestCase):
             with self.subTest(token=token):
                 self.assertIn(token, ios_package)
         self.assertNotIn('test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt"', ios_package)
+        self.assertEqual(ios_package.count('for MODE in JIT TCI; do'), 2)
+        self.assertIn("test \"$(awk 'END { print NR }' \"$MODE_MANIFEST\")\" -eq 1", ios_package)
+        self.assertIn("Unsafe QEMU $MODE runtime path", ios_package)
+        self.assertIn('test -s "$MODE_DIR/exports.txt"', ios_package)
 
 
     def test_qemu_packager_has_one_complete_candidate_scan(self):
