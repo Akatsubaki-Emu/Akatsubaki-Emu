@@ -3,6 +3,7 @@ import Foundation
 /// Owns one native QEMU session and keeps any Files-provider security scopes
 /// alive for the full lifetime of QEMU (not just while constructing argv).
 final class QEMUNativeRuntime {
+    static let shared = QEMUNativeRuntime()
     enum RuntimeError: LocalizedError {
         case runtimeUnavailable(String)
 
@@ -14,11 +15,13 @@ final class QEMUNativeRuntime {
     }
 
     private(set) var started = false
+    private(set) var isPaused = false
+    private var sessionKey: String?
+    private var controlError: String?
     private var scopedURLs: [URL] = []
 
     func start(configuration: VMConfiguration, diskImage: URL, writableDiskImage: URL? = nil,
                firmware: URL? = nil) throws {
-        guard !started else { return }
         try configuration.validateForStart()
         guard configuration.architecture == .x86_64 else {
             throw RuntimeError.runtimeUnavailable(
@@ -94,6 +97,37 @@ final class QEMUNativeRuntime {
             throw RuntimeError.runtimeUnavailable("The boot image and writable VM disk must be different files.")
         }
 
+        effectiveConfiguration.accelerator = requiresJIT ? .jit : .tcg
+        let requestedSessionKey = Self.makeSessionKey(
+            configuration: effectiveConfiguration, diskImage: diskImage,
+            writableDiskImage: writableDiskImage, firmware: selectedFirmware,
+            firmwareVariables: selectedFirmwareVariables, library: libraryURL,
+            dataDirectory: dataDirectory, requiresJIT: requiresJIT
+        )
+        if started {
+            guard sessionKey == requestedSessionKey else {
+                throw RuntimeError.runtimeUnavailable(
+                    "The in-process QEMU runtime is already bound to another VM configuration. Restart Akatsubaki Emu to switch guests."
+                )
+            }
+            let reset = Self.sendQMP("system_reset")
+            guard reset.success else {
+                controlError = reset.error
+                throw RuntimeError.runtimeUnavailable(reset.error ?? "QEMU did not acknowledge system_reset.")
+            }
+            if isPaused {
+                let resumed = Self.sendQMP("cont")
+                guard resumed.success else {
+                    controlError = resumed.error
+                    throw RuntimeError.runtimeUnavailable(resumed.error ?? "QEMU did not acknowledge cont.")
+                }
+            }
+            isPaused = false
+            controlError = nil
+            EmulationLog.shared.write("QEMU guest reset and resumed through the persistent QMP session.")
+            return
+        }
+
         var newlyScoped: [URL] = []
         for url in [diskImage, writableDiskImage, selectedFirmware].compactMap({ $0 }) {
             let granted = url.startAccessingSecurityScopedResource()
@@ -111,8 +145,8 @@ final class QEMUNativeRuntime {
             }
         }
 
-        effectiveConfiguration.accelerator = requiresJIT ? .jit : .tcg
         EmulationLog.shared.write("QEMU effective accelerator: \(requiresJIT ? "JIT" : "TCI")")
+        try? FileManager.default.removeItem(atPath: QEMUCommandBuilder.qmpSocketPath)
         let args = QEMUCommandBuilder(configuration: effectiveConfiguration)
             .arguments(diskImage: diskImage, writableDiskImage: writableDiskImage,
                        firmware: selectedFirmware, firmwareVariables: selectedFirmwareVariables)
@@ -151,7 +185,10 @@ final class QEMUNativeRuntime {
         }
 
         scopedURLs = newlyScoped
+        sessionKey = requestedSessionKey
         started = true
+        isPaused = false
+        controlError = nil
         EmulationLog.shared.write("QEMU launch requested with boot media \(diskImage.lastPathComponent)"
             + (writableDiskImage.map { " and writable disk \($0.lastPathComponent)" } ?? ""))
     }
@@ -311,30 +348,58 @@ final class QEMUNativeRuntime {
         return destination
     }
 
-    func stop() {
-        guard started else { return }
-        isteam_qemu_request_stop()
-        started = false
-        releaseScopesWhenStopped()
+    @discardableResult
+    func stop() -> Bool {
+        guard started else { return true }
+        guard !isPaused else { return true }
+        let result = Self.sendQMP("stop")
+        guard result.success else {
+            controlError = result.error ?? "QEMU did not acknowledge the pause request."
+            EmulationLog.shared.write("QEMU pause failed: \(controlError ?? "unknown QMP error")")
+            return false
+        }
+        isPaused = true
+        controlError = nil
+        EmulationLog.shared.write("QEMU guest paused; the process and disk scopes remain available for the next launch.")
+        return true
     }
 
-    private func releaseScopesWhenStopped() {
-        guard isteam_qemu_is_active() else {
-            scopedURLs.forEach { $0.stopAccessingSecurityScopedResource() }
-            scopedURLs.removeAll()
-            return
+    private static func sendQMP(_ command: String) -> (success: Bool, error: String?) {
+        var errorBuffer = [CChar](repeating: 0, count: 512)
+        let success = QEMUCommandBuilder.qmpSocketPath.withCString { socketPath in
+            command.withCString { commandPointer in
+                errorBuffer.withUnsafeMutableBufferPointer { buffer -> Bool in
+                    guard let error = buffer.baseAddress else { return false }
+                    return isteam_qemu_qmp_command(socketPath, commandPointer, error, Int32(buffer.count))
+                }
+            }
         }
-        // Capture strongly until the native thread exits, even if VMEngine drops
-        // its backend after a startup timeout.
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .milliseconds(250)) {
-            self.releaseScopesWhenStopped()
-        }
+        let message = String(cString: errorBuffer)
+        return (success, message.isEmpty ? nil : message)
     }
 
-    var isRunning: Bool { isteam_qemu_is_running() }
+    private static func makeSessionKey(configuration: VMConfiguration, diskImage: URL,
+                                       writableDiskImage: URL?, firmware: URL?,
+                                       firmwareVariables: URL?, library: URL,
+                                       dataDirectory: URL, requiresJIT: Bool) -> String {
+        let resolvedPath: (URL?) -> String = { url in
+            guard let url else { return "" }
+            return url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL.path
+        }
+        return [
+            String(describing: configuration), configuration.id.uuidString,
+            resolvedPath(diskImage), resolvedPath(writableDiskImage),
+            resolvedPath(firmware), resolvedPath(firmwareVariables),
+            resolvedPath(library), resolvedPath(dataDirectory),
+            requiresJIT ? "jit" : "tcg"
+        ].joined(separator: "\u{0}")
+    }
+
+    var isRunning: Bool { started && !isPaused && isteam_qemu_is_running() }
     var isActive: Bool { isteam_qemu_is_active() }
 
     var lastError: String? {
+        if let controlError { return controlError }
         let message = String(cString: isteam_qemu_last_error())
         return message.isEmpty ? nil : message
     }
