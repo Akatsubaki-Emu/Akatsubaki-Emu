@@ -106,7 +106,8 @@ iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate(const void *code,size
  int mode=iSteamJITGetProtocolMode();
  if(mode==ISTEAM_JIT_PROTOCOL_STIKDEBUG){
   if(!ensure_txm_arena(error,capacity)){free(r);return NULL;}
-  size_t hostPage=(size_t)sysconf(_SC_PAGESIZE);if(!hostPage)hostPage=4096u;
+  long hostPageValue=sysconf(_SC_PAGESIZE);
+  size_t hostPage=hostPageValue>0?(size_t)hostPageValue:4096u;
   size_t offset=0;
   if(!iSteamAOTExecutableArenaAllocate(sTXMArena,mapped,hostPage,&offset)){free(r);set_error(error,capacity,"StikDebug AOT executable arena exhausted.");return NULL;}
   r->execute_address=(void *)((uintptr_t)sTXMExecuteBase+offset);

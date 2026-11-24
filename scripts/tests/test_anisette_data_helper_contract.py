@@ -14,7 +14,11 @@ class AnisetteDataHelperContractTests(unittest.TestCase):
             v3,
         )
         self.assertIn(
-            "self.extractAnisetteData(data, response as? HTTPURLResponse, v3: true)",
+            'let httpResponse = try self.requireSuccessfulHTTPResponse(response, operation: "Anisette V3 header request")',
+            v3,
+        )
+        self.assertIn(
+            "return try await self.extractAnisetteData(data, httpResponse, v3: true)",
             v3,
         )
 

@@ -56,5 +56,13 @@ class IOSJITMemoryContractTests(unittest.TestCase):
         self.assertIn("r->arena_owned=true", self.aot_memory)
 
 
+    def test_txm_arena_failure_paths_release_aliases_and_recycle_blocks(self):
+        txm_setup = self.aot_memory.split("static bool ensure_txm_arena", 1)[1].split("#endif", 1)[0]
+        self.assertEqual(txm_setup.count("deallocate_mach_address(write,AOT_TXM_ARENA_BYTES)"), 3)
+        self.assertEqual(txm_setup.count("deallocate_mach_address((vm_address_t)exec,AOT_TXM_ARENA_BYTES)"), 3)
+        block_remap = self.aot_memory.split("kern_return_t status=vm_remap(mach_task_self(),&execute", 1)[1].split("return NULL;", 1)[0]
+        self.assertIn("deallocate_mach_address(execute,mapped)", block_remap)
+        self.assertIn("iSteamAOTExecutableArenaFree(sTXMArena,offset,mapped)", block_remap)
+
 if __name__ == "__main__":
     unittest.main()

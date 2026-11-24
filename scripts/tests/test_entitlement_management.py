@@ -68,7 +68,10 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertNotIn("try! JSONSerialization.data", self.anisette)
 
     def test_anisette_requests_fail_cleanly_when_required_state_is_missing(self):
-        self.assertIn("guard let serverURL = self.url else", self.anisette)
+        self.assertIn("guard let serverURL = self.url,", self.anisette)
+        self.assertIn('serverURL.scheme?.lowercased() == "https"', self.anisette)
+        self.assertIn("serverURL.host != nil", self.anisette)
+        self.assertIn("A valid HTTPS Anisette server is required", self.anisette)
         self.assertIn("guard let identifier = try EntitlementAnisetteKeychain.shared.identifier(),", self.anisette)
         self.assertIn("guard let clientInfo = self.clientInfo,", self.anisette)
         self.assertIn("func buildAppleRequest(url: URL) throws -> URLRequest", self.anisette)

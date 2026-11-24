@@ -43,7 +43,15 @@ class GitHubActionsOwnershipTests(unittest.TestCase):
     ROOT = Path(__file__).resolve().parents[2]
 
     def test_gitlab_ci_configuration_is_retired(self):
-        self.assertFalse((self.ROOT / ".gitlab-ci.yml").exists())
+        gitlab_ci = (self.ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        self.assertIn('CI_PIPELINE_SOURCE == "web"', gitlab_ci)
+        self.assertIn('CI_PIPELINE_SOURCE == "api"', gitlab_ci)
+        self.assertIn("core-source-and-elf-validation:", gitlab_ci)
+        self.assertIn("unittest discover", gitlab_ci)
+        self.assertIn("build_hybrid_runtime_smoke_elf.py", gitlab_ci)
+        self.assertIn("build_hybrid_xchg_smoke_elf.py", gitlab_ci)
+        self.assertNotIn("swiftc", gitlab_ci)
+        self.assertNotIn("xcodebuild", gitlab_ci)
 
     def test_runtime_regression_tests_are_owned_by_github_actions(self):
         workflow = (self.ROOT / ".github" / "workflows" / "validate-repository.yml").read_text(encoding="utf-8")

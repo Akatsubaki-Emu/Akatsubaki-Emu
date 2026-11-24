@@ -1646,10 +1646,19 @@ if "sTestAvailabilityOverride" not in aot_memory:
 if "-D KENRAN_BUTO_AOT_TESTS -I iSteam" not in aot_workflow:
     print("AOT C provider is not compiled with the readiness-revocation test hook", file=sys.stderr)
     failed = True
-guard = aot_memory.find("if(status!=KERN_SUCCESS||(maximum&VM_PROT_WRITE)==0)")
-cleanup_end = aot_memory.find("return NULL;", guard)
-if guard < 0 or cleanup_end < 0 or "deallocate_mach_address(write,mapped)" not in aot_memory[guard:cleanup_end]:
-    print("AOT TXM remap failure path does not release writable alias", file=sys.stderr)
+txm_arena_setup = aot_memory.split("static bool ensure_txm_arena", 1)[1].split("#endif", 1)[0]
+if (
+    txm_arena_setup.count("deallocate_mach_address(write,AOT_TXM_ARENA_BYTES)") != 3
+    or txm_arena_setup.count("deallocate_mach_address((vm_address_t)exec,AOT_TXM_ARENA_BYTES)") != 3
+):
+    print("AOT TXM arena setup failure paths do not release both aliases", file=sys.stderr)
+    failed = True
+txm_block_remap = aot_memory.split("kern_return_t status=vm_remap(mach_task_self(),&execute", 1)[1].split("return NULL;", 1)[0]
+if (
+    "deallocate_mach_address(execute,mapped)" not in txm_block_remap
+    or "iSteamAOTExecutableArenaFree(sTXMArena,offset,mapped)" not in txm_block_remap
+):
+    print("AOT TXM block remap failure path does not return allocation to shared arena", file=sys.stderr)
     failed = True
 for token in ("KenranButoAOTGuestState", "makeMemoryCallbacks(for:memory)",
               "iSteamAOTExecutableMemoryInvoke", "maximumCachedBlocks=64",

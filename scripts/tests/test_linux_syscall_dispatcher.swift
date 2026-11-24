@@ -522,9 +522,10 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.readUInt64(offset: 0x1200) != nil)
         precondition(memory.readUInt64(offset: 0x1208)! < 1_000_000)
 
-        let unameBuffer = dispatcher.dispatch(
+        let unameBufferResult = dispatcher.dispatch(
             number: 9, arguments: [0, 0x1000, 3, 0x22, UInt64.max, 0]
         )!
+        guard case .returned(let unameBuffer) = unameBufferResult else { preconditionFailure() }
         precondition(unameBuffer < memory.size && unameBuffer & 0xFFF == 0)
         let unameResult = dispatcher.dispatch(number: 63, arguments: [unameBuffer, 0, 0, 0, 0, 0])!
         guard case .returned(let unameStatus) = unameResult else { preconditionFailure() }

@@ -35,7 +35,11 @@ class GuestConsoleOutputTests(unittest.TestCase):
         workflow = (root / ".github" / "workflows" / "validate-ios-build.yml").read_text(encoding="utf-8")
         command = "swiftc -parse-as-library -swift-version 5 src/Core/EmulationLog.swift scripts/tests/test_emulation_log_observer.swift"
         self.assertIn(command, workflow)
-        self.assertFalse((root / ".gitlab-ci.yml").exists())
+        gitlab_ci = (root / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("core-source-and-elf-validation", gitlab_ci)
+        self.assertIn("unittest discover", gitlab_ci)
+        self.assertNotIn("swiftc", gitlab_ci)
+        self.assertNotIn("xcodebuild", gitlab_ci)
 
     def test_aot_translation_and_cache_tests_are_wired_into_github_actions(self):
         root = Path(__file__).resolve().parents[2]
@@ -47,7 +51,11 @@ class GuestConsoleOutputTests(unittest.TestCase):
         self.assertIn("KenranButoAOTCompiler.swift", source)
         self.assertIn("test_kenran_buto_aot_cache.swift", source)
         self.assertNotIn("src/Runtime/KenranButoAOT.swift", source)
-        self.assertFalse((root / ".gitlab-ci.yml").exists())
+        gitlab_ci = (root / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("core-source-and-elf-validation", gitlab_ci)
+        self.assertIn("unittest discover", gitlab_ci)
+        self.assertNotIn("swiftc", gitlab_ci)
+        self.assertNotIn("xcodebuild", gitlab_ci)
 
 
 if __name__ == "__main__":
