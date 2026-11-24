@@ -749,5 +749,21 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn(ignored_path, paths_ignore)
         self.assertIn(ignored_path, freshness)
 
+    def test_kenran_buto_aot_is_opt_in_and_fails_closed(self):
+        root = Path(__file__).resolve().parents[2]
+        machine = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
+        launcher = (root / "src" / "Steam" / "GameLauncher.swift").read_text(encoding="utf-8")
+        executor = (root / "src" / "Runtime" / "KenranButoAOTExecution.swift").read_text(encoding="utf-8")
+        interpreter = (root / "src" / "Runtime" / "X86_64Interpreter.swift").read_text(encoding="utf-8")
+        provider = (root / "iSteam" / "KenranButoAOTExecutableMemory.c").read_text(encoding="utf-8")
+        self.assertIn("aotExecutor: KenranButoAOTExecuting? = nil", machine)
+        self.assertIn("aotExecutor: KenranButoAOTExecutor()", launcher)
+        self.assertIn("func refreshAvailability() -> Bool", executor)
+        self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", provider)
+        invoke = provider.split("bool iSteamAOTExecutableMemoryInvoke", 1)[1].split("void iSteamAOTExecutableMemoryDestroy", 1)[0]
+        self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", invoke)
+        self.assertIn("let budget = Int(min(remaining, 16))", interpreter)
+        self.assertIn("let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff", interpreter)
+
 if __name__ == "__main__":
     unittest.main()
