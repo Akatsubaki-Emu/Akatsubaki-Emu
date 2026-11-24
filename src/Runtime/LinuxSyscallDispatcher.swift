@@ -42,9 +42,12 @@ final class LinuxSyscallDispatcher {
     func reset() {
         if programBreak > initialProgramBreak {
             _ = memory.zero(offset: initialProgramBreak, length: programBreak - initialProgramBreak)
+            let heapStart = Self.alignUp(initialProgramBreak)
+            let heapEnd = Self.alignUp(programBreak)
+            if heapEnd > heapStart { _ = memory.unmap(offset: heapStart, length: heapEnd - heapStart) }
         }
         for range in mappedRanges {
-            _ = memory.zero(offset: range.lowerBound, length: range.upperBound - range.lowerBound)
+            _ = memory.unmap(offset: range.lowerBound, length: range.upperBound - range.lowerBound)
         }
         programBreak = initialProgramBreak
         mappedRanges.removeAll(keepingCapacity: true)
@@ -93,9 +96,7 @@ final class LinuxSyscallDispatcher {
             guard arg4 == UInt64.max, arg5 == 0 else { return .returned(errno(22)) }
             return .returned(mapAnonymous(address: arg0, length: arg1, protection: arg2, flags: arg3))
         case 10:
-            // Guest page permissions are not enforced by the current memory/ELF/mmap path.
-            // Never report mprotect success until those restrictions are actually applied.
-            return .returned(errno(38))
+            return .returned(protect(address: arg0, length: arg1, protection: arg2))
         case 11:
             return .returned(unmap(address: arg0, length: arg1))
         case 12:
@@ -224,8 +225,23 @@ final class LinuxSyscallDispatcher {
               requested <= memory.size else { return programBreak }
         let previousBreak = programBreak
         if requested > previousBreak {
-            guard memory.zero(offset: previousBreak, length: requested - previousBreak) else { return previousBreak }
+            let mapStart = Self.alignUp(previousBreak)
+            let mapEnd = Self.alignUp(requested)
+            if mapEnd > mapStart,
+               !memory.map(offset: mapStart, length: mapEnd - mapStart, permissions: 0x3) {
+                return previousBreak
+            }
+            guard memory.zero(offset: previousBreak, length: requested - previousBreak) else {
+                if mapEnd > mapStart { _ = memory.unmap(offset: mapStart, length: mapEnd - mapStart) }
+                return previousBreak
+            }
         } else if requested < previousBreak {
+            let unmapStart = Self.alignUp(requested)
+            let unmapEnd = Self.alignUp(previousBreak)
+            if unmapEnd > unmapStart,
+               !memory.unmap(offset: unmapStart, length: unmapEnd - unmapStart) {
+                return previousBreak
+            }
             guard memory.zero(offset: requested, length: previousBreak - requested) else { return previousBreak }
         }
         programBreak = requested
@@ -240,13 +256,10 @@ final class LinuxSyscallDispatcher {
     private func mapAnonymous(address requested: UInt64, length: UInt64,
                               protection: UInt64, flags: UInt64) -> UInt64 {
         let mapType = flags & 0x03
-        // This memory backend does not enforce per-page guest permissions yet.
-        // Only anonymous read/write mappings are safe to expose; reject all
-        // other valid Linux protections until the native permission model lands.
+        // Linux PROT_READ/WRITE/EXEC map directly to the guest R/W/X bits.
         let supportedFlags: UInt64 = 0x03 | 0x10 | 0x20 | 0x100000
         guard length > 0, length <= memory.size, flags & 0x20 != 0,
-              flags & ~supportedFlags == 0,
-              protection == 0x3,
+              flags & ~supportedFlags == 0, protection & ~UInt64(0x7) == 0,
               mapType == 1 || mapType == 2,
               !(flags & 0x10 != 0 && flags & 0x100000 != 0) else { return errno(22) }
         let (rounded, overflow) = length.addingReportingOverflow(4095)
@@ -284,27 +297,18 @@ final class LinuxSyscallDispatcher {
         }
         if !overlappingRanges.isEmpty {
             if noReplace { return errno(17) }
-            guard fixed, unmap(address: address, length: size) == 0 else { return errno(12) }
-
-            // unmap() clears replaced pages; clear only newly covered gaps here.
-            var zeroCursor = address
-            for overlap in overlappingRanges {
-                let overlapStart = max(address, overlap.lowerBound)
-                let overlapEnd = min(end, overlap.upperBound)
-                if zeroCursor < overlapStart,
-                   !memory.zero(offset: zeroCursor, length: overlapStart - zeroCursor) {
-                    return errno(12)
-                }
-                zeroCursor = max(zeroCursor, overlapEnd)
-            }
-            if zeroCursor < end,
-               !memory.zero(offset: zeroCursor, length: end - zeroCursor) {
-                return errno(12)
-            }
-        } else if !memory.zero(offset: address, length: size) {
+            guard fixed else { return errno(12) }
+        }
+        // Native map updates the entire permission range atomically. For MAP_FIXED,
+        // this replaces old page protections without first destroying the old map.
+        guard memory.map(offset: address, length: size, permissions: UInt8(protection)) else {
             return errno(12)
         }
-        insertMappedRange(address..<end)
+        guard memory.zero(offset: address, length: size) else {
+            _ = memory.unmap(offset: address, length: size)
+            return errno(12)
+        }
+        replaceMappedRange(address..<end)
         if !fixed { mmapCursor = max(mmapCursor, end) }
         return address
     }
@@ -318,6 +322,38 @@ final class LinuxSyscallDispatcher {
             else { upper = middle }
         }
         mappedRanges.insert(newRange, at: lower)
+    }
+
+    private func replaceMappedRange(_ newRange: Range<UInt64>) {
+        var updated: [Range<UInt64>] = []
+        updated.reserveCapacity(mappedRanges.count + 1)
+        for range in mappedRanges {
+            if range.upperBound <= newRange.lowerBound || range.lowerBound >= newRange.upperBound {
+                updated.append(range)
+                continue
+            }
+            if range.lowerBound < newRange.lowerBound {
+                updated.append(range.lowerBound..<newRange.lowerBound)
+            }
+            if range.upperBound > newRange.upperBound {
+                updated.append(newRange.upperBound..<range.upperBound)
+            }
+        }
+        updated.append(newRange)
+        mappedRanges = updated.sorted { $0.lowerBound < $1.lowerBound }
+    }
+
+    private func protect(address: UInt64, length: UInt64, protection: UInt64) -> UInt64 {
+        guard address & 0xFFF == 0, length > 0,
+              protection & ~UInt64(0x7) == 0 else { return errno(22) }
+        let (rounded, overflow) = length.addingReportingOverflow(4095)
+        guard !overflow else { return errno(22) }
+        let size = rounded & ~UInt64(4095)
+        guard address <= memory.size, size <= memory.size - address,
+              memory.protect(offset: address, length: size, permissions: UInt8(protection)) else {
+            return errno(22)
+        }
+        return 0
     }
 
     private func firstMappedRangeEnding(after address: UInt64) -> Int {
@@ -356,17 +392,12 @@ final class LinuxSyscallDispatcher {
             return errno(22)
         }
 
+        guard memory.unmap(offset: address, length: size) else { return errno(22) }
         var remaining: [Range<UInt64>] = []
         for range in mappedRanges {
             if range.upperBound <= address || range.lowerBound >= end {
                 remaining.append(range)
                 continue
-            }
-
-            let overlapStart = max(range.lowerBound, address)
-            let overlapEnd = min(range.upperBound, end)
-            guard memory.zero(offset: overlapStart, length: overlapEnd - overlapStart) else {
-                return errno(22)
             }
             if range.lowerBound < address {
                 remaining.append(range.lowerBound..<address)
