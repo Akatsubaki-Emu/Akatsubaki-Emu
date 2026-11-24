@@ -566,7 +566,8 @@ struct InterpreterTests {
         let truncatedNear = X86_64Interpreter(memory: truncatedNearMemory)
         try truncatedNear.reset(entryPoint: 0)
         let truncatedNearExit = try truncatedNear.run(maxInstructions: 1)
-        precondition(truncatedNearExit == .memoryFault(address: 2))
+        // The available displacement byte at 0x2 is consumed; the first missing byte is 0x3.
+        precondition(truncatedNearExit == .memoryFault(address: 3))
 
         let orMemory = GuestMemory(size: 32)
         precondition(orMemory.write(Data([0xB8, 0x01, 0x00, 0x00, 0x00, 0x83, 0xC8, 0x02, 0x0F, 0x0B]), offset: 0))
