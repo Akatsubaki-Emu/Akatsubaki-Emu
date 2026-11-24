@@ -50,7 +50,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
 struct X86_64AOTTranslator {
     static let translatorIdentifier = "kenran-buto-aot-arm64"
     // Bump whenever emitted code or decoding semantics change.
-    static let translatorVersion = "7"
+    static let translatorVersion = "8"
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
@@ -128,13 +128,14 @@ struct X86_64AOTTranslator {
             var words = EncodedWords()
 
             switch opcode {
-            case 0x90:
-                let register = (rex & 0x01) != 0 ? 8 : 0
-                words = Self.exchangeRegisters(0, register, is64Bit: (rex & 0x08) != 0)
-
-            case 0x91...0x97:
-                let register = Int(opcode - 0x90) | ((rex & 0x01) != 0 ? 8 : 0)
-                words = Self.exchangeRegisters(0, register, is64Bit: (rex & 0x08) != 0)
+            case 0x90...0x97:
+                // 90 without REX.B is NOP; the REX.B form is XCHG RAX, r8.
+                if opcode == 0x90 && (rex & 0x01) == 0 {
+                    words.append(0xD503201F)
+                } else {
+                    let register = Int(opcode - 0x90) | ((rex & 0x01) != 0 ? 8 : 0)
+                    words = Self.exchangeRegisters(0, register, is64Bit: (rex & 0x08) != 0)
+                }
 
             case 0xB8...0xBF:
                 let register = Int(opcode - 0xB8) | ((rex & 0x01) != 0 ? 8 : 0)
@@ -203,6 +204,30 @@ struct X86_64AOTTranslator {
                     ? UInt64(bitPattern: Int64(Int32(bitPattern: immediate32)))
                     : UInt64(immediate32)
                 words = Self.moveImmediate(immediate, to: register, is64Bit: is64Bit)
+
+            case 0x87:
+                // Only register operands are translated. Memory XCHG is implicitly locked.
+                guard cursor < bytes.count else {
+                    if bytes.count < guestCodeCount {
+                        return result(output, consumed: start, instructions: instructions,
+                                      reason: .inputLimit, fallbackOffset: start)
+                    }
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .truncatedInstruction, opcode: bytes[start])
+                }
+                guard cursor - start < Self.maximumX86InstructionLength else {
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+                let modRM = bytes[cursor]
+                cursor += 1
+                guard modRM >> 6 == 0b11 else {
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+                let left = Int(modRM & 0x07) | ((rex & 0x01) != 0 ? 8 : 0)
+                let right = Int((modRM >> 3) & 0x07) | ((rex & 0x04) != 0 ? 8 : 0)
+                words = Self.exchangeRegisters(left, right, is64Bit: (rex & 0x08) != 0)
 
             case 0x89, 0x8B:
                 guard cursor < bytes.count else {
@@ -508,7 +533,8 @@ struct X86_64AOTTranslator {
     private static func exchangeRegisters(_ left: Int, _ right: Int, is64Bit: Bool) -> EncodedWords {
         var words = EncodedWords()
         guard left != right else {
-            words.append(0xD503201F)
+            // A 32-bit XCHG with the same register still zero-extends the GPR.
+            words.append(moveRegister(left, to: left, is64Bit: is64Bit))
             return words
         }
         let opcode: UInt32 = is64Bit ? 0xCA000000 : 0x4A000000

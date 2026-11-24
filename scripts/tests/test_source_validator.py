@@ -837,8 +837,8 @@ class SourceValidatorTests(unittest.TestCase):
     def test_aot_architecture_docs_match_translator_version(self):
         root = Path(__file__).resolve().parents[2]
         docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
-        self.assertIn("Translator version 7 emits", docs)
-        self.assertIn("Translator version 7 enforces", docs)
+        self.assertIn("Translator version 8 emits", docs)
+        self.assertIn("Translator version 8 enforces", docs)
         self.assertIn("accumulator/register XCHG", docs)
 
     def test_kenran_buto_aot_is_opt_in_and_fails_closed(self):

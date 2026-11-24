@@ -20,7 +20,7 @@ final class GameLauncher {
         }
 
         if format == .linuxELF {
-            // A bounded NOP/MOV AOT fast path is injected for eligible JIT sessions.
+// A bounded NOP/MOV/C7/LEA/accumulator-and-register-XCHG AOT fast path is injected for eligible JIT sessions.
             // The interpreter remains the correctness fallback; this is not a full Linux ABI.
             let availability = RuntimeCapabilityRegistry.current.backendAvailability
             let request = RuntimeExecutionRequest(format: .linuxX64ELF)

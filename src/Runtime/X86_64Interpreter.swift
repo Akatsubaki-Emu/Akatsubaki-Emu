@@ -1027,6 +1027,8 @@ final class X86_64Interpreter: GuestCPUBackend {
         switch instructionWindow[cursor] {
         case 0x90...0x97:
             return true
+        case 0x87:
+            return canTranslateRegisterXCHGAtCurrentWindow(opcodeOffset: cursor)
         case 0xB8...0xBF:
             return true
         case 0x89, 0x8B:
@@ -1039,6 +1041,12 @@ final class X86_64Interpreter: GuestCPUBackend {
         default:
             return false
         }
+    }
+
+    private func canTranslateRegisterXCHGAtCurrentWindow(opcodeOffset: Int) -> Bool {
+        let modRMOffset = opcodeOffset + 1
+        guard modRMOffset < instructionWindowLength else { return false }
+        return instructionWindow[modRMOffset] >> 6 == 0b11
     }
 
     /// C7 /0 is AOT-eligible only for a complete register-immediate form.

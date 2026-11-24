@@ -155,6 +155,40 @@ struct KenranButoAOTTranslatorTests {
         precondition(word(extendedAccumulatorExchange.machineCode, 1) == 0xCA0F000F)
         precondition(word(extendedAccumulatorExchange.machineCode, 2) == 0xCA0F0000)
 
+        let nop = translator.translate(Data([0x90]))
+        precondition(nop.isComplete && nop.instructionCount == 1)
+        precondition(word(nop.machineCode, 0) == 0xD503201F)
+
+        let xchg64 = translator.translate(Data([0x48, 0x87, 0xD8]))
+        precondition(xchg64.isComplete && xchg64.guestBytesConsumed == 3 && xchg64.instructionCount == 1)
+        precondition(word(xchg64.machineCode, 0) == 0xCA030000)
+        precondition(word(xchg64.machineCode, 1) == 0xCA030003)
+        precondition(word(xchg64.machineCode, 2) == 0xCA030000)
+
+        let xchg32 = translator.translate(Data([0x87, 0xD8]))
+        precondition(xchg32.isComplete && xchg32.instructionCount == 1)
+        precondition(word(xchg32.machineCode, 0) == 0x4A030000)
+        precondition(word(xchg32.machineCode, 1) == 0x4A030003)
+        precondition(word(xchg32.machineCode, 2) == 0x4A030000)
+
+        let xchgExtended = translator.translate(Data([0x4D, 0x87, 0xC8]))
+        precondition(xchgExtended.isComplete && xchgExtended.instructionCount == 1)
+        precondition(word(xchgExtended.machineCode, 0) == 0xCA090108)
+        precondition(word(xchgExtended.machineCode, 1) == 0xCA090109)
+        precondition(word(xchgExtended.machineCode, 2) == 0xCA090108)
+
+        let xchgSameRegister = translator.translate(Data([0x87, 0xC0]))
+        precondition(xchgSameRegister.isComplete && xchgSameRegister.instructionCount == 1)
+        precondition(word(xchgSameRegister.machineCode, 0) == 0x2A0003E0)
+
+        let xchgMemory = translator.translate(Data([0x48, 0x87, 0x08]))
+        precondition(xchgMemory.stopReason == .unsupportedInstruction)
+        precondition(xchgMemory.guestBytesConsumed == 0 && xchgMemory.fallbackOpcode == 0x48)
+
+        let xchgTruncated = translator.translate(Data([0x48, 0x87]))
+        precondition(xchgTruncated.stopReason == .truncatedInstruction)
+        precondition(xchgTruncated.guestBytesConsumed == 0 && xchgTruncated.fallbackOpcode == 0x48)
+
         // The complete x86 instruction length, including REX prefixes and
         // immediate bytes, must not exceed the architectural 15-byte limit.
         let legal15ByteInstruction = Data(
@@ -224,7 +258,7 @@ struct KenranButoAOTTranslatorTests {
         precondition(multiInstructionBlock.guestBytesConsumed == 20)
         precondition(multiInstructionBlock.instructionCount == 4)
         precondition(multiInstructionBlock.fallbackOpcode == 0x0F)
-        precondition(X86_64AOTTranslator.translatorVersion == "7")
+        precondition(X86_64AOTTranslator.translatorVersion == "8")
         let oversizedBudgets = translator.translate(
             guest, maximumInstructions: Int.max,
             maximumOutputBytes: Int.max & ~3,

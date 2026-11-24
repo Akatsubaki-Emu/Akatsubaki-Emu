@@ -1738,6 +1738,39 @@ struct InterpreterTests {
             precondition(xchgBaselineMemory.readUInt64(offset: xchgBaselineStack) == 1)
             precondition(executor.blocksExecuted == blocksBeforeXCHG + 2)
 
+            // Register-only 0x87 XCHG must start a native block after interpreter PUSH.
+            let xchgRegisterProgram = Data([
+                0xB8,0x01,0x00,0x00,0x00,
+                0xBB,0x02,0x00,0x00,0x00,
+                0x50,
+                0x48,0x87,0xD8,
+                0x0F,0x0B
+            ])
+            let xchgRegisterBaselineMemory = GuestMemory(size: 8192)
+            precondition(xchgRegisterBaselineMemory.write(xchgRegisterProgram, offset: 0x1000))
+            let xchgRegisterHybridMemory = GuestMemory(size: 8192)
+            precondition(xchgRegisterHybridMemory.write(xchgRegisterProgram, offset: 0x1000))
+            let blocksBeforeXCHGRegister = executor.blocksExecuted
+            let xchgRegisterBaseline = X86_64Interpreter(memory: xchgRegisterBaselineMemory)
+            try xchgRegisterBaseline.reset(entryPoint: 0x1000)
+            let xchgRegisterBaselineExit = try xchgRegisterBaseline.run(maxInstructions: 8)
+            let xchgRegisterHybrid = X86_64Interpreter(memory: xchgRegisterHybridMemory, aotExecutor: executor)
+            try xchgRegisterHybrid.reset(entryPoint: 0x1000)
+            let xchgRegisterHybridExit = try xchgRegisterHybrid.run(maxInstructions: 8)
+            precondition(xchgRegisterHybridExit == xchgRegisterBaselineExit)
+            precondition(xchgRegisterHybridExit == .unsupportedInstruction(address: 0x100E))
+            precondition(xchgRegisterHybrid.instructionCount == xchgRegisterBaseline.instructionCount)
+            precondition(xchgRegisterHybrid.conditionFlags == xchgRegisterBaseline.conditionFlags)
+            for index in 0..<16 {
+                precondition(xchgRegisterHybrid.registerValue(index) == xchgRegisterBaseline.registerValue(index))
+            }
+            precondition(xchgRegisterHybrid.registerValue(0) == 2)
+            precondition(xchgRegisterHybrid.registerValue(3) == 1)
+            let xchgRegisterStackPointer = xchgRegisterHybrid.registerValue(4)
+            precondition(xchgRegisterStackPointer == xchgRegisterBaseline.registerValue(4))
+            precondition(xchgRegisterHybridMemory.readUInt64(at: xchgRegisterStackPointer) == 1)
+            precondition(executor.blocksExecuted == blocksBeforeXCHGRegister + 2)
+
 
 
             let baselineMemory = GuestMemory(size: 8192)
