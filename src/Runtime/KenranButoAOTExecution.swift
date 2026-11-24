@@ -15,6 +15,11 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
     var blocksExecuted:Int{lock.lock();defer{lock.unlock()};return executionCount}
     var cachedBlockCount:Int{lock.lock();defer{lock.unlock()};return blocks.count}
     var cachedExecutableBytes:UInt64{lock.lock();defer{lock.unlock()};return cachedExecutableBytesStorage}
+    func refreshAvailability() -> Bool {
+        let available = isAvailable
+        if !available { invalidateAll() }
+        return available
+    }
     var isAvailable: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         let coordinator=JITCoordinator.shared
