@@ -3,14 +3,70 @@ import Foundation
 final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
+    private var permissionsEnabled = true
+    private var pagePermissions: [UInt64: UInt8] = [:]
 
     init(size: UInt64) {
         self.size = size
         bytes = [UInt8](repeating: 0, count: Int(size))
+        let pageCount = size / 4096 + (size % 4096 == 0 ? 0 : 1)
+        if pageCount > 0 {
+            for page in 0..<pageCount { pagePermissions[page] = 0x3 }
+        }
+    }
+
+    func hasPermission(offset: UInt64, length: Int, required: UInt8) -> Bool {
+        guard length >= 0, offset <= size, UInt64(length) <= size - offset else { return false }
+        if !permissionsEnabled || length == 0 { return true }
+        let first = offset / 4096
+        let last = (offset + UInt64(length) - 1) / 4096
+        for page in first...last {
+            guard let value = pagePermissions[page], value & required == required else { return false }
+        }
+        return true
+    }
+
+    func beginMapping() -> Bool {
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = true
+        return true
+    }
+
+    func map(offset: UInt64, length: UInt64, permissions: UInt8, merge: Bool = false) -> Bool {
+        guard permissionsEnabled, offset % 4096 == 0, length > 0,
+              permissions & ~UInt8(7) == 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / 4096
+        let last = (offset + length - 1) / 4096
+        for page in first...last {
+            let old = pagePermissions[page] ?? 0
+            pagePermissions[page] = merge ? old | permissions : permissions
+        }
+        return true
+    }
+
+    func protect(offset: UInt64, length: UInt64, permissions: UInt8) -> Bool {
+        guard permissionsEnabled, offset % 4096 == 0, length > 0,
+              permissions & ~UInt8(7) == 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / 4096
+        let last = (offset + length - 1) / 4096
+        for page in first...last where pagePermissions[page] == nil { return false }
+        for page in first...last { pagePermissions[page] = permissions }
+        return true
+    }
+
+    func unmap(offset: UInt64, length: UInt64) -> Bool {
+        guard permissionsEnabled, offset % 4096 == 0, length > 0,
+              offset <= size, length <= size - offset else { return false }
+        let first = offset / 4096
+        let last = (offset + length - 1) / 4096
+        for page in first...last { pagePermissions.removeValue(forKey: page) }
+        let start = Int(offset), end = Int(offset + length)
+        bytes.replaceSubrange(start..<end, with: repeatElement(0, count: end - start))
+        return true
     }
 
     func read(offset: UInt64, length: Int) -> Data? {
-        guard length >= 0, offset <= size, UInt64(length) <= size - offset else { return nil }
+        guard hasPermission(offset: offset, length: length, required: 0x1) else { return nil }
         return Data(bytes[Int(offset)..<Int(offset) + length])
     }
 
@@ -19,7 +75,7 @@ final class GuestMemory {
         guard length >= 0, destinationOffset >= 0,
               destinationOffset <= data.count,
               length <= data.count - destinationOffset,
-              offset <= size, UInt64(length) <= size - offset else { return false }
+              hasPermission(offset: offset, length: length, required: 0x1) else { return false }
         if length == 0 { return true }
         let start = Int(offset)
         data.replaceSubrange(destinationOffset..<(destinationOffset + length),
@@ -27,21 +83,19 @@ final class GuestMemory {
         return true
     }
 
-
     func write(_ data: Data, offset: UInt64) -> Bool {
-        guard offset <= size, UInt64(data.count) <= size - offset else { return false }
+        guard hasPermission(offset: offset, length: data.count, required: 0x2) else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset) + data.count, with: data)
         return true
     }
 
     func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool {
-        guard offset <= size, size - offset >= 16 else { return false }
-        let start = Int(offset)
-        for index in 0..<8 {
-            bytes[start + index] = UInt8(truncatingIfNeeded: first >> (index * 8))
-            bytes[start + 8 + index] = UInt8(truncatingIfNeeded: second >> (index * 8))
+        var data = Data()
+        for value in [first, second] {
+            var littleEndian = value.littleEndian
+            data.append(contentsOf: withUnsafeBytes(of: &littleEndian, Array.init))
         }
-        return true
+        return write(data, offset: offset)
     }
 
     func writeUInt64(_ value: UInt64, offset: UInt64) -> Bool {
@@ -56,14 +110,12 @@ final class GuestMemory {
         }
     }
 
-
     func zero(offset: UInt64, length: UInt64) -> Bool {
         guard offset <= size, length <= size - offset, length <= UInt64(Int.max) else { return false }
         bytes.replaceSubrange(Int(offset)..<Int(offset + length), with: repeatElement(0, count: Int(length)))
         return true
     }
 }
-
 final class EmulationLog {
     static let shared = EmulationLog()
     private(set) var messages: [String] = []
@@ -123,17 +175,25 @@ struct LinuxSyscallDispatcherTests {
         precondition(mapped >= 0x10000 && mapped % 4096 == 0)
         precondition(memory.write(Data([1, 2, 3]), offset: mapped))
 
-        // Until page permissions are enforced by the production memory
-        // backend, mmap may expose only the read/write combination used by
-        // this bounded runtime. Never silently turn PROT_NONE, read-only,
-        // write-only or executable mappings into the same writable mapping.
-        for protection: UInt64 in [0, 1, 2, 4, 5, 6, 7, 8] {
-            let rejected = dispatcher.dispatch(
+        // All Linux PROT_READ/WRITE/EXEC combinations are preserved by mmap.
+        for protection: UInt64 in [0, 1, 2, 4, 5, 6, 7] {
+            let mappedProtection = dispatcher.dispatch(
                 number: 9, arguments: [0x60000, 4096, protection, 0x22, UInt64.max, 0]
             )!
-            guard case .returned(let rejectedValue) = rejected else { preconditionFailure() }
-            precondition(rejectedValue == UInt64(bitPattern: Int64(-22)))
+            guard case .returned(let protectionAddress) = mappedProtection else { preconditionFailure() }
+            precondition(protectionAddress == 0x60000)
+            precondition(memory.hasPermission(offset: protectionAddress, length: 1, required: 0x4) == (protection & 0x4 != 0))
+            precondition((memory.read(offset: protectionAddress, length: 1) != nil) == (protection & 0x1 != 0))
+            precondition(memory.write(Data([0x5A]), offset: protectionAddress) == (protection & 0x2 != 0))
+            let release = dispatcher.dispatch(number: 11, arguments: [protectionAddress, 4096, 0, 0, 0, 0])!
+            guard case .returned(let releaseValue) = release else { preconditionFailure() }
+            precondition(releaseValue == 0)
         }
+        let invalidProtection = dispatcher.dispatch(
+            number: 9, arguments: [0x60000, 4096, 8, 0x22, UInt64.max, 0]
+        )!
+        guard case .returned(let invalidProtectionValue) = invalidProtection else { preconditionFailure() }
+        precondition(invalidProtectionValue == UInt64(bitPattern: Int64(-22)))
         let unsupportedFlags = dispatcher.dispatch(
             number: 9, arguments: [0x60000, 4096, 3, 0x4022, UInt64.max, 0]
         )!
@@ -156,10 +216,12 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.write(Data([7, 8, 9]), offset: hintedAddress))
         let hintedProtection = dispatcher.dispatch(number: 10, arguments: [hintedAddress, 4096, 1, 0, 0, 0])!
         guard case .returned(let hintedProtectionValue) = hintedProtection else { preconditionFailure() }
-        precondition(hintedProtectionValue == UInt64(bitPattern: Int64(-38)))
+        precondition(hintedProtectionValue == 0)
+        precondition(memory.read(offset: hintedAddress, length: 3) == Data([7, 8, 9]))
+        precondition(!memory.write(Data([1]), offset: hintedAddress))
         let unalignedProtection = dispatcher.dispatch(number: 10, arguments: [hintedAddress + 1, 4096, 1, 0, 0, 0])!
         guard case .returned(let unalignedProtectionValue) = unalignedProtection else { preconditionFailure() }
-        precondition(unalignedProtectionValue == UInt64(bitPattern: Int64(-38)))
+        precondition(unalignedProtectionValue == UInt64(bitPattern: Int64(-22)))
         let nextHinted = dispatcher.dispatch(number: 9, arguments: [0x47000, 8192, 3, 0x22, UInt64.max, 0])!
         guard case .returned(let nextHintedAddress) = nextHinted else { preconditionFailure() }
         precondition(nextHintedAddress == 0x49000)
@@ -167,7 +229,9 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.write(Data([4, 5, 6]), offset: mapped + 4096))
         let protection = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
         guard case .returned(let protectionValue) = protection else { preconditionFailure() }
-        precondition(protectionValue == UInt64(bitPattern: Int64(-38)))
+        precondition(protectionValue == 0)
+        precondition(memory.read(offset: mapped, length: 3) == Data([1, 2, 3]))
+        precondition(!memory.write(Data([0xFF]), offset: mapped))
         let advice = dispatcher.dispatch(number: 28, arguments: [mapped, 4096, 0, 0, 0, 0])!
         guard case .returned(let adviceValue) = advice else { preconditionFailure() }
         precondition(adviceValue == 0)
@@ -175,7 +239,7 @@ struct LinuxSyscallDispatcherTests {
         let fixed = dispatcher.dispatch(number: 9, arguments: [mapped, 4096, 3, 0x32, UInt64.max, 0])!
         guard case .returned(let fixedAddress) = fixed else { preconditionFailure() }
         precondition(fixedAddress == mapped)
-        precondition(memory.read(offset: mapped, length: 3) == Data([0, 0, 0]))
+        precondition(memory.read(offset: mapped, length: 3) == nil)
         precondition(memory.read(offset: mapped + 4096, length: 3) == Data([4, 5, 6]))
 
         let noReplace = dispatcher.dispatch(number: 9, arguments: [mapped, 4096, 3, 0x100022, UInt64.max, 0])!
@@ -186,18 +250,18 @@ struct LinuxSyscallDispatcherTests {
         let unmap = dispatcher.dispatch(number: 11, arguments: [0x4B000, 0x6000, 0, 0, 0, 0])!
         guard case .returned(let unmapValue) = unmap else { preconditionFailure() }
         precondition(unmapValue == 0)
-        precondition(memory.read(offset: 0x4B000, length: 3) == Data([10, 11, 12]))
+        precondition(memory.read(offset: 0x4B000, length: 3) == nil)
         precondition(memory.read(offset: mapped, length: 3) == Data([0, 0, 0]))
         precondition(memory.read(offset: mapped + 4096, length: 3) == Data([4, 5, 6]))
 
         let protectionAfterUnmap = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
         guard case .returned(let protectionAfterUnmapValue) = protectionAfterUnmap else { preconditionFailure() }
-        precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-38)))
+        precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-22)))
 
         let unmapRemainder = dispatcher.dispatch(number: 11, arguments: [mapped + 4096, 4096, 0, 0, 0, 0])!
         guard case .returned(let unmapRemainderValue) = unmapRemainder else { preconditionFailure() }
         precondition(unmapRemainderValue == 0)
-        precondition(memory.read(offset: mapped + 4096, length: 3) == Data([0, 0, 0]))
+        precondition(memory.read(offset: mapped + 4096, length: 3) == nil)
 
         let invalidMmapFD = dispatcher.dispatch(number: 9, arguments: [0, 4096, 3, 0x22, 0, 0])!
         guard case .returned(let invalidMmapFDValue) = invalidMmapFD else { preconditionFailure() }
@@ -380,9 +444,9 @@ struct LinuxSyscallDispatcherTests {
         precondition(dispatcher.dispatch(number: 9999, arguments: [0, 0, 0, 0, 0, 0]) == nil)
 
         dispatcher.reset()
-        precondition(memory.readUInt64(offset: 0x40800) == 0)
-        precondition(memory.readUInt64(offset: mapped) == 0)
-        precondition(memory.readUInt64(offset: hintedAddress) == 0)
+        precondition(memory.readUInt64(offset: 0x40800) == nil)
+        precondition(memory.readUInt64(offset: mapped) == nil)
+        precondition(memory.readUInt64(offset: hintedAddress) == nil)
         let resetBreak = dispatcher.dispatch(number: 12, arguments: [0, 0, 0, 0, 0, 0])!
         guard case .returned(let resetValue) = resetBreak else { preconditionFailure() }
         precondition(resetValue == 0x40000)
