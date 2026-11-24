@@ -9,6 +9,7 @@ on:
       - .github/workflows/reconcile-gitlab-main.yml
       - .github/workflows/validate-ios-build.yml
       - .github/workflows/validate-repository.yml
+      - ".github/workflows/Update stats.yml"
       - scripts/tests/**
       - README.md
       - CONTRIBUTING.md
