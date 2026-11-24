@@ -800,20 +800,25 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertLess(import_flow.index("var current = GameStore.shared.games"), import_flow.index("for profile in backup.profiles"))
         self.assertLess(import_flow.index("let validGameIDs = existingIDs.union(seen)"), import_flow.index("for profile in backup.profiles"))
 
-    def test_release_tags_are_immutable_and_assets_publish_after_final_freshness(self):
+    def test_release_channel_metadata_is_bound_after_freshness_without_force_moving_tags(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-        self.assertIn("contents: write", workflow)
-        self.assertIn("tag_name: ${{ steps.meta.outputs.tag }}", workflow)
-        self.assertIn("target_commitish: ${{ github.sha }}", workflow)
-        self.assertNotIn('git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"', workflow)
-        self.assertNotIn('git push --force origin "refs/tags/$RELEASE_CHANNEL"', workflow)
         verify = workflow.index("- name: Verify combined release assets")
         final_check = workflow.index("- name: Re-check freshness immediately before publishing")
+        metadata = workflow.index("- name: Set release metadata")
         publish = workflow.index("- name: Publish combined release")
         self.assertLess(verify, final_check)
-        self.assertLess(final_check, publish)
-        self.assertIn("if: steps.final-freshness.outputs.publish == 'true'", workflow)
+        self.assertLess(final_check, metadata)
+        self.assertLess(metadata, publish)
+        metadata_step = workflow[metadata:publish]
+        publish_step = workflow[publish:]
+        self.assertIn('echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"', metadata_step)
+        self.assertIn("tag_name: ${{ steps.meta.outputs.tag }}", publish_step)
+        self.assertIn("target_commitish: ${{ github.sha }}", publish_step)
+        self.assertIn("contents: write", workflow)
+        self.assertIn("if: steps.final-freshness.outputs.publish == 'true'", publish_step)
+        self.assertNotIn("git tag --force", workflow)
+        self.assertNotIn("git push --force", workflow)
 
     def test_mirror_reconciliation_only_changes_do_not_trigger_release_builds(self):
         root = Path(__file__).resolve().parents[2]

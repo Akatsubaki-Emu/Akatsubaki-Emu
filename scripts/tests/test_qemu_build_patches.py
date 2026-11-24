@@ -667,10 +667,13 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         ):
             step = release_job.split("- name: " + name, 1)[1].split("\n      - name:", 1)[0]
             self.assertIn("if: steps.final-freshness.outputs.publish == 'true'", step)
-        self.assertIn("target_commitish: ${{ github.sha }}", release_job)
+        metadata = release_job.split("- name: Set release metadata", 1)[1].split("\n      - name:", 1)[0]
+        publish = release_job.split("- name: Publish combined release", 1)[1]
+        self.assertIn('echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"', metadata)
+        self.assertIn("tag_name: ${{ steps.meta.outputs.tag }}", publish)
+        self.assertIn("target_commitish: ${{ github.sha }}", publish)
         self.assertNotIn("git tag --force", release_job)
         self.assertNotIn("git push --force", release_job)
-
 
         ios_package = source.split("- name: Build and package iOS IPA", 1)[1].split(
             "- name: Build and package tvOS IPA", 1

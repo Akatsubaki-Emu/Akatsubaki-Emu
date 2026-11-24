@@ -12,16 +12,16 @@ class X86InstructionWindowTests(unittest.TestCase):
         fetch32 = interpreter.split("private func fetchUInt32()", 1)[1].split("private func fetchUInt64()", 1)[0]
         fetch64 = interpreter.split("private func fetchUInt64()", 1)[1].split("private func decodeRM", 1)[0]
         self.assertIn("instructionWindowLength - instructionWindowCursor >= 4", fetch32)
-        self.assertIn("let offset = instructionWindowCursor", fetch32)
-        self.assertIn("for index in 0..<4", fetch32)
-        self.assertIn("guard let byte = fetchByte() else { return nil }", fetch32)
+        self.assertIn("UInt32(instructionWindow[offset + 3]) << 24", fetch32)
+        self.assertNotIn("readExecutableInteger(at: rip, byteCount: 4)", fetch32)
         self.assertIn("instructionWindowLength - instructionWindowCursor >= 8", fetch64)
-        self.assertIn("let offset = instructionWindowCursor", fetch64)
-        self.assertIn("for index in 0..<8", fetch64)
-        self.assertIn("guard let byte = fetchByte() else { return nil }", fetch64)
+        self.assertIn("UInt64(instructionWindow[offset + 7]) << 56", fetch64)
+        self.assertNotIn("readExecutableInteger(at: rip, byteCount: 8)", fetch64)
         self.assertIn("UInt64(instructionWindow[offset + 7]) << 56", fetch64)
         self.assertNotIn("for shift in 0..<8", fetch64)
         self.assertIn("func readPrefix(offset: UInt64, maximumLength: Int? = nil, into buffer: inout [UInt8]) -> Int?", memory)
+        helper = interpreter.split("private func readExecutableInteger", 1)[1].split("private func fetchUInt32", 1)[0]
+        self.assertIn("memory.readExecuteByte(offset: byteAddress)", helper)
         self.assertNotIn("instructionWindowOffset", interpreter)
         self.assertNotIn("Data(count: 15)", interpreter)
 
