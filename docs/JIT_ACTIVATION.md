@@ -12,7 +12,7 @@
 4. LocalDevVPN submits its tunnel-start request and calls back to Akatsubaki after its own one-second delay. Akatsubaki waits a further two seconds, then opens StikDebug with the current bundle identifier and process ID using `stikdebug://enable-jit`.
 5. On iOS 26+ devices with TXM/SPTM, the StikDebug request includes `script-name=universal.js`. The QEMU allocator selects the breakpoint-based executable-region protocol only when the host's hardware check reports TXM; non-TXM devices omit the script and retain QEMU's normal Darwin split-W^X allocator.
 6. When Akatsubaki becomes active again, it polls the process debugger/JIT status. QEMU starts only after that state is confirmed. If the request fails or times out, QEMU remains stopped.
-7. Before `qemu_init`, the native bridge resolves QEMU's exported `isteam_qemu_set_jit_callbacks` and registers three direct host callbacks: `iSteamJITIsReady`, `iSteamJITPrepareRegion`, and `iSteamJITDetach`. QEMU separately resolves only `iSteamJITIsSupported` to choose the iOS 26+ TXM path. The QEMU allocator uses the registered callbacks to prepare the executable region and detach after the writable/executable aliases are established.
+7. Before `qemu_init`, the native bridge resolves QEMU's exported `isteam_qemu_set_jit_callbacks` and registers three direct host callbacks: `iSteamJITIsReady`, `iSteamJITPrepareRegion`, and `iSteamJITDetach`. QEMU separately resolves only `iSteamJITIsSupported` to choose the iOS 26+ TXM path. The QEMU allocator uses the registered callbacks to prepare the executable region and invokes the detach callback after aliases are established. The current TXM implementation intentionally keeps the StikDebug session attached (the detach callback is a no-op) so the process can continue servicing JIT-region requests; Kenran Butō AOT now uses one preallocated executable arena instead of preparing one region per block. This is an interim policy pending physical-device validation of the guide's recommended post-preallocation detach sequence.
 
 ## First-time setup
 
@@ -63,3 +63,14 @@ Do not treat source-level integration as proof of a working JIT session until a 
 ## Fail-closed TXM detection
 
 On physical iOS 26+ devices, Akatsubaki reads `IODeviceTree:/chosen/memory-map` through IOKit, matching StikJIT's protocol detection. A valid registry result without `TXM` selects standard attach-only JIT; `TXM` selects the StikDebug breakpoint allocator; unreadable, malformed, or empty registry data is UNKNOWN and blocks launch. The QEMU patcher uses the tri-state protocol export and refuses unknown devices.
+
+
+## Kenran Butō AOT executable memory on TXM devices
+
+The iOS TXM/StikDebug AOT path now prepares one 32 MiB split-WX executable arena on first use. A single `iSteamJITPrepareRegion` request is followed by one writable `vm_remap` alias; translated blocks are allocated as host-page-aligned subranges. The current translation cache is capped at 16 MiB/64 blocks, leaving headroom for a candidate block while eviction runs. Eviction returns subranges to a coalescing, thread-safe free list; the process-lifetime arena itself is retained until process exit.
+
+This avoids asking StikDebug to prepare a new executable region for every translated block and respects 16 KiB host-page alignment. The allocator has standalone C regression coverage for alignment, fragmentation/coalescing, exhaustion, invalid frees, overflow and concurrent allocation.
+
+**TXM session policy:** the current readiness contract deliberately keeps StikDebug attached; `iSteamJITDetach` remains a no-op. The official StikJIT guide recommends preparing initial regions and detaching afterward. The arena reduces region preparation to one request, but post-detach readiness and executable-mapping lifetime have not been verified on a physical iPad. Do not claim the TXM JIT path is device-verified until that test is recorded. If StikDebug 3.2.2 or a fresh RPPairing file is required by the current iOS 27.2 pairing flow, update/re-pair the external helper before testing; older StikDebug 3.1.x sessions are not accepted as proof.
+
+The standard non-TXM split-WX allocator remains unchanged. If the TXM arena cannot be prepared or becomes exhausted, AOT allocation fails closed and the x86-64 interpreter remains the fallback.

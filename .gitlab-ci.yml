@@ -16,6 +16,8 @@ core-source-and-elf-validation:
   script:
     - python3 --version
     - mkdir -p build
+    - cc -std=c11 -Wall -Wextra -Werror -pthread -IiSteam iSteam/AOTExecutableArena.c scripts/tests/test_aot_executable_arena.c -o build/test_aot_executable_arena
+    - ./build/test_aot_executable_arena
     - python3 scripts/build_hybrid_xchg_smoke_elf.py build/hybrid_xchg_smoke.elf
     - ./build/hybrid_xchg_smoke.elf
     - python3 scripts/build_hybrid_runtime_smoke_elf.py build/hybrid_runtime_smoke.elf

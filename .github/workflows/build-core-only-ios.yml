@@ -68,6 +68,13 @@ jobs:
           test -f src/Runtime/LinuxSyscallDispatcher.swift
           test -f src/Runtime/ELF64Loader.swift
 
+      - name: Run AOT executable arena allocator regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang -std=c11 -Wall -Wextra -Werror -pthread -IiSteam iSteam/AOTExecutableArena.c scripts/tests/test_aot_executable_arena.c -o /tmp/kenran-aot-arena-tests
+          /tmp/kenran-aot-arena-tests
+
       - name: Run repository source-contract and Python regression tests
         shell: bash
         run: |
