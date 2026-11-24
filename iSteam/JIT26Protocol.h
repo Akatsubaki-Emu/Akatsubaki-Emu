@@ -41,6 +41,8 @@ typedef struct KenranButoAOTGuestState {
 } KenranButoAOTGuestState;
 typedef struct iSteamAOTExecutableRegion iSteamAOTExecutableRegion;
 bool iSteamAOTExecutableMemoryIsAvailable(void);
+bool iSteamAOTExecutableMemoryIsPrepared(void);
+bool iSteamAOTExecutableMemoryPrepare(void);
 #ifdef KENRAN_BUTO_AOT_TESTS
 void iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(int available);
 #endif

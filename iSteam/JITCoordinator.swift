@@ -101,6 +101,21 @@ final class JITCoordinator {
         return false
     }
 
+    /// Initial Kenran Butō arena preparation requires a live StikDebug attachment.
+    /// Once prepared, the arena remains usable after the detach breakpoint returns.
+    var isStikDebugJITSessionReady: Bool {
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        if #available(iOS 26.0, *) {
+            return isStikDebugAvailable
+                && hasGetTaskAllow
+                && isJITProtocolKnown
+                && iSteamJITGetProtocolMode() == ISTEAM_JIT_PROTOCOL_STIKDEBUG
+                && isJITReady
+        }
+        #endif
+        return false
+    }
+
     /// QEMU TCG requires the supported physical-device executable-memory handshake.
     var isQEMUJITReady: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)

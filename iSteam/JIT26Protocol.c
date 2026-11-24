@@ -26,9 +26,9 @@ void *iSteamJITPrepareRegion(void *address, size_t length) {
 /* Kenran Butō calls this only after its full executable arena and RW alias are prepared. */
 __attribute__((noinline, optnone, naked))
 void iSteamJITDetachPreparedArena(void) {
-    __asm__ volatile("mov x16, #0\\n"
-                     "brk #0xf00d\\n"
-                     "ret\\n");
+    __asm__ volatile("mov x16, #0\n"
+                     "brk #0xf00d\n"
+                     "ret\n");
 }
 
 bool iSteamJITHasGetTaskAllow(void) {

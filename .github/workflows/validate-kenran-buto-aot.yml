@@ -40,6 +40,10 @@ on:
       - ".github/workflows/build-qemu-runtime.yml"
       - ".github/workflows/validate-kenran-buto-aot.yml"
       - "docs/FEXCORE_IOS_PORT_AUDIT.md"
+      - "iSteam/JITCoordinator.swift"
+      - "scripts/tests/test_ios_jit_memory_contract.py"
+      - "scripts/tests/test_jit_protocol.py"
+      - "scripts/tests/test_jit_coordinator.py"
   pull_request:
     paths:
       - "src/Runtime/X86_64AOTTranslator.swift"
@@ -77,6 +81,10 @@ on:
       - ".github/workflows/build-qemu-runtime.yml"
       - ".github/workflows/validate-kenran-buto-aot.yml"
       - "docs/FEXCORE_IOS_PORT_AUDIT.md"
+      - "iSteam/JITCoordinator.swift"
+      - "scripts/tests/test_ios_jit_memory_contract.py"
+      - "scripts/tests/test_jit_protocol.py"
+      - "scripts/tests/test_jit_coordinator.py"
   workflow_dispatch:
 
 concurrency:
@@ -97,6 +105,14 @@ jobs:
         run: |
           set -euo pipefail
           ruby -e 'require "yaml"; Dir.glob(".github/workflows/*.{yml,yaml}").sort.each { |path| YAML.load_file(path, aliases: true); puts "Validated #{path}" }'
+      - name: Compile TXM/SPTM iOS arm64 JIT sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios26.0 -isysroot "$SDK" -std=c11 -Wall -Wextra -I iSteam -c iSteam/JIT26Protocol.c -o "$RUNNER_TEMP/jit26-protocol.o"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios26.0 -isysroot "$SDK" -std=c11 -Wall -Wextra -I iSteam -c iSteam/AOTExecutableArena.c -o "$RUNNER_TEMP/aot-executable-arena-ios.o"
+          xcrun --sdk iphoneos clang -target arm64-apple-ios26.0 -isysroot "$SDK" -std=c11 -Wall -Wextra -I iSteam -c iSteam/KenranButoAOTExecutableMemory.c -o "$RUNNER_TEMP/aot-executable-memory-ios.o"
       - name: Verify fixed-buffer translator allocation contract
         shell: bash
         run: |
@@ -134,6 +150,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s scripts/tests -p 'test_source_validator.py'
+          python3 -m unittest discover -s scripts/tests -p 'test_ios_jit_memory_contract.py' -v
+          python3 -m unittest discover -s scripts/tests -p 'test_jit_protocol.py' -v
+          python3 -m unittest discover -s scripts/tests -p 'test_jit_coordinator.py' -v
       - name: Compile and test x86-64 to AArch64 decoder
         shell: bash
         run: |

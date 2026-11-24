@@ -1,6 +1,8 @@
 import unittest
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+
 
 class JITProtocolSourceTests(unittest.TestCase):
     def test_breakpoint_protocol_exports_prepare_and_lifetime_safe_detach(self):
@@ -112,9 +114,23 @@ class JITProtocolSourceTests(unittest.TestCase):
         source = (ROOT / "iSteam/JIT26Protocol.c").read_text()
         header = (ROOT / "iSteam/JIT26Protocol.h").read_text()
         self.assertIn("void iSteamJITDetachPreparedArena(void);", header)
-        detach = source.split("void iSteamJITDetachPreparedArena(void)", 1)[1].split("\\n}", 1)[0]
+        detach = source.split("void iSteamJITDetachPreparedArena(void)", 1)[1].split("\n}", 1)[0]
+        self.assertIn('"mov x16, #0\\n"', source)
+        self.assertIn('"brk #0xf00d\\n"', source)
+        self.assertIn('"ret\\n"', source)
         self.assertIn("mov x16, #0", detach)
         self.assertIn("brk #0xf00d", detach)
+
+    def test_aot_txm_first_prepare_requires_live_stikdebug_session(self):
+        root = Path(__file__).resolve().parents[2]
+        memory = (root / "iSteam" / "KenranButoAOTExecutableMemory.c").read_text(encoding="utf-8")
+        execution = (root / "src" / "Runtime" / "KenranButoAOTExecution.swift").read_text(encoding="utf-8")
+        prepare = memory.split("bool iSteamAOTExecutableMemoryPrepare(void)", 1)[1].split("bool iSteamAOTExecutableMemoryIsAvailable(void)", 1)[0]
+        self.assertIn("iSteamJITHasGetTaskAllow()", prepare)
+        self.assertIn("iSteamJITIsReady()", prepare)
+        self.assertIn("coordinator.isStikDebugJITSessionReady", execution)
+        self.assertIn("iSteamAOTExecutableMemoryIsPrepared()", execution)
+        self.assertIn("iSteamAOTExecutableMemoryPrepare()", execution)
 
 if __name__ == "__main__":
     unittest.main()

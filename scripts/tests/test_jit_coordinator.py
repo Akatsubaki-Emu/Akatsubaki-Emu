@@ -148,5 +148,14 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("delete StikDebug completely", docs)
         self.assertIn("interpreter smoke guest does not require JIT", docs)
 
+    def test_stikdebug_session_readiness_requires_live_attachment(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
+        readiness = source.split("var isStikDebugJITSessionReady: Bool", 1)[1].split("var isQEMUJITReady: Bool", 1)[0]
+        self.assertIn("isStikDebugAvailable", readiness)
+        self.assertIn("hasGetTaskAllow", readiness)
+        self.assertIn("iSteamJITGetProtocolMode() == ISTEAM_JIT_PROTOCOL_STIKDEBUG", readiness)
+        self.assertIn("isJITReady", readiness)
+
 if __name__ == "__main__":
     unittest.main()

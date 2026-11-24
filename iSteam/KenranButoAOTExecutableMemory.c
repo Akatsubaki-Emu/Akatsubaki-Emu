@@ -70,13 +70,47 @@ static bool ensure_txm_arena(char *error,size_t capacity){
  return true;
 }
 #endif
+bool iSteamAOTExecutableMemoryIsPrepared(void){
+#if defined(KENRAN_BUTO_AOT_TESTS)
+ if(sTestAvailabilityOverride>=0)return sTestAvailabilityOverride!=0;
+#endif
+#if defined(__APPLE__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
+ if(iSteamJITGetProtocolMode()!=ISTEAM_JIT_PROTOCOL_STIKDEBUG)return false;
+ if(pthread_mutex_lock(&sTXMArenaInitLock)!=0)return false;
+ bool prepared=sTXMArena!=NULL&&sTXMArenaReady&&!sTXMArenaFailed;
+ pthread_mutex_unlock(&sTXMArenaInitLock);
+ return prepared;
+#else
+ return false;
+#endif
+}
+bool iSteamAOTExecutableMemoryPrepare(void){
+#if defined(KENRAN_BUTO_AOT_TESTS)
+ if(sTestAvailabilityOverride>=0)return sTestAvailabilityOverride!=0;
+#endif
+#if defined(__APPLE__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
+ int mode=iSteamJITGetProtocolMode();
+ if(mode==ISTEAM_JIT_PROTOCOL_STIKDEBUG){
+  if(iSteamAOTExecutableMemoryIsPrepared())return true;
+  if(!iSteamJITHasGetTaskAllow()||!iSteamJITIsReady())return false;
+  char error[256]={0};
+  return ensure_txm_arena(error,sizeof(error));
+ }
+ if(mode==ISTEAM_JIT_PROTOCOL_STANDARD)return iSteamJITHasGetTaskAllow()&&iSteamJITIsReady();
+ return false;
+#elif defined(__APPLE__) && defined(__arm64__) && TARGET_OS_OSX && !TARGET_OS_MACCATALYST
+ return true;
+#else
+ return iSteamAOTExecutableMemoryIsAvailable();
+#endif
+}
 bool iSteamAOTExecutableMemoryIsAvailable(void){
 #if defined(KENRAN_BUTO_AOT_TESTS)
  if(sTestAvailabilityOverride>=0)return sTestAvailabilityOverride!=0;
 #endif
 #if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
  int mode=iSteamJITGetProtocolMode();
- if(mode==ISTEAM_JIT_PROTOCOL_STIKDEBUG){char error[256]={0};return ensure_txm_arena(error,sizeof(error));}
+ if(mode==ISTEAM_JIT_PROTOCOL_STIKDEBUG)return iSteamAOTExecutableMemoryIsPrepared();
  if(mode==ISTEAM_JIT_PROTOCOL_STANDARD)return iSteamJITHasGetTaskAllow()&&iSteamJITIsReady();
  return false;
 #elif defined(__APPLE__) && defined(__arm64__) && TARGET_OS_OSX && !TARGET_OS_MACCATALYST

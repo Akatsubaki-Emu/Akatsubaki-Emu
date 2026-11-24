@@ -27,7 +27,8 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
         guard mode == ISTEAM_JIT_PROTOCOL_STANDARD || mode == ISTEAM_JIT_PROTOCOL_STIKDEBUG,
               coordinator.hasGetTaskAllow else { return false }
         if mode == ISTEAM_JIT_PROTOCOL_STIKDEBUG {
-            return iSteamAOTExecutableMemoryIsAvailable()
+            if iSteamAOTExecutableMemoryIsPrepared() { return true }
+            return coordinator.isStikDebugJITSessionReady && iSteamAOTExecutableMemoryPrepare()
         }
         return coordinator.isJITReady && iSteamAOTExecutableMemoryIsAvailable()
         #else

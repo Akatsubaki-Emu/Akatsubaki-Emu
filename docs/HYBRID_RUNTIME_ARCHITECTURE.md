@@ -198,3 +198,6 @@ See [FEXCore and Box64 iOS integration audit](FEXCORE_IOS_PORT_AUDIT.md) for the
 ## iOS JIT lifecycle split
 
 On iOS 26+ hardware, either TXM or SPTM selects StikDebug `universal.js`. QEMU keeps its existing no-op detach callback because its JIT regions can be created lazily. Kenran Butō instead prepares one 32 MiB executable arena, creates its writable alias, and uses the separate `iSteamJITDetachPreparedArena` breakpoint. Its arena-ready state is independent of QEMU’s debugger-attached state. This is source-level protocol integration only; physical iPad execution, JIT revocation and interpreter fallback still require device verification.
+
+
+The first TXM/SPTM prepare requires a live StikDebug attachment and a separate explicit prepare call. Availability checks are side-effect-free; after the prepared-arena detach returns, the arena-ready state is reused for subsequent AOT work.

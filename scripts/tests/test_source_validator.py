@@ -955,7 +955,8 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("test_randomized_allocation_and_free_stress", tests)
 
     def test_aot_workflow_validates_yaml_and_covers_runtime_regressions(self):
-        workflow = (ROOT / ".github" / "workflows" / "validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
         required = (
             "Validate GitHub Actions workflow YAML",
             'YAML.load_file(path, aliases: true)',
@@ -965,6 +966,11 @@ class SourceValidatorTests(unittest.TestCase):
             "scripts/tests/test_execution_backend_router.swift",
             ".github/workflows/build-qemu-runtime.yml",
             ".github/workflows/build-core-only-ios.yml",
+            "iSteam/JITCoordinator.swift",
+            "scripts/tests/test_ios_jit_memory_contract.py",
+            "scripts/tests/test_jit_protocol.py",
+            "scripts/tests/test_jit_coordinator.py",
+            "Compile TXM/SPTM iOS arm64 JIT sources",
         )
         for token in required:
             with self.subTest(token=token):

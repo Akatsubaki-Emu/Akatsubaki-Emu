@@ -78,14 +78,23 @@ class IOSJITMemoryContractTests(unittest.TestCase):
         self.assertIn("hasTXM || hasSPTM", protocol)
         self.assertIn("void iSteamJITDetachPreparedArena(void)", protocol)
         self.assertIn("void iSteamJITDetachPreparedArena(void);", header)
+        self.assertIn('"mov x16, #0\\n"', protocol)
+        self.assertIn('"brk #0xf00d\\n"', protocol)
+        self.assertIn('"ret\\n"', protocol)
         self.assertIn("mov x16, #0", protocol)
         self.assertIn("brk #0xf00d", protocol)
         self.assertIn("iSteamJITDetachPreparedArena();", memory)
         self.assertLess(memory.index("iSteamAOTExecutableArenaCreate"), memory.index("iSteamJITDetachPreparedArena();"))
         self.assertIn("sTXMArenaReady=true", memory)
-        self.assertIn("return ensure_txm_arena(error,sizeof(error));", memory)
-        self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", execution)
-        self.assertNotIn("coordinator.isQEMUJITReady", execution)
+        prepare = memory.split("bool iSteamAOTExecutableMemoryPrepare(void)", 1)[1].split("bool iSteamAOTExecutableMemoryIsAvailable(void)", 1)[0]
+        available = memory.split("bool iSteamAOTExecutableMemoryIsAvailable(void)", 1)[1].split("bool iSteamAOTGuestStateIsValid", 1)[0]
+        self.assertIn("iSteamJITHasGetTaskAllow()", prepare)
+        self.assertIn("iSteamJITIsReady()", prepare)
+        self.assertIn("return ensure_txm_arena(error,sizeof(error));", prepare)
+        self.assertIn("return iSteamAOTExecutableMemoryIsPrepared();", available)
+        self.assertNotIn("ensure_txm_arena", available)
+        self.assertIn("iSteamAOTExecutableMemoryIsPrepared()", execution)
+        self.assertIn("coordinator.isStikDebugJITSessionReady && iSteamAOTExecutableMemoryPrepare()", execution)
 
 if __name__ == "__main__":
     unittest.main()
