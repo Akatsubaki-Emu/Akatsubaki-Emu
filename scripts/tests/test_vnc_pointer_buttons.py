@@ -36,7 +36,11 @@ class VNCPointerButtonTests(unittest.TestCase):
         display = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
         self.assertIn('configurePointerClickButton(pointerLeftClick, title: "L Click", buttonMask: 0x01)', display)
         self.assertIn('configurePointerClickButton(pointerRightClick, title: "R Click", buttonMask: 0x04)', display)
-        self.assertIn("self?.vncClient.tapPointer(buttonMask: buttonMask)", display)
+        helper = display.split("private func configurePointerClickButton", 1)[1].split("@objc", 1)[0]
+        self.assertIn("sendPointerButton(buttonMask: buttonMask, down: true)", helper)
+        self.assertIn("sendPointerButton(buttonMask: buttonMask, down: false)", helper)
+        self.assertIn("for: .touchDown", helper)
+        self.assertIn("for: [.touchUpInside, .touchUpOutside, .touchCancel]", helper)
 
 
 if __name__ == "__main__":

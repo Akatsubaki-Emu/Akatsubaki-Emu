@@ -285,8 +285,11 @@ final class VMDisplayViewController: UIViewController {
         button.setTitle(title, for: .normal)
         button.accessibilityLabel = title == "L Click" ? "Left mouse click" : "Right mouse click"
         button.addAction(UIAction { [weak self] _ in
-            self?.vncClient.tapPointer(buttonMask: buttonMask)
-        }, for: .touchUpInside)
+            self?.vncClient.sendPointerButton(buttonMask: buttonMask, down: true)
+        }, for: .touchDown)
+        button.addAction(UIAction { [weak self] _ in
+            self?.vncClient.sendPointerButton(buttonMask: buttonMask, down: false)
+        }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
         view.addSubview(button)
     }
 
