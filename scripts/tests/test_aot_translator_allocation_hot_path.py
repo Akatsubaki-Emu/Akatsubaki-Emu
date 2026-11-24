@@ -25,6 +25,15 @@ class AOTTranslatorAllocationHotPathTests(unittest.TestCase):
         self.assertIn("var words = EncodedWords()", SOURCE)
         self.assertNotIn("var words: [UInt32]", SOURCE)
 
+    def test_lea_encoder_uses_fixed_word_buffer_without_dynamic_arrays(self):
+        lea = section("case 0x8D:", "case 0xF3:")
+        self.assertIn("addShiftedRegister", lea)
+        self.assertIn("addImmediate", lea)
+        self.assertNotIn("[UInt8]", lea)
+        self.assertNotIn("[UInt32]", lea)
+        self.assertNotIn("Data(", lea)
+        self.assertNotIn("Array(", lea)
+
     def test_move_immediate_does_not_allocate_chunk_or_word_arrays(self):
         move = section("private static func moveImmediate(", "private static func moveWide(")
         self.assertNotIn("[UInt16]", move)

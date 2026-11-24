@@ -39,6 +39,56 @@ struct KenranButoAOTTranslatorTests {
         precondition(word(registerMoves.machineCode, 0) == 0x2A0303E0) // ORR W0, WZR, W3
         precondition(word(registerMoves.machineCode, 1) == 0xAA0003E3) // ORR X3, XZR, X0
 
+        // LEA r64, [base + index*4 + disp8] emits flag-preserving AArch64 ADDs.
+        let lea64Code = Data([0x48, 0x8D, 0x54, 0x88, 0x10])
+        let lea64 = translator.translate(lea64Code)
+        precondition(lea64.isComplete && lea64.guestBytesConsumed == 5 && lea64.instructionCount == 1)
+        precondition(word(lea64.machineCode, 0) == 0x8B010802) // ADD X2, X0, X1, LSL #2
+        precondition(word(lea64.machineCode, 1) == 0x91004042) // ADD X2, X2, #16
+
+        let leaNegative = translator.translate(Data([0x48, 0x8D, 0x50, 0xF0]))
+        precondition(leaNegative.isComplete && leaNegative.instructionCount == 1)
+        precondition(word(leaNegative.machineCode, 0) == 0xD1004002) // SUB X2, X0, #16
+
+        let lea32 = translator.translate(Data([0x8D, 0x54, 0x48, 0x10]))
+        precondition(lea32.isComplete && lea32.instructionCount == 1)
+        precondition(word(lea32.machineCode, 0) == 0x0B010402) // ADD W2, W0, W1, LSL #1
+        precondition(word(lea32.machineCode, 1) == 0x11004042) // ADD W2, W2, #16
+
+        let leaExtended = translator.translate(Data([0x4F, 0x8D, 0x54, 0x88, 0x10]))
+        precondition(leaExtended.isComplete && leaExtended.instructionCount == 1)
+        precondition(word(leaExtended.machineCode, 0) == 0x8B09090A) // ADD X10, X8, X9, LSL #2
+        precondition(word(leaExtended.machineCode, 1) == 0x9100414A) // ADD X10, X10, #16
+
+        let leaIndexOnly = translator.translate(Data([0x48, 0x8D, 0x14, 0x8D, 0x10, 0, 0, 0]))
+        precondition(leaIndexOnly.isComplete && leaIndexOnly.instructionCount == 1)
+        precondition(word(leaIndexOnly.machineCode, 0) == 0x8B010BE2) // ADD X2, XZR, X1, LSL #2
+        precondition(word(leaIndexOnly.machineCode, 1) == 0x91004042)
+
+        let leaAbsolute = translator.translate(Data([0x48, 0x8D, 0x14, 0x25, 0x00, 0x10, 0x00, 0x00]))
+        precondition(leaAbsolute.isComplete && leaAbsolute.instructionCount == 1)
+        precondition(word(leaAbsolute.machineCode, 0) == 0xD2820002) // MOVZ X2, #0x1000
+
+        let leaRipRelative = translator.translate(Data([0x48, 0x8D, 0x05, 0x10, 0, 0, 0]))
+        precondition(leaRipRelative.stopReason == .unsupportedInstruction)
+        precondition(leaRipRelative.guestBytesConsumed == 0 && leaRipRelative.fallbackOpcode == 0x48)
+
+        let leaLargeDisplacement = translator.translate(Data([0x48, 0x8D, 0x94, 0x88, 0x00, 0x10, 0, 0]))
+        precondition(leaLargeDisplacement.stopReason == .unsupportedInstruction)
+        precondition(leaLargeDisplacement.guestBytesConsumed == 0 && leaLargeDisplacement.fallbackOpcode == 0x48)
+
+        let leaRegisterMode = translator.translate(Data([0x48, 0x8D, 0xD0]))
+        precondition(leaRegisterMode.stopReason == .unsupportedInstruction)
+        precondition(leaRegisterMode.guestBytesConsumed == 0 && leaRegisterMode.fallbackOpcode == 0x48)
+
+        let leaTruncated = translator.translate(Data([0x48, 0x8D, 0x14, 0x25, 0x01]))
+        precondition(leaTruncated.stopReason == .truncatedInstruction)
+        precondition(leaTruncated.guestBytesConsumed == 0 && leaTruncated.fallbackOpcode == 0x48)
+
+        let leaOutputLimited = translator.translate(lea64Code, maximumOutputBytes: 4)
+        precondition(leaOutputLimited.stopReason == .outputLimit)
+        precondition(leaOutputLimited.guestBytesConsumed == 0 && leaOutputLimited.machineCode.isEmpty)
+
         // Both REX.B variants of 90 are XCHG, not NOP.
         for rex in [UInt8(0x41), UInt8(0x49)] {
             let exchange = translator.translate(Data([rex, 0x90]))
@@ -117,7 +167,7 @@ struct KenranButoAOTTranslatorTests {
         precondition(multiInstructionBlock.guestBytesConsumed == 20)
         precondition(multiInstructionBlock.instructionCount == 4)
         precondition(multiInstructionBlock.fallbackOpcode == 0x0F)
-        precondition(X86_64AOTTranslator.translatorVersion == "3")
+        precondition(X86_64AOTTranslator.translatorVersion == "4")
         let oversizedBudgets = translator.translate(
             guest, maximumInstructions: Int.max,
             maximumOutputBytes: Int.max & ~3,

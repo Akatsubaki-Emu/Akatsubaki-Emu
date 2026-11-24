@@ -50,7 +50,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
 struct X86_64AOTTranslator {
     static let translatorIdentifier = "kenran-buto-aot-arm64"
     // Bump whenever emitted code or decoding semantics change.
-    static let translatorVersion = "3"
+    static let translatorVersion = "4"
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
@@ -188,6 +188,138 @@ struct X86_64AOTTranslator {
                 let is64Bit = (rex & 0x08) != 0
                 words.append(Self.moveRegister(source, to: destination, is64Bit: is64Bit))
 
+            case 0x8D:
+                // LEA computes an effective address but does not access guest
+                // memory or modify flags. RIP-relative and oversized combined
+                // displacements deliberately side-exit to the interpreter.
+                guard cursor < bytes.count else {
+                    if bytes.count < guestCodeCount {
+                        return result(output, consumed: start, instructions: instructions,
+                                      reason: .inputLimit, fallbackOffset: start)
+                    }
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .truncatedInstruction, opcode: bytes[start])
+                }
+                let modRM = bytes[cursor]
+                cursor += 1
+                let mode = modRM >> 6
+                guard mode != 0b11 else {
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+
+                let destination = Int((modRM >> 3) & 0x07) | ((rex & 0x04) != 0 ? 8 : 0)
+                let rmField = modRM & 0x07
+                var baseRegister: Int? = nil
+                var indexRegister: Int? = nil
+                var scale = 0
+                var requiresDisplacement32 = false
+
+                if rmField == 0x04 {
+                    guard cursor < bytes.count else {
+                        if bytes.count < guestCodeCount {
+                            return result(output, consumed: start, instructions: instructions,
+                                          reason: .inputLimit, fallbackOffset: start)
+                        }
+                        return fallback(output, consumed: start, instructions: instructions,
+                                        reason: .truncatedInstruction, opcode: bytes[start])
+                    }
+                    let sib = bytes[cursor]
+                    cursor += 1
+                    scale = Int((sib >> 6) & 0x03)
+                    let indexField = Int((sib >> 3) & 0x07)
+                    let baseField = Int(sib & 0x07)
+                    if indexField != 0x04 || (rex & 0x02) != 0 {
+                        indexRegister = indexField | ((rex & 0x02) != 0 ? 8 : 0)
+                    }
+                    if mode == 0 && baseField == 0x05 {
+                        requiresDisplacement32 = true
+                    } else {
+                        baseRegister = baseField | ((rex & 0x01) != 0 ? 8 : 0)
+                    }
+                } else if mode == 0 && rmField == 0x05 {
+                    // This encoding is RIP-relative in 64-bit mode. The
+                    // translator has no guest-RIP input, so preserve it.
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                } else {
+                    baseRegister = Int(rmField) | ((rex & 0x01) != 0 ? 8 : 0)
+                }
+
+                let displacementBytes = mode == 1 ? 1 : ((mode == 2 || requiresDisplacement32) ? 4 : 0)
+                guard cursor - start <= Self.maximumX86InstructionLength - displacementBytes else {
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+                var displacement: Int64 = 0
+                if displacementBytes == 1 {
+                    guard cursor < bytes.count else {
+                        if bytes.count < guestCodeCount {
+                            return result(output, consumed: start, instructions: instructions,
+                                          reason: .inputLimit, fallbackOffset: start)
+                        }
+                        return fallback(output, consumed: start, instructions: instructions,
+                                        reason: .truncatedInstruction, opcode: bytes[start])
+                    }
+                    displacement = Int64(Int8(bitPattern: bytes[cursor]))
+                    cursor += 1
+                } else if displacementBytes == 4 {
+                    guard bytes.count - cursor >= 4 else {
+                        if bytes.count < guestCodeCount {
+                            return result(output, consumed: start, instructions: instructions,
+                                          reason: .inputLimit, fallbackOffset: start)
+                        }
+                        return fallback(output, consumed: start, instructions: instructions,
+                                        reason: .truncatedInstruction, opcode: bytes[start])
+                    }
+                    let raw = UInt32(bytes[cursor])
+                        | (UInt32(bytes[cursor + 1]) << 8)
+                        | (UInt32(bytes[cursor + 2]) << 16)
+                        | (UInt32(bytes[cursor + 3]) << 24)
+                    displacement = Int64(Int32(bitPattern: raw))
+                    cursor += 4
+                }
+                guard cursor - start <= Self.maximumX86InstructionLength else {
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+
+                let is64Bit = (rex & 0x08) != 0
+                let displacementMagnitude = displacement < 0 ? -displacement : displacement
+                if baseRegister != nil || indexRegister != nil {
+                    guard displacementMagnitude <= 4095 else {
+                        return fallback(output, consumed: start, instructions: instructions,
+                                        reason: .unsupportedInstruction, opcode: bytes[start])
+                    }
+                }
+
+                if let base = baseRegister, let index = indexRegister {
+                    words.append(Self.addShiftedRegister(base, index, scale: scale,
+                                                         to: destination, is64Bit: is64Bit))
+                    if displacement != 0 {
+                        words.append(Self.addImmediate(destination, displacement: displacement,
+                                                       to: destination, is64Bit: is64Bit))
+                    }
+                } else if let base = baseRegister {
+                    if displacement == 0 {
+                        words.append(Self.moveRegister(base, to: destination, is64Bit: is64Bit))
+                    } else {
+                        words.append(Self.addImmediate(base, displacement: displacement,
+                                                       to: destination, is64Bit: is64Bit))
+                    }
+                } else if let index = indexRegister {
+                    words.append(Self.addShiftedRegister(31, index, scale: scale,
+                                                         to: destination, is64Bit: is64Bit))
+                    if displacement != 0 {
+                        words.append(Self.addImmediate(destination, displacement: displacement,
+                                                       to: destination, is64Bit: is64Bit))
+                    }
+                } else {
+                    // A no-base/no-index SIB form is a sign-extended disp32.
+                    words = Self.moveImmediate(UInt64(bitPattern: displacement),
+                                               to: destination, is64Bit: is64Bit)
+                }
+
             case 0xF3:
                 // ENDBR64 is not assumed to be a NOP: guest CET policy is not
                 // modelled yet, so preserve it for the interpreter fallback.
@@ -290,6 +422,25 @@ struct X86_64AOTTranslator {
             ? (keep ? 0xF2800000 : 0xD2800000)
             : (keep ? 0x72800000 : 0x52800000)
         return base | (UInt32(half) << 21) | (UInt32(immediate) << 5) | UInt32(register)
+    }
+
+    private static func addShiftedRegister(_ base: Int, _ index: Int, scale: Int,
+                                            to destination: Int, is64Bit: Bool) -> UInt32 {
+        let opcode: UInt32 = is64Bit ? 0x8B000000 : 0x0B000000
+        return opcode | (UInt32(index) << 16) | (UInt32(scale) << 10)
+            | (UInt32(base) << 5) | UInt32(destination)
+    }
+
+    private static func addImmediate(_ source: Int, displacement: Int64,
+                                     to destination: Int, is64Bit: Bool) -> UInt32 {
+        let magnitude = UInt32(displacement < 0 ? -displacement : displacement)
+        let opcode: UInt32
+        if is64Bit {
+            opcode = displacement < 0 ? 0xD1000000 : 0x91000000
+        } else {
+            opcode = displacement < 0 ? 0x51000000 : 0x11000000
+        }
+        return opcode | (magnitude << 10) | (UInt32(source) << 5) | UInt32(destination)
     }
 
     private static func moveRegister(_ source: Int, to destination: Int, is64Bit: Bool) -> UInt32 {

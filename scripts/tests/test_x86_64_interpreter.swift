@@ -1533,6 +1533,39 @@ struct InterpreterTests {
             precondition(executor.cachedBlockCount <= 64)
             precondition(executor.cachedExecutableBytes <= 16 * 1024 * 1024)
 
+            // Differentially execute MOV + SIB LEA through AOT, then side-exit
+            // at UD2 and resume in the architectural interpreter.
+            let leaProgram = Data([
+                0x48,0xB8,0x00,0x01,0,0,0,0,0,0,
+                0x48,0xB9,0x20,0,0,0,0,0,0,0,
+                0x48,0x8D,0x54,0x88,0x10,
+                0x0F,0x0B
+            ])
+            let leaMemory = GuestMemory(size: 8192)
+            precondition(leaMemory.write(leaProgram, offset: 0x1000))
+            var leaRegisters = [UInt64](repeating: 0, count: 16)
+            let leaResult = executor.execute(guestCode: leaProgram, registers: &leaRegisters,
+                rip: 0x1000, rflags: 0x202, fsBase: 0, gsBase: 0,
+                memory: leaMemory, maximumInstructions: 8)
+            precondition(leaResult != nil && leaResult!.guestBytesConsumed == 25)
+            precondition(leaResult!.instructionCount == 3 && leaResult!.exitRip == 0x1019)
+            precondition(leaResult!.exitReason == .unsupportedInstruction)
+            precondition(leaRegisters[0] == 0x100 && leaRegisters[1] == 0x20 && leaRegisters[2] == 0x190)
+
+            let leaBaseline = X86_64Interpreter(memory: leaMemory)
+            try leaBaseline.reset(entryPoint: 0x1000)
+            let leaBaselineExit = try leaBaseline.run(maxInstructions: 8)
+            let leaHybrid = X86_64Interpreter(memory: leaMemory, aotExecutor: executor)
+            try leaHybrid.reset(entryPoint: 0x1000)
+            let leaHybridExit = try leaHybrid.run(maxInstructions: 8)
+            precondition(leaHybridExit == leaBaselineExit)
+            precondition(leaHybridExit == .unsupportedInstruction(address: 0x1019))
+            precondition(leaHybrid.instructionCount == leaBaseline.instructionCount)
+            for index in 0..<16 {
+                precondition(leaHybrid.registerValue(index) == leaBaseline.registerValue(index))
+            }
+            precondition(leaHybrid.registerValue(2) == 0x190)
+
             let baselineMemory = GuestMemory(size: 8192)
             precondition(baselineMemory.write(program, offset: 0x1000))
             let baseline = X86_64Interpreter(memory: baselineMemory)
