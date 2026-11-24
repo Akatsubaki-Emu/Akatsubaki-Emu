@@ -26,6 +26,22 @@ class MetalPartialFramebufferUploadTests(unittest.TestCase):
         self.assertLess(draw.index("if isUploading { return }"), draw.index("view.currentDrawable"))
         self.assertIn("if let source { release(source) }", draw)
 
+    def test_session_generation_is_checked_before_upload_and_final_publication(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "GPU" / "MetalGPUBackend.swift").read_text(encoding="utf-8")
+        submit = source.split("func submit(frame:", 1)[1].split("private func release(", 1)[0]
+        drain = source.split("private func drainPendingFrame()", 1)[1].split("private func makeTexture", 1)[0]
+        draw = source.split("func draw(in view:", 1)[1].split("extension MetalGPUBackend", 1)[0]
+
+        self.assertIn("let sessionGeneration: UInt64", source)
+        self.assertIn("guard frameSessionGeneration == sessionGeneration", submit)
+        self.assertIn("frameSessionGeneration == sessionGeneration", submit)
+        self.assertIn("pending.sessionGeneration == sessionGeneration", drain)
+        self.assertIn("drawSessionGeneration == sessionGeneration", draw)
+        self.assertIn("drawFramebufferGeneration == framebufferGeneration", draw)
+        self.assertIn("framebuffer === source", draw)
+        self.assertIn("if !isCurrent", draw)
+
     def test_spare_texture_receives_a_full_frame_to_avoid_stale_pixels(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "GPU" / "MetalGPUBackend.swift").read_text(encoding="utf-8")
