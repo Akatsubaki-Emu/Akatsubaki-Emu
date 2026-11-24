@@ -84,6 +84,66 @@ jobs:
             -o "$RUNNER_TEMP/akatsubaki-core-tests/interpreter-tests"
           "$RUNNER_TEMP/akatsubaki-core-tests/interpreter-tests"
 
+      - name: Run translation cache and AOT artifact cache tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Core/EmulationLog.swift \
+            src/Performance/TranslationCache.swift \
+            scripts/tests/test_translation_cache.swift \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/translation-cache-tests"
+          "$RUNNER_TEMP/akatsubaki-core-tests/translation-cache-tests"
+          swiftc -parse-as-library -swift-version 5 \
+            src/Core/EmulationLog.swift \
+            src/Performance/TranslationCache.swift \
+            src/Runtime/X86_64AOTTranslator.swift \
+            src/Runtime/KenranButoAOTCompiler.swift \
+            scripts/tests/test_kenran_buto_aot_cache.swift \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/aot-cache-tests"
+          "$RUNNER_TEMP/akatsubaki-core-tests/aot-cache-tests"
+
+      - name: Run ELF headers, Linux syscall and process-stack tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/ELF64Loader.swift \
+            scripts/tests/test_elf_loader_program_headers.swift \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/elf-phdr-tests"
+          "$RUNNER_TEMP/akatsubaki-core-tests/elf-phdr-tests"
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            scripts/tests/test_linux_syscall_dispatcher.swift \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/linux-syscall-tests"
+          "$RUNNER_TEMP/akatsubaki-core-tests/linux-syscall-tests"
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/LinuxProcessStackBuilder.swift \
+            scripts/tests/test_linux_process_stack.swift \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/linux-process-stack-tests"
+          "$RUNNER_TEMP/akatsubaki-core-tests/linux-process-stack-tests"
+
+      - name: Run production native guest-memory regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ -std=c++17 -Wall -Wextra -Werror -pthread -DISTEAM_GUEST_MEMORY_TESTING -I iSteam \
+            iSteam/NativeGuestMemory.cpp scripts/tests/test_native_guest_memory.cpp \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-memory-tests"
+          "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-memory-tests"
+          clang++ -std=c++17 -Wall -Wextra -Werror -pthread -I iSteam -c \
+            iSteam/NativeGuestMemory.cpp \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-memory.o"
+          swiftc -parse-as-library -swift-version 5 \
+            -import-objc-header iSteam/NativeGuestMemory.h \
+            src/Runtime/GuestMemory.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            scripts/tests/test_guest_memory_native_integration.swift \
+            "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-memory.o" \
+            -Xlinker -lc++ \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-memory-integration"
+          "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-memory-integration"
+
       - name: Build diagnostic static Linux guest
         run: python3 scripts/build_hybrid_xchg_smoke_elf.py "$RUNNER_TEMP/hybrid_xchg_smoke.elf"
 
