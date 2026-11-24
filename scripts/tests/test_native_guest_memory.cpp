@@ -128,6 +128,54 @@ int main() {
     assert(isteam_guest_memory_allocated_pages(huge) == 0);
     isteam_guest_memory_destroy(huge);
 
+
+    // Permission-aware mappings distinguish data reads/writes from instruction fetches.
+    ISteamGuestMemory *permissionMemory = isteam_guest_memory_create(pageSize * 3);
+    assert(permissionMemory != nullptr);
+    const std::array<uint8_t, 4> codeBytes{0x90, 0x90, 0xF4, 0xCC};
+    const std::array<uint8_t, 4> dataBytes{0x11, 0x22, 0x33, 0x44};
+    assert(isteam_guest_memory_write(permissionMemory, 0, codeBytes.data(), codeBytes.size()));
+    assert(isteam_guest_memory_write(permissionMemory, pageSize, dataBytes.data(), dataBytes.size()));
+    assert(isteam_guest_memory_begin_mapping(permissionMemory));
+    assert(isteam_guest_memory_map(permissionMemory, 0, pageSize, 0x5, false)); // read + execute
+    assert(isteam_guest_memory_map(permissionMemory, pageSize, pageSize, 0x3, false)); // read + write
+
+    std::array<uint8_t, 4> executableBytes{};
+    assert(isteam_guest_memory_read_execute(permissionMemory, 0, executableBytes.data(), executableBytes.size()));
+    assert(executableBytes == codeBytes);
+    assert(!isteam_guest_memory_write(permissionMemory, 0, dataBytes.data(), 1));
+    assert(isteam_guest_memory_read(permissionMemory, pageSize, executableBytes.data(), 4));
+    assert(!isteam_guest_memory_read_execute(permissionMemory, pageSize, executableBytes.data(), 4));
+
+    std::array<uint8_t, 4> crossingFetch{};
+    assert(isteam_guest_memory_read_execute_prefix(permissionMemory, pageSize - 2,
+                                                    crossingFetch.data(), crossingFetch.size()) == 2);
+    assert(isteam_guest_memory_protect(permissionMemory, pageSize, pageSize, 0x5));
+    assert(isteam_guest_memory_read_execute_prefix(permissionMemory, pageSize - 2,
+                                                    crossingFetch.data(), crossingFetch.size()) == 4);
+    assert(isteam_guest_memory_protect(permissionMemory, pageSize, pageSize, 0x1));
+    assert(!isteam_guest_memory_write(permissionMemory, pageSize, dataBytes.data(), 1));
+    assert(isteam_guest_memory_protect(permissionMemory, 0, pageSize, 0x1));
+    assert(!isteam_guest_memory_read_execute(permissionMemory, 0, executableBytes.data(), 1));
+    assert(!isteam_guest_memory_protect(permissionMemory, pageSize * 2, pageSize, 0x1));
+
+    // Permission merges support adjacent ELF PT_LOAD segments sharing a page.
+    assert(isteam_guest_memory_map(permissionMemory, pageSize * 2, pageSize, 0x1, false));
+    assert(isteam_guest_memory_map(permissionMemory, pageSize * 2, pageSize, 0x4, true));
+    assert(isteam_guest_memory_read_execute(permissionMemory, pageSize * 2,
+                                            executableBytes.data(), executableBytes.size()));
+    assert(!isteam_guest_memory_write(permissionMemory, pageSize * 2, dataBytes.data(), 1));
+    assert(isteam_guest_memory_map(permissionMemory, pageSize * 2, pageSize, 0x2, true));
+    assert(isteam_guest_memory_write(permissionMemory, pageSize * 2, dataBytes.data(), 1));
+
+    assert(isteam_guest_memory_unmap(permissionMemory, pageSize, pageSize));
+    assert(!isteam_guest_memory_read(permissionMemory, pageSize, executableBytes.data(), 1));
+    assert(!isteam_guest_memory_write(permissionMemory, pageSize, dataBytes.data(), 1));
+    isteam_guest_memory_clear(permissionMemory);
+    assert(isteam_guest_memory_read(permissionMemory, pageSize, executableBytes.data(), 1));
+    assert(isteam_guest_memory_write(permissionMemory, pageSize, dataBytes.data(), 1));
+    isteam_guest_memory_destroy(permissionMemory);
+
     isteam_guest_memory_clear(memory);
     assert(isteam_guest_memory_allocated_pages(memory) == 0);
     isteam_guest_memory_destroy(memory);

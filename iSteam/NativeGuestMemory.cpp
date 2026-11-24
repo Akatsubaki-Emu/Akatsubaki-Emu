@@ -5,6 +5,8 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <limits>
+#include <utility>
 #include <new>
 #include <unordered_map>
 #include <vector>
@@ -27,6 +29,8 @@ struct ISteamGuestMemory {
     std::vector<std::unique_ptr<Page>> densePages;
     std::vector<uint64_t> denseAllocatedPageIndices;
     std::unordered_map<uint64_t, std::unique_ptr<Page>> pages;
+    std::unordered_map<uint64_t, uint8_t> pagePermissions;
+    bool permissionsEnabled = false;
     mutable std::mutex mutex;
 };
 
@@ -57,16 +61,38 @@ void removeDensePage(ISteamGuestMemory *memory, uint64_t pageIndex) {
         memory->densePages[static_cast<size_t>(movedPageIndex)]->allocatedIndex = allocatedIndex;
     }
 }
+
+bool hasPermissionLocked(const ISteamGuestMemory *memory, uint64_t offset,
+                         size_t length, uint8_t required) {
+    if (!memory->permissionsEnabled || !length) return true;
+    const uint64_t lastAddress = offset + length - 1;
+    const uint64_t firstPage = offset / pageSize;
+    const uint64_t lastPage = lastAddress / pageSize;
+    for (uint64_t pageIndex = firstPage; pageIndex <= lastPage; ++pageIndex) {
+        const auto found = memory->pagePermissions.find(pageIndex);
+        if (found == memory->pagePermissions.end()
+            || (found->second & required) != required) return false;
+    }
+    return true;
 }
 
-extern "C" {
-
-ISteamGuestMemory *isteam_guest_memory_create(uint64_t size) {
+bool copyReadLocked(ISteamGuestMemory *bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
+                              uint8_t *destination, size_t length) {
+    if (!memory || (length && !destination)
+        || offset > memory->size || length > memory->size - offset) {
+        return false;
+    }
+    if (!length) return true;
     try {
-        auto memory = std::make_unique<ISteamGuestMemory>(size);
-        const uint64_t pageCount = size / pageSize + (size % pageSize == 0 ? 0 : 1);
-        if (pageCount <= densePageLimit) {
-            memory->densePages.resize(static_cast<size_t>(pageCount));
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!hasPermissionLocked(memory, offset, length, 0x1)) return false;
+        return copyReadLocked(memory, offset, destination, length);
+    } catch (...) {
+        return false;
+    }
+}
+
+ize(static_cast<size_t>(pageCount));
             memory->usesDensePages = true;
         }
         return memory.release();
@@ -81,6 +107,147 @@ void isteam_guest_memory_destroy(ISteamGuestMemory *memory) {
 
 uint64_t isteam_guest_memory_size(const ISteamGuestMemory *memory) {
     return memory ? memory->size : 0;
+}
+
+bool isteam_guest_memory_begin_mapping(ISteamGuestMemory *memory) {
+    if (!memory) return false;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        memory->pagePermissions.clear();
+        memory->permissionsEnabled = true;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool isteam_guest_memory_map(ISteamGuestMemory *memory, uint64_t offset,
+                             uint64_t length, uint8_t permissions, bool merge) {
+    if (!memory || !length || (offset % pageSize) != 0 || (permissions & ~uint8_t{7}) != 0
+        || offset > memory->size || length > memory->size - offset) return false;
+    const uint64_t firstPage = offset / pageSize;
+    const uint64_t lastPage = (offset + length - 1) / pageSize;
+    const uint64_t pageCount = lastPage - firstPage + 1;
+    if (pageCount > static_cast<uint64_t>(std::numeric_limits<size_t>::max())) return false;
+    struct PreviousPermission { uint64_t page; bool existed; uint8_t value; };
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!memory->permissionsEnabled) return false;
+        std::vector<PreviousPermission> previous;
+        try {
+            previous.reserve(static_cast<size_t>(pageCount));
+            for (uint64_t page = firstPage; page <= lastPage; ++page) {
+                const auto found = memory->pagePermissions.find(page);
+                const bool existed = found != memory->pagePermissions.end();
+                const uint8_t oldValue = existed ? found->second : 0;
+                previous.push_back({page, existed, oldValue});
+                memory->pagePermissions[page] = merge ? static_cast<uint8_t>(oldValue | permissions) : permissions;
+            }
+        } catch (...) {
+            for (const auto &entry : previous) {
+                if (entry.existed) memory->pagePermissions[entry.page] = entry.value;
+                else memory->pagePermissions.erase(entry.page);
+            }
+            return false;
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool isteam_guest_memory_protect(ISteamGuestMemory *memory, uint64_t offset,
+                                 uint64_t length, uint8_t permissions) {
+    if (!memory || !length || (offset % pageSize) != 0 || (permissions & ~uint8_t{7}) != 0
+        || offset > memory->size || length > memory->size - offset) return false;
+    const uint64_t firstPage = offset / pageSize;
+    const uint64_t lastPage = (offset + length - 1) / pageSize;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!memory->permissionsEnabled) return false;
+        for (uint64_t page = firstPage; page <= lastPage; ++page) {
+            if (memory->pagePermissions.find(page) == memory->pagePermissions.end()) return false;
+        }
+        for (uint64_t page = firstPage; page <= lastPage; ++page) {
+            memory->pagePermissions[page] = permissions;
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool isteam_guest_memory_unmap(ISteamGuestMemory *memory, uint64_t offset, uint64_t length) {
+    if (!memory || !length || (offset % pageSize) != 0
+        || offset > memory->size || length > memory->size - offset) return false;
+    const uint64_t firstPage = offset / pageSize;
+    const uint64_t lastPage = (offset + length - 1) / pageSize;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!memory->permissionsEnabled) return false;
+        if (memory->usesDensePages) {
+            size_t index = 0;
+            while (index < memory->denseAllocatedPageIndices.size()) {
+                const uint64_t page = memory->denseAllocatedPageIndices[index];
+                if (page >= firstPage && page <= lastPage) removeDensePage(memory, page);
+                else ++index;
+            }
+        } else {
+            for (auto it = memory->pages.begin(); it != memory->pages.end();) {
+                if (it->first >= firstPage && it->first <= lastPage) it = memory->pages.erase(it);
+                else ++it;
+            }
+        }
+        for (auto it = memory->pagePermissions.begin(); it != memory->pagePermissions.end();) {
+            if (it->first >= firstPage && it->first <= lastPage) it = memory->pagePermissions.erase(it);
+            else ++it;
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool isteam_guest_memory_read_execute(ISteamGuestMemory *memory, uint64_t offset,
+                                      uint8_t *destination, size_t length) {
+    if (!memory || (length && !destination)
+        || offset > memory->size || length > memory->size - offset) return false;
+    if (!length) return true;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!hasPermissionLocked(memory, offset, length, 0x5)) return false;
+        return copyReadLocked(memory, offset, destination, length);
+    } catch (...) {
+        return false;
+    }
+}
+
+size_t isteam_guest_memory_read_execute_prefix(ISteamGuestMemory *memory, uint64_t offset,
+                                               uint8_t *destination, size_t maximumLength) {
+    if (!memory || (maximumLength && !destination) || offset > memory->size || !maximumLength) return 0;
+    const uint64_t available = memory->size - offset;
+    const size_t count = available < static_cast<uint64_t>(maximumLength)
+        ? static_cast<size_t>(available) : maximumLength;
+    if (!count) return 0;
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!memory->permissionsEnabled) {
+            return copyReadLocked(memory, offset, destination, count) ? count : 0;
+        }
+        size_t completed = 0;
+        while (completed < count) {
+            const uint64_t address = offset + completed;
+            const auto found = memory->pagePermissions.find(address / pageSize);
+            if (found == memory->pagePermissions.end() || (found->second & 0x5) != 0x5) break;
+            const size_t pageRemaining = static_cast<size_t>(pageSize - (address % pageSize));
+            const size_t amount = std::min(count - completed, pageRemaining);
+            if (!copyReadLocked(memory, address, destination + completed, amount)) break;
+            completed += amount;
+        }
+        return completed;
+    } catch (...) {
+        return 0;
+    }
 }
 
 bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
@@ -159,6 +326,7 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
 
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!hasPermissionLocked(memory, offset, length, 0x2)) return false;
         const uint64_t lastAddress = offset + length - 1;
         if (memory->usesDensePages) {
             if (offset / pageSize == lastAddress / pageSize) {
@@ -344,6 +512,8 @@ void isteam_guest_memory_clear(ISteamGuestMemory *memory) {
     if (!memory) return;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
+        memory->pagePermissions.clear();
+        memory->permissionsEnabled = false;
         if (memory->usesDensePages) {
             for (uint64_t pageIndex : memory->denseAllocatedPageIndices) {
                 memory->densePages[static_cast<size_t>(pageIndex)].reset();
