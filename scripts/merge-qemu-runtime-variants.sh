@@ -42,6 +42,8 @@ for package in "$JIT_DIR" "$TCI_DIR"; do
   [[ -d "$package/Frameworks" && ! -L "$package/Frameworks" && -d "$package/QEMU" && ! -L "$package/QEMU" ]] || fail "incomplete or symlinked package: $package"
   [[ -s "$package/UTM-SOURCE-REVISION.txt" ]] || fail "missing UTM source revision: $package"
   [[ -s "$package/QEMU/runtime-library-path.txt" ]] || fail "missing runtime library manifest: $package"
+  manifest_lines="$(awk 'END { print NR }' "$package/QEMU/runtime-library-path.txt")"
+  [[ "$manifest_lines" -eq 1 ]] || fail "runtime library manifest must contain exactly one line: $package"
   [[ -s "$package/exports.txt" ]] || fail "missing exports report: $package"
 done
 
