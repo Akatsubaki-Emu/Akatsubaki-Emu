@@ -464,7 +464,6 @@ final class QEMUVNCClient {
                                 }
                             }
                         }
-                    }
                         return true
                     }
                     guard applied else { throw CancellationError() }
