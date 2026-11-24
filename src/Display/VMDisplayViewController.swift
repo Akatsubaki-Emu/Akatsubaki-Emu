@@ -14,6 +14,8 @@ final class VMDisplayViewController: UIViewController {
     private let vrSettings = VRSettings.shared
     private var keyboardPanel: KeyboardOverlayView?
     private let keyboardToggle = UIButton(type: .system)
+    private let pointerLeftClick = UIButton(type: .system)
+    private let pointerRightClick = UIButton(type: .system)
     private let functionKeyBar = UIStackView()
     private var keyboardObservers: [NSObjectProtocol] = []
     private var lastMotionStatusUpdate: TimeInterval = 0
@@ -196,6 +198,8 @@ final class VMDisplayViewController: UIViewController {
         keyboardToggle.configuration = keyboardConfiguration
         keyboardToggle.addTarget(self, action: #selector(toggleTouchKeyboard), for: .touchUpInside)
         view.addSubview(keyboardToggle)
+        configurePointerClickButton(pointerLeftClick, title: "L Click", buttonMask: 0x01)
+        configurePointerClickButton(pointerRightClick, title: "R Click", buttonMask: 0x04)
 
         functionKeyBar.translatesAutoresizingMaskIntoConstraints = false
         functionKeyBar.axis = .horizontal
@@ -227,6 +231,12 @@ final class VMDisplayViewController: UIViewController {
         NSLayoutConstraint.activate([
             keyboardToggle.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
             keyboardToggle.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+            pointerLeftClick.topAnchor.constraint(equalTo: keyboardToggle.topAnchor),
+            pointerLeftClick.trailingAnchor.constraint(equalTo: keyboardToggle.leadingAnchor, constant: -6),
+            pointerLeftClick.widthAnchor.constraint(equalToConstant: 64),
+            pointerRightClick.topAnchor.constraint(equalTo: keyboardToggle.topAnchor),
+            pointerRightClick.trailingAnchor.constraint(equalTo: pointerLeftClick.leadingAnchor, constant: -6),
+            pointerRightClick.widthAnchor.constraint(equalToConstant: 64),
             functionKeyBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
             functionKeyBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
             functionKeyBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -4),
@@ -236,6 +246,27 @@ final class VMDisplayViewController: UIViewController {
             panel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -4),
             panel.heightAnchor.constraint(equalToConstant: 238)
         ])
+    }
+
+    private func configurePointerClickButton(_ button: UIButton, title: String, buttonMask: UInt8) {
+        button.translatesAutoresizingMaskIntoConstraints = false
+        var configuration = UIButton.Configuration.filled()
+        configuration.baseBackgroundColor = UIColor.black.withAlphaComponent(0.78)
+        configuration.baseForegroundColor = .white
+        configuration.cornerStyle = .medium
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 7, bottom: 8, trailing: 7)
+        configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var outgoing = incoming
+            outgoing.font = .systemFont(ofSize: 11, weight: .semibold)
+            return outgoing
+        }
+        button.configuration = configuration
+        button.setTitle(title, for: .normal)
+        button.accessibilityLabel = title == "L Click" ? "Left mouse click" : "Right mouse click"
+        button.addAction(UIAction { [weak self] _ in
+            self?.vncClient.tapPointer(buttonMask: buttonMask)
+        }, for: .touchUpInside)
+        view.addSubview(button)
     }
 
     @objc private func toggleTouchKeyboard() {

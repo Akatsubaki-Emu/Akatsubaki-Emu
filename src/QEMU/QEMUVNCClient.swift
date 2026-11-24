@@ -5,6 +5,7 @@ import Network
 private struct VNCPointerPosition: Sendable {
     let x: UInt16
     let y: UInt16
+    let buttonMask: UInt8
 }
 
 /// Thread-safe one-shot gate for NWConnection callbacks that may arrive
@@ -63,6 +64,7 @@ final class QEMUVNCClient {
     private var framebufferHeight = 0
     private var pointerX: Int = 0
     private var pointerY: Int = 0
+    private var pointerButtonMask: UInt8 = 0
     private var keyState = VNCKeyState()
     /// A separate batch per connection prevents stale queued pointer work from
     /// leaking into a restarted VNC session.
@@ -95,6 +97,7 @@ final class QEMUVNCClient {
                     self.connection = candidate
                     self.connected = false
                     self.pointerSendBatch = nil
+                    self.pointerButtonMask = 0
                     return true
                 }
                 guard installed else {
@@ -130,6 +133,7 @@ final class QEMUVNCClient {
                         self.connection = nil
                         self.connected = false
                         self.pointerSendBatch = nil
+                        self.pointerButtonMask = 0
                         self.pendingSendGroup = DispatchGroup()
                         _ = self.keyState.releaseAll()
                         return true
@@ -165,9 +169,14 @@ final class QEMUVNCClient {
             connected = false
             pointerSendBatch = nil
 
-            // No later input can enter the old group after connection becomes nil.
-            // Queue releases after all earlier key-down packets, then cancel only
-            // after Network.framework confirms the final release was processed.
+            // Release held mouse buttons and keys after all earlier input packets.
+            // The old connection is cancelled only after this group drains.
+            let releasePointerButtons = pointerButtonMask != 0
+            pointerButtonMask = 0
+            if let previous, releasePointerButtons {
+                enqueueSend(Self.pointerEvent(buttonMask: 0, x: UInt16(pointerX), y: UInt16(pointerY)),
+                            to: previous, in: group)
+            }
             let releaseEvents = keyState.releaseAll()
             if let previous, !releaseEvents.isEmpty {
                 enqueueSend(Self.keyEvents(releaseEvents), to: previous, in: group)
@@ -277,6 +286,14 @@ final class QEMUVNCClient {
         }
     }
 
+    private static func pointerEvent(buttonMask: UInt8, x: UInt16, y: UInt16) -> Data {
+        Data([
+            5, buttonMask,
+            UInt8(x >> 8), UInt8(x & 0xff),
+            UInt8(y >> 8), UInt8(y & 0xff)
+        ])
+    }
+
     private static func keyEvent(_ keysym: UInt32, down: Bool) -> Data {
         Data([4, down ? 1 : 0, 0, 0,
               UInt8((keysym >> 24) & 0xff), UInt8((keysym >> 16) & 0xff),
@@ -368,6 +385,7 @@ final class QEMUVNCClient {
             framebuffer = Data(repeating: 0, count: width * height * 4)
             pointerX = width / 2
             pointerY = height / 2
+            pointerButtonMask = 0
         }
 
         // 32bpp, 24-bit depth, little endian, true colour; memory order B,G,R,X.
@@ -552,7 +570,7 @@ final class QEMUVNCClient {
             pointerX = nextX
             pointerY = nextY
             guard let batch = pointerSendBatch else { return }
-            batch.latestPosition = VNCPointerPosition(x: UInt16(pointerX), y: UInt16(pointerY))
+            batch.latestPosition = VNCPointerPosition(x: UInt16(pointerX), y: UInt16(pointerY), buttonMask: pointerButtonMask)
             guard !batch.scheduled else { return }
             batch.scheduled = true
             let group = pendingSendGroup
@@ -568,11 +586,11 @@ final class QEMUVNCClient {
                     group.leave()
                     return
                 }
-                let message = Data([
-                    5, 0,
-                    UInt8(latestPosition.x >> 8), UInt8(latestPosition.x & 0xff),
-                    UInt8(latestPosition.y >> 8), UInt8(latestPosition.y & 0xff)
-                ])
+                let message = Self.pointerEvent(
+                    buttonMask: latestPosition.buttonMask,
+                    x: latestPosition.x,
+                    y: latestPosition.y
+                )
                 connection.send(content: message, completion: .contentProcessed { error in
                     if let error {
                         EmulationLog.shared.write("QEMU VNC pointer send failed: \(error.localizedDescription)")
@@ -580,6 +598,44 @@ final class QEMUVNCClient {
                     group.leave()
                 })
             }
+        }
+    }
+
+    /// Holds or releases one RFB pointer button. Button masks are left=1, middle=2, right=4.
+    func sendPointerButton(buttonMask: UInt8, down: Bool) {
+        guard buttonMask == 0x01 || buttonMask == 0x02 || buttonMask == 0x04 else { return }
+        withStateLock {
+            guard connected, let connection else { return }
+            let nextMask = down
+                ? pointerButtonMask | buttonMask
+                : pointerButtonMask & ~buttonMask
+            guard nextMask != pointerButtonMask else { return }
+            pointerButtonMask = nextMask
+            enqueueSend(
+                Self.pointerEvent(buttonMask: nextMask, x: UInt16(pointerX), y: UInt16(pointerY)),
+                to: connection,
+                in: pendingSendGroup
+            )
+        }
+    }
+
+    /// Sends a complete press/release pair without changing any other held buttons.
+    func tapPointer(buttonMask: UInt8 = 0x01) {
+        guard buttonMask == 0x01 || buttonMask == 0x02 || buttonMask == 0x04 else { return }
+        withStateLock {
+            guard connected, let connection, pointerButtonMask & buttonMask == 0 else { return }
+            let pressedMask = pointerButtonMask | buttonMask
+            let releasedMask = pointerButtonMask
+            enqueueSend(
+                Self.pointerEvent(buttonMask: pressedMask, x: UInt16(pointerX), y: UInt16(pointerY)),
+                to: connection,
+                in: pendingSendGroup
+            )
+            enqueueSend(
+                Self.pointerEvent(buttonMask: releasedMask, x: UInt16(pointerX), y: UInt16(pointerY)),
+                to: connection,
+                in: pendingSendGroup
+            )
         }
     }
 

@@ -11,7 +11,7 @@ class VNCPointerNoopTests(unittest.TestCase):
         self.assertIn("let deltaY = Int(boundedY)", movement)
         self.assertIn("guard deltaX != 0 || deltaY != 0 else { return }", movement)
         self.assertIn("guard nextX != pointerX || nextY != pointerY else { return }", movement)
-        self.assertLess(movement.index("guard nextX"), movement.index("let message = Data"))
+        self.assertLess(movement.index("guard nextX"), movement.index("let message = Self.pointerEvent"))
 
 
 if __name__ == "__main__":
