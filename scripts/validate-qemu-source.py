@@ -1553,7 +1553,9 @@ for token in ("KenranButoAOTGuestState", "makeMemoryCallbacks(for:memory)",
         print(f"AOT executor missing {token!r}", file=sys.stderr)
         failed = True
 for token in ("aotExecutor.execute(", "rip = result.exitRip", "aotExecutor?.invalidateAll()",
-              "canStartAOTBlock()", "aotPageRemaining"):
+              "canStartAOTBlock()", "aotPageRemaining",
+              "let budget = Int(min(remaining, 16))",
+              "let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff"):
     if token not in aot_interpreter:
         print(f"AOT interpreter integration missing {token!r}", file=sys.stderr)
         failed = True
