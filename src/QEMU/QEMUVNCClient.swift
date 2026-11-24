@@ -69,7 +69,8 @@ final class QEMUVNCClient {
     private var pointerSendBatch: VNCPointerSendBatch?
     private var connected = false
     var isConnected: Bool { withStateLock { connected } }
-    var onFrame: ((Data, Int, Int, GPUFrameRegion?) -> Void)?
+    var onFrame: ((UInt64, Data, Int, Int, GPUFrameRegion?) -> Void)?
+    var onSessionGenerationChanged: ((UInt64) -> Void)?
     var onStatus: ((String) -> Void)?
 
     func start(port: UInt16 = 5900) {
@@ -78,6 +79,7 @@ final class QEMUVNCClient {
             sessionGeneration &+= 1
             return sessionGeneration
         }
+        onSessionGenerationChanged?(generation)
         guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
             onStatus?("Invalid local VNC port.")
             return
@@ -155,7 +157,7 @@ final class QEMUVNCClient {
     func stop() {
         readerTask?.cancel()
         readerTask = nil
-        let (previousConnection, previousGroup) = withStateLock { () -> (NWConnection?, DispatchGroup) in
+        let (previousConnection, previousGroup, generation) = withStateLock { () -> (NWConnection?, DispatchGroup, UInt64) in
             sessionGeneration &+= 1
             let previous = connection
             let group = pendingSendGroup
@@ -171,8 +173,9 @@ final class QEMUVNCClient {
                 enqueueSend(Self.keyEvents(releaseEvents), to: previous, in: group)
             }
             pendingSendGroup = DispatchGroup()
-            return (previous, group)
+            return (previous, group, sessionGeneration)
         }
+        onSessionGenerationChanged?(generation)
         if let previousConnection {
             previousGroup.notify(queue: queue) {
                 previousConnection.cancel()
@@ -474,7 +477,7 @@ final class QEMUVNCClient {
                         guard self.sessionGeneration == generation, self.connection === connection else { return nil }
                         return (framebuffer, framebufferWidth, framebufferHeight)
                     }
-                    if let frame { onFrame?(frame.0, frame.1, frame.2, dirtyRegion) }
+                    if let frame { onFrame?(generation, frame.0, frame.1, frame.2, dirtyRegion) }
                 }
                 try await requestFramebufferUpdate(incremental: true, connection: connection)
             case 1: // SetColourMapEntries: padding + first-colour + colour-count.
