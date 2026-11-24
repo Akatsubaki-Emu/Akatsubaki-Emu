@@ -52,6 +52,12 @@ final class GuestMemory {
         bytes = [UInt8](repeating: 0, count: Int(size))
     }
 
+    // Mirrors GuestMemory.clear(): reset bytes without changing page permissions.
+    func clear() {
+        bytes = [UInt8](repeating: 0, count: Int(size))
+    }
+
+
     private func hasPermission(offset: UInt64, length: UInt64, required: UInt8) -> Bool {
         guard length > 0 else { return true }
         guard offset <= size, length <= size - offset else { return false }
@@ -231,6 +237,13 @@ final class GuestMemory {
         guard length >= 0, offset <= size, UInt64(length) <= size - offset,
               hasPermission(offset: offset, length: UInt64(length), required: 1) else { return nil }
         return Data(bytes[Int(offset)..<Int(offset) + length])
+    }
+
+    func write(_ data: Data, sourceRange: Range<Int>, offset: UInt64) -> Bool {
+        guard sourceRange.lowerBound >= 0,
+              sourceRange.lowerBound <= sourceRange.upperBound,
+              sourceRange.upperBound <= data.count else { return false }
+        return write(data.subdata(in: sourceRange), offset: offset)
     }
 
     func write(_ data: Data, offset: UInt64) -> Bool {
