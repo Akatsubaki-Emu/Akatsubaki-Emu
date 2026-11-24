@@ -6,15 +6,10 @@ CONFIG = ROOT / ".gitlab-ci.yml"
 
 
 class GitLabCIConfigTests(unittest.TestCase):
-    def test_pipeline_is_limited_to_existing_main(self) -> None:
+    def test_pipeline_is_limited_to_manual_main_web_runs(self) -> None:
         config = CONFIG.read_text(encoding="utf-8")
-        self.assertIn("if: '$CI_COMMIT_BRANCH == \"main\"'", config)
+        self.assertIn("if: '$CI_PIPELINE_SOURCE == \"web\" && $CI_COMMIT_BRANCH == \"main\"'", config)
         self.assertIn("- when: never", config)
-
-    def test_runner_job_is_manual_when_shared_minutes_are_unavailable(self) -> None:
-        config = CONFIG.read_text(encoding="utf-8")
-        self.assertIn("when: manual", config)
-        self.assertIn("allow_failure: true", config)
 
     def test_pipeline_runs_source_contracts_and_python_regressions(self) -> None:
         config = CONFIG.read_text(encoding="utf-8")

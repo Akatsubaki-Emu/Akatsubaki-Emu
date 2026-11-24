@@ -3,13 +3,11 @@ stages:
 
 workflow:
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "main"'
     - when: never
 
 core-source-and-elf-validation:
   stage: validate
-  when: manual
-  allow_failure: true
   image: python:3.12
   variables:
     PYTHONDONTWRITEBYTECODE: "1"
