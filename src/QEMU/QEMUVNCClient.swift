@@ -46,6 +46,8 @@ final class QEMUVNCClient {
     private var pendingSendGroup = DispatchGroup()
     private let lock = NSLock()
     private var connection: NWConnection?
+    // Monotonically invalidates callbacks/readers belonging to older sessions.
+    private var sessionGeneration: UInt64 = 0
 
     /// Keep NSLock operations in a synchronous helper. Calling lock()/unlock()
     /// directly from async contexts is rejected by Swift 6 concurrency checking.
@@ -72,6 +74,10 @@ final class QEMUVNCClient {
 
     func start(port: UInt16 = 5900) {
         stop()
+        let generation = withStateLock {
+            sessionGeneration &+= 1
+            return sessionGeneration
+        }
         guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
             onStatus?("Invalid local VNC port.")
             return
@@ -83,7 +89,7 @@ final class QEMUVNCClient {
                 if Task.isCancelled { return }
                 let candidate = NWConnection(host: "127.0.0.1", port: endpointPort, using: .tcp)
                 let installed = self.withStateLock {
-                    guard !Task.isCancelled else { return false }
+                    guard !Task.isCancelled, self.sessionGeneration == generation else { return false }
                     self.connection = candidate
                     self.connected = false
                     self.pointerSendBatch = nil
@@ -97,7 +103,8 @@ final class QEMUVNCClient {
                     try await self.waitUntilReady(candidate)
                     try await self.performHandshake(candidate)
                     let activated = self.withStateLock {
-                        guard !Task.isCancelled, self.connection === candidate else { return false }
+                        guard !Task.isCancelled, self.sessionGeneration == generation,
+                              self.connection === candidate else { return false }
                         self.connected = true
                         self.pointerSendBatch = VNCPointerSendBatch()
                         return true
@@ -106,14 +113,18 @@ final class QEMUVNCClient {
                         candidate.cancel()
                         return
                     }
+                    let publishConnectedStatus = self.withStateLock {
+                        self.sessionGeneration == generation && self.connection === candidate && self.connected
+                    }
+                    guard publishConnectedStatus else { candidate.cancel(); return }
                     self.onStatus?("Guest display connected • local VNC")
-                    try await self.readServerMessages(candidate)
+                    try await self.readServerMessages(candidate, generation: generation)
                     break
                 } catch {
                     lastError = error
                     if Task.isCancelled { return }
                     let wasCurrent = self.withStateLock {
-                        guard self.connection === candidate else { return false }
+                        guard self.sessionGeneration == generation, self.connection === candidate else { return false }
                         self.connection = nil
                         self.connected = false
                         self.pointerSendBatch = nil
@@ -130,10 +141,14 @@ final class QEMUVNCClient {
                 }
             }
             if Task.isCancelled { return }
-            self.withStateLock {
+            let shouldReportStatus = self.withStateLock {
+                guard self.sessionGeneration == generation else { return false }
                 self.connected = false
+                return true
             }
-            self.onStatus?("Guest display unavailable: \(lastError.localizedDescription)")
+            if shouldReportStatus {
+                self.onStatus?("Guest display unavailable: \(lastError.localizedDescription)")
+            }
         }
     }
 
@@ -141,6 +156,7 @@ final class QEMUVNCClient {
         readerTask?.cancel()
         readerTask = nil
         let (previousConnection, previousGroup) = withStateLock { () -> (NWConnection?, DispatchGroup) in
+            sessionGeneration &+= 1
             let previous = connection
             let group = pendingSendGroup
             connection = nil
@@ -361,9 +377,16 @@ final class QEMUVNCClient {
         try await requestFramebufferUpdate(incremental: false, connection: connection)
     }
 
-    private func readServerMessages(_ connection: NWConnection) async throws {
+    private func isCurrentSession(_ connection: NWConnection, generation: UInt64) -> Bool {
+        withStateLock {
+            sessionGeneration == generation && self.connection === connection && connected
+        }
+    }
+
+    private func readServerMessages(_ connection: NWConnection, generation: UInt64) async throws {
         while !Task.isCancelled {
             let type = try await receiveExactly(1, from: connection)[0]
+            guard isCurrentSession(connection, generation: generation) else { throw CancellationError() }
             switch type {
             case 0: // FramebufferUpdate
                 let updateHeader = try await receiveExactly(3, from: connection)
@@ -386,13 +409,16 @@ final class QEMUVNCClient {
                               width <= Self.maxFramebufferBytes / height / 4 else {
                             throw ClientError.protocolError("QEMU requested an invalid guest display size.")
                         }
-                        withStateLock {
+                        let resized = withStateLock {
+                            guard self.sessionGeneration == generation, self.connection === connection else { return false }
                             framebufferWidth = width
                             framebufferHeight = height
                             framebuffer = Data(repeating: 0, count: width * height * 4)
                             pointerX = min(pointerX, width - 1)
                             pointerY = min(pointerY, height - 1)
+                            return true
                         }
+                        guard resized else { throw CancellationError() }
                         dirtyRegion = GPUFrameRegion(x: 0, y: 0, width: width, height: height)
                         framebufferChanged = true
                         continue
@@ -413,7 +439,8 @@ final class QEMUVNCClient {
                     let region = GPUFrameRegion(x: x, y: y, width: width, height: height)
                     dirtyRegion = dirtyRegion.map { $0.union(region) } ?? region
                     let pixels = try await receiveExactly(rectangleBytes, from: connection)
-                    withStateLock {
+                    let applied = withStateLock {
+                        guard self.sessionGeneration == generation, self.connection === connection else { return false }
                         // The reader task owns framebuffer updates; the lock also
                         // protects snapshots consumed by the UI/render thread.
                         let rowBytes = width * 4
@@ -438,11 +465,17 @@ final class QEMUVNCClient {
                             }
                         }
                     }
+                        return true
+                    }
+                    guard applied else { throw CancellationError() }
                     framebufferChanged = true
                 }
                 if framebufferChanged {
-                    let frame = withStateLock { (framebuffer, framebufferWidth, framebufferHeight) }
-                    onFrame?(frame.0, frame.1, frame.2, dirtyRegion)
+                    let frame = withStateLock { () -> (Data, Int, Int)? in
+                        guard self.sessionGeneration == generation, self.connection === connection else { return nil }
+                        return (framebuffer, framebufferWidth, framebufferHeight)
+                    }
+                    if let frame { onFrame?(frame.0, frame.1, frame.2, dirtyRegion) }
                 }
                 try await requestFramebufferUpdate(incremental: true, connection: connection)
             case 1: // SetColourMapEntries: padding + first-colour + colour-count.
