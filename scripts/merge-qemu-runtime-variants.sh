@@ -51,11 +51,11 @@ tci_revision="$(tr -d '\r\n' < "$TCI_DIR/UTM-SOURCE-REVISION.txt")"
 
 required_symbols=(qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request)
 for symbol in "${required_symbols[@]}"; do
-  grep -Fq "$symbol" "$JIT_DIR/exports.txt" || fail "JIT artifact is missing required export: $symbol"
-  grep -Fq "$symbol" "$TCI_DIR/exports.txt" || fail "TCI artifact is missing required export: $symbol"
+  grep -Eq "[[:space:]]_?${symbol}$" "$JIT_DIR/exports.txt" || fail "JIT artifact is missing required export: $symbol"
+  grep -Eq "[[:space:]]_?${symbol}$" "$TCI_DIR/exports.txt" || fail "TCI artifact is missing required export: $symbol"
 done
-grep -Fq 'isteam_qemu_set_jit_callbacks' "$JIT_DIR/exports.txt" || fail "JIT artifact is missing the StikJIT callback export"
-if grep -Fq 'isteam_qemu_set_jit_callbacks' "$TCI_DIR/exports.txt"; then
+grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks$' "$JIT_DIR/exports.txt" || fail "JIT artifact is missing the StikJIT callback export"
+if grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks$' "$TCI_DIR/exports.txt"; then
   fail "TCI artifact unexpectedly contains the StikJIT callback export"
 fi
 
