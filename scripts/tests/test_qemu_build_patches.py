@@ -448,6 +448,8 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         source = workflow.read_text(encoding="utf-8")
         self.assertIn('grep -Eq "[[:space:]]_?${symbol}$" "$exports"', source)
         self.assertNotIn('grep -Fq "$symbol" "$exports"', source)
+        self.assertIn('manifest_lines="$(awk \'END { print NR }\' "$manifest")"', source)
+        self.assertIn('test "$manifest_lines" -eq 1', source)
 
         with TemporaryDirectory() as temporary:
             exports = Path(temporary) / "exports.txt"
