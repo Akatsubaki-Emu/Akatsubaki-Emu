@@ -1043,8 +1043,10 @@ final class X86_64Interpreter: GuestCPUBackend {
     /// Memory destinations, other group extensions and REX.R forms side-exit.
     private func canTranslateRegisterImmediateMOVAtCurrentWindow(opcodeOffset: Int, rex: UInt8) -> Bool {
         let modRMOffset = opcodeOffset + 1
+        let pageRemaining = 4096 - Int(rip & 0xFFF)
         guard opcodeOffset + 6 <= 15,
               opcodeOffset + 6 <= instructionWindowLength,
+              opcodeOffset + 6 <= pageRemaining,
               modRMOffset < instructionWindowLength else { return false }
         let modRM = instructionWindow[modRMOffset]
         return modRM >> 6 == 0b11

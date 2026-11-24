@@ -53,7 +53,8 @@ class VNCPointerCoalescingTests(unittest.TestCase):
         self.assertIn("self.connected = false", install)
         self.assertIn("self.pointerSendBatch = nil", install)
         activation = start.split("try await self.performHandshake(candidate)", 1)[1].split("self.onStatus", 1)[0]
-        self.assertIn("guard !Task.isCancelled, self.sessionGeneration == generation, self.connection === candidate else { return false }", activation)
+        self.assertIn("guard !Task.isCancelled, self.sessionGeneration == generation,", activation)
+        self.assertIn("self.connection === candidate else { return false }", activation)
         self.assertIn("guard activated else {", activation)
         catch = start.split("} catch {", 1)[1].split("if attempt < 119", 1)[0]
         self.assertIn("let wasCurrent = self.withStateLock", catch)

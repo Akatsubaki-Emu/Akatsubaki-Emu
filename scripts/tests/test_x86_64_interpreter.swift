@@ -1604,6 +1604,24 @@ struct InterpreterTests {
             precondition(movImmediateFirstHybrid.registerValue(0) == 0xFFFF_FFFF_8000_0000)
             precondition(executor.blocksExecuted == blocksBeforeMovImmediate + 1)
 
+            // A C7 instruction crossing the guest-page boundary must not start
+            // an AOT block because the translator receives only the current page.
+            let pageCrossingProgram = Data([0x48, 0xC7, 0xC0, 0x2A, 0x00, 0x00, 0x00, 0x0F, 0x0B])
+            let pageCrossingMemory = GuestMemory(size: 8192)
+            precondition(pageCrossingMemory.write(pageCrossingProgram, offset: 0x1FFB))
+            let pageCrossingBaseline = X86_64Interpreter(memory: pageCrossingMemory)
+            let pageCrossingHybrid = X86_64Interpreter(memory: pageCrossingMemory, aotExecutor: executor)
+            try pageCrossingBaseline.reset(entryPoint: 0x1FFB)
+            try pageCrossingHybrid.reset(entryPoint: 0x1FFB)
+            let blocksBeforePageCrossing = executor.blocksExecuted
+            let pageCrossingBaselineExit = try pageCrossingBaseline.run(maxInstructions: 8)
+            let pageCrossingHybridExit = try pageCrossingHybrid.run(maxInstructions: 8)
+            precondition(pageCrossingBaselineExit == .unsupportedInstruction(address: 0x2002))
+            precondition(pageCrossingHybridExit == pageCrossingBaselineExit)
+            precondition(pageCrossingHybrid.instructionCount == pageCrossingBaseline.instructionCount)
+            precondition(pageCrossingHybrid.registerValue(0) == 42)
+            precondition(executor.blocksExecuted == blocksBeforePageCrossing)
+
             let baselineMemory = GuestMemory(size: 8192)
             precondition(baselineMemory.write(program, offset: 0x1000))
             let baseline = X86_64Interpreter(memory: baselineMemory)

@@ -1670,7 +1670,8 @@ for token in ("#if KENRAN_BUTO_AOT_TESTS", "iSteamAOTGuestMemoryRead",
         failed = True
 aot_eligibility = x86_interpreter[x86_interpreter.index("private func canStartAOTBlock"):x86_interpreter.index("private func prepareInstructionWindow")]
 for token in ("case 0x8D:", "canTranslateLEAAtCurrentWindow",
-              "case 0xC7:", "canTranslateRegisterImmediateMOVAtCurrentWindow"):
+              "case 0xC7:", "canTranslateRegisterImmediateMOVAtCurrentWindow",
+              "opcodeOffset + 6 <= pageRemaining"):
     if token not in aot_eligibility:
         print(f"AOT eligibility regression missing {token!r}", file=sys.stderr)
         failed = True

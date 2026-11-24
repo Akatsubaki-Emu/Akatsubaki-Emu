@@ -662,8 +662,8 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertNotIn("Slower compatibility fallback", settings)
         self.assertIn('configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg"', builder)
         self.assertNotIn("tcg,tb-size=64,split-wx=on", builder)
-        self.assertIn("QEMU TCG uses JIT code generation", docs)
-        self.assertIn("ios-tci dependency targets", docs)
+        self.assertIn("JIT profile uses native TCG code generation", docs)
+        self.assertIn("`ios-tci` dependency targets", docs)
         self.assertIn("successful hosted dual-runtime build and physical guest boot remain unverified", docs)
 
 
@@ -823,6 +823,14 @@ class SourceValidatorTests(unittest.TestCase):
         paths_ignore = workflow.split("paths-ignore:", 1)[1].split("schedule:", 1)[0]
         self.assertIn(ignored_path, paths_ignore)
         self.assertIn(ignored_path, freshness)
+
+    def test_aot_c7_entry_guard_respects_guest_page_boundary(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src" / "Runtime" / "X86_64Interpreter.swift").read_text(encoding="utf-8")
+        helper = source.split("private func canTranslateRegisterImmediateMOVAtCurrentWindow", 1)[1].split(
+            "private func canTranslateLEAAtCurrentWindow", 1
+        )[0]
+        self.assertIn("opcodeOffset + 6 <= pageRemaining", helper)
 
     def test_kenran_buto_aot_is_opt_in_and_fails_closed(self):
         root = Path(__file__).resolve().parents[2]
