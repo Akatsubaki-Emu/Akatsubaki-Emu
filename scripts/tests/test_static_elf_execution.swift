@@ -718,7 +718,7 @@ struct StaticELFExecutionTests {
         try interpreter.configureLinuxProcess(programBreak: programBreak & ~UInt64(4095),
                                                stackBase: stack.stackBase)
         let exit = try interpreter.run(maxInstructions: 64)
-        precondition(exit == .halted)
+        precondition(exit == .exited(0), "Static ELF guest did not exit with status 0")
         precondition(EmulationLog.shared.messages.contains { $0.contains(expectedOutput) })
 #if KENRAN_BUTO_AOT_TESTS
         precondition(aotExecutor.blocksExecuted > 0)

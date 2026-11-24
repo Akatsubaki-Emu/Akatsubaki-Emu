@@ -24,7 +24,7 @@ class GuestExitStatusTests(unittest.TestCase):
         self.assertIn("return .exited(status)", interpreter)
         self.assertIn("return .exited(Int32(arg0 & 0xFF))", syscalls)
         self.assertIn("case .success(.exited(let status)):", console)
-        self.assertIn("exit == .exited(0)", static_test)
+        self.assertGreaterEqual(static_test.count("exit == .exited(0)"), 2)
 
     def test_interpreter_covers_exit_and_exit_group_status_semantics(self) -> None:
         tests = self.read("scripts/tests/test_x86_64_interpreter.swift")

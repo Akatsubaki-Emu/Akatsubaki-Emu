@@ -148,9 +148,11 @@ struct KenranButoAOTTranslatorTests {
         precondition(word(exchange32High.machineCode, 0) == 0x4A080000)
         precondition(word(exchange32High.machineCode, 1) == 0x4A080008)
         precondition(word(exchange32High.machineCode, 2) == 0x4A080000)
-        // REX.X on register-only XCHG is conservatively routed to the interpreter.
-        let exchange32HighWithUnsupportedIndex = translator.translate(Data([0x43, 0x87, 0xC0]))
-        precondition(!exchange32HighWithUnsupportedIndex.isComplete)
+        // REX.X is ignored for register-only ModRM forms; REX.B still selects R8D.
+        let exchange32HighWithIgnoredIndex = translator.translate(Data([0x43, 0x87, 0xC0]))
+        precondition(exchange32HighWithIgnoredIndex.isComplete && exchange32HighWithIgnoredIndex.instructionCount == 1)
+        precondition(exchange32HighWithIgnoredIndex.guestBytesConsumed == 3)
+        precondition(exchange32HighWithIgnoredIndex.machineCode == exchange32High.machineCode)
 
         let extendedAccumulatorExchange = translator.translate(Data([0x4D, 0x97]))
         precondition(extendedAccumulatorExchange.isComplete && extendedAccumulatorExchange.instructionCount == 1)

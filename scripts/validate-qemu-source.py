@@ -1592,6 +1592,7 @@ for token in ("endbr64Memory", "malformedEndbr64Memory", "truncatedEndbr64Memory
 
 
 # Kenran Buto AOT ABI v1, split-WX provider and interpreter-cooperative dispatch.
+aot_workflow = Path(".github/workflows/validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
 aot_header = Path("iSteam/JIT26Protocol.h").read_text(encoding="utf-8")
 aot_memory = Path("iSteam/KenranButoAOTExecutableMemory.c").read_text(encoding="utf-8")
 aot_execution = Path("src/Runtime/KenranButoAOTExecution.swift").read_text(encoding="utf-8")
@@ -1765,7 +1766,6 @@ for token in (
     if token not in xchg_register_interpreter_tests:
         print(f"XCHG register interpreter test missing {token!r}", file=sys.stderr)
         failed = True
-aot_workflow = Path(".github/workflows/validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
 aot_execution_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
 for token in ("iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(0)",
               "iSteamAOTExecutableMemoryInvoke(revocationRegion, &revocationState)",
@@ -1954,7 +1954,7 @@ if "case 0x90...0x97:" not in xchg_interpreter_source:
     print("AOT XCHG block-entry eligibility is missing", file=sys.stderr)
     failed = True
 for token in ("0x4A010000", "0xCA080000", "0xCA0F000F", "extendedAccumulatorExchange",
-              "exchange32HighWithUnsupportedIndex", "Data([0x43, 0x87, 0xC0])"):
+              "exchange32HighWithIgnoredIndex", "Data([0x43, 0x87, 0xC0])"):
     if token not in xchg_translator_tests:
         print(f"AOT XCHG encoding regression missing {token!r}", file=sys.stderr)
         failed = True
