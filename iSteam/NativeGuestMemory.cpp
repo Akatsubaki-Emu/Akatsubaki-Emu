@@ -403,7 +403,7 @@ bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset,
     if (length == 0) return true;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
-        if (!hasPermissionLocked(memory, offset, length, 0x1)) return false;
+        if (!hasPermissionLocked(memory, offset, length, permissionRead)) return false;
         return copyReadLocked(memory, offset, destination, length);
     } catch (...) { return false; }
 }
@@ -414,7 +414,7 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
     if (length == 0) return true;
     try {
         std::lock_guard<std::mutex> guard(memory->mutex);
-        if (!hasPermissionLocked(memory, offset, length, 0x2)) return false;
+        if (!hasPermissionLocked(memory, offset, length, permissionWrite)) return false;
         size_t completed = 0;
         while (completed < length) {
             const uint64_t address = offset + static_cast<uint64_t>(completed);

@@ -103,6 +103,9 @@ jobs:
           grep -Fq "test_static_elf_execution.swift" .github/workflows/validate-repository.yml
           grep -Fq "python -m unittest discover -s scripts/tests -p 'test_*.py'" .github/workflows/validate-repository.yml
           grep -Fq "test-native-guest-memory" .github/workflows/validate-repository.yml
+          grep -Fq -- "-DISTEAM_GUEST_MEMORY_TESTING" .github/workflows/validate-repository.yml
+          grep -Fq -- "-pthread" .github/workflows/validate-repository.yml
+          grep -Fq "test_kenran_buto_aot_translator.swift" .github/workflows/validate-kenran-buto-aot.yml
           grep -Fq "test-qemu-native-bridge" .github/workflows/validate-repository.yml
           test -f .github/workflows/blank.yml || { echo "The owner-required GitHub-to-GitLab sync workflow is missing." >&2; exit 1; }
           grep -Fq "GitHub to GitLab Push Sync" .github/workflows/blank.yml
