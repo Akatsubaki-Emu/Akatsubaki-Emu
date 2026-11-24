@@ -13,7 +13,7 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn('"mov x16, #1\\n"', prepare)
         self.assertNotIn('"mov x16, #0\\n"', detach)
         self.assertNotIn('"brk #0xf00d\\n"', detach)
-        self.assertIn("Intentionally empty: keep TXM executable mappings valid.", detach)
+        self.assertIn("QEMU may allocate executable regions lazily", detach)
         self.assertIn("bool iSteamJITIsReady(void)", source)
         self.assertIn("bool iSteamJITIsReady(void);", header)
 
@@ -46,6 +46,8 @@ class JITProtocolSourceTests(unittest.TestCase):
         self.assertIn('"IODeviceTree:/chosen/memory-map"', source)
         self.assertIn("kIORegistryEntryPropertyKeysKey", source)
         self.assertIn('CFSTR("TXM")', source)
+        self.assertIn('CFSTR("SPTM")', source)
+        self.assertIn("hasTXM || hasSPTM", source)
         self.assertIn("CFGetTypeID(keysValue) != CFArrayGetTypeID()", source)
         self.assertIn("CFGetTypeID(key) != CFStringGetTypeID()", source)
         self.assertIn("keyCount == 0", source)
@@ -104,6 +106,15 @@ class JITProtocolSourceTests(unittest.TestCase):
         coordinator = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
         self.assertIn("var isJITProtocolKnown: Bool", coordinator)
         self.assertIn("guard isJITProtocolKnown else", coordinator)
+
+
+    def test_kenran_buto_preallocated_arena_has_separate_detach_breakpoint(self):
+        source = (ROOT / "iSteam/JIT26Protocol.c").read_text()
+        header = (ROOT / "iSteam/JIT26Protocol.h").read_text()
+        self.assertIn("void iSteamJITDetachPreparedArena(void);", header)
+        detach = source.split("void iSteamJITDetachPreparedArena(void)", 1)[1].split("\\n}", 1)[0]
+        self.assertIn("mov x16, #0", detach)
+        self.assertIn("brk #0xf00d", detach)
 
 if __name__ == "__main__":
     unittest.main()

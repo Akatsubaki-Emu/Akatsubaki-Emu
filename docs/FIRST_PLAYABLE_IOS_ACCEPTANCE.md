@@ -118,3 +118,8 @@ Do not force-push or run a mirror operation that could discard either side. Reso
 ## Definition of done
 
 The first playable physical iOS milestone is complete only when a reproducible current-source IPA is installed on a physical iPad, a known-good guest executes through the app's real import-to-runtime path, basic guest display and input work, repeat launches and cleanup are reliable, persistent guest state survives restarts, and the build/test/device evidence is recorded. A simulator run, host-side ELF execution, or successful IPA packaging alone is insufficient.
+
+
+## Latest JIT source status (2026-11-24)
+
+The Kenran Butō iOS AOT allocator now has a separate preallocated-arena detach path: one 32 MiB TXM/SPTM executable region, one writable alias, then `iSteamJITDetachPreparedArena`; its arena-ready state is independent of QEMU’s attached-session callback. Hardware detection recognizes both TXM and SPTM. QEMU retains its no-op detach for lazy regions. This remains **UNTESTED on a physical iPad**; interpreter execution is the first-playable fallback and does not require JIT.

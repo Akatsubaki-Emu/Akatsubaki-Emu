@@ -67,5 +67,25 @@ class IOSJITMemoryContractTests(unittest.TestCase):
         self.assertIn("(void)munmap((void *)execute,mapped)", standard_protect)
         self.assertIn("(void)munmap(write,mapped)", standard_protect)
 
+
+    def test_txm_sptm_arena_detaches_after_one_prepared_region(self):
+        protocol = (ROOT / "iSteam/JIT26Protocol.c").read_text()
+        header = (ROOT / "iSteam/JIT26Protocol.h").read_text()
+        memory = (ROOT / "iSteam/KenranButoAOTExecutableMemory.c").read_text()
+        execution = (ROOT / "src/Runtime/KenranButoAOTExecution.swift").read_text()
+        self.assertIn('CFSTR("TXM")', protocol)
+        self.assertIn('CFSTR("SPTM")', protocol)
+        self.assertIn("hasTXM || hasSPTM", protocol)
+        self.assertIn("void iSteamJITDetachPreparedArena(void)", protocol)
+        self.assertIn("void iSteamJITDetachPreparedArena(void);", header)
+        self.assertIn("mov x16, #0", protocol)
+        self.assertIn("brk #0xf00d", protocol)
+        self.assertIn("iSteamJITDetachPreparedArena();", memory)
+        self.assertLess(memory.index("iSteamAOTExecutableArenaCreate"), memory.index("iSteamJITDetachPreparedArena();"))
+        self.assertIn("sTXMArenaReady=true", memory)
+        self.assertIn("return ensure_txm_arena(error,sizeof(error));", memory)
+        self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", execution)
+        self.assertNotIn("coordinator.isQEMUJITReady", execution)
+
 if __name__ == "__main__":
     unittest.main()

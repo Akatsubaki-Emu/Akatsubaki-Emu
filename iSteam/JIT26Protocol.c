@@ -14,13 +14,21 @@
 
 #if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR
 void iSteamJITDetach(void) {
-    /* Intentionally empty: keep TXM executable mappings valid. */
+    /* QEMU may allocate executable regions lazily, so its callback keeps StikDebug attached. Kenran Butō uses iSteamJITDetachPreparedArena after preparing its fixed arena. */
 }
 __attribute__((noinline, optnone, naked))
 void *iSteamJITPrepareRegion(void *address, size_t length) {
     __asm__ volatile("mov x16, #1\n"
                      "brk #0xf00d\n"
                      "ret\n");
+}
+
+/* Kenran Butō calls this only after its full executable arena and RW alias are prepared. */
+__attribute__((noinline, optnone, naked))
+void iSteamJITDetachPreparedArena(void) {
+    __asm__ volatile("mov x16, #0\\n"
+                     "brk #0xf00d\\n"
+                     "ret\\n");
 }
 
 bool iSteamJITHasGetTaskAllow(void) {
@@ -41,7 +49,7 @@ bool iSteamJITHasGetTaskAllow(void) {
     return allowed;
 }
 
-static int iSteamJITHardwareTXMMode(void) {
+static int iSteamJITHardwareMonitorMode(void) {
     io_registry_entry_t memoryMap = IORegistryEntryFromPath(
         kIOMainPortDefault, "IODeviceTree:/chosen/memory-map"
     );
@@ -70,13 +78,15 @@ static int iSteamJITHardwareTXMMode(void) {
         }
     }
 
-    bool hasTXM = CFArrayContainsValue(keys, CFRangeMake(0, keyCount), CFSTR("TXM"));
+    CFRange allKeys = CFRangeMake(0, keyCount);
+    bool hasTXM = CFArrayContainsValue(keys, allKeys, CFSTR("TXM"));
+    bool hasSPTM = CFArrayContainsValue(keys, allKeys, CFSTR("SPTM"));
     CFRelease(keysValue);
-    return hasTXM ? ISTEAM_JIT_PROTOCOL_STIKDEBUG : ISTEAM_JIT_PROTOCOL_STANDARD;
+    return (hasTXM || hasSPTM) ? ISTEAM_JIT_PROTOCOL_STIKDEBUG : ISTEAM_JIT_PROTOCOL_STANDARD;
 }
 
 int iSteamJITGetProtocolMode(void) {
-    if (__builtin_available(iOS 26.0, *)) return iSteamJITHardwareTXMMode();
+    if (__builtin_available(iOS 26.0, *)) return iSteamJITHardwareMonitorMode();
     return ISTEAM_JIT_PROTOCOL_STANDARD;
 }
 
@@ -120,6 +130,7 @@ int iSteamJITGetProtocolMode(void) {
 }
 bool iSteamJITHasGetTaskAllow(void) { return false; }
 void iSteamJITDetach(void) {}
+void iSteamJITDetachPreparedArena(void) {}
 void *iSteamJITPrepareRegion(void *address, size_t length) {
     (void)address;
     (void)length;

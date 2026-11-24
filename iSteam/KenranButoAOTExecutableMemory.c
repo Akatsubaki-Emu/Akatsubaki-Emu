@@ -40,9 +40,10 @@ static iSteamAOTExecutableArena *sTXMArena;
 static void *sTXMExecuteBase;
 static void *sTXMWriteBase;
 static bool sTXMArenaFailed;
+static bool sTXMArenaReady;
 static bool ensure_txm_arena(char *error,size_t capacity){
  if(pthread_mutex_lock(&sTXMArenaInitLock)!=0){set_error(error,capacity,"StikDebug AOT arena lock failed.");return false;}
- if(sTXMArena){pthread_mutex_unlock(&sTXMArenaInitLock);return true;}
+ if(sTXMArena){bool ready=sTXMArenaReady;pthread_mutex_unlock(&sTXMArenaInitLock);return ready;}
  if(sTXMArenaFailed){pthread_mutex_unlock(&sTXMArenaInitLock);set_error(error,capacity,"StikDebug AOT arena initialization previously failed.");return false;}
  void *exec=iSteamJITPrepareRegion(NULL,AOT_TXM_ARENA_BYTES);
  if(!exec){sTXMArenaFailed=true;pthread_mutex_unlock(&sTXMArenaInitLock);set_error(error,capacity,"StikDebug executable arena unavailable.");return false;}
@@ -63,6 +64,8 @@ static bool ensure_txm_arena(char *error,size_t capacity){
   pthread_mutex_unlock(&sTXMArenaInitLock);set_error(error,capacity,"StikDebug AOT arena allocator initialization failed.");return false;
  }
  sTXMArena=arena;sTXMExecuteBase=exec;sTXMWriteBase=(void *)write;
+ iSteamJITDetachPreparedArena();
+ sTXMArenaReady=true;
  pthread_mutex_unlock(&sTXMArenaInitLock);
  return true;
 }
@@ -72,9 +75,10 @@ bool iSteamAOTExecutableMemoryIsAvailable(void){
  if(sTestAvailabilityOverride>=0)return sTestAvailabilityOverride!=0;
 #endif
 #if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
- if(!iSteamJITHasGetTaskAllow()||!iSteamJITIsReady())return false;
  int mode=iSteamJITGetProtocolMode();
- return mode==ISTEAM_JIT_PROTOCOL_STANDARD||mode==ISTEAM_JIT_PROTOCOL_STIKDEBUG;
+ if(mode==ISTEAM_JIT_PROTOCOL_STIKDEBUG){char error[256]={0};return ensure_txm_arena(error,sizeof(error));}
+ if(mode==ISTEAM_JIT_PROTOCOL_STANDARD)return iSteamJITHasGetTaskAllow()&&iSteamJITIsReady();
+ return false;
 #elif defined(__APPLE__) && defined(__arm64__) && TARGET_OS_OSX && !TARGET_OS_MACCATALYST
  return true;
 #else

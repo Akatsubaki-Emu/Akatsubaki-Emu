@@ -46,7 +46,7 @@ The helper apps are not embedded in Akatsubaki. They remain external dependencie
 - `src/Display/VMDisplayViewController.swift` — repeats the readiness gate and starts QEMU only once.
 - `iSteam/SettingsViewController.swift` — describes the automatic helper sequence.
 - `project.yml` — links Security for the stable and nightly iOS targets.
-- `scripts/patch_qemu_stikjit_ios.py` — selects the breakpoint allocator only on TXM devices; non-TXM iOS 26 devices retain the upstream split-W^X allocator.
+- `scripts/patch_qemu_stikjit_ios.py` — selects the breakpoint allocator only on TXM/SPTM devices; non-TXM iOS 26 devices retain the upstream split-W^X allocator.
 - `scripts/tests/test_jit_protocol.py` — source-contract regression coverage for TXM model detection, live-debugger gating, and QEMU allocator routing.
 - `scripts/tests/test_jit_coordinator.py` — source-contract regression coverage.
 
@@ -62,16 +62,16 @@ Do not treat source-level integration as proof of a working JIT session until a 
 
 ## Fail-closed TXM detection
 
-On physical iOS 26+ devices, Akatsubaki reads `IODeviceTree:/chosen/memory-map` through IOKit, matching StikJIT's protocol detection. A valid registry result without `TXM` selects standard attach-only JIT; `TXM` selects the StikDebug breakpoint allocator; unreadable, malformed, or empty registry data is UNKNOWN and blocks launch. The QEMU patcher uses the tri-state protocol export and refuses unknown devices.
+On physical iOS 26+ devices, Akatsubaki reads `IODeviceTree:/chosen/memory-map` through IOKit, matching StikJIT's protocol detection. A valid registry result containing either `TXM` or `SPTM` selects StikDebug’s `universal.js` breakpoint protocol; a valid result containing neither selects standard JIT; unreadable, malformed, or empty registry data is UNKNOWN and blocks launch. The QEMU patcher uses the tri-state protocol export and refuses unknown devices.
 
 
-## Kenran Butō AOT executable memory on TXM devices
+## Kenran Butō AOT executable memory on TXM/SPTM devices
 
 The iOS TXM/StikDebug AOT path now prepares one 32 MiB split-WX executable arena on first use. A single `iSteamJITPrepareRegion` request is followed by one writable `vm_remap` alias; translated blocks are allocated as host-page-aligned subranges. The current translation cache is capped at 16 MiB/64 blocks, leaving headroom for a candidate block while eviction runs. Eviction returns subranges to a coalescing, thread-safe free list; the process-lifetime arena itself is retained until process exit.
 
 This avoids asking StikDebug to prepare a new executable region for every translated block and respects 16 KiB host-page alignment. The allocator has standalone C regression coverage for alignment, fragmentation/coalescing, exhaustion, invalid frees, overflow and concurrent allocation.
 
-**TXM session policy:** the current readiness contract deliberately keeps StikDebug attached; `iSteamJITDetach` remains a no-op. The official StikJIT guide recommends preparing initial regions and detaching afterward. The arena reduces region preparation to one request, but post-detach readiness and executable-mapping lifetime have not been verified on a physical iPad. Do not claim the TXM JIT path is device-verified until that test is recorded. If StikDebug 3.2.2 or a fresh RPPairing file is required by the current iOS 27.2 pairing flow, update/re-pair the external helper before testing; older StikDebug 3.1.x sessions are not accepted as proof.
+**JIT session policy:** QEMU continues to use `iSteamJITDetach` as a no-op so StikDebug remains attached for lazily created QEMU regions. Kenran Butō’s fixed 32 MiB arena uses the separate `iSteamJITDetachPreparedArena` breakpoint after its RX region and writable alias are ready. `sTXMArenaReady` records that the preallocated arena remains usable after the debugger detaches; `KenranButoAOTExecution` checks this arena-specific state rather than QEMU’s attached-session readiness. This implements the prepare/alias/detach sequence, but remains unverified on physical iPad hardware. Do not claim device-ready JIT until that test is recorded. Update StikDebug to 3.2.2 or newer and create a fresh RPPairing file before testing; older 3.1.x sessions are not accepted as proof.
 
 The standard non-TXM split-WX allocator remains unchanged. If the TXM arena cannot be prepared or becomes exhausted, AOT allocation fails closed and the x86-64 interpreter remains the fallback.
 
@@ -81,3 +81,8 @@ The standard non-TXM split-WX allocator remains unchanged. If the TXM arena cann
 Use the current [StikDebug 3.2.2 release](https://github.com/StikDebug/StikDebug/releases/tag/3.2.2) or newer for the TXM/JIT26 integration. Older 3.1.x installations are not accepted as proof of the current TXM path. Generate a fresh `RPPairing` file and import it into StikDebug after updating.
 
 If LocalDevVPN/StikDebug pairing still fails with a missing `public_key` field or TLS tunnel timeout, [StikDebug issue #471](https://github.com/StikDebug/StikDebug/issues/471) records a user-reported recovery: delete StikDebug completely (do not offload it), restart the device, reinstall StikDebug, create a new pairing file, and import that file. This is a reported workaround, not a guarantee. The interpreter smoke guest does not require JIT; this setup is needed to validate AOT acceleration.
+
+
+## Kenran Butō post-detach readiness
+
+The 32 MiB arena is a single prepared executable region. Kenran Butō prepares that region once, creates the writable alias, then calls `iSteamJITDetachPreparedArena`. The generic `iSteamJITIsReady` and QEMU callback remain attached-session checks; the Kenran Butō allocator has its own `sTXMArenaReady` state and remains available after successful detach. If preparation or detach does not complete, AOT allocation fails closed and the interpreter remains the fallback. Physical iPadOS 27.2 validation is still required.

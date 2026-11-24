@@ -11,6 +11,7 @@ int iSteamJITGetProtocolMode(void);
 bool iSteamJITIsSupported(void);
 bool iSteamJITIsReady(void);
 void iSteamJITDetach(void);
+void iSteamJITDetachPreparedArena(void);
 void *iSteamJITPrepareRegion(void *address, size_t length);
 
 
