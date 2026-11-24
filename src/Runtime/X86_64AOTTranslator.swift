@@ -50,7 +50,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
 struct X86_64AOTTranslator {
     static let translatorIdentifier = "kenran-buto-aot-arm64"
     // Bump whenever emitted code or decoding semantics change.
-    static let translatorVersion = "7
+    static let translatorVersion = "7"
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
