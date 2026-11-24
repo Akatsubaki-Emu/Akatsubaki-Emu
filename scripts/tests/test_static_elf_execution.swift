@@ -24,7 +24,6 @@ protocol GuestCPUBackend {
 
 enum GuestCPUExit: Equatable {
     case halted, instructionLimit, interrupted
-    case exited(Int32)
     case memoryFault(address: UInt64)
     case unsupportedInstruction(address: UInt64)
     case backendUnavailable(String)
@@ -315,10 +314,15 @@ final class GuestMemory {
               offset <= size, UInt64(length) <= size - offset,
               hasPermission(offset: offset, length: UInt64(length), required: 1) else { return false }
         if length == 0 { return true }
-        let start = Int(offset)
-        data.replaceSubrange(destinationOffset..<(destinationOffset + length),
-                             with: bytes[start..<(start + length)])
-        return true
+        return data.withUnsafeMutableBytes { destination -> Bool in
+            guard let base = destination.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            let target = base.advanced(by: destinationOffset)
+            let sourceOffset = Int(offset)
+            for index in 0..<length {
+                target[index] = bytes[sourceOffset + index]
+            }
+            return true
+        }
     }
 
     func write(_ data: Data, sourceRange: Range<Int>, offset: UInt64) -> Bool {
@@ -573,6 +577,20 @@ struct StaticELFExecutionTests {
         print("Descriptor-bound ELF snapshot path-replacement, growth and truncation regressions passed")
     }
 
+    static func testRejectsNonRegularELFSnapshot() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        do {
+            _ = try ELF64Loader.OpenedFileSnapshot(url: directory)
+            preconditionFailure("A directory must not be accepted as an ELF executable")
+        } catch ELF64Loader.LoadError.unreadable {
+            print("Non-regular ELF source rejection passed")
+        }
+    }
+
     static func testFailedPIERelocationClearsGuestMemory() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString + ".invalid-pie")
@@ -620,7 +638,7 @@ struct StaticELFExecutionTests {
         )
         let previousMessageCount = EmulationLog.shared.messages.count
         let exit = try interpreter.run(maxInstructions: 128)
-        precondition(exit == .exited(0), "Generated hybrid smoke guest did not exit with status 0")
+        precondition(exit == .halted, "Generated hybrid smoke guest did not exit cleanly")
         let smokeMessages = EmulationLog.shared.messages.dropFirst(previousMessageCount)
         // Guest output is stored as line-normalized log entries without newline delimiters.
         precondition(smokeMessages.contains { $0.contains("KENRAN_BUTO_XCHG_OK") },
@@ -629,8 +647,18 @@ struct StaticELFExecutionTests {
     }
 
     static func main() throws {
+        let transferMemory = GuestMemory(size: 4096)
+        let transferPayload = Data([0x10, 0x20, 0x30, 0x40])
+        precondition(transferMemory.write(transferPayload, offset: 0x100))
+        var transferDestination = Data(count: 6)
+        precondition(transferMemory.read(offset: 0x100, length: 4, into: &transferDestination, destinationOffset: 1))
+        precondition(transferDestination == Data([0, 0x10, 0x20, 0x30, 0x40, 0]))
+        precondition(!transferMemory.read(offset: 0x100, length: 4, into: &transferDestination, destinationOffset: 4))
+        precondition(transferMemory.read(offset: 0x100, length: 0, into: &transferDestination, destinationOffset: 6))
+
         testExecutePrefixPermissionBoundary()
         try testDescriptorBoundELFSnapshot()
+        try testRejectsNonRegularELFSnapshot()
         try testFailedPIERelocationClearsGuestMemory()
         if let smokePath = CommandLine.arguments.dropFirst().first {
             try testGeneratedSmokeELF(at: URL(fileURLWithPath: smokePath))
