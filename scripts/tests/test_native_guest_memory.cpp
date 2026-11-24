@@ -3,9 +3,31 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <cstdint>
 #include <random>
 #include <vector>
+
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+struct ReadExecuteBarrier {
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool entered = false;
+    bool release = false;
+};
+
+static void blockReadExecute(void *context) {
+    auto *barrier = static_cast<ReadExecuteBarrier *>(context);
+    std::unique_lock<std::mutex> lock(barrier->mutex);
+    barrier->entered = true;
+    barrier->condition.notify_all();
+    barrier->condition.wait(lock, [&] { return barrier->release; });
+}
+#endif
 
 int main() {
     constexpr uint64_t pageSize = 4096;
@@ -79,6 +101,186 @@ int main() {
         }
     }
 
+    // Permission checks are opt-in so the loader can populate pages before
+    // beginning the guest address-space mapping phase.
+    ISteamGuestMemory *protectedMemory = isteam_guest_memory_create(pageSize * 3);
+    assert(protectedMemory != nullptr);
+    const std::array<uint8_t, 4> instruction{0x90, 0x90, 0x90, 0xC3};
+    const std::array<uint8_t, 4> boundaryInstruction{0x48, 0xB8, 0x11, 0x22};
+    assert(isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
+    assert(isteam_guest_memory_write(protectedMemory, pageSize - 2,
+                                    boundaryInstruction.data(), boundaryInstruction.size()));
+    assert(isteam_guest_memory_begin_mapping(protectedMemory));
+    assert(isteam_guest_memory_map(protectedMemory, 0, pageSize, 5, false)); // read + execute
+    assert(isteam_guest_memory_map(protectedMemory, pageSize, pageSize, 3, false)); // read + write
+    std::array<uint8_t, 4> protectedBytes{};
+    assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(isteam_guest_memory_read_execute(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    std::array<uint8_t, 4> prefixBytes{};
+    prefixBytes.fill(0xA5);
+    assert(isteam_guest_memory_read_execute_prefix(
+        protectedMemory, pageSize - 2, prefixBytes.data(), prefixBytes.size()) == 2);
+    assert(prefixBytes[0] == boundaryInstruction[0]
+           && prefixBytes[1] == boundaryInstruction[1]
+           && prefixBytes[2] == 0xA5 && prefixBytes[3] == 0xA5);
+    assert(isteam_guest_memory_protect(protectedMemory, pageSize, pageSize, 5));
+    prefixBytes.fill(0xA5);
+    assert(isteam_guest_memory_read_execute_prefix(
+        protectedMemory, pageSize - 2, prefixBytes.data(), prefixBytes.size()) == 4);
+    assert(std::equal(prefixBytes.begin(), prefixBytes.end(), boundaryInstruction.begin()));
+    assert(isteam_guest_memory_protect(protectedMemory, pageSize, pageSize, 3));
+    assert(!isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
+    assert(!isteam_guest_memory_read_execute(protectedMemory, pageSize, protectedBytes.data(), protectedBytes.size()));
+    assert(isteam_guest_memory_write(protectedMemory, pageSize, instruction.data(), instruction.size()));
+    assert(isteam_guest_memory_protect(protectedMemory, 0, pageSize, 1)); // read-only, no execute
+    assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(!isteam_guest_memory_read_execute(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(!isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
+    assert(!isteam_guest_memory_protect(protectedMemory, pageSize * 2, pageSize, 0)); // unmapped
+    assert(isteam_guest_memory_protect(protectedMemory, pageSize, pageSize, 0)); // PROT_NONE
+    assert(!isteam_guest_memory_read(protectedMemory, pageSize, protectedBytes.data(), protectedBytes.size()));
+    assert(!isteam_guest_memory_write(protectedMemory, pageSize, instruction.data(), instruction.size()));
+    assert(isteam_guest_memory_map(protectedMemory, pageSize * 2, pageSize, 5, false));
+    assert(isteam_guest_memory_map(protectedMemory, pageSize * 2, pageSize, 2, true)); // merge permissions
+    assert(isteam_guest_memory_write(protectedMemory, pageSize * 2, instruction.data(), instruction.size()));
+    assert(isteam_guest_memory_read_execute(protectedMemory, pageSize * 2, protectedBytes.data(), protectedBytes.size()));
+    assert(isteam_guest_memory_unmap(protectedMemory, pageSize * 2, pageSize));
+    assert(isteam_guest_memory_allocated_pages(protectedMemory) == 2);
+    assert(!isteam_guest_memory_protect(protectedMemory, pageSize * 2, pageSize, 5));
+    assert(!isteam_guest_memory_read_execute(protectedMemory, pageSize * 2, protectedBytes.data(), protectedBytes.size()));
+    assert(isteam_guest_memory_map(protectedMemory, pageSize * 2, pageSize, 3, false));
+    protectedBytes.fill(0xA5);
+    assert(isteam_guest_memory_read(protectedMemory, pageSize * 2, protectedBytes.data(), protectedBytes.size()));
+    for (uint8_t value : protectedBytes) assert(value == 0);
+    // A range containing mapped pages and holes is safely unmapped in one pass.
+    assert(isteam_guest_memory_unmap(protectedMemory, 0, pageSize * 3));
+    assert(isteam_guest_memory_allocated_pages(protectedMemory) == 0);
+    assert(isteam_guest_memory_unmap(protectedMemory, 0, pageSize * 3));
+    assert(!isteam_guest_memory_map(protectedMemory, UINT64_MAX, 2, 3, false));
+    isteam_guest_memory_clear(protectedMemory);
+    assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
+    isteam_guest_memory_destroy(protectedMemory);
+
+#ifdef ISTEAM_GUEST_MEMORY_TESTING
+    // Hold read_execute after permission validation. protect() must not be able
+    // to revoke execute permission until the bytes have been copied.
+    ISteamGuestMemory *atomicReadMemory = isteam_guest_memory_create(pageSize);
+    assert(atomicReadMemory != nullptr);
+    const std::array<uint8_t, 4> atomicInstruction{0x90, 0x90, 0x90, 0xC3};
+    assert(isteam_guest_memory_write(atomicReadMemory, 0,
+                                    atomicInstruction.data(), atomicInstruction.size()));
+    assert(isteam_guest_memory_begin_mapping(atomicReadMemory));
+    assert(isteam_guest_memory_map(atomicReadMemory, 0, pageSize, 5, false));
+
+    ReadExecuteBarrier readBarrier;
+    isteam_guest_memory_set_read_execute_test_hook(blockReadExecute, &readBarrier);
+    std::atomic<bool> readSucceeded{false};
+    std::atomic<bool> protectStarted{false};
+    std::atomic<bool> protectSucceeded{false};
+    std::thread reader([&] {
+        std::array<uint8_t, 4> bytes{};
+        readSucceeded.store(
+            isteam_guest_memory_read_execute(atomicReadMemory, 0, bytes.data(), bytes.size()),
+            std::memory_order_release);
+    });
+    {
+        std::unique_lock<std::mutex> lock(readBarrier.mutex);
+        readBarrier.condition.wait(lock, [&] { return readBarrier.entered; });
+    }
+    std::thread protector([&] {
+        protectStarted.store(true, std::memory_order_release);
+        protectSucceeded.store(
+            isteam_guest_memory_protect(atomicReadMemory, 0, pageSize, 3),
+            std::memory_order_release);
+    });
+    while (!protectStarted.load(std::memory_order_acquire)) std::this_thread::yield();
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    assert(!protectSucceeded.load(std::memory_order_acquire));
+    {
+        std::lock_guard<std::mutex> lock(readBarrier.mutex);
+        readBarrier.release = true;
+    }
+    readBarrier.condition.notify_all();
+    reader.join();
+    protector.join();
+    isteam_guest_memory_set_read_execute_test_hook(nullptr, nullptr);
+    assert(readSucceeded.load(std::memory_order_acquire));
+    assert(protectSucceeded.load(std::memory_order_acquire));
+    std::array<uint8_t, 4> revokedBytes{};
+    assert(!isteam_guest_memory_read_execute(
+        atomicReadMemory, 0, revokedBytes.data(), revokedBytes.size()));
+    isteam_guest_memory_destroy(atomicReadMemory);
+
+    // MAP_FIXED replacement stages every permission node before touching old bytes.
+    ISteamGuestMemory *transactional = isteam_guest_memory_create(pageSize * 4);
+    assert(transactional != nullptr);
+    assert(isteam_guest_memory_begin_mapping(transactional));
+    assert(isteam_guest_memory_map(transactional, 0, pageSize, 3, false));
+    const uint8_t originalByte = 0xA5;
+    assert(isteam_guest_memory_write(transactional, 0, &originalByte, 1));
+    // One old page and one new page: fail after the new permission node is staged,
+    // but before destination metadata reserve/commit.
+    isteam_guest_memory_set_allocation_failure_countdown(2);
+    assert(isteam_guest_memory_map_transaction(
+        transactional, 0, pageSize * 2, 5, true
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_ALLOCATION_FAILED);
+    isteam_guest_memory_set_allocation_failure_countdown(-1);
+    std::array<uint8_t, 1> preservedByte{};
+    assert(isteam_guest_memory_read(transactional, 0, preservedByte.data(), 1));
+    assert(preservedByte[0] == originalByte);
+    assert(isteam_guest_memory_has_mapped_pages(transactional, 0, pageSize));
+    assert(!isteam_guest_memory_has_mapped_pages(transactional, pageSize, pageSize));
+    assert(isteam_guest_memory_map_transaction(
+        transactional, 0, pageSize, 5, false
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_ALREADY_MAPPED);
+    assert(isteam_guest_memory_map_transaction(
+        transactional, 0, pageSize, 5, true
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS);
+    preservedByte[0] = 0xA5;
+    assert(isteam_guest_memory_read(transactional, 0, preservedByte.data(), 1));
+    assert(preservedByte[0] == 0);
+    assert(isteam_guest_memory_read_execute(transactional, 0, preservedByte.data(), 1));
+    isteam_guest_memory_destroy(transactional);
+
+    // brk growth stages all new pages first; an injected failure preserves the
+    // old heap bytes and leaves every page beyond the old break unmapped.
+    ISteamGuestMemory *heap = isteam_guest_memory_create(pageSize * 8);
+    assert(heap != nullptr);
+    assert(isteam_guest_memory_write(heap, 0, &originalByte, 1));
+    assert(isteam_guest_memory_begin_mapping(heap));
+    assert(isteam_guest_memory_map(heap, 0, pageSize, 3, false));
+    isteam_guest_memory_set_allocation_failure_countdown(3);
+    assert(isteam_guest_memory_resize_break(
+        heap, pageSize, pageSize * 3
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_ALLOCATION_FAILED);
+    isteam_guest_memory_set_allocation_failure_countdown(-1);
+    preservedByte[0] = 0;
+    assert(isteam_guest_memory_read(heap, 0, preservedByte.data(), 1));
+    assert(preservedByte[0] == originalByte);
+    assert(!isteam_guest_memory_has_mapped_pages(heap, pageSize, pageSize * 2));
+    assert(isteam_guest_memory_resize_break(
+        heap, pageSize, pageSize * 3
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS);
+    assert(isteam_guest_memory_has_mapped_pages(heap, pageSize, pageSize * 2));
+    const uint8_t heapMarker = 0x5A;
+    assert(isteam_guest_memory_write(heap, pageSize + 128, &heapMarker, 1));
+    assert(isteam_guest_memory_write(heap, pageSize * 2, &heapMarker, 1));
+    assert(isteam_guest_memory_resize_break(
+        heap, pageSize * 3, pageSize + 128
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS);
+    preservedByte[0] = 0xA5;
+    assert(isteam_guest_memory_read(heap, pageSize + 128, preservedByte.data(), 1));
+    assert(preservedByte[0] == 0);
+    assert(!isteam_guest_memory_has_mapped_pages(heap, pageSize * 2, pageSize));
+    assert(isteam_guest_memory_resize_break(
+        heap, pageSize + 128, pageSize * 3
+    ) == ISTEAM_GUEST_MEMORY_TRANSACTION_SUCCESS);
+    assert(isteam_guest_memory_has_mapped_pages(heap, pageSize * 2, pageSize));
+    isteam_guest_memory_destroy(heap);
+    isteam_guest_memory_set_allocation_failure_countdown(-1);
+#endif
+
     // Clearing the final partial page should release its backing allocation too.
     constexpr uint64_t partialSize = pageSize + 17;
     ISteamGuestMemory *partial = isteam_guest_memory_create(partialSize);
@@ -124,6 +326,15 @@ int main() {
     fallbackValue[0] = 0;
     assert(isteam_guest_memory_read(huge, UINT64_MAX - 1, fallbackValue.data(), 1));
     assert(fallbackValue[0] == fallbackMarker);
+    assert(isteam_guest_memory_begin_mapping(huge));
+    const uint64_t finalPage = UINT64_MAX & ~uint64_t(4095);
+    const uint64_t finalPageLength = UINT64_MAX - finalPage;
+    assert(isteam_guest_memory_map(huge, finalPage, finalPageLength, 3, false));
+    assert(isteam_guest_memory_write(huge, finalPage, &fallbackMarker, 1));
+    // A huge sparse unmap must visit allocated pages, not every virtual page.
+    assert(isteam_guest_memory_unmap(huge, 0, UINT64_MAX));
+    assert(isteam_guest_memory_allocated_pages(huge) == 0);
+    assert(!isteam_guest_memory_read(huge, finalPage, fallbackValue.data(), 1));
     assert(isteam_guest_memory_zero(huge, 0, UINT64_MAX));
     assert(isteam_guest_memory_allocated_pages(huge) == 0);
     isteam_guest_memory_destroy(huge);
@@ -175,6 +386,27 @@ int main() {
     assert(isteam_guest_memory_read(permissionMemory, pageSize, executableBytes.data(), 1));
     assert(isteam_guest_memory_write(permissionMemory, pageSize, dataBytes.data(), 1));
     isteam_guest_memory_destroy(permissionMemory);
+
+    // Execute-only and write-only mappings keep R/W/X permissions independent.
+    ISteamGuestMemory *permissionModes = isteam_guest_memory_create(pageSize);
+    assert(permissionModes != nullptr);
+    const uint8_t permissionMarker = 0xC3;
+    assert(isteam_guest_memory_write(permissionModes, 0, &permissionMarker, 1));
+    assert(isteam_guest_memory_begin_mapping(permissionModes));
+    assert(isteam_guest_memory_map(permissionModes, 0, pageSize, 0x4, false));
+    std::array<uint8_t, 1> permissionValue{};
+    assert(isteam_guest_memory_read_execute(permissionModes, 0, permissionValue.data(), 1));
+    assert(!isteam_guest_memory_read(permissionModes, 0, permissionValue.data(), 1));
+    assert(!isteam_guest_memory_write(permissionModes, 0, &permissionMarker, 1));
+    assert(isteam_guest_memory_protect(permissionModes, 0, pageSize, 0x2));
+    assert(!isteam_guest_memory_read_execute(permissionModes, 0, permissionValue.data(), 1));
+    assert(!isteam_guest_memory_read(permissionModes, 0, permissionValue.data(), 1));
+    assert(isteam_guest_memory_write(permissionModes, 0, &permissionMarker, 1));
+    assert(isteam_guest_memory_protect(permissionModes, 0, pageSize, 0x1));
+    assert(isteam_guest_memory_read(permissionModes, 0, permissionValue.data(), 1));
+    assert(!isteam_guest_memory_read_execute(permissionModes, 0, permissionValue.data(), 1));
+    assert(!isteam_guest_memory_write(permissionModes, 0, &permissionMarker, 1));
+    isteam_guest_memory_destroy(permissionModes);
 
     isteam_guest_memory_clear(memory);
     assert(isteam_guest_memory_allocated_pages(memory) == 0);

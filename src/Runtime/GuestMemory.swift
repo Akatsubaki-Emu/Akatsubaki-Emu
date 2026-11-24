@@ -1,5 +1,12 @@
 import Foundation
 
+enum GuestMemoryTransactionResult: Int32 {
+    case success = 0
+    case invalid = 1
+    case alreadyMapped = 2
+    case allocationFailed = 3
+}
+
 /// Sparse guest memory backed by native C++ pages. Bounds are checked by the
 /// native implementation; absent pages read as zero without allocating memory.
 final class GuestMemory {
@@ -222,6 +229,30 @@ final class GuestMemory {
         guard let native, offset % Self.pageSize == 0, length > 0,
               offset <= size, length <= size - offset else { return false }
         return isteam_guest_memory_unmap(native, offset, length)
+    }
+
+    func hasMappedPages(offset: UInt64, length: UInt64) -> Bool {
+        guard let native, length > 0, offset <= size, length <= size - offset else { return false }
+        return isteam_guest_memory_has_mapped_pages(native, offset, length)
+    }
+
+    @discardableResult
+    func mapTransaction(offset: UInt64, length: UInt64, permissions: UInt8,
+                        replaceExisting: Bool) -> GuestMemoryTransactionResult {
+        guard let native, offset % Self.pageSize == 0, length > 0,
+              permissions & ~UInt8(0x7) == 0,
+              offset <= size, length <= size - offset else { return .invalid }
+        let result = Int32(isteam_guest_memory_map_transaction(
+            native, offset, length, permissions, replaceExisting
+        ))
+        return GuestMemoryTransactionResult(rawValue: result) ?? .invalid
+    }
+
+    @discardableResult
+    func resizeBreak(from oldBreak: UInt64, to newBreak: UInt64) -> GuestMemoryTransactionResult {
+        guard let native, oldBreak <= size, newBreak <= size else { return .invalid }
+        let result = Int32(isteam_guest_memory_resize_break(native, oldBreak, newBreak))
+        return GuestMemoryTransactionResult(rawValue: result) ?? .invalid
     }
 
     func clear() { if let native { isteam_guest_memory_clear(native) } }
