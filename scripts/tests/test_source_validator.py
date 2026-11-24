@@ -685,6 +685,10 @@ class SourceValidatorTests(unittest.TestCase):
         runtime = launcher.split("final class LinuxELFRuntime", 1)[1]
         self.assertIn("format == .linuxELF", launcher)
         self.assertIn("LinuxELFRuntime.shared.launch(", launcher)
+        self.assertIn("let configuration = VMConfiguration.defaultLinux", runtime)
+        self.assertIn("configuration: configuration", runtime)
+        self.assertNotIn("guestMemorySize", runtime)
+        self.assertNotIn("memorySize: Self.guestMemorySize", runtime)
         self.assertIn("machine.loadELFImage(at: executable, arguments: arguments)", runtime)
         self.assertIn("machine.runBatch(maxInstructions: Self.batchInstructionLimit)", runtime)
         self.assertIn("queue.asyncAfter", runtime)

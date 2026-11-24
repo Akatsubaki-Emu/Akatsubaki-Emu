@@ -800,7 +800,8 @@ required = {
         "queue.async { machine.stop() }",
         "machine.runBatch(maxInstructions: Self.batchInstructionLimit)",
         "queue.asyncAfter",
-        "private static let guestMemorySize: UInt64 = 1024 * 1024 * 1024",
+        "let configuration = VMConfiguration.defaultLinux",
+        "configuration: configuration",
         "completion: ((Result<GuestCPUExit, Error>) -> Void)? = nil",
     ],
     "src/Core/VMSaveSlotStore.swift": [

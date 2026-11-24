@@ -93,7 +93,6 @@ final class GameLauncher {
 final class LinuxELFRuntime {
     static let shared = LinuxELFRuntime()
 
-    private static let guestMemorySize: UInt64 = 1024 * 1024 * 1024
     private static let batchInstructionLimit: UInt64 = 250_000
 
     private let queue = DispatchQueue(label: "com.xthrx.akatsubaki.linux-elf-runtime", qos: .userInitiated)
@@ -124,9 +123,10 @@ final class LinuxELFRuntime {
 
         queue.async { [weak self] in
             guard let self else { return }
+            // GuestMachine derives its allocation from the device-aware Linux RAM budget.
+            let configuration = VMConfiguration.defaultLinux
             let machine = GuestMachine(
-                configuration: .defaultLinux,
-                memorySize: Self.guestMemorySize,
+                configuration: configuration,
                 aotExecutor: KenranButoAOTExecutor()
             )
             guard machine.state == .configured else {
