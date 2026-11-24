@@ -26,6 +26,13 @@ class SmokeArtifactPackagingTests(unittest.TestCase):
         self.assertIn("Runtime smoke guest expected output: Linuxx86_64KENRAN_BUTO_RUNTIME_OK", workflow)
         self.assertIn("hybrid_runtime_smoke.elf", docs)
         self.assertIn("KENRAN_BUTO_RUNTIME_OK", docs)
+        self.assertIn("src/Runtime/GuestMachine.swift", workflow)
+        self.assertIn("src/Core/EmulationLog.swift", workflow)
+        self.assertIn("scripts/tests/test_native_guest_machine_smoke.swift", workflow)
+        self.assertIn('"$RUNNER_TEMP/akatsubaki-core-tests/native-guest-memory.o"', workflow)
+        self.assertIn("-Xlinker -lc++", workflow)
+        self.assertIn('"$RUNNER_TEMP/akatsubaki-core-tests/native-guest-machine-smoke" "$RUNNER_TEMP/hybrid_runtime_smoke.elf"', workflow)
+        self.assertIn("Native GuestMachine integration regression", docs)
         self.assertIn("XCHG R8D,R9D", docs)
         self.assertIn("XCHG R10,R11", docs)
 

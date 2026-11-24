@@ -42,3 +42,10 @@ On a physical iPad, import both ELF files from the core-only IPA's smoke-kit art
 ## GitLab validation artifact
 
 The GitLab main-branch API/web validation pipeline also builds and runs both static guests and retains them as job artifacts for seven days. The job is deliberately manual/API-triggered; if GitLab reports shared-runner quota exhaustion, no tests have run and the pipeline must be retried after quota is restored.
+
+
+## Native GuestMachine integration regression
+
+The core-only iOS workflow now runs the runtime smoke guest through the application's actual GuestMachine, ELF64Loader, LinuxProcessStackBuilder, X86_64Interpreter and C-backed GuestMemory implementation. It checks uname-written guest memory, captured stdout, exit status 0, a second launch after CPU reset, and guest-page cleanup after stop.
+
+This closes the previous test-double-only gap for the execution engine. It still does not replace installation and execution on a physical iPad.

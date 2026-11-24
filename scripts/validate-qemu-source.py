@@ -517,6 +517,17 @@ required = {
         "KENRAN_BUTO_RUNTIME_OK",
         "subprocess.run",
     ],
+    "scripts/tests/test_native_guest_machine_smoke.swift": [
+        "struct VMConfiguration",
+        "final class HostDeviceBridge",
+        "let machine = GuestMachine(",
+        "memorySize: UInt64(64 * 1024 * 1024)",
+        "loadELFImage(at: guestURL",
+        "runBatch(maxInstructions: 256)",
+        "KENRAN_BUTO_RUNTIME_OK",
+        "machine.stop()",
+        "allocatedPageCount == 0",
+    ],
     "scripts/tests/test_static_elf_execution.swift": [
         "KENRAN_BUTO_AOT_TESTS",
         "aotExecutor.refreshAvailability()",

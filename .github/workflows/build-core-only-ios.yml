@@ -186,6 +186,26 @@ jobs:
             -o "$RUNNER_TEMP/akatsubaki-core-tests/static-elf-tests"
           "$RUNNER_TEMP/akatsubaki-core-tests/static-elf-tests" "$RUNNER_TEMP/hybrid_xchg_smoke.elf" "$RUNNER_TEMP/hybrid_runtime_smoke.elf"
 
+      - name: Execute ELF through native GuestMachine and C-backed guest memory
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            -import-objc-header iSteam/NativeGuestMemory.h \
+            src/Core/EmulationLog.swift \
+            src/Runtime/GuestMemory.swift \
+            src/Runtime/GuestMachine.swift \
+            src/Runtime/ELF64Loader.swift \
+            src/Runtime/LinuxProcessStackBuilder.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            src/Runtime/X86_64ALU.swift \
+            src/Runtime/X86_64Interpreter.swift \
+            scripts/tests/test_native_guest_machine_smoke.swift \
+            "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-memory.o" \
+            -Xlinker -lc++ \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-machine-smoke"
+          "$RUNNER_TEMP/akatsubaki-core-tests/native-guest-machine-smoke" "$RUNNER_TEMP/hybrid_runtime_smoke.elf"
+
       - name: Run hybrid backend routing tests
         shell: bash
         run: |
