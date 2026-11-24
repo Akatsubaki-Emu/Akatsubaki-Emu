@@ -143,3 +143,11 @@ The native ABI is versioned and size-checked. Guest registers are copied into th
 Executable blocks use separate writable and executable mappings and are capped at 64 blocks / 16 MiB of page-rounded executable memory. The translation cache identity includes ABI and resource budgets, and cached artifacts are compared with a canonical translation before reuse. The translator uses bounded input/output budgets and a fixed four-word instruction emission buffer.
 
 The dedicated ARM64 workflow now has ABI, memory-callback, side-exit, differential interpreter, cache-limit and static-ELF hybrid tests. These are hosted validation gates only. Physical iPad execution, JIT entitlement behavior, app signing, graphics/input, persistent guest state and repeat-launch cleanup still require device verification.
+
+## Process-lifetime QEMU and VNC frame ownership
+
+QEMU's native library remains a process-global, one-shot initialization. The application now owns one shared QEMUNativeRuntime for the process lifetime and does not call the native shutdown path when a user stops a guest. The command line uses -no-shutdown and a private AF_UNIX QMP socket at /tmp/akatsubaki-qmp.sock. The bridge accepts only stop, cont, system_reset and query-status commands. Stopping a VM pauses the guest; launching the same configuration resets and resumes it. A different VM configuration is rejected with an app-restart diagnostic rather than attempting unsafe qemu_init re-entry. Disk and firmware security scopes remain held while the QEMU process is alive.
+
+VNC frames carry the QEMUVNCClient session generation from the locked framebuffer snapshot through VirtIOGPU and the Metal backend. Session replacement invalidates pending uploads, pending full-frame snapshots and published framebuffer slots. The Metal draw path rechecks both session and framebuffer generations immediately before command-buffer presentation, so work queued by an old VNC connection cannot replace the new session's frame.
+
+The QMP and frame-generation source tests verify these lifecycle contracts. They do not replace physical iPad testing of QEMU initialization, QMP socket availability, JIT policy, guest boot, display and input, repeat launches or persistent guest state.
