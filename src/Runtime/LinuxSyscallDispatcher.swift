@@ -40,11 +40,10 @@ final class LinuxSyscallDispatcher {
     }
 
     func reset() {
-        if programBreak > initialProgramBreak {
-            _ = memory.zero(offset: initialProgramBreak, length: programBreak - initialProgramBreak)
-            let heapStart = Self.alignUp(initialProgramBreak)
-            let heapEnd = Self.alignUp(programBreak)
-            if heapEnd > heapStart { _ = memory.unmap(offset: heapStart, length: heapEnd - heapStart) }
+        let heapStart = Self.alignUp(initialProgramBreak)
+        let heapEnd = Self.alignUp(programBreak)
+        if heapEnd > heapStart {
+            _ = memory.unmap(offset: heapStart, length: heapEnd - heapStart)
         }
         for range in mappedRanges {
             _ = memory.unmap(offset: range.lowerBound, length: range.upperBound - range.lowerBound)
@@ -54,6 +53,7 @@ final class LinuxSyscallDispatcher {
         closedStandardDescriptorMask = 0
         let (rawCursor, overflow) = initialProgramBreak.addingReportingOverflow(0x10000)
         let minimumCursor = overflow ? UInt64.max : Self.alignUp(rawCursor)
+        minimumMmapCursor = minimumCursor
         let preferred = max(minimumCursor, 0x10000000)
         mmapCursor = preferred < stackBase ? preferred : minimumCursor
     }
@@ -216,38 +216,35 @@ final class LinuxSyscallDispatcher {
 
     private func setBreak(_ requested: UInt64) -> UInt64 {
         if requested == 0 { return programBreak }
-        // The heap may grow up to the first live mmap range, or the stack
-        // guard when no mmap ranges exist. mmapCursor is only an allocation
-        // hint; using it as the heap ceiling incorrectly caps brk at 64 KiB.
         let stackGuard = stackBase >= 4096 ? stackBase - 4096 : 0
-        let upperLimit = min(mappedRanges.first?.lowerBound ?? stackGuard, stackGuard)
+        // mmapCursor is only a placement hint; the stack guard is the heap ceiling.
+        let firstMappingIndex = firstMappedRangeEnding(after: initialProgramBreak)
+        let firstMapping = firstMappingIndex < mappedRanges.count ? mappedRanges[firstMappingIndex] : nil
+        let upperLimit: UInt64
+        if let firstMapping {
+            upperLimit = firstMapping.lowerBound < initialProgramBreak ? initialProgramBreak : min(firstMapping.lowerBound, stackGuard)
+        } else { upperLimit = stackGuard }
         guard requested >= initialProgramBreak, requested <= upperLimit,
               requested <= memory.size else { return programBreak }
+
         let previousBreak = programBreak
-        if requested > previousBreak {
-            let mapStart = Self.alignUp(previousBreak)
-            let mapEnd = Self.alignUp(requested)
-            if mapEnd > mapStart,
-               !memory.map(offset: mapStart, length: mapEnd - mapStart, permissions: 0x3) {
+        if requested < previousBreak {
+            let shrinkStart = Self.alignUp(requested)
+            let shrinkEnd = Self.alignUp(previousBreak)
+            if shrinkStart < shrinkEnd && mappedRanges.contains(where: {
+                $0.lowerBound < shrinkEnd && $0.upperBound > shrinkStart
+            }) {
                 return previousBreak
             }
-            guard memory.zero(offset: previousBreak, length: requested - previousBreak) else {
-                if mapEnd > mapStart { _ = memory.unmap(offset: mapStart, length: mapEnd - mapStart) }
-                return previousBreak
-            }
-        } else if requested < previousBreak {
-            let unmapStart = Self.alignUp(requested)
-            let unmapEnd = Self.alignUp(previousBreak)
-            if unmapEnd > unmapStart,
-               !memory.unmap(offset: unmapStart, length: unmapEnd - unmapStart) {
-                return previousBreak
-            }
-            guard memory.zero(offset: requested, length: previousBreak - requested) else { return previousBreak }
+        }
+
+        guard memory.resizeBreak(from: previousBreak, to: requested) == .success else {
+            return previousBreak
         }
         programBreak = requested
-        if requested < previousBreak {
-            // Reuse the released heap address space. findFreeAddress still
-            // skips any live mappings, so rewinding the hint is safe.
+        if requested > previousBreak {
+            mmapCursor = max(mmapCursor, Self.alignUp(requested))
+        } else if requested < previousBreak {
             mmapCursor = max(minimumMmapCursor, Self.alignUp(requested))
         }
         return programBreak
@@ -256,7 +253,6 @@ final class LinuxSyscallDispatcher {
     private func mapAnonymous(address requested: UInt64, length: UInt64,
                               protection: UInt64, flags: UInt64) -> UInt64 {
         let mapType = flags & 0x03
-        // Linux PROT_READ/WRITE/EXEC map directly to the guest R/W/X bits.
         let supportedFlags: UInt64 = 0x03 | 0x10 | 0x20 | 0x100000
         guard length > 0, length <= memory.size, flags & 0x20 != 0,
               flags & ~supportedFlags == 0, protection & ~UInt64(0x7) == 0,
@@ -266,10 +262,11 @@ final class LinuxSyscallDispatcher {
         guard !overflow else { return errno(12) }
         let size = rounded & ~UInt64(4095)
         let limit = stackBase >= 4096 ? stackBase - 4096 : 0
-        let fixed = flags & 0x10 != 0 || flags & 0x100000 != 0
+        let fixed = flags & 0x10 != 0
         let noReplace = flags & 0x100000 != 0
+        let fixedAddress = fixed || noReplace
         var address: UInt64
-        if fixed {
+        if fixedAddress {
             guard requested & 0xFFF == 0 else { return errno(22) }
             address = requested
         } else {
@@ -283,77 +280,79 @@ final class LinuxSyscallDispatcher {
             }
         }
         let (end, endOverflow) = address.addingReportingOverflow(size)
-        guard !endOverflow, address >= programBreak, end <= limit, end <= memory.size else {
+        guard !endOverflow, end <= memory.size else { return errno(12) }
+        if !fixedAddress && (address < programBreak || end > limit) { return errno(12) }
+
+        // Allocate the Swift range-index update before the native transaction.
+        // Once native pages change, assigning this prepared array is non-allocating.
+        let nextMappedRanges = mappedRangesAfterMapping(
+            address..<end, replacing: fixed
+        )
+        let result = memory.mapTransaction(
+            offset: address, length: size,
+            permissions: guestPermissions(protection),
+            replaceExisting: fixed
+        )
+        switch result {
+        case .success:
+            break
+        case .alreadyMapped:
+            return noReplace ? errno(17) : errno(12)
+        case .allocationFailed:
             return errno(12)
+        case .invalid:
+            return errno(22)
         }
-        let firstPotential = firstMappedRangeEnding(after: address)
-        var overlappingRanges: [Range<UInt64>] = []
-        if firstPotential < mappedRanges.count {
-            var index = firstPotential
-            while index < mappedRanges.count && mappedRanges[index].lowerBound < end {
-                overlappingRanges.append(mappedRanges[index])
-                index += 1
-            }
-        }
-        if !overlappingRanges.isEmpty {
-            if noReplace { return errno(17) }
-            guard fixed else { return errno(12) }
-        }
-        // Native map updates the entire permission range atomically. For MAP_FIXED,
-        // this replaces old page protections without first destroying the old map.
-        guard memory.map(offset: address, length: size, permissions: UInt8(protection)) else {
-            return errno(12)
-        }
-        guard memory.zero(offset: address, length: size) else {
-            _ = memory.unmap(offset: address, length: size)
-            return errno(12)
-        }
-        replaceMappedRange(address..<end)
-        if !fixed { mmapCursor = max(mmapCursor, end) }
+        mappedRanges = nextMappedRanges
+        if !fixedAddress { mmapCursor = max(mmapCursor, end) }
         return address
     }
 
-    private func insertMappedRange(_ newRange: Range<UInt64>) {
+    private func mappedRangesAfterMapping(
+        _ newRange: Range<UInt64>, replacing: Bool
+    ) -> [Range<UInt64>] {
+        var result: [Range<UInt64>] = []
+        result.reserveCapacity(mappedRanges.count + 1)
+        for range in mappedRanges {
+            if replacing && range.lowerBound < newRange.upperBound
+                && range.upperBound > newRange.lowerBound {
+                if range.lowerBound < newRange.lowerBound {
+                    result.append(range.lowerBound..<newRange.lowerBound)
+                }
+                if range.upperBound > newRange.upperBound {
+                    result.append(newRange.upperBound..<range.upperBound)
+                }
+            } else {
+                result.append(range)
+            }
+        }
         var lower = 0
-        var upper = mappedRanges.count
+        var upper = result.count
         while lower < upper {
             let middle = lower + (upper - lower) / 2
-            if mappedRanges[middle].lowerBound <= newRange.lowerBound { lower = middle + 1 }
+            if result[middle].lowerBound <= newRange.lowerBound { lower = middle + 1 }
             else { upper = middle }
         }
-        mappedRanges.insert(newRange, at: lower)
+        result.insert(newRange, at: lower)
+        return result
     }
 
-    private func replaceMappedRange(_ newRange: Range<UInt64>) {
-        var updated: [Range<UInt64>] = []
-        updated.reserveCapacity(mappedRanges.count + 1)
+    private func mappedRangesAfterRemoving(_ removed: Range<UInt64>) -> [Range<UInt64>] {
+        var result: [Range<UInt64>] = []
+        result.reserveCapacity(mappedRanges.count + 1)
         for range in mappedRanges {
-            if range.upperBound <= newRange.lowerBound || range.lowerBound >= newRange.upperBound {
-                updated.append(range)
+            if range.upperBound <= removed.lowerBound || range.lowerBound >= removed.upperBound {
+                result.append(range)
                 continue
             }
-            if range.lowerBound < newRange.lowerBound {
-                updated.append(range.lowerBound..<newRange.lowerBound)
+            if range.lowerBound < removed.lowerBound {
+                result.append(range.lowerBound..<removed.lowerBound)
             }
-            if range.upperBound > newRange.upperBound {
-                updated.append(newRange.upperBound..<range.upperBound)
+            if range.upperBound > removed.upperBound {
+                result.append(removed.upperBound..<range.upperBound)
             }
         }
-        updated.append(newRange)
-        mappedRanges = updated.sorted { $0.lowerBound < $1.lowerBound }
-    }
-
-    private func protect(address: UInt64, length: UInt64, protection: UInt64) -> UInt64 {
-        guard address & 0xFFF == 0, length > 0,
-              protection & ~UInt64(0x7) == 0 else { return errno(22) }
-        let (rounded, overflow) = length.addingReportingOverflow(4095)
-        guard !overflow else { return errno(22) }
-        let size = rounded & ~UInt64(4095)
-        guard address <= memory.size, size <= memory.size - address,
-              memory.protect(offset: address, length: size, permissions: UInt8(protection)) else {
-            return errno(22)
-        }
-        return 0
+        return result
     }
 
     private func firstMappedRangeEnding(after address: UInt64) -> Int {
@@ -376,6 +375,11 @@ final class LinuxSyscallDispatcher {
             if range.lowerBound >= candidateEnd { break }
             if candidate < range.upperBound { candidate = Self.alignUp(range.upperBound) }
         }
+        while memory.hasMappedPages(offset: candidate, length: size) {
+            let (next, nextOverflow) = candidate.addingReportingOverflow(4096)
+            guard !nextOverflow else { return nil }
+            candidate = Self.alignUp(next)
+        }
         let (end, overflow) = candidate.addingReportingOverflow(size)
         guard !overflow, end <= limit, end <= memory.size else { return nil }
         return candidate
@@ -387,27 +391,35 @@ final class LinuxSyscallDispatcher {
         guard !overflow else { return errno(22) }
         let size = rounded & ~UInt64(4095)
         let (end, endOverflow) = address.addingReportingOverflow(size)
-        let limit = stackBase >= 4096 ? stackBase - 4096 : 0
-        guard !endOverflow, address >= programBreak, end <= limit, end <= memory.size else {
-            return errno(22)
-        }
+        guard !endOverflow, end <= memory.size else { return errno(22) }
 
+        // Prepare the Swift-side range update before the native unmap commits.
+        let nextMappedRanges = mappedRangesAfterRemoving(address..<end)
         guard memory.unmap(offset: address, length: size) else { return errno(22) }
-        var remaining: [Range<UInt64>] = []
-        for range in mappedRanges {
-            if range.upperBound <= address || range.lowerBound >= end {
-                remaining.append(range)
-                continue
-            }
-            if range.lowerBound < address {
-                remaining.append(range.lowerBound..<address)
-            }
-            if range.upperBound > end {
-                remaining.append(end..<range.upperBound)
-            }
-        }
-        mappedRanges = remaining
+        mappedRanges = nextMappedRanges
+        mmapCursor = min(mmapCursor, address)
         return 0
+    }
+
+    private func protect(address: UInt64, length: UInt64, protection: UInt64) -> UInt64 {
+        guard protection & ~UInt64(0x7) == 0,
+              address & 0xFFF == 0, length > 0 else { return errno(22) }
+        let (rounded, overflow) = length.addingReportingOverflow(4095)
+        guard !overflow else { return errno(22) }
+        let size = rounded & ~UInt64(4095)
+        guard address <= memory.size, size <= memory.size - address else { return errno(22) }
+        // GuestMemory is the authority for mapped pages, including PT_LOAD and stack pages.
+        guard memory.protect(offset: address, length: size,
+                             permissions: guestPermissions(protection)) else {
+            return errno(12)
+        }
+        return 0
+    }
+
+    private func guestPermissions(_ protection: UInt64) -> UInt8 {
+        var permissions = UInt8(protection & 0x7)
+        if permissions & 0x6 != 0 { permissions |= 0x1 }
+        return permissions
     }
 
     private func validateRange(address: UInt64, length: UInt64) -> UInt64 {

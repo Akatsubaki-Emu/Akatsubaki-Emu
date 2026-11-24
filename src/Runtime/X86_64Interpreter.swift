@@ -977,6 +977,17 @@ final class X86_64Interpreter: GuestCPUBackend {
         return UInt16(low) | UInt16(high) << 8
     }
 
+    private func readExecutableInteger(at address: UInt64, byteCount: Int) -> UInt64? {
+        guard (1...8).contains(byteCount) else { return nil }
+        var value: UInt64 = 0
+        for index in 0..<byteCount {
+            let (byteAddress, overflow) = address.addingReportingOverflow(UInt64(index))
+            guard !overflow, let byte = memory.readExecuteByte(offset: byteAddress) else { return nil }
+            value |= UInt64(byte) << (index * 8)
+        }
+        return value
+    }
+
     private func fetchUInt32() -> UInt32? {
         guard instructionWindowCursor <= 11 else {
             instructionLengthExceeded = true
@@ -993,7 +1004,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             rip &+= 4
             return value
         }
-        guard let value = memory.readUInt32(offset: rip) else { return nil }
+        guard let value = readExecutableInteger(at: rip, byteCount: 4).map(UInt32.init(truncatingIfNeeded:)) else { return nil }
         instructionWindowCursor += 4
         rip &+= 4
         return value
@@ -1019,7 +1030,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             rip &+= 8
             return value
         }
-        guard let value = memory.readUInt64(offset: rip) else { return nil }
+        guard let value = readExecutableInteger(at: rip, byteCount: 8) else { return nil }
         instructionWindowCursor += 8
         rip &+= 8
         return value
