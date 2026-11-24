@@ -271,6 +271,8 @@ jobs:
             manifest="$mode_dir/runtime-library-path.txt"
             exports="$mode_dir/exports.txt"
             test -s "$manifest" || { echo "Missing $mode runtime manifest." >&2; exit 1; }
+            manifest_lines="$(awk 'END { print NR }' "$manifest")"
+            test "$manifest_lines" -eq 1 || { echo "Invalid $mode runtime manifest: expected exactly one line, found $manifest_lines." >&2; exit 1; }
             test -s "$exports" || { echo "Missing $mode export manifest." >&2; exit 1; }
             test "$(awk 'END { print NR }' "$manifest")" -eq 1 || { echo "$mode runtime manifest must contain exactly one path." >&2; exit 1; }
             runtime_rel="$(head -n 1 "$manifest")"
