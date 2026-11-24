@@ -14,6 +14,7 @@ final class QEMUNativeRuntime {
         }
     }
 
+    private let stateLock = NSLock()
     private(set) var started = false
     private(set) var isPaused = false
     private var sessionKey: String?
@@ -24,6 +25,8 @@ final class QEMUNativeRuntime {
 
     func start(configuration: VMConfiguration, diskImage: URL, writableDiskImage: URL? = nil,
                firmware: URL? = nil) throws {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         try configuration.validateForStart()
         guard configuration.architecture == .x86_64 else {
             throw RuntimeError.runtimeUnavailable(
@@ -351,6 +354,8 @@ final class QEMUNativeRuntime {
 
     @discardableResult
     func stop() -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         guard started else { return true }
         guard !isPaused else { return true }
         let result = Self.sendQMP("stop")
@@ -398,10 +403,17 @@ final class QEMUNativeRuntime {
         ].joined(separator: "\u{0}")
     }
 
-    var isRunning: Bool { started && !isPaused && isteam_qemu_is_running() }
+    var isRunning: Bool {
+        stateLock.lock()
+        let guestShouldRun = started && !isPaused
+        stateLock.unlock()
+        return guestShouldRun && isteam_qemu_is_running()
+    }
     var isActive: Bool { isteam_qemu_is_active() }
 
     var lastError: String? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         if let controlError { return controlError }
         let message = String(cString: isteam_qemu_last_error())
         return message.isEmpty ? nil : message
