@@ -11,6 +11,12 @@
 #include "JIT26Protocol.h"
 #include <dlfcn.h>
 #include <pthread.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/time.h>
+#include <time.h>
+#include <unistd.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdatomic.h>
@@ -36,7 +42,7 @@ static bool g_starting = false;
 static bool g_running = false;
 static bool g_stop_requested = false;
 static atomic_bool g_main_loop_active = ATOMIC_VAR_INIT(false);
-/* UTM documents that QEMU cannot safely be relaunched in the same iOS process. */
+/* QEMU is initialized once per app process and controlled/rebooted through QMP. */
 static bool g_has_started = false;
 static char g_error[512] = {0};
 static int g_argc = 0;
@@ -171,7 +177,7 @@ bool isteam_qemu_start(int argc, const char * const *argv,
         pthread_mutex_unlock(&g_lock);
         if (error_buffer && error_capacity > 0) {
             snprintf(error_buffer, (size_t)error_capacity,
-                     "UTM's iOS QEMU runtime cannot safely restart in the same app process. Force-quit and reopen Akatsubaki Emu before starting another VM.");
+                     "A QEMU runtime is already initialized in this app process; reuse it through the local QMP control socket.");
         }
         return false;
     }
@@ -279,6 +285,120 @@ bool isteam_qemu_start(int argc, const char * const *argv,
     pthread_detach(g_thread);
     pthread_mutex_unlock(&g_lock);
     return true;
+}
+
+static bool qmp_write_all(int fd, const char *bytes, size_t length) {
+    size_t offset = 0;
+    while (offset < length) {
+        ssize_t written = send(fd, bytes + offset, length - offset, 0);
+        if (written < 0 && errno == EINTR) continue;
+        if (written <= 0) return false;
+        offset += (size_t)written;
+    }
+    return true;
+}
+
+static bool qmp_read_line(int fd, char *buffer, size_t capacity) {
+    if (!buffer || capacity < 2) return false;
+    size_t length = 0;
+    while (length + 1 < capacity) {
+        char byte = 0;
+        ssize_t received = recv(fd, &byte, 1, 0);
+        if (received < 0 && errno == EINTR) continue;
+        if (received <= 0) return false;
+        if (byte == '\n') break;
+        if (byte != '\r') buffer[length++] = byte;
+    }
+    buffer[length] = '\0';
+    return length > 0;
+}
+
+static bool qmp_read_return(int fd, char *buffer, size_t capacity) {
+    for (int attempt = 0; attempt < 16; ++attempt) {
+        if (!qmp_read_line(fd, buffer, capacity)) return false;
+        if (strstr(buffer, "\"error\"")) return false;
+        if (strstr(buffer, "\"return\"")) return true;
+        // QMP events may be interleaved with command replies.
+    }
+    return false;
+}
+
+static bool qmp_send_command(int fd, const char *command, char *response, size_t response_capacity) {
+    char line[128];
+    const int length = snprintf(line, sizeof(line), "{\"execute\":\"%s\"}\r\n", command);
+    if (length <= 0 || (size_t)length >= sizeof(line)) return false;
+    return qmp_write_all(fd, line, (size_t)length)
+        && qmp_read_return(fd, response, response_capacity);
+}
+
+bool isteam_qemu_qmp_command(const char *socket_path, const char *command,
+                             char *error_buffer, int error_capacity) {
+    if (!socket_path || !socket_path[0] || !command
+        || (strcmp(command, "stop") != 0
+            && strcmp(command, "cont") != 0
+            && strcmp(command, "system_reset") != 0
+            && strcmp(command, "query-status") != 0)) {
+        if (error_buffer && error_capacity > 0)
+            snprintf(error_buffer, (size_t)error_capacity, "Invalid QMP socket path or unsupported command");
+        return false;
+    }
+
+    pthread_mutex_lock(&g_lock);
+    const bool active = g_thread_created || g_running;
+    pthread_mutex_unlock(&g_lock);
+    if (!active) {
+        if (error_buffer && error_capacity > 0)
+            snprintf(error_buffer, (size_t)error_capacity, "QEMU runtime is not active");
+        return false;
+    }
+
+    struct sockaddr_un address;
+    memset(&address, 0, sizeof(address));
+    address.sun_family = AF_UNIX;
+    const size_t path_length = strnlen(socket_path, sizeof(address.sun_path));
+    if (path_length == 0 || path_length >= sizeof(address.sun_path)) {
+        if (error_buffer && error_capacity > 0)
+            snprintf(error_buffer, (size_t)error_capacity, "QMP socket path is too long");
+        return false;
+    }
+    memcpy(address.sun_path, socket_path, path_length + 1);
+#if defined(__APPLE__)
+    address.sun_len = (uint8_t)sizeof(address);
+#endif
+
+    int fd = -1;
+    for (int attempt = 0; attempt < 20; ++attempt) {
+        fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (fd < 0) break;
+        if (connect(fd, (struct sockaddr *)&address, sizeof(address)) == 0) break;
+        close(fd);
+        fd = -1;
+        struct timespec delay = {0, 100 * 1000 * 1000};
+        nanosleep(&delay, NULL);
+    }
+    if (fd < 0) {
+        if (error_buffer && error_capacity > 0)
+            snprintf(error_buffer, (size_t)error_capacity, "Could not connect to the local QEMU control socket");
+        return false;
+    }
+
+    struct timeval timeout = {2, 0};
+    (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+
+    char response[4096] = {0};
+    bool success = qmp_read_line(fd, response, sizeof(response)); // QMP greeting.
+    if (success) success = qmp_send_command(fd, "qmp_capabilities", response, sizeof(response));
+    if (success) success = qmp_send_command(fd, command, response, sizeof(response));
+    close(fd);
+
+    if (!success && error_buffer && error_capacity > 0) {
+        snprintf(error_buffer, (size_t)error_capacity, "QEMU QMP command '%s' failed: %.360s",
+                 command, response[0] ? response : "no response from QMP");
+    } else if (error_buffer && error_capacity > 0) {
+        error_buffer[0] = '\0';
+    }
+    return success;
 }
 
 void isteam_qemu_request_stop(void) {
