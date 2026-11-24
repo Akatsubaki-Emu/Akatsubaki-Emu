@@ -43,6 +43,7 @@ class QEMUBuildPatchTests(unittest.TestCase):
 
     def test_qemu_meson_patch_selects_the_compiler_block_among_multiple_objc_blocks(self):
         source = (
+            "project('qemu', 'c')\\n"
             "if 'objc' in all_languages\\n"
             "  summary_info += {'Objective-C compiler': false}\\n"
             "endif\\n"
@@ -52,8 +53,11 @@ class QEMUBuildPatchTests(unittest.TestCase):
             "if 'objc' in all_languages\\n"
             "  summary_info += {'OBJCFLAGS': ' '.join(get_option('objc_args'))}\\n"
             "endif\\n"
+            "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\\n"
+            "emulator_link_args = []\\n"
         )
-        patched = patch_qemu_meson_ios.patch_objc_compile_flag(source)
+        runtime = "/toolchain/libclang_rt.ios.a"
+        patched = patch_qemu_meson_ios.patch_source(source, runtime)
         self.assertEqual(patched.count("if 'objc' in all_languages"), 3)
         self.assertIn(
             "objc.get_supported_arguments(warn_flags + ['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')",
@@ -61,7 +65,7 @@ class QEMUBuildPatchTests(unittest.TestCase):
         )
         self.assertIn("summary_info += {'Objective-C compiler': false}", patched)
         self.assertIn("summary_info += {'OBJCFLAGS': ' '.join(get_option('objc_args'))}", patched)
-        self.assertEqual(patch_qemu_meson_ios.patch_objc_compile_flag(patched), patched)
+        self.assertEqual(patch_qemu_meson_ios.patch_source(patched, runtime), patched)
 
 
     def test_qemu_meson_patch_replaces_a_stale_runtime_path(self):
