@@ -1,5 +1,12 @@
 import Foundation
 
+enum GuestMemoryTransactionResult: Int32 {
+    case success = 0
+    case invalid = 1
+    case alreadyMapped = 2
+    case allocationFailed = 3
+}
+
 final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
@@ -30,6 +37,65 @@ final class GuestMemory {
         pagePermissions.removeAll(keepingCapacity: true)
         permissionsEnabled = true
         return true
+    }
+
+    func hasMappedPages(offset: UInt64, length: UInt64) -> Bool {
+        guard length > 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / 4096
+        let last = (offset + length - 1) / 4096
+        for page in first...last where pagePermissions[page] != nil { return true }
+        return false
+    }
+
+    func mapTransaction(offset: UInt64, length: UInt64, permissions: UInt8,
+                        replaceExisting: Bool) -> GuestMemoryTransactionResult {
+        guard permissionsEnabled, offset % 4096 == 0, length > 0,
+              length % 4096 == 0, permissions & ~UInt8(7) == 0,
+              offset <= size, length <= size - offset else { return .invalid }
+        if !replaceExisting && hasMappedPages(offset: offset, length: length) {
+            return .alreadyMapped
+        }
+        let first = offset / 4096
+        let last = (offset + length - 1) / 4096
+        if replaceExisting {
+            for page in first...last { pagePermissions.removeValue(forKey: page) }
+            let start = Int(offset)
+            let end = Int(offset + length)
+            bytes.replaceSubrange(start..<end, with: repeatElement(UInt8(0), count: end - start))
+        }
+        for page in first...last { pagePermissions[page] = permissions }
+        return .success
+    }
+
+    func resizeBreak(from oldBreak: UInt64, to newBreak: UInt64) -> GuestMemoryTransactionResult {
+        guard permissionsEnabled, oldBreak <= size, newBreak <= size else { return .invalid }
+        if oldBreak == newBreak { return .success }
+        if newBreak > oldBreak {
+            let oldPageEnd = Self.alignUp(oldBreak)
+            let newPageEnd = Self.alignUp(newBreak)
+            if newPageEnd > oldPageEnd {
+                let result = mapTransaction(offset: oldPageEnd,
+                                             length: newPageEnd - oldPageEnd,
+                                             permissions: 0x3,
+                                             replaceExisting: false)
+                guard result == .success else { return result }
+            }
+            guard zero(offset: oldBreak, length: newBreak - oldBreak) else { return .invalid }
+        } else {
+            guard zero(offset: newBreak, length: oldBreak - newBreak) else { return .invalid }
+            let unmapStart = Self.alignUp(newBreak)
+            let unmapEnd = Self.alignUp(oldBreak)
+            if unmapEnd > unmapStart,
+               !unmap(offset: unmapStart, length: unmapEnd - unmapStart) {
+                return .invalid
+            }
+        }
+        return .success
+    }
+
+    private static func alignUp(_ value: UInt64) -> UInt64 {
+        let (sum, overflow) = value.addingReportingOverflow(4095)
+        return overflow ? UInt64.max & ~UInt64(4095) : sum & ~UInt64(4095)
     }
 
     func map(offset: UInt64, length: UInt64, permissions: UInt8, merge: Bool = false) -> Bool {
@@ -132,8 +198,32 @@ enum GuestEngineError: Error {
 struct LinuxSyscallDispatcherTests {
     static func main() throws {
         let memory = GuestMemory(size: 4 * 1024 * 1024)
+        precondition(memory.beginMapping())
         let dispatcher = LinuxSyscallDispatcher(memory: memory)
         try dispatcher.configure(programBreak: 0x40000, stackBase: 0x3F0000)
+
+        // Fixed mappings and madvise must operate on mapped ELF/stack regions too.
+        precondition(memory.mapTransaction(offset: 0x20000, length: 4096,
+                                            permissions: 0x7, replaceExisting: false) == .success)
+        precondition(memory.write(Data([0xA1, 0xB2]), offset: 0x20000))
+        let elfAdvice = dispatcher.dispatch(number: 28, arguments: [0x20000, 4096, 0, 0, 0, 0])!
+        guard case .returned(let elfAdviceValue) = elfAdvice else { preconditionFailure() }
+        precondition(elfAdviceValue == 0)
+        let unmappedAdvice = dispatcher.dispatch(number: 28, arguments: [0x21000, 4096, 0, 0, 0, 0])!
+        guard case .returned(let unmappedAdviceValue) = unmappedAdvice else { preconditionFailure() }
+        precondition(unmappedAdviceValue == UInt64(bitPattern: Int64(-12)))
+        let fixedNoReplaceELF = dispatcher.dispatch(number: 9, arguments: [0x20000, 4096, 3, 0x100022, UInt64.max, 0])!
+        guard case .returned(let fixedNoReplaceELFValue) = fixedNoReplaceELF else { preconditionFailure() }
+        precondition(fixedNoReplaceELFValue == UInt64(bitPattern: Int64(-17)))
+        let fixedELF = dispatcher.dispatch(number: 9, arguments: [0x20000, 4096, 1, 0x32, UInt64.max, 0])!
+        guard case .returned(let fixedELFValue) = fixedELF else { preconditionFailure() }
+        precondition(fixedELFValue == 0x20000)
+        precondition(memory.read(offset: 0x20000, length: 2) == Data([0, 0]))
+        precondition(!memory.write(Data([0xFF]), offset: 0x20000))
+        let unmapELF = dispatcher.dispatch(number: 11, arguments: [0x20000, 4096, 0, 0, 0, 0])!
+        guard case .returned(let unmapELFValue) = unmapELF else { preconditionFailure() }
+        precondition(unmapELFValue == 0)
+        precondition(memory.read(offset: 0x20000, length: 2) == nil)
 
         let initialBreak = dispatcher.dispatch(number: 12, arguments: [0, 0, 0, 0, 0, 0])!
         guard case .returned(let initial) = initialBreak else { preconditionFailure() }
@@ -167,8 +257,8 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.write(Data([0xAA, 0xBB]), offset: 0x40000))
         let heapUnmap = dispatcher.dispatch(number: 11, arguments: [0x40000, 4096, 0, 0, 0, 0])!
         guard case .returned(let heapUnmapValue) = heapUnmap else { preconditionFailure() }
-        precondition(heapUnmapValue == UInt64(bitPattern: Int64(-22)))
-        precondition(memory.read(offset: 0x40000, length: 2) == Data([0xAA, 0xBB]))
+        precondition(heapUnmapValue == 0)
+        precondition(memory.read(offset: 0x40000, length: 2) == nil)
 
         let mapping = dispatcher.dispatch(number: 9, arguments: [0, 8192, 3, 0x22, UInt64.max, 0])!
         guard case .returned(let mapped) = mapping else { preconditionFailure() }
@@ -239,7 +329,7 @@ struct LinuxSyscallDispatcherTests {
         let fixed = dispatcher.dispatch(number: 9, arguments: [mapped, 4096, 3, 0x32, UInt64.max, 0])!
         guard case .returned(let fixedAddress) = fixed else { preconditionFailure() }
         precondition(fixedAddress == mapped)
-        precondition(memory.read(offset: mapped, length: 3) == nil)
+        precondition(memory.read(offset: mapped, length: 3) == Data([0, 0, 0]))
         precondition(memory.read(offset: mapped + 4096, length: 3) == Data([4, 5, 6]))
 
         let noReplace = dispatcher.dispatch(number: 9, arguments: [mapped, 4096, 3, 0x100022, UInt64.max, 0])!
@@ -256,7 +346,7 @@ struct LinuxSyscallDispatcherTests {
 
         let protectionAfterUnmap = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
         guard case .returned(let protectionAfterUnmapValue) = protectionAfterUnmap else { preconditionFailure() }
-        precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-22)))
+        precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-12)))
 
         let unmapRemainder = dispatcher.dispatch(number: 11, arguments: [mapped + 4096, 4096, 0, 0, 0, 0])!
         guard case .returned(let unmapRemainderValue) = unmapRemainder else { preconditionFailure() }

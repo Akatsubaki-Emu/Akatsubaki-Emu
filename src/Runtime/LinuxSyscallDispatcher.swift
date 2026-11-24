@@ -416,31 +416,30 @@ final class LinuxSyscallDispatcher {
         return 0
     }
 
+    // Preserve Linux PROT_* bits exactly. Instruction fetch uses the separate
+    // execute-access API; data reads must still require PROT_READ.
     private func guestPermissions(_ protection: UInt64) -> UInt8 {
-        var permissions = UInt8(protection & 0x7)
-        if permissions & 0x6 != 0 { permissions |= 0x1 }
-        return permissions
+        return UInt8(protection & 0x7)
     }
 
     private func validateRange(address: UInt64, length: UInt64) -> UInt64 {
         guard address & 0xFFF == 0, length > 0 else { return errno(22) }
-        let (end, overflow) = address.addingReportingOverflow(length)
-        let limit = stackBase >= 4096 ? stackBase - 4096 : 0
-        guard !overflow, address >= initialProgramBreak, end <= limit, end <= memory.size else {
-            return errno(22)
-        }
+        let (roundedLength, roundOverflow) = length.addingReportingOverflow(4095)
+        guard !roundOverflow else { return errno(22) }
+        let size = roundedLength & ~UInt64(4095)
+        let (end, overflow) = address.addingReportingOverflow(size)
+        guard !overflow, address <= memory.size, end <= memory.size else { return errno(22) }
+
+        // madvise operates on any mapped guest region, not just the anonymous
+        // mmap arena. Check every page so a partially unmapped range returns ENOMEM.
         var cursor = address
-        if cursor < programBreak {
-            cursor = min(end, programBreak)
-            if cursor == end { return 0 }
+        while cursor < end {
+            guard memory.hasMappedPages(offset: cursor, length: 4096) else { return errno(12) }
+            let (next, nextOverflow) = cursor.addingReportingOverflow(4096)
+            guard !nextOverflow else { return errno(22) }
+            cursor = next
         }
-        for index in firstMappedRangeEnding(after: cursor)..<mappedRanges.count {
-            let range = mappedRanges[index]
-            if range.lowerBound > cursor { return errno(12) }
-            cursor = min(end, range.upperBound)
-            if cursor == end { return 0 }
-        }
-        return errno(12)
+        return 0
     }
 
     private func getRandom(at address: UInt64, length: UInt64, flags: UInt64) -> UInt64 {
