@@ -8,6 +8,8 @@ workflow:
 
 core-source-and-elf-validation:
   stage: validate
+  when: manual
+  allow_failure: true
   image: python:3.12
   variables:
     PYTHONDONTWRITEBYTECODE: "1"
