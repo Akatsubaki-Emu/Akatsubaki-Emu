@@ -266,10 +266,49 @@ jobs:
           cp UTM/UTMBuildTCI.xcarchive/Info.plist build/qemu-runtime-tci/UTM-archive-Info.plist
 
           bash scripts/merge-qemu-runtime-variants.sh build/qemu-runtime-jit build/qemu-runtime-tci build/qemu-runtime
-          test -s build/qemu-runtime/QEMU/JIT/runtime-library-path.txt
-          test -s build/qemu-runtime/QEMU/TCI/runtime-library-path.txt
-          test -s build/qemu-runtime/QEMU/JIT/exports.txt
-          test -s build/qemu-runtime/QEMU/TCI/exports.txt
+          for mode in JIT TCI; do
+            mode_dir="build/qemu-runtime/QEMU/$mode"
+            manifest="$mode_dir/runtime-library-path.txt"
+            exports="$mode_dir/exports.txt"
+            test -s "$manifest" || { echo "Missing $mode runtime manifest." >&2; exit 1; }
+            test -s "$exports" || { echo "Missing $mode export manifest." >&2; exit 1; }
+            runtime_rel="$(head -n 1 "$manifest")"
+            case "$runtime_rel" in
+              Frameworks/*) ;;
+              *) echo "Unsafe $mode runtime path: $runtime_rel" >&2; exit 1 ;;
+            esac
+            test -s "build/qemu-runtime/$runtime_rel" || { echo "Missing $mode runtime library: $runtime_rel" >&2; exit 1; }
+            for symbol in qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request; do
+              grep -Eq " _?\${symbol}$" "$exports" || { echo "$mode runtime is missing $symbol." >&2; exit 1; }
+            done
+            if [ "$mode" = "JIT" ]; then
+              grep -Eq ' _?isteam_qemu_set_jit_callbacks
+
+      - name: Upload verified QEMU runtime artifact
+        if: steps.freshness.outputs.build == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: AkatsubakiEmu-qemu-runtime-ios-arm64
+          path: build/qemu-runtime/
+          if-no-files-found: error
+          retention-days: 14
+ "$exports" || { echo "JIT callback export is missing." >&2; exit 1; }
+            elif grep -Eq ' _?isteam_qemu_set_jit_callbacks
+
+      - name: Upload verified QEMU runtime artifact
+        if: steps.freshness.outputs.build == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: AkatsubakiEmu-qemu-runtime-ios-arm64
+          path: build/qemu-runtime/
+          if-no-files-found: error
+          retention-days: 14
+ "$exports"; then
+              echo "TCI runtime must not export the JIT callback." >&2
+              exit 1
+            fi
+          done
+          echo "Physical iOS arm64 runtime variants: JIT and TCI"
 
       - name: Upload verified QEMU runtime artifact
         if: steps.freshness.outputs.build == 'true'
