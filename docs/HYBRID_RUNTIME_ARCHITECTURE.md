@@ -122,13 +122,13 @@ The planner's availability set must be populated only by concrete runtime probes
 
 The translator is now connected to a versioned ARM64 guest-state ABI, a W^X executable-memory provider, a bounded executable-block cache and interpreter side exits. ABI details and field offsets are documented in [KENRAN_BUTO_AOT_ABI.md](KENRAN_BUTO_AOT_ABI.md).
 
-Translator version 3 currently emits only NOP, MOV register-immediate (32/64-bit), and register-only MOV (32/64-bit). ENDBR64, arithmetic, memory operations, branches, calls/returns, syscalls, SIMD, atomics, relocations and cross-block control flow remain interpreter fallbacks. The translated subset does not modify x86 arithmetic flags.
+Translator version 4 currently emits NOP, MOV register-immediate (32/64-bit), register-only MOV (32/64-bit), and bounded flag-preserving LEA forms (32/64-bit base/index/SIB addressing with supported signed displacements and no-base disp32 constants). ENDBR64, arithmetic, memory operations, branches, calls/returns, syscalls, SIMD, atomics, relocations and cross-block control flow remain interpreter fallbacks. The translated subset does not modify x86 arithmetic flags.
 
 AOT is injected at the Linux ELF launch boundary. Generic GuestMachine instances remain interpreter-only unless an executor is explicitly supplied. The C invocation boundary rechecks JIT readiness for every block; unavailable or revoked JIT returns to the interpreter. The ARM64 workflow validates the ABI, register preservation, side-exit RIP, cache bounds and a static ELF hybrid run. This is a validated execution subset, not a general-purpose x86-64 backend or proof of physical-iPad compatibility.
 
 ## AOT decoder correctness contract
 
-Translator version 3 enforces the x86-64 architectural 15-byte instruction limit across prefixes, opcode, ModRM and immediate. REX.B forms 41 90 and 49 90 are preserved for interpreter fallback because they encode XCHG rather than NOP. ENDBR64 is preserved for fallback until guest CET policy is represented. Guest-input, instruction-count and output-byte budgets stop only at instruction boundaries; unsupported and truncated instructions report the original guest offset.
+Translator version 4 enforces the x86-64 architectural 15-byte instruction limit across prefixes, opcode, ModRM and immediate. REX.B forms 41 90 and 49 90 are preserved for interpreter fallback because they encode XCHG rather than NOP. ENDBR64 is preserved for fallback until guest CET policy is represented. Guest-input, instruction-count and output-byte budgets stop only at instruction boundaries; unsupported and truncated instructions report the original guest offset.
 
 The focused regression harness is scripts/tests/test_kenran_buto_aot_translator.swift. It checks AArch64 MOVZ/MOVK encodings, register moves, both REX.B exchange forms, legal 15-byte and rejected 16-byte instructions, multi-instruction blocks, hard budget clamps, input limits, ENDBR64 fallback, unsupported/truncated boundaries and output/instruction budgets. A separate allocation-contract test guards the borrowed input buffer, fixed four-word instruction buffer and single final Data copy.
 
@@ -136,7 +136,7 @@ The focused regression harness is scripts/tests/test_kenran_buto_aot_translator.
 
 The ARM64 executable-memory provider and Swift execution adapter now connect the bounded translator to the x86-64 interpreter. The launch path injects this adapter only for Linux ELF guests; generic GuestMachine users remain interpreter-only unless they explicitly inject an executor.
 
-The current translated subset is deliberately narrow: NOP, MOV immediate-to-register, and register-only MOV. ENDBR64, arithmetic, memory operations, control flow, syscalls and all other unsupported instructions side-exit to the interpreter at the exact guest RIP. No full Linux ABI or general x86-64 compatibility is implied.
+The current translated subset is deliberately narrow: NOP, MOV immediate-to-register, register-only MOV, and bounded flag-preserving LEA forms. ENDBR64, arithmetic, memory operations, control flow, syscalls and all other unsupported instructions side-exit to the interpreter at the exact guest RIP. No full Linux ABI or general x86-64 compatibility is implied.
 
 The native ABI is versioned and size-checked. Guest registers are copied into the ARM64 call registers and written back on return. The executor validates state pointers, budgets, register state and exact byte accounting; failed native invocation restores the original registers. The C invocation boundary rechecks live JIT readiness before each block, so a revoked or unavailable JIT session falls back to interpretation.
 

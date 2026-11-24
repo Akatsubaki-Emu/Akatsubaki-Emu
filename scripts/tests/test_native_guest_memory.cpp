@@ -132,6 +132,11 @@ int main() {
     assert(!isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
     assert(!isteam_guest_memory_read_execute(protectedMemory, pageSize, protectedBytes.data(), protectedBytes.size()));
     assert(isteam_guest_memory_write(protectedMemory, pageSize, instruction.data(), instruction.size()));
+    // Execute-only mappings are valid: PROT_EXEC does not imply PROT_READ.
+    assert(isteam_guest_memory_protect(protectedMemory, 0, pageSize, 4));
+    assert(isteam_guest_memory_read_execute(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(!isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
+    assert(!isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
     assert(isteam_guest_memory_protect(protectedMemory, 0, pageSize, 1)); // read-only, no execute
     assert(isteam_guest_memory_read(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));
     assert(!isteam_guest_memory_read_execute(protectedMemory, 0, protectedBytes.data(), protectedBytes.size()));

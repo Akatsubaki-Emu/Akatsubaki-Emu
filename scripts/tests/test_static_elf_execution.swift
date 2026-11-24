@@ -186,7 +186,7 @@ final class GuestMemory {
 
     func readExecuteByte(offset: UInt64) -> UInt8? {
         readByteCalls += 1
-        guard offset < size, hasPermission(offset: offset, length: 1, required: 5) else { return nil }
+        guard offset < size, hasPermission(offset: offset, length: 1, required: 4) else { return nil }
         return bytes[Int(offset)]
     }
 
@@ -210,7 +210,7 @@ final class GuestMemory {
     func readExecuteUInt32(offset: UInt64) -> UInt32? {
         readUInt32Calls += 1
         guard offset <= size, size - offset >= 4,
-              hasPermission(offset: offset, length: 4, required: 5) else { return nil }
+              hasPermission(offset: offset, length: 4, required: 4) else { return nil }
         let index = Int(offset)
         return UInt32(bytes[index]) | UInt32(bytes[index + 1]) << 8
             | UInt32(bytes[index + 2]) << 16 | UInt32(bytes[index + 3]) << 24
@@ -229,7 +229,7 @@ final class GuestMemory {
     func readExecuteUInt64(offset: UInt64) -> UInt64? {
         readUInt64Calls += 1
         guard offset <= size, size - offset >= 8,
-              hasPermission(offset: offset, length: 8, required: 5) else { return nil }
+              hasPermission(offset: offset, length: 8, required: 4) else { return nil }
         let index = Int(offset)
         var value: UInt64 = 0
         for shift in 0..<8 { value |= UInt64(bytes[index + shift]) << (shift * 8) }
@@ -250,7 +250,7 @@ final class GuestMemory {
         var completed = 0
         while completed < limit {
             let address = offset + UInt64(completed)
-            guard hasPermission(offset: address, length: 1, required: 5) else { break }
+            guard hasPermission(offset: address, length: 1, required: 4) else { break }
             let pageRemaining = Int(pageSize - address % pageSize)
             let amount = min(limit - completed, pageRemaining)
             let start = Int(address)
@@ -484,6 +484,23 @@ struct StaticELFExecutionTests {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".elf")
         try elfData.write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
+
+        // Linux PROT_EXEC is independent of PROT_READ. Keep the test double
+        // aligned with NativeGuestMemory.cpp and verify actual interpreter fetch.
+        let executeOnlyMemory = GuestMemory(size: 4096)
+        let executeOnlyCode = Data([0xB8, 0x2A, 0x00, 0x00, 0x00, 0xF4])
+        precondition(executeOnlyMemory.write(executeOnlyCode, offset: 0))
+        precondition(executeOnlyMemory.beginMapping())
+        precondition(executeOnlyMemory.map(offset: 0, length: 4096, permissions: 4))
+        precondition(executeOnlyMemory.readExecuteByte(offset: 0) == 0xB8)
+        precondition(executeOnlyMemory.readByte(offset: 0) == nil)
+        var executeOnlyPrefix = [UInt8](repeating: 0, count: 15)
+        precondition(executeOnlyMemory.readPrefix(offset: 0, maximumLength: 15, into: &executeOnlyPrefix) == 15)
+        let executeOnlyInterpreter = X86_64Interpreter(memory: executeOnlyMemory)
+        try executeOnlyInterpreter.reset(entryPoint: 0)
+        let executeOnlyExit = try executeOnlyInterpreter.run(maxInstructions: 4)
+        precondition(executeOnlyExit == .halted)
+        precondition(executeOnlyInterpreter.registerValue(0) == 42)
 
         let memory = GuestMemory(size: 16 * 1024 * 1024)
         precondition(memory.writeByte(0xA5, offset: memory.size - 1))
