@@ -538,7 +538,7 @@ struct StaticELFExecutionTests {
         precondition(EmulationLog.shared.messages.contains { $0.contains(expectedOutput) })
 #if KENRAN_BUTO_AOT_TESTS
         precondition(aotExecutor.blocksExecuted > 0)
-        print("STATIC_ELF_AOT blocks=\(aotExecutor.blocksExecuted) unsupported_LEA_and_syscall_side_exits=verified")
+        print("STATIC_ELF_AOT blocks=\(aotExecutor.blocksExecuted) unsupported_syscall_side_exit=verified")
 #endif
         let pieURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pie")
         try makePIE().write(to: pieURL)

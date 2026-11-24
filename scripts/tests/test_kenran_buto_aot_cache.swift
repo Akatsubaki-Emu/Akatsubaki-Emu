@@ -104,6 +104,23 @@ struct KenranButoAOTCacheTests {
         let statisticsAfterBudgets = try cache.statistics()
         precondition(statisticsAfterBudgets.entryCount == 5)
 
+        let ripRelativeGuest = Data([0x48, 0x8D, 0x35, 0xEF, 0x00, 0x00, 0x00])
+        let firstRIP = try compiler.compile(
+            ripRelativeGuest, guestABI: "sysv-linux-x86_64", guestRIP: 0x40020A
+        )
+        precondition(!firstRIP.cacheHit)
+        let firstRIPAgain = try compiler.compile(
+            ripRelativeGuest, guestABI: "sysv-linux-x86_64", guestRIP: 0x40020A
+        )
+        precondition(firstRIPAgain.cacheHit)
+        let secondRIP = try compiler.compile(
+            ripRelativeGuest, guestABI: "sysv-linux-x86_64", guestRIP: 0x50020A
+        )
+        precondition(!secondRIP.cacheHit)
+        precondition(firstRIP.translation.machineCode != secondRIP.translation.machineCode)
+        let statisticsAfterRIP = try cache.statistics()
+        precondition(statisticsAfterRIP.entryCount == 7)
+
         print("Kenran Butō AOT artifact cache round-trip, ABI isolation and fallback passed")
     }
 }

@@ -22,14 +22,17 @@ final class KenranButoAOTCompiler {
     static func cacheGuestABI(
         _ guestABI: String,
         abiVersion: UInt32 = executionABIVersion,
+        guestRIP: UInt64? = nil,
         maximumInstructions: Int = X86_64AOTTranslator.maximumInstructionBudget,
         maximumGuestBytes: Int = X86_64AOTTranslator.maximumGuestByteBudget,
         maximumOutputBytes: Int = X86_64AOTTranslator.maximumOutputBudget
     ) -> String {
-        "\(guestABI)-abi\(abiVersion)-i\(maximumInstructions)-g\(maximumGuestBytes)-o\(maximumOutputBytes)"
+        let ripIdentity = guestRIP.map { String($0, radix: 16) } ?? "none"
+        return "\(guestABI)-abi\(abiVersion)-rip\(ripIdentity)-i\(maximumInstructions)-g\(maximumGuestBytes)-o\(maximumOutputBytes)"
     }
 
     func compile(_ guestCode: Data, guestABI: String,
+                 guestRIP: UInt64? = nil,
                  maximumInstructions: Int = 4096,
                  maximumGuestBytes: Int = 65_536,
                  maximumOutputBytes: Int = 1_048_576) throws -> Compilation {
@@ -49,6 +52,7 @@ final class KenranButoAOTCompiler {
             hostArchitecture: X86_64AOTTranslator.hostArchitecture,
             cpuFeatures: X86_64AOTTranslator.cpuFeatures,
             guestABI: Self.cacheGuestABI(guestABI, abiVersion: Self.executionABIVersion,
+                                        guestRIP: guestRIP,
                                         maximumInstructions: budget,
                                         maximumGuestBytes: guestByteBudget,
                                         maximumOutputBytes: outputByteBudget)
@@ -58,7 +62,7 @@ final class KenranButoAOTCompiler {
             if let translation = try? JSONDecoder().decode(X86_64AOTTranslation.self, from: cached),
                translation.isCacheable && translation.isValid(for: guestCode, maximumOutputBytes: outputByteBudget) {
                 // Structural validation alone cannot authenticate cached machine code.
-                let canonical = translator.translate(guestCode, maximumInstructions: budget,
+                let canonical = translator.translate(guestCode, guestRIP: guestRIP, maximumInstructions: budget,
                                                     maximumOutputBytes: outputByteBudget,
                                                     maximumGuestBytes: guestByteBudget)
                 if translation == canonical {
@@ -67,7 +71,7 @@ final class KenranButoAOTCompiler {
             }
             try? cache.invalidate(identity)
         }
-        let translation = translator.translate(guestCode, maximumInstructions: budget,
+        let translation = translator.translate(guestCode, guestRIP: guestRIP, maximumInstructions: budget,
                                                     maximumOutputBytes: outputByteBudget,
                                                     maximumGuestBytes: guestByteBudget)
         if translation.isCacheable {

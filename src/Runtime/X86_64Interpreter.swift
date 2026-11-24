@@ -1079,8 +1079,8 @@ final class X86_64Interpreter: GuestCPUBackend {
                 hasBase = false
             }
         } else if mode == 0 && rmField == 0x05 {
-            // RIP-relative LEA needs the guest RIP in the translator input.
-            return false
+            // AOT execution passes the guest block RIP to the translator.
+            hasBase = false
         }
 
         let displacementBytes = mode == 1 ? 1 : ((mode == 2 || (mode == 0 && !hasBase)) ? 4 : 0)

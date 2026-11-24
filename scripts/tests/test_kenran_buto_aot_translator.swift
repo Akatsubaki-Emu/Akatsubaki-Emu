@@ -105,9 +105,17 @@ struct KenranButoAOTTranslatorTests {
         precondition(leaAbsolute.isComplete && leaAbsolute.instructionCount == 1)
         precondition(word(leaAbsolute.machineCode, 0) == 0xD2820002) // MOVZ X2, #0x1000
 
-        let leaRipRelative = translator.translate(Data([0x48, 0x8D, 0x05, 0x10, 0, 0, 0]))
-        precondition(leaRipRelative.stopReason == .unsupportedInstruction)
-        precondition(leaRipRelative.guestBytesConsumed == 0 && leaRipRelative.fallbackOpcode == 0x48)
+                let leaRipRelativeBytes = Data([0x48, 0x8D, 0x35, 0xEF, 0x00, 0x00, 0x00])
+        let leaRipRelative = translator.translate(leaRipRelativeBytes, guestRIP: 0x40020A)
+        precondition(leaRipRelative.isComplete && leaRipRelative.instructionCount == 1)
+        precondition(leaRipRelative.guestBytesConsumed == 7)
+        precondition(word(leaRipRelative.machineCode, 0) == 0xD2806006)
+        precondition(word(leaRipRelative.machineCode, 1) == 0xF2A00806)
+        let leaRipAtAnotherAddress = translator.translate(leaRipRelativeBytes, guestRIP: 0x50020A)
+        precondition(leaRipAtAnotherAddress.machineCode != leaRipRelative.machineCode)
+        let leaRipWithoutAddress = translator.translate(leaRipRelativeBytes)
+        precondition(leaRipWithoutAddress.stopReason == .unsupportedInstruction)
+        precondition(leaRipWithoutAddress.guestBytesConsumed == 0)
 
         let leaLargeDisplacement = translator.translate(Data([0x48, 0x8D, 0x94, 0x88, 0x00, 0x10, 0, 0]))
         precondition(leaLargeDisplacement.stopReason == .unsupportedInstruction)
@@ -203,7 +211,7 @@ struct KenranButoAOTTranslatorTests {
         precondition(multiInstructionBlock.guestBytesConsumed == 20)
         precondition(multiInstructionBlock.instructionCount == 4)
         precondition(multiInstructionBlock.fallbackOpcode == 0x0F)
-        precondition(X86_64AOTTranslator.translatorVersion == "5")
+        precondition(X86_64AOTTranslator.translatorVersion == "6")
         let oversizedBudgets = translator.translate(
             guest, maximumInstructions: Int.max,
             maximumOutputBytes: Int.max & ~3,

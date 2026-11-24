@@ -50,7 +50,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
 struct X86_64AOTTranslator {
     static let translatorIdentifier = "kenran-buto-aot-arm64"
     // Bump whenever emitted code or decoding semantics change.
-    static let translatorVersion = "5"
+    static let translatorVersion = "6"
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
@@ -59,6 +59,7 @@ struct X86_64AOTTranslator {
     static let maximumGuestByteBudget = 65_536
 
     func translate(_ guestCode: Data,
+                   guestRIP: UInt64? = nil,
                    maximumInstructions: Int = 4096,
                    maximumOutputBytes: Int = 1_048_576,
                    maximumGuestBytes: Int = 65_536) -> X86_64AOTTranslation {
@@ -78,14 +79,14 @@ struct X86_64AOTTranslator {
                 start: raw.baseAddress?.assumingMemoryBound(to: UInt8.self),
                 count: inputCount
             )
-            return translate(bytes, guestCodeCount: raw.count,
+            return translate(bytes, guestCodeCount: raw.count, guestRIP: guestRIP,
                              maximumInstructions: instructionBudget,
                              maximumOutputBytes: outputBudget)
         }
     }
 
     private func translate(_ bytes: UnsafeBufferPointer<UInt8>,
-                           guestCodeCount: Int,
+                           guestCodeCount: Int, guestRIP: UInt64?,
                            maximumInstructions: Int,
                            maximumOutputBytes: Int) -> X86_64AOTTranslation {
         var cursor = 0
@@ -257,6 +258,7 @@ struct X86_64AOTTranslator {
                 var indexRegister: Int? = nil
                 var scale = 0
                 var requiresDisplacement32 = false
+                var ripRelative = false
 
                 if rmField == 0x04 {
                     guard cursor < bytes.count else {
@@ -281,10 +283,9 @@ struct X86_64AOTTranslator {
                         baseRegister = baseField | ((rex & 0x01) != 0 ? 8 : 0)
                     }
                 } else if mode == 0 && rmField == 0x05 {
-                    // This encoding is RIP-relative in 64-bit mode. The
-                    // translator has no guest-RIP input, so preserve it.
-                    return fallback(output, consumed: start, instructions: instructions,
-                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                    // ModRM mod=00/rm=101 is RIP-relative in 64-bit mode.
+                    requiresDisplacement32 = true
+                    ripRelative = true
                 } else {
                     baseRegister = Int(rmField) | ((rex & 0x01) != 0 ? 8 : 0)
                 }
@@ -328,6 +329,17 @@ struct X86_64AOTTranslator {
                 }
 
                 let is64Bit = (rex & 0x08) != 0
+                if ripRelative {
+                    guard let guestRIP else {
+                        return fallback(output, consumed: start, instructions: instructions,
+                                        reason: .unsupportedInstruction, opcode: bytes[start])
+                    }
+                    // cursor is the total byte offset from the start of this block.
+                    let nextRIP = guestRIP &+ UInt64(cursor)
+                    let target = nextRIP &+ UInt64(bitPattern: displacement)
+                    let value = is64Bit ? target : UInt64(UInt32(truncatingIfNeeded: target))
+                    words = Self.moveImmediate(value, to: destination, is64Bit: is64Bit)
+                } else {
                 let displacementMagnitude = displacement < 0 ? -displacement : displacement
                 if baseRegister != nil || indexRegister != nil {
                     guard displacementMagnitude <= 4095 else {
@@ -362,8 +374,9 @@ struct X86_64AOTTranslator {
                     words = Self.moveImmediate(UInt64(bitPattern: displacement),
                                                to: destination, is64Bit: is64Bit)
                 }
+                }
 
-            case 0xF3:
+case 0xF3:
                 // ENDBR64 is not assumed to be a NOP: guest CET policy is not
                 // modelled yet, so preserve it for the interpreter fallback.
                 return fallback(output, consumed: start, instructions: instructions,

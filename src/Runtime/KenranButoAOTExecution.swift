@@ -1,7 +1,7 @@
 import Foundation
 
 final class KenranButoAOTExecutor: KenranButoAOTExecuting {
-    private struct BlockKey: Hashable { let code:Data; let budget:Int; let guestByteBudget:Int; let outputByteBudget:Int; let translatorVersion:String; let abiVersion:UInt32 }
+    private struct BlockKey: Hashable { let code:Data; let rip:UInt64; let budget:Int; let guestByteBudget:Int; let outputByteBudget:Int; let translatorVersion:String; let abiVersion:UInt32 }
     private let compiler:KenranButoAOTCompiler
     private let lock=NSLock()
     private var blocks:[BlockKey:KenranButoAOTExecutableBlock]=[:]
@@ -54,7 +54,7 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
         guard registers.count==16,!guestCode.isEmpty,maximumInstructions>0 else{return nil}
         guard isAvailable else{invalidateAll();return nil}
         let budget=min(maximumInstructions,4096)
-        let key=BlockKey(code:guestCode,budget:budget,guestByteBudget:4096,outputByteBudget:1_048_576,translatorVersion:X86_64AOTTranslator.translatorVersion,abiVersion:KenranButoAOTCompiler.executionABIVersion)
+        let key=BlockKey(code:guestCode,rip:rip,budget:budget,guestByteBudget:4096,outputByteBudget:1_048_576,translatorVersion:X86_64AOTTranslator.translatorVersion,abiVersion:KenranButoAOTCompiler.executionABIVersion)
         guard let block=executableBlock(for:key) else{return nil}
         let t=block.translation
         guard t.isValid(for:guestCode,maximumOutputBytes:key.outputByteBudget),t.guestBytesConsumed>0,t.instructionCount>0,t.instructionCount<=budget else{return nil}
@@ -127,7 +127,7 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
     }
     private func executableBlock(for key:BlockKey)->KenranButoAOTExecutableBlock?{
         lock.lock();if let hit=blocks[key]{lock.unlock();return hit};lock.unlock()
-        guard let result=try? compiler.compile(key.code,guestABI:guestABI,maximumInstructions:key.budget,
+        guard let result=try? compiler.compile(key.code,guestABI:guestABI,guestRIP:key.rip,maximumInstructions:key.budget,
                                                maximumGuestBytes:key.guestByteBudget,
                                                maximumOutputBytes:key.outputByteBudget),
               result.translation.isCacheable,
