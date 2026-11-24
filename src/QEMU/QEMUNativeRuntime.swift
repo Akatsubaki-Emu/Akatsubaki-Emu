@@ -37,10 +37,16 @@ final class QEMUNativeRuntime {
         }
 
         let requestedJIT = configuration.accelerator == .jit
+        let allowsTCIFallback = RuntimeSettings.shared.acceleration.allowsTCIFallback
         var effectiveConfiguration = configuration
         var requiresJIT = requestedJIT
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if requiresJIT && !JITCoordinator.shared.isQEMUJITReady {
+            guard allowsTCIFallback else {
+                throw RuntimeError.runtimeUnavailable(
+                    "QEMU JIT was explicitly selected but is unavailable. Choose Automatic to allow TCI fallback or select QEMU TCI directly."
+                )
+            }
             requiresJIT = false
             effectiveConfiguration.accelerator = .tcg
             EmulationLog.shared.write("QEMU JIT is unavailable; falling back to the TCI no-JIT runtime.")
@@ -49,7 +55,11 @@ final class QEMUNativeRuntime {
 
         var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)
         if requiresJIT, case .unavailable(let reason) = runtimeStatus {
-            _ = reason
+            guard allowsTCIFallback else {
+                throw RuntimeError.runtimeUnavailable(
+                    "The selected QEMU JIT runtime is unavailable: \(reason). Choose Automatic to allow TCI fallback or select QEMU TCI directly."
+                )
+            }
             // A missing or unloadable JIT variant must not block a packaged
             // no-JIT interpreter runtime. Re-run the full TCI loadability probe.
             requiresJIT = false

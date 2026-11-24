@@ -35,6 +35,9 @@ enum VMAccelerationBackend: String, CaseIterable {
         }
     }
 
+    /// Only Automatic may silently fall back from JIT to the no-JIT TCI runtime.
+    var allowsTCIFallback: Bool { self == .automatic }
+
     var detail: String {
         switch self {
         case .automatic:

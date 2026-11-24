@@ -633,6 +633,22 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("build", device)
 
 
+    def test_qemu_tci_fallback_is_only_used_for_automatic_backend(self):
+        root = Path(__file__).resolve().parents[2]
+        settings = (root / "src" / "Core" / "RuntimeSettings.swift").read_text(encoding="utf-8")
+        launch = (root / "iSteam" / "LaunchSetupViewController.swift").read_text(encoding="utf-8")
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        self.assertIn("var allowsTCIFallback: Bool { self == .automatic }", settings)
+        self.assertIn("let selectedAcceleration = RuntimeSettings.shared.acceleration", launch)
+        self.assertIn("guard selectedAcceleration.allowsTCIFallback else", launch)
+        self.assertLess(
+            launch.index("guard selectedAcceleration.allowsTCIFallback else"),
+            launch.index("QEMURuntimeStatus.inspect(requiresJIT: false)"),
+        )
+        self.assertIn("let allowsTCIFallback = RuntimeSettings.shared.acceleration.allowsTCIFallback", runtime)
+        self.assertEqual(runtime.count("guard allowsTCIFallback else"), 2)
+
+
     def test_qemu_acceleration_profiles_describe_actual_tcg_behavior(self):
         root = Path(__file__).resolve().parents[2]
         settings = (root / "src" / "Core" / "RuntimeSettings.swift").read_text(encoding="utf-8")
