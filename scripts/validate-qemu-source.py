@@ -680,11 +680,14 @@ required = {
         "runtime-library-path.txt",
     ],
     "scripts/merge-qemu-runtime-variants.sh": [
-        'grep -q \'isteam_qemu_set_jit_callbacks\' "$JIT_DIR/exports.txt"',
-        'if grep -q \'isteam_qemu_set_jit_callbacks\' "$TCI_DIR/exports.txt"; then',
-        'mkdir -p "$OUT/Frameworks" "$OUT/QEMU/JIT" "$OUT/QEMU/TCI"',
-        'cp -a "$JIT_DIR/QEMU/." "$OUT/QEMU/JIT/"',
-        'cp -a "$TCI_DIR/QEMU/." "$OUT/QEMU/TCI/"',
+        "required_symbols=(qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request)",
+        'grep -Fq "$symbol" "$JIT_DIR/exports.txt" || fail "JIT artifact is missing required export: $symbol"',
+        'grep -Fq "$symbol" "$TCI_DIR/exports.txt" || fail "TCI artifact is missing required export: $symbol"',
+        "grep -Fq 'isteam_qemu_set_jit_callbacks' \"$JIT_DIR/exports.txt\"",
+        "if grep -Fq 'isteam_qemu_set_jit_callbacks' \"$TCI_DIR/exports.txt\"; then",
+        'mkdir -p "$TEMP_OUT/Frameworks" "$TEMP_OUT/QEMU/JIT" "$TEMP_OUT/QEMU/TCI"',
+        'cp -a "$JIT_DIR/QEMU/." "$TEMP_OUT/QEMU/JIT/"',
+        'cp -a "$TCI_DIR/QEMU/." "$TEMP_OUT/QEMU/TCI/"',
     ],
     "scripts/validate-qemu-runtime.sh": [
         "for tool in file lipo nm codesign vtool; do",
@@ -767,10 +770,11 @@ required = {
     ],
     "src/Core/RuntimeSettings.swift": [
         "?? .linuxVM",
-        "TCG with a 128 MiB translation-block cache and split-WX enabled",
+        "return stored.isAvailable ? stored : .automatic",
         "case qemuInterpreter = \"QEMU TCI (no JIT)\"",
-        "Threaded TCG interpreter (TCI); does not require executable-memory JIT, but is slower than native TCG",
-        "stored selections fall back to QEMU TCI (no JIT)",
+        "TCG with a 128 MiB translation-block cache and split-WX; requires physical iOS 26+ and a supported StikDebug JIT session.",
+        "The CI-built no-JIT TCI fallback remains disabled until physical-device startup is verified.",
+        "Built and packaged by CI; disabled until physical iOS startup is verified.",
     ],
     "src/Core/VMConfiguration.swift": [
         "static var defaultAccelerator: Accelerator",
@@ -1295,7 +1299,7 @@ for token in (
     "./scripts/build_dependencies.sh -p ios-tci -a arm64",
     "./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI",
     "test -d 'UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app'",
-    "build/qemu-runtime-tci/QEMU/TCI",
+    'mode_dir="build/qemu-runtime/QEMU/$mode"',
     "for mode in JIT TCI; do",
     "Physical iOS arm64 runtime variants: JIT and TCI",
 ):
