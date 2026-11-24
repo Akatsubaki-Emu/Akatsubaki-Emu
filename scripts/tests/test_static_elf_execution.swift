@@ -479,7 +479,32 @@ struct StaticELFExecutionTests {
         }
     }
 
+    static func testDescriptorBoundELFSnapshot() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let executableURL = directory.appendingPathComponent("guest.elf")
+        let replacementURL = directory.appendingPathComponent("replacement.elf")
+        let displacedURL = directory.appendingPathComponent("displaced.elf")
+        let original = Data([0x7F, 0x45, 0x4C, 0x46, 0x01, 0x02, 0x03])
+        let replacement = Data([0xDE, 0xAD, 0xBE, 0xEF])
+        try original.write(to: executableURL)
+
+        // Open and size the guest, then replace its path before consuming bytes.
+        let snapshot = try ELF64Loader.OpenedFileSnapshot(url: executableURL)
+        try replacement.write(to: replacementURL)
+        try FileManager.default.moveItem(at: executableURL, to: displacedURL)
+        try FileManager.default.moveItem(at: replacementURL, to: executableURL)
+
+        let loaded = try snapshot.read()
+        precondition(loaded == original, "ELF bytes must come from the descriptor that was size-checked")
+        print("Descriptor-bound ELF snapshot path-replacement regression passed")
+    }
+
     static func main() throws {
+        try testDescriptorBoundELFSnapshot()
         let (elfData, expectedOutput) = makeELF()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".elf")
         try elfData.write(to: url)

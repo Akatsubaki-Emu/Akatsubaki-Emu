@@ -50,19 +50,66 @@ final class ELF64Loader {
         }
     }
 
+    /// A bounded read of the exact file opened at initialization time.
+    /// Keeping the descriptor open prevents a path swap from redirecting the bytes
+    /// after the size check; short reads and concurrent growth fail closed.
+    final class OpenedFileSnapshot {
+        private let handle: FileHandle
+        let byteCount: Int
+
+        init(url: URL) throws {
+            let openedHandle: FileHandle
+            do { openedHandle = try FileHandle(forReadingFrom: url) }
+            catch { throw LoadError.unreadable }
+            handle = openedHandle
+
+            let length: UInt64
+            do {
+                length = try openedHandle.seekToEnd()
+                try openedHandle.seek(toOffset: 0)
+            } catch {
+                try? openedHandle.close()
+                throw LoadError.unreadable
+            }
+            guard length <= 512 * 1024 * 1024, length <= UInt64(Int.max) else {
+                try? openedHandle.close()
+                throw LoadError.fileTooLarge
+            }
+            byteCount = Int(length)
+        }
+
+        func read() throws -> Data {
+            var snapshot = Data()
+            snapshot.reserveCapacity(byteCount)
+            while snapshot.count < byteCount {
+                let requested = min(1_048_576, byteCount - snapshot.count)
+                let chunk: Data
+                do { chunk = try handle.read(upToCount: requested) ?? Data() }
+                catch { throw LoadError.unreadable }
+                guard !chunk.isEmpty, chunk.count <= requested else {
+                    throw LoadError.unreadable
+                }
+                snapshot.append(chunk)
+            }
+
+            let trailing: Data
+            do { trailing = try handle.read(upToCount: 1) ?? Data() }
+            catch { throw LoadError.unreadable }
+            guard trailing.isEmpty else { throw LoadError.unreadable }
+            return snapshot
+        }
+
+        deinit { try? handle.close() }
+    }
+
     func load(_ url: URL, into memory: GuestMemory,
               expectedArchitecture: VMConfiguration.Architecture) throws -> Image {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        let values: URLResourceValues
-        do { values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]) }
-        catch { throw LoadError.unreadable }
-        guard values.isRegularFile == true, let fileSize = values.fileSize else { throw LoadError.unreadable }
-        guard fileSize <= 512 * 1024 * 1024 else { throw LoadError.fileTooLarge }
-        let data: Data
-        do { data = try Data(contentsOf: url, options: [.mappedIfSafe]) }
-        catch { throw LoadError.unreadable }
-        guard data.count <= 512 * 1024 * 1024 else { throw LoadError.fileTooLarge }
+        // Capture the size and bytes through one already-open descriptor. A path
+        // replacement between metadata lookup and Data(contentsOf:) must not swap
+        // the executable after validation has begun.
+        let data = try OpenedFileSnapshot(url: url).read()
 
         guard data.count >= 64, data[0] == 0x7F, data[1] == 0x45,
               data[2] == 0x4C, data[3] == 0x46 else { throw LoadError.invalidMagic }
