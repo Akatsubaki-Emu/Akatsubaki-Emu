@@ -1625,6 +1625,47 @@ struct InterpreterTests {
 
             // Register-immediate C7 /0 must also enter AOT directly and preserve
             // x86's sign-extension of imm32 into a 64-bit destination.
+            // RIP-relative LEA must use the guest block RIP, and identical
+            // bytes at another address must not reuse the first absolute target.
+            let leaRipRelativeProgram = Data([
+                0x48, 0x8D, 0x35, 0xEF, 0x00, 0x00, 0x00, 0x0F, 0x0B
+            ])
+            let leaRipRelativeMemory = GuestMemory(size: 0x600000)
+            precondition(leaRipRelativeMemory.write(leaRipRelativeProgram, offset: 0x40020A))
+            precondition(leaRipRelativeMemory.write(leaRipRelativeProgram, offset: 0x50020A))
+
+            let blocksBeforeLEARIP = executor.blocksExecuted
+            let leaRipRelativeBaseline = X86_64Interpreter(memory: leaRipRelativeMemory)
+            try leaRipRelativeBaseline.reset(entryPoint: 0x40020A)
+            let leaRipRelativeBaselineExit = try leaRipRelativeBaseline.run(maxInstructions: 8)
+            let leaRipRelativeHybrid = X86_64Interpreter(memory: leaRipRelativeMemory, aotExecutor: executor)
+            try leaRipRelativeHybrid.reset(entryPoint: 0x40020A)
+            let leaRipRelativeHybridExit = try leaRipRelativeHybrid.run(maxInstructions: 8)
+            precondition(leaRipRelativeHybridExit == leaRipRelativeBaselineExit)
+            precondition(leaRipRelativeHybridExit == .unsupportedInstruction(address: 0x400211))
+            precondition(leaRipRelativeHybrid.instructionCount == leaRipRelativeBaseline.instructionCount)
+            for index in 0..<16 {
+                precondition(leaRipRelativeHybrid.registerValue(index) == leaRipRelativeBaseline.registerValue(index))
+            }
+            precondition(leaRipRelativeHybrid.registerValue(6) == 0x400300)
+            precondition(executor.blocksExecuted == blocksBeforeLEARIP + 1)
+
+            let blocksBeforeSecondRIP = executor.blocksExecuted
+            let secondRIPBaseline = X86_64Interpreter(memory: leaRipRelativeMemory)
+            try secondRIPBaseline.reset(entryPoint: 0x50020A)
+            let secondRIPBaselineExit = try secondRIPBaseline.run(maxInstructions: 8)
+            let secondRIPHybrid = X86_64Interpreter(memory: leaRipRelativeMemory, aotExecutor: executor)
+            try secondRIPHybrid.reset(entryPoint: 0x50020A)
+            let secondRIPHybridExit = try secondRIPHybrid.run(maxInstructions: 8)
+            precondition(secondRIPHybridExit == secondRIPBaselineExit)
+            precondition(secondRIPHybridExit == .unsupportedInstruction(address: 0x500211))
+            precondition(secondRIPHybrid.instructionCount == secondRIPBaseline.instructionCount)
+            for index in 0..<16 {
+                precondition(secondRIPHybrid.registerValue(index) == secondRIPBaseline.registerValue(index))
+            }
+            precondition(secondRIPHybrid.registerValue(6) == 0x500300)
+            precondition(executor.blocksExecuted == blocksBeforeSecondRIP + 1)
+
             let movImmediateFirstProgram = Data([
                 0x48, 0xC7, 0xC0, 0x00, 0x00, 0x00, 0x80, 0x0F, 0x0B
             ])

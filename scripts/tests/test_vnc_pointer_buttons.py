@@ -43,5 +43,18 @@ class VNCPointerButtonTests(unittest.TestCase):
         self.assertIn("for: [.touchUpInside, .touchUpOutside, .touchCancel]", helper)
 
 
+    def test_pointer_button_packets_rotate_pending_motion_on_serial_queue(self):
+        source = (Path(__file__).resolve().parents[2] / "src/QEMU/QEMUVNCClient.swift").read_text(encoding="utf-8")
+        enqueue = source.split("private func enqueueSend", 1)[1].split("private func send(", 1)[0]
+        self.assertIn("if pointerSendBatch != nil", enqueue)
+        self.assertIn("pointerSendBatch = VNCPointerSendBatch()", enqueue)
+        self.assertIn("sendQueue.async", enqueue)
+        self.assertIn("connection.send(content: data", enqueue)
+
+        button = source.split("func sendPointerButton", 1)[1].split("func tapPointer", 1)[0]
+        tap = source.split("func tapPointer", 1)[1].split("func movePointer", 1)[0]
+        self.assertIn("enqueueSend(Self.pointerEvent", button)
+        self.assertEqual(tap.count("enqueueSend(Self.pointerEvent"), 2)
+
 if __name__ == "__main__":
     unittest.main()
