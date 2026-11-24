@@ -1711,7 +1711,20 @@ for token in ("xchg64", "xchg32", "xchgExtended", "xchgSameRegister", "xchgMemor
         print(f"XCHG register translator test missing {token!r}", file=sys.stderr)
         failed = True
 xchg_register_interpreter_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
-for token in ("xchgRegisterProgram", "blocksBeforeXCHGRegister", "xchgExtendedRegisterProgram", "blocksBeforeXCHGExtended", "0x99AABBCCDDEEFF00", "0x1122334455667788", "xchgSameRegister32Program", "blocksBeforeXCHGSame32", "0x55667788", "0x300C"):
+for token in (
+    "xchgRegisterProgram",
+    "blocksBeforeXCHGRegister",
+    "xchgExtendedRegisterProgram",
+    "blocksBeforeXCHGExtended",
+    "0x99AABBCCDDEEFF00",
+    "0x1122334455667788",
+    "xchgExtendedBaselineMemory.write(xchgExtendedRegisterProgram, offset: 0x2000)",
+    "xchgSameRegister32Program",
+    "blocksBeforeXCHGSame32",
+    "0x55667788",
+    "0x300C",
+    "xchgSame32BaselineMemory.write(xchgSameRegister32Program, offset: 0x3000)",
+):
     if token not in xchg_register_interpreter_tests:
         print(f"XCHG register interpreter test missing {token!r}", file=sys.stderr)
         failed = True
