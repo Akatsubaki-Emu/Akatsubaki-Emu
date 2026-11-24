@@ -24,6 +24,10 @@ bool isteam_qemu_validate_library(const char * ISTEAM_NONNULL library_path,
 bool isteam_qemu_start(int argc, const char * ISTEAM_NONNULL const * ISTEAM_NONNULL argv,
                        const char * ISTEAM_NONNULL library_path, bool requires_jit,
                        char * ISTEAM_NONNULL error_buffer, int error_capacity);
+/// Sends a whitelisted QMP control command to the persistent in-process QEMU session.
+bool isteam_qemu_qmp_command(const char * ISTEAM_NONNULL socket_path,
+                             const char * ISTEAM_NONNULL command,
+                             char * ISTEAM_NONNULL error_buffer, int error_capacity);
 void isteam_qemu_request_stop(void);
 bool isteam_qemu_is_running(void);
 bool isteam_qemu_is_active(void);
