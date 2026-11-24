@@ -44,15 +44,29 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
         self.assertEqual(patched.count("-fno-objc-msgsend-class-selector-stubs"), 1)
         self.assertTrue(patched.startswith("objc.get_supported_arguments(warn_flags)\n"))
 
-    def test_meson_patcher_ignores_later_objc_summary_conditional(self):
+    def test_meson_patcher_ignores_later_objc_summary_conditionals(self):
+        # Match all four Objective-C conditionals in upstream QEMU v10.0.12-utm:
+        # one compiler-argument block and three summary-only blocks.
         source = self.meson_source() + (
-            "if 'objc' in all_languages\n"
-            "  summary_info += {'Objective-C compiler': ' '.join(meson.get_compiler('objc').cmd_array())}\n"
-            "endif\n"
+            "if 'objc' in all_languages\\n"
+            "  summary_info += {'Objective-C compiler': ' '.join(meson.get_compiler('objc').cmd_array())}\\n"
+            "else\\n"
+            "  summary_info += {'Objective-C compiler': false}\\n"
+            "endif\\n"
+            "if 'objc' in all_languages\\n"
+            "  summary_info += {'OBJCFLAGS': ' '.join(get_option('objc_args') + option_cflags)}\\n"
+            "endif\\n"
+            "if 'objc' in all_languages\\n"
+            "  summary_info += {'QEMU_OBJCFLAGS': ' '.join(qemu_common_flags)}\\n"
+            "endif\\n"
         )
         patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
+        self.assertEqual(patched.count("if 'objc' in all_languages"), 4)
         self.assertEqual(patched.count("-fno-objc-msgsend-class-selector-stubs"), 1)
         self.assertIn("summary_info += {'Objective-C compiler'", patched)
+        self.assertIn("summary_info += {'OBJCFLAGS'", patched)
+        self.assertIn("summary_info += {'QEMU_OBJCFLAGS'", patched)
+
 
     def test_meson_patcher_handles_qemu_common_flags_variant(self):
         source = self.meson_source().replace(
