@@ -94,11 +94,17 @@ jobs:
           bash -n scripts/validate-qemu-runtime.sh
           bash -n scripts/validate-apple-package.sh
 
-      - name: Verify all CI tests run on GitHub Actions
+      - name: Verify GitHub and GitLab validation scopes
         shell: bash
         run: |
           set -euo pipefail
-          test ! -e .gitlab-ci.yml || { echo "GitLab CI must not be maintained; GitHub Actions owns validation." >&2; exit 1; }
+          test -f .gitlab-ci.yml
+          grep -Fq 'CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"' .gitlab-ci.yml
+          grep -Fq '$CI_COMMIT_BRANCH == "main"' .gitlab-ci.yml
+          grep -Fq "core-source-and-elf-validation:" .gitlab-ci.yml
+          grep -Fq "python3 scripts/validate-qemu-source.py" .gitlab-ci.yml
+          grep -Fq "python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v" .gitlab-ci.yml
+          grep -Fq "scripts/build_hybrid_xchg_smoke_elf.py build/hybrid_xchg_smoke.elf" .gitlab-ci.yml
           grep -Fq "swift-runtime-tests:" .github/workflows/validate-repository.yml
           grep -Fq "test_static_elf_execution.swift" .github/workflows/validate-repository.yml
           grep -Fq "python -m unittest discover -s scripts/tests -p 'test_*.py'" .github/workflows/validate-repository.yml

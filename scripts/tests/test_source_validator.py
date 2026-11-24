@@ -498,7 +498,12 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("cc -std=c11 -Wall -Wextra -Werror -pthread", workflow)
         self.assertIn("scripts/tests/test_vnc_key_state.swift", workflow)
         self.assertIn("python -m unittest discover -s scripts/tests -p 'test_*.py'", workflow)
-        self.assertFalse((root / ".gitlab-ci.yml").exists())
+        gitlab_ci = (root / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        self.assertIn('CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"', gitlab_ci)
+        self.assertIn('$CI_COMMIT_BRANCH == "main"', gitlab_ci)
+        self.assertIn("python3 scripts/validate-qemu-source.py", gitlab_ci)
+        self.assertIn("python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v", gitlab_ci)
+        self.assertIn("scripts/build_hybrid_xchg_smoke_elf.py build/hybrid_xchg_smoke.elf", gitlab_ci)
 
 
     def test_guest_backend_replacement_resets_previous_syscall_state(self):
