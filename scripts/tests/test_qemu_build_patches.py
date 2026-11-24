@@ -439,6 +439,27 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("group: isteam-release-publish-", release_job)
         self.assertIn("cancel-in-progress: false", release_job)
 
+    def test_qemu_runtime_exports_are_matched_exactly(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn('grep -Eq "[[:space:]]_?${symbol}$" "$exports"', source)
+        self.assertNotIn('grep -Fq "$symbol" "$exports"', source)
+
+        with TemporaryDirectory() as temporary:
+            exports = Path(temporary) / "exports.txt"
+            pattern = r"[[:space:]]_?qemu_init$"
+            exports.write_text("00000000 T _qemu_init_extra\n", encoding="utf-8")
+            result = subprocess.run(["grep", "-Eq", pattern, str(exports)], capture_output=True)
+            self.assertNotEqual(result.returncode, 0, "a similarly named export must not satisfy qemu_init")
+
+            exports.write_text("00000000 T _qemu_init\n", encoding="utf-8")
+            result = subprocess.run(["grep", "-Eq", pattern, str(exports)], capture_output=True)
+            self.assertEqual(result.returncode, 0, "the exact underscored nm symbol must be accepted")
+
+            exports.write_text("00000000 T qemu_init\n", encoding="utf-8")
+            result = subprocess.run(["grep", "-Eq", pattern, str(exports)], capture_output=True)
+            self.assertEqual(result.returncode, 0, "the exact non-underscored symbol must also be accepted")
+
     def test_qemu_workflow_ios_vm_map_probe_shell_syntax(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
         source = workflow.read_text(encoding="utf-8")
