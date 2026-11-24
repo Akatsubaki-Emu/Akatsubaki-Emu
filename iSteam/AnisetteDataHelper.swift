@@ -27,7 +27,6 @@ final class AnisetteDataHelper
     var mdLu: String?
     var deviceId: String?
     
-    var menuAnisetteURL: String?
     
     static var shared: AnisetteDataHelper = AnisetteDataHelper()
     
@@ -42,16 +41,21 @@ final class AnisetteDataHelper
     func getAnisetteData(refresh: Bool = false) async throws -> AnisetteData
     {
         
-        guard self.url != nil else {
-            throw "No Anisette Server Found!"
+        guard let serverURL = self.url,
+              serverURL.scheme?.lowercased() == "https",
+              serverURL.host != nil else {
+            throw "A valid HTTPS Anisette server is required"
+        }
+        if refresh {
+            try EntitlementAnisetteKeychain.shared.setAdiPb(nil)
         }
 
         self.printOut("Using configured Anisette server")
         try await self.fetchClientInfo()
 
         let ans: AnisetteData
-        if let identifier = EntitlementAnisetteKeychain.shared.identifier,
-           let adiPb = EntitlementAnisetteKeychain.shared.adiPb {
+        if let identifier = try EntitlementAnisetteKeychain.shared.identifier(),
+           let adiPb = try EntitlementAnisetteKeychain.shared.adiPb() {
             ans = try await self.fetchAnisetteV3(identifier, adiPb)
         } else {
             ans = try await self.provision()
@@ -61,7 +65,10 @@ final class AnisetteDataHelper
     
     // MARK: - COMMON
     
-    func extractAnisetteData(_ data: Data, _ response: HTTPURLResponse?, v3: Bool) async throws -> AnisetteData {
+    func extractAnisetteData(_ data: Data, _ response: HTTPURLResponse, v3: Bool) async throws -> AnisetteData {
+        guard (200...299).contains(response.statusCode) else {
+            throw "Anisette server returned HTTP status " + String(response.statusCode)
+        }
         // make sure this JSON is in the format we expect
         // convert data to json
         if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: String] {
@@ -72,7 +79,7 @@ final class AnisetteDataHelper
                     if let message = message,
                        message.contains("-45061") {
                         self.printOut("Error message contains -45061 (not provisioned), resetting adi.pb and retrying")
-                        EntitlementAnisetteKeychain.shared.adiPb = nil
+                        try EntitlementAnisetteKeychain.shared.setAdiPb(nil)
                         return try await provision()
                     } else { throw message ?? "Unknown error" }
                 }
@@ -115,8 +122,7 @@ final class AnisetteDataHelper
                 if let timeZone = json["X-Apple-I-TimeZone"] { formattedJSON["timeZone"] = timeZone }
             }
             
-            if let response = response,
-               let version = response.value(forHTTPHeaderField: "Implementation-Version") {
+            if let version = response.value(forHTTPHeaderField: "Implementation-Version") {
                 self.printOut("Implementation-Version: \(version)")
             } else { self.printOut("No Implementation-Version header") }
             
@@ -157,12 +163,17 @@ final class AnisetteDataHelper
         var request = try self.buildAppleRequest(url: lookupURL)
         request.httpMethod = "GET"
         let (data, response) = try await URLSession.shared.data(for: request)
+        _ = try self.requireSuccessfulHTTPResponse(response, operation: "Apple provisioning lookup")
         if
            let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? Dictionary<String, Dictionary<String, Any>>,
            let startProvisioningString = plist["urls"]?["midStartProvisioning"] as? String,
            let startProvisioningURL = URL(string: startProvisioningString),
+           startProvisioningURL.scheme?.lowercased() == "https",
+           startProvisioningURL.host != nil,
            let endProvisioningString = plist["urls"]?["midFinishProvisioning"] as? String,
-           let endProvisioningURL = URL(string: endProvisioningString) {
+           let endProvisioningURL = URL(string: endProvisioningString),
+           endProvisioningURL.scheme?.lowercased() == "https",
+           endProvisioningURL.host != nil {
             self.startProvisioningURL = startProvisioningURL
             self.endProvisioningURL = endProvisioningURL
             self.printOut("Start provisioning endpoint received")
@@ -178,7 +189,9 @@ final class AnisetteDataHelper
     }
     
     func startProvisioningSession() async throws -> AnisetteData {
-        guard let serverURL = self.url else { throw "No Anisette Server Found!" }
+        guard let serverURL = self.url,
+              serverURL.scheme?.lowercased() == "https",
+              serverURL.host != nil else { throw "A valid HTTPS Anisette server is required" }
         let provisioningSessionURL = self.webSocketURL(from: serverURL.appendingPathComponent("v3").appendingPathComponent("provisioning_session"))
         var wsRequest = URLRequest(url: provisioningSessionURL)
         wsRequest.timeoutInterval = 5
@@ -186,8 +199,8 @@ final class AnisetteDataHelper
         self.socket = socket
         socket.resume()
         try await self.receiveProvisioningMessages(from: socket)
-        guard let identifier = EntitlementAnisetteKeychain.shared.identifier,
-              let adiPb = EntitlementAnisetteKeychain.shared.adiPb else {
+        guard let identifier = try EntitlementAnisetteKeychain.shared.identifier(),
+              let adiPb = try EntitlementAnisetteKeychain.shared.adiPb() else {
             throw "Anisette provisioning state could not be saved"
         }
         return try await self.fetchAnisetteV3(identifier, adiPb)
@@ -232,7 +245,7 @@ final class AnisetteDataHelper
         switch result {
         case "GiveIdentifier":
             self.printOut("Giving identifier")
-            guard let identifier = EntitlementAnisetteKeychain.shared.identifier else {
+            guard let identifier = try EntitlementAnisetteKeychain.shared.identifier() else {
                 throw "Anisette device identifier is unavailable"
             }
             try await socket.sendJSON(["identifier": identifier])
@@ -259,7 +272,7 @@ final class AnisetteDataHelper
                 self.printOut("The server didn't give us an adi.pb file")
                 throw "The server didn't give us an adi.pb file"
             }
-            EntitlementAnisetteKeychain.shared.adiPb = adiPb
+            try EntitlementAnisetteKeychain.shared.setAdiPb(adiPb)
             return true
             
         default:
@@ -284,7 +297,8 @@ final class AnisetteDataHelper
         request.httpMethod = "POST"
         request.httpBody = try PropertyListSerialization.data(fromPropertyList: body, format: .xml, options: 0)
         
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        _ = try self.requireSuccessfulHTTPResponse(response, operation: "Apple provisioning data request")
         if let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? Dictionary<String, Dictionary<String, Any>>,
            let spim = plist["Response"]?["spim"] as? String {
             return spim
@@ -308,7 +322,8 @@ final class AnisetteDataHelper
         request.httpMethod = "POST"
         request.httpBody = try PropertyListSerialization.data(fromPropertyList: body, format: .xml, options: 0)
         
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        _ = try self.requireSuccessfulHTTPResponse(response, operation: "Apple provisioning data request")
         if let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? Dictionary<String, Dictionary<String, Any>>,
            let ptm = plist["Response"]?["ptm"] as? String,
            let tk = plist["Response"]?["tk"] as? String {
@@ -365,7 +380,7 @@ final class AnisetteDataHelper
     // MARK: - V3: FETCHING
     
     func fetchClientInfo() async throws -> Void {
-        let storedIdentifier = EntitlementAnisetteKeychain.shared.identifier
+        let storedIdentifier = try EntitlementAnisetteKeychain.shared.identifier()
         let decodedIdentifier = storedIdentifier.flatMap { Data(base64Encoded: $0) }
         if self.clientInfo != nil &&
             self.userAgent != nil &&
@@ -398,9 +413,9 @@ final class AnisetteDataHelper
 
             let generatedData = Data(bytes: &bytes, count: bytes.count)
             let generatedIdentifier = generatedData.base64EncodedString()
-            EntitlementAnisetteKeychain.shared.adiPb = nil
-            EntitlementAnisetteKeychain.shared.identifier = generatedIdentifier
-            guard EntitlementAnisetteKeychain.shared.identifier == generatedIdentifier else {
+            try EntitlementAnisetteKeychain.shared.setAdiPb(nil)
+            try EntitlementAnisetteKeychain.shared.setIdentifier(generatedIdentifier)
+            guard try EntitlementAnisetteKeychain.shared.identifier() == generatedIdentifier else {
                 throw "Couldn't save the device identifier securely"
             }
             decoded = generatedData
@@ -416,7 +431,9 @@ final class AnisetteDataHelper
     func fetchAnisetteV3(_ identifier: String, _ adiPb: String) async throws -> AnisetteData {
         try await fetchClientInfo()
         self.printOut("Fetching anisette V3")
-        guard let serverURL = self.url else { throw "No Anisette Server Found!" }
+        guard let serverURL = self.url,
+              serverURL.scheme?.lowercased() == "https",
+              serverURL.host != nil else { throw "A valid HTTPS Anisette server is required" }
         var request = URLRequest(url: serverURL.appendingPathComponent("v3").appendingPathComponent("get_headers"))
         request.httpMethod = "POST"
         request.httpBody = try JSONSerialization.data(withJSONObject: [
@@ -425,12 +442,27 @@ final class AnisetteDataHelper
         ], options: [])
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, response) = try await URLSession.shared.data(for: request)
-        
-        return try await self.extractAnisetteData(data, response as? HTTPURLResponse, v3: true)
+        let httpResponse = try self.requireSuccessfulHTTPResponse(response, operation: "Anisette V3 header request")
+        return try await self.extractAnisetteData(data, httpResponse, v3: true)
 
     }
     
     
+    private func requireSuccessfulHTTPResponse(_ response: URLResponse, operation: String) throws -> HTTPURLResponse {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw operation + " did not return an HTTP response"
+        }
+        guard let finalURL = httpResponse.url,
+              finalURL.scheme?.lowercased() == "https",
+              finalURL.host != nil else {
+            throw operation + " did not remain on HTTPS"
+        }
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw operation + " failed with HTTP status " + String(httpResponse.statusCode)
+        }
+        return httpResponse
+    }
+
     private func printOut(_ text: String?) {}
 
 }
@@ -461,6 +493,6 @@ extension Data {
 }
 
 
-extension String: LocalizedError {
+extension String: @retroactive LocalizedError {
     public var errorDescription: String? { self }
 }
