@@ -339,7 +339,8 @@ struct LinuxSyscallDispatcherTests {
         let unmapMapping = dispatcher.dispatch(
             number: 9, arguments: [0x4B000, 0x6000, 3, 0x22, UInt64.max, 0]
         )!
-        precondition(unmapMapping == 0x4B000)
+        guard case .returned(let unmapMappingAddress) = unmapMapping else { preconditionFailure() }
+        precondition(unmapMappingAddress == 0x4B000)
         precondition(memory.write(Data([10, 11, 12]), offset: 0x4B000))
         let unmap = dispatcher.dispatch(number: 11, arguments: [0x4B000, 0x6000, 0, 0, 0, 0])!
         guard case .returned(let unmapValue) = unmap else { preconditionFailure() }

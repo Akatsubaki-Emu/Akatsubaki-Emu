@@ -504,6 +504,7 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("python3 scripts/validate-qemu-source.py", gitlab_ci)
         self.assertIn("python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v", gitlab_ci)
         self.assertIn("scripts/build_hybrid_xchg_smoke_elf.py build/hybrid_xchg_smoke.elf", gitlab_ci)
+        self.assertEqual(workflow.count("      - .gitlab-ci.yml"), 2)
 
 
     def test_guest_backend_replacement_resets_previous_syscall_state(self):
