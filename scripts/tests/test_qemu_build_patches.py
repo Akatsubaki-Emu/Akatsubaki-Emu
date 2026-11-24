@@ -442,6 +442,17 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         metrics_source = (root / ".github/workflows/Update stats.yml").read_text(encoding="utf-8")
         self.assertIn("group: update-repository-metrics-${{ github.ref }}", metrics_source)
         self.assertIn("cancel-in-progress: true", metrics_source)
+        self.assertIn("  cancel-stale:", metrics_source)
+        self.assertEqual(metrics_source.count("    needs: cancel-stale"), 2)
+        self.assertIn("actions: write", metrics_source)
+        self.assertIn('select(.path == ".github/workflows/Update stats.yml"', metrics_source)
+        cancel_script = textwrap.dedent(
+            metrics_source.split("        run: |" + chr(10), 1)[1].split(chr(10) + "  overview:", 1)[0]
+        )
+        cancel_result = subprocess.run(
+            ["bash", "-n"], input=cancel_script, text=True, capture_output=True
+        )
+        self.assertEqual(cancel_result.returncode, 0, cancel_result.stderr)
 
     def test_qemu_runtime_exports_are_matched_exactly(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
