@@ -17,6 +17,14 @@ The runtime workflow checks out UTM at the immutable source revision [`3d4b8d8cb
 
 Update this pin only after reviewing the upstream changes, submodule revisions, iOS/iOS-SE schemes, dependency targets, local QEMU patch compatibility and applicable third-party notices. The JIT and TCI archives must both pass the runtime packagers and export checks before a new pin is accepted.
 
+## QEMU licensing and distribution gate
+
+The pinned UTM source selects the QEMU `v10.0.12-utm` tarball. QEMU's own licensing explanation identifies QEMU as a whole as GPLv2, with per-file exceptions; this is not a blanket GPLv2-or-later grant. The exact QEMU fork and every linked dependency must be audited at the pinned versions.
+
+Akatsubaki Emu's top-level application license is GPLv3. Since the QEMU runtime is loaded as an in-process shared library, do not assume that separate framework packaging or dynamic linking settles GPL compatibility. Before publishing or redistributing a combined IPA, obtain a qualified file-level and combined-work licensing review, preserve source and notices, and secure any required permissions. Do not change the project's top-level license without authorization from all relevant rights holders.
+
+References: [QEMU licensing](https://www.qemu.org/license.html), [UTM third-party licenses](https://getutm.app/licenses/).
+
 ## Build flow
 
 1. Check out UTM and its submodules on the GitHub-hosted `xcode-27` arm64 runner with the active Xcode 27.x toolchain and the iOS device SDK (the current runner image supplies Xcode 27.3 beta; the workflow validates the installed major version and compiler probes instead of pinning a minor-version path); install both `spirv-tools` and `spirv-llvm-translator` because Mesa's iOS cross-build checks for the `SPIRV-Tools` pkg-config dependency.

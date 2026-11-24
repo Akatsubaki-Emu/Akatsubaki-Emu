@@ -50,6 +50,16 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("git -C UTM rev-parse HEAD > build/qemu-runtime-jit/UTM-SOURCE-REVISION.txt", workflow)
         self.assertIn("git -C UTM rev-parse HEAD > build/qemu-runtime-tci/UTM-SOURCE-REVISION.txt", workflow)
 
+    def test_qemu_runtime_records_the_exact_pinned_qemu_source(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
+        package = workflow.split("- name: Package and verify in-process QEMU runtime", 1)[1].split("- name: Upload verified QEMU runtime artifact", 1)[0]
+        expected = "https://github.com/utmapp/qemu/releases/download/v10.0.12-utm/qemu-10.0.12-utm.tar.xz"
+        self.assertIn('QEMU_SOURCE_URL="$(sed -n', package)
+        self.assertIn(expected, package)
+        self.assertIn("QEMU-SOURCE-URL.txt", package)
+        self.assertIn("UTM-SOURCE-REVISION.txt", package)
+
     def test_qmp_socket_path_failure_releases_scoped_resources(self):
         root = Path(__file__).resolve().parents[2]
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")

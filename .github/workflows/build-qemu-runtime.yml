@@ -256,6 +256,11 @@ jobs:
           set -euo pipefail
           bash scripts/package-utm-qemu-runtime.sh UTM/UTMBuild.xcarchive build/qemu-runtime-jit
           bash scripts/package-utm-qemu-tci-runtime.sh UTM/UTMBuildTCI.xcarchive build/qemu-runtime-tci
+          QEMU_SOURCE_URL="$(sed -n 's/^QEMU_SRC="\([^"]*\)"/\1/p' UTM/patches/sources)"
+          EXPECTED_QEMU_SOURCE_URL="https://github.com/utmapp/qemu/releases/download/v10.0.12-utm/qemu-10.0.12-utm.tar.xz"
+          test "$QEMU_SOURCE_URL" = "$EXPECTED_QEMU_SOURCE_URL" || { echo "Unexpected QEMU source URL in the pinned UTM tree: $QEMU_SOURCE_URL" >&2; exit 1; }
+          printf '%s\n' "$QEMU_SOURCE_URL" > build/qemu-runtime-jit/QEMU-SOURCE-URL.txt
+          cp build/qemu-runtime-jit/QEMU-SOURCE-URL.txt build/qemu-runtime-tci/QEMU-SOURCE-URL.txt
 
           git -C UTM rev-parse HEAD > build/qemu-runtime-jit/UTM-SOURCE-REVISION.txt
           git -C UTM rev-parse HEAD > build/qemu-runtime-tci/UTM-SOURCE-REVISION.txt

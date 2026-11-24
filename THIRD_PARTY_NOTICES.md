@@ -13,4 +13,10 @@ The Apache License 2.0 text is available at https://www.apache.org/licenses/LICE
 
 ## QEMU
 
-QEMU is a separate upstream project: https://gitlab.com/qemu-project/qemu. Its project-level license is generally GNU GPL version 2 or later, with components and dependencies potentially carrying different licenses. Before shipping a QEMU build, record the exact source revision, applied UTM patches, configure options, linked dependencies, and all applicable notices. Do not assume this notice alone satisfies redistribution requirements for a compiled runtime.
+QEMU is a separate upstream project: https://gitlab.com/qemu-project/qemu.
+
+- **Project-level license:** GNU GPL version 2. QEMU's own [license explanation](https://www.qemu.org/license.html) says QEMU as a whole is GPLv2; per-file headers can specify other terms, files without a license header default to GPLv2-or-later, and some areas have GPLv2-only contributions. TCG is mostly BSD/MIT, but each linked component still needs its own audit. Do not describe the entire QEMU project as a blanket GPLv2-or-later work.
+- **Pinned build input:** the pinned UTM 5.0.9 source revision selects the `qemu-10.0.12-utm.tar.xz` release asset. The build workflow verifies and records that exact URL in both JIT and TCI runtime artifacts.
+- **Distribution review:** this repository's application license is GPLv3, while QEMU's project-level license is GPLv2 with file-level exceptions. Because the QEMU runtime is loaded as an in-process shared library, perform a file-level and combined-work compatibility review before distributing an IPA. Do not assume that dynamic linking or a separate framework alone resolves compatibility. Preserve the exact QEMU source, UTM patches, configure options, linked dependency licenses and all notices; obtain qualified review or required permissions before public distribution.
+
+Do not change the repository's top-level license as a workaround without authorization from every relevant rights holder.
