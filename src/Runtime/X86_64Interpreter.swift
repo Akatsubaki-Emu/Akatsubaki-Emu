@@ -95,8 +95,9 @@ final class X86_64Interpreter: GuestCPUBackend {
         var executed: UInt64 = 0
         // The native C invoke boundary rechecks live JIT readiness for every block.
         let aotIsAvailable = aotExecutor?.isAvailable == true
+        let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff
         while executed < maxInstructions {
-            if executed & 0xff == 0 {
+            if executed & stopCheckMask == 0 {
                 stopLock.lock()
                 let shouldStop = stopRequested
                 stopLock.unlock()
@@ -117,7 +118,8 @@ final class X86_64Interpreter: GuestCPUBackend {
                 ) ?? 0
                 if aotWindowLength > 0 {
                     let remaining = maxInstructions - executed
-                    let budget = Int(min(remaining, 4096))
+                    // Bound native batches so stop requests remain responsive.
+                    let budget = Int(min(remaining, 16))
                     if let result = aotExecutor.execute(
                         guestCode: Data(aotInstructionWindow.prefix(aotWindowLength)),
                         registers: &registers, rip: instructionAddress, rflags: flags,
