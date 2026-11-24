@@ -7,7 +7,7 @@ on:
         description: Rebuild UTM dependencies instead of reusing the runner cache
         type: boolean
         required: true
-        default: false
+        default: true
   workflow_call:
     inputs:
       rebuild_dependencies:
@@ -22,8 +22,7 @@ permissions:
 
 jobs:
   build-utm-runtime:
-    # Do not publish QEMU runtime artifacts before qualified license review.
-    if: vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'
+    # Manual runs may compile locally in the ephemeral runner; artifact upload stays gated.
     runs-on: xcode-27
     timeout-minutes: 350
     steps:
@@ -300,7 +299,7 @@ jobs:
           echo "Physical iOS arm64 runtime variants: JIT and TCI"
 
       - name: Upload verified QEMU runtime artifact
-        if: steps.freshness.outputs.build == 'true'
+        if: steps.freshness.outputs.build == 'true' && vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: AkatsubakiEmu-qemu-runtime-ios-arm64
