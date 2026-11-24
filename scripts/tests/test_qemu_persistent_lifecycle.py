@@ -40,6 +40,14 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("tooLongSocketPath", native_test)
         self.assertIn("sun_path", native_test)
 
+    def test_qmp_socket_path_failure_releases_scoped_resources(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        guard = runtime.split("guard QEMUCommandBuilder.qmpSocketPath.utf8.count < 104 else {", 1)[1].split("let args =", 1)[0]
+        cleanup = "newlyScoped.forEach { $0.stopAccessingSecurityScopedResource() }"
+        self.assertIn(cleanup, guard)
+        self.assertLess(guard.index(cleanup), guard.index("throw RuntimeError.runtimeUnavailable"))
+
     def test_native_qmp_protocol_exercises_real_socket_handshake_and_replies(self):
         root = Path(__file__).resolve().parents[2]
         native_test = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
