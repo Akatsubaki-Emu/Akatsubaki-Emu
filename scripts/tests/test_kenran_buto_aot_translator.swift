@@ -108,6 +108,24 @@ struct KenranButoAOTTranslatorTests {
         precondition(outputLimited.stopReason == .outputLimit)
         precondition(outputLimited.guestBytesConsumed == 0)
 
+        // Multiple x86 instructions may form one block even though no single
+        // instruction may exceed the architectural 15-byte limit.
+        let multiInstructionBlock = translator.translate(Data([
+            0xB8,1,0,0,0, 0xBB,2,0,0,0, 0xB9,3,0,0,0, 0xBA,4,0,0,0, 0x0F,0x0B
+        ]))
+        precondition(multiInstructionBlock.stopReason == .unsupportedInstruction)
+        precondition(multiInstructionBlock.guestBytesConsumed == 20)
+        precondition(multiInstructionBlock.instructionCount == 4)
+        precondition(multiInstructionBlock.fallbackOpcode == 0x0F)
+        precondition(X86_64AOTTranslator.translatorVersion == "3")
+        let oversizedBudgets = translator.translate(
+            guest, maximumInstructions: Int.max,
+            maximumOutputBytes: Int.max & ~3,
+            maximumGuestBytes: Int.max
+        )
+        precondition(oversizedBudgets.isComplete)
+        precondition(oversizedBudgets.instructionCount == 3)
+
         print("Kenran Butō AOT decoder, AArch64 emission, 15-byte bounds and interpreter fallback passed")
     }
 }
