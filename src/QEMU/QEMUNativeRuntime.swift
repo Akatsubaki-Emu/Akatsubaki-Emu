@@ -20,6 +20,8 @@ final class QEMUNativeRuntime {
     private var controlError: String?
     private var scopedURLs: [URL] = []
 
+    private init() {}
+
     func start(configuration: VMConfiguration, diskImage: URL, writableDiskImage: URL? = nil,
                firmware: URL? = nil) throws {
         try configuration.validateForStart()
