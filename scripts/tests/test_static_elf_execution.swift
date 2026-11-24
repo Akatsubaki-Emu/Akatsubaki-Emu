@@ -540,6 +540,25 @@ struct StaticELFExecutionTests {
         print("Descriptor-bound ELF snapshot path-replacement, growth and truncation regressions passed")
     }
 
+    static func testFailedPIERelocationClearsGuestMemory() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".invalid-pie")
+        try makePIE(relocationType: 1).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let memory = GuestMemory(size: 16 * 1024 * 1024)
+        do {
+            _ = try ELF64Loader().load(url, into: memory, expectedArchitecture: .x86_64)
+            preconditionFailure("An unsupported PIE relocation must fail the ELF load")
+        } catch ELF64Loader.LoadError.unsupportedDynamicImage {
+            // The failure occurs after PT_LOAD bytes are copied into guest memory.
+        }
+
+        precondition(memory.readUInt64(offset: 0x400600) == 0,
+                     "A failed ELF relocation must clear the partially loaded guest image")
+        print("Failed static PIE relocation clears partial guest memory")
+    }
+
     static func testGeneratedSmokeELF(at url: URL) throws {
         let memory = GuestMemory(size: 16 * 1024 * 1024)
         let image = try ELF64Loader().load(url, into: memory, expectedArchitecture: .x86_64)
@@ -578,6 +597,7 @@ struct StaticELFExecutionTests {
 
     static func main() throws {
         try testDescriptorBoundELFSnapshot()
+        try testFailedPIERelocationClearsGuestMemory()
         if let smokePath = CommandLine.arguments.dropFirst().first {
             try testGeneratedSmokeELF(at: URL(fileURLWithPath: smokePath))
         }

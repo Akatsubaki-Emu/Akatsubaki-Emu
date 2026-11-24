@@ -117,6 +117,15 @@ final class ELF64Loader {
 
     func load(_ url: URL, into memory: GuestMemory,
               expectedArchitecture: VMConfiguration.Architecture) throws -> Image {
+        // Once the old address space is cleared, any later write, relocation or
+        // permission-mapping failure must not leave a partial guest image behind.
+        var didClearGuestMemory = false
+        var didCommitGuestMemory = false
+        defer {
+            if didClearGuestMemory && !didCommitGuestMemory {
+                memory.clear()
+            }
+        }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         // Capture the size and bytes through one already-open descriptor. A path
@@ -295,6 +304,7 @@ final class ELF64Loader {
         // pages are value-initialized to zero, so clearing the sparse page map is
         // sufficient; walking every untouched BSS page would be redundant.
         memory.clear()
+        didClearGuestMemory = true
         for (segment, fileOffset) in pending where segment.fileSize > 0 {
             let sourceEnd = fileOffset + Int(segment.fileSize)
             guard memory.write(data, sourceRange: fileOffset..<sourceEnd,
@@ -344,6 +354,7 @@ final class ELF64Loader {
             }
         }
         let maximumGuestAddress = orderedSegments.reduce(UInt64(0)) { max($0, $1.guestAddress + $1.memorySize) }
+        didCommitGuestMemory = true
         return Image(entryPoint: loadedEntryPoint, machine: machine, segments: segments, loadedByteCount: total,
                      programHeaderAddress: phdrAddress, programHeaderEntrySize: phentsize,
                      programHeaderCount: phnum, maximumGuestAddress: maximumGuestAddress)
