@@ -26,8 +26,8 @@ enum VMAccelerationBackend: String, CaseIterable {
     case qemuInterpreter = "QEMU TCI (no JIT)"
     case hypervisor = "Hypervisor.framework"
 
-    /// TCI is packaged by CI but remains disabled until startup is verified
-    /// on a physical iOS device. Keep unsupported choices visible for migration.
+    /// CI packaging is configured, but no successful device-arm64 TCI artifact
+    /// or physical-device startup has been verified. Keep this option disabled.
     var isAvailable: Bool {
         switch self {
         case .automatic, .qemuJIT: return true
@@ -38,11 +38,11 @@ enum VMAccelerationBackend: String, CaseIterable {
     var detail: String {
         switch self {
         case .automatic:
-            return "Uses the packaged QEMU TCG + JIT runtime; requires physical-device JIT readiness. The CI-built no-JIT TCI fallback remains disabled until physical-device startup is verified."
+            return "Uses the packaged QEMU TCG + JIT runtime; requires physical-device JIT readiness. The no-JIT TCI fallback remains disabled until a device-arm64 artifact is built and physical-device startup is verified."
         case .qemuJIT:
             return "TCG with a 128 MiB translation-block cache and split-WX; requires physical iOS 26+ and a supported StikDebug JIT session."
         case .qemuInterpreter:
-            return "Built and packaged by CI; disabled until physical iOS startup is verified."
+            return "A no-JIT TCI runtime is not packaged yet. Keep this option disabled until a device-arm64 build and physical-device startup are verified."
         case .hypervisor:
             return "Unavailable on standard iOS; Hypervisor.framework is not exposed to ordinary iOS apps."
         }
