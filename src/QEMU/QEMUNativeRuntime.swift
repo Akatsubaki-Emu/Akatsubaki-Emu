@@ -112,7 +112,7 @@ final class QEMUNativeRuntime {
         }
 
         effectiveConfiguration.accelerator = requiresJIT ? .jit : .tcg
-        EmulationLog.shared.write("QEMU effective accelerator: \\(requiresJIT ? "JIT" : "TCI")")
+        EmulationLog.shared.write("QEMU effective accelerator: \(requiresJIT ? "JIT" : "TCI")")
         let args = QEMUCommandBuilder(configuration: effectiveConfiguration)
             .arguments(diskImage: diskImage, writableDiskImage: writableDiskImage,
                        firmware: selectedFirmware, firmwareVariables: selectedFirmwareVariables)
