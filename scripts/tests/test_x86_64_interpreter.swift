@@ -1026,6 +1026,28 @@ struct InterpreterTests {
         precondition(syscallInterpreter.registerValue(1) == 21)
         precondition(syscallInterpreter.registerValue(11) == 0x46)
 
+        let unameInterpreterMemory = GuestMemory(size: 0x2000)
+        let unameInterpreterProgram: [UInt8] = [
+            0xB8, 0x3F, 0x00, 0x00, 0x00,
+            0x48, 0xBF, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x0F, 0x05,
+            0xB8, 0x3C, 0x00, 0x00, 0x00,
+            0xBF, 0x00, 0x00, 0x00, 0x00,
+            0x0F, 0x05
+        ]
+        precondition(unameInterpreterMemory.write(Data(unameInterpreterProgram), offset: 0))
+        let unameInterpreter = X86_64Interpreter(memory: unameInterpreterMemory)
+        try unameInterpreter.reset(entryPoint: 0)
+        let unameInterpreterExit = try unameInterpreter.run(maxInstructions: 6)
+        precondition(unameInterpreterExit == .halted)
+        let unameInterpreterBytes = [UInt8](unameInterpreterMemory.read(offset: 0x1000, length: 390)!)
+        let unameInterpreterFields = stride(from: 0, to: 390, by: 65).map { offset -> String in
+            let field = unameInterpreterBytes[offset..<(offset + 65)]
+            let end = field.firstIndex(of: 0) ?? field.endIndex
+            return String(decoding: field[..<end], as: UTF8.self)
+        }
+        precondition(unameInterpreterFields == ["Linux", "akatsubaki", "6.0.0-akatsubaki", "Kenran Buto", "x86_64", "localdomain"])
+
         let fsSegmentMemory = GuestMemory(size: 0x2000)
         let fsSegmentProgram: [UInt8] = [
             0xBF, 0x02, 0x10, 0x00, 0x00,
