@@ -57,6 +57,15 @@ struct QEMUCommandBuilderBehaviorTests {
         let jitArguments = QEMUCommandBuilder(configuration: configuration(.jit)).arguments()
         precondition(accelArgument(jitArguments) == "tcg,tb-size=128,split-wx=on")
 
+        // Keep the process alive after guest poweroff and control repeat launches
+        // through a private AF_UNIX QMP socket instead of re-entering qemu_init.
+        precondition(requestedTCIArguments.contains("-no-shutdown"))
+        precondition(requestedTCIArguments.contains("-qmp"))
+        let qmpIndex = requestedTCIArguments.firstIndex(of: "-qmp")
+        precondition(qmpIndex != nil && requestedTCIArguments.indices.contains(qmpIndex! + 1))
+        precondition(requestedTCIArguments[qmpIndex! + 1] ==
+                     "unix:\(QEMUCommandBuilder.qmpSocketPath),server=on,wait=off")
+
         print("QEMU command-builder effective accelerator tests passed: JIT fallback -> TCI, requested TCI -> TCI, requested JIT -> split-WX JIT")
     }
 }
