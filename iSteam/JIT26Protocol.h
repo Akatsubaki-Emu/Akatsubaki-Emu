@@ -40,6 +40,9 @@ typedef struct KenranButoAOTGuestState {
 } KenranButoAOTGuestState;
 typedef struct iSteamAOTExecutableRegion iSteamAOTExecutableRegion;
 bool iSteamAOTExecutableMemoryIsAvailable(void);
+#ifdef KENRAN_BUTO_AOT_TESTS
+void iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(int available);
+#endif
 iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate(const void *, size_t, char *, size_t);
 size_t iSteamAOTExecutableMemoryMappedSize(const iSteamAOTExecutableRegion *);
 bool iSteamAOTExecutableMemoryInvoke(iSteamAOTExecutableRegion *, KenranButoAOTGuestState *);

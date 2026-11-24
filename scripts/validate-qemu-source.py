@@ -1601,7 +1601,7 @@ aot_launcher = Path("src/Steam/GameLauncher.swift").read_text(encoding="utf-8")
 aot_translator = Path("src/Runtime/X86_64AOTTranslator.swift").read_text(encoding="utf-8")
 for token in ("KENRAN_BUTO_AOT_ABI_VERSION", "KenranButoAOTGuestState",
               "KenranButoAOTMemoryCallbacks", "iSteamAOTExecutableMemoryInvoke",
-              "iSteamAOTExecutableMemoryMappedSize", "iSteamAOTGuestMemoryRead",
+              "iSteamAOTExecutableMemoryMappedSize", "iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting", "iSteamAOTGuestMemoryRead",
               "iSteamAOTGuestMemoryWrite"):
     if token not in aot_header:
         print(f"AOT ABI missing {token!r}", file=sys.stderr)
@@ -1611,7 +1611,7 @@ for token in ("_Static_assert(offsetof(KenranButoAOTGuestState,gpr)==8",
               "iSteamAOTGuestStateIsValid(s)", "iSteamAOTGuestMemoryRead",
               "iSteamAOTGuestMemoryWrite", "iSteamAOTExecutableMemoryMappedSize",
               "r->mapped_size", "mprotect((void *)execute,mapped,PROT_READ|PROT_EXEC)",
-              "r->finalized=true"):
+              "r->finalized=true", "sTestAvailabilityOverride", "iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting"):
     if token not in aot_memory:
         print(f"AOT memory provider missing {token!r}", file=sys.stderr)
         failed = True
@@ -1620,6 +1620,12 @@ invoke = aot_memory.split("bool iSteamAOTExecutableMemoryInvoke", 1)[1].split(
 )[0]
 if "iSteamAOTExecutableMemoryIsAvailable()" not in invoke:
     print("AOT invoke does not recheck live executable-memory readiness", file=sys.stderr)
+    failed = True
+if "sTestAvailabilityOverride" not in aot_memory:
+    print("AOT test provider lacks a deterministic readiness override", file=sys.stderr)
+    failed = True
+if "-D KENRAN_BUTO_AOT_TESTS -I iSteam" not in aot_workflow:
+    print("AOT C provider is not compiled with the readiness-revocation test hook", file=sys.stderr)
     failed = True
 guard = aot_memory.find("if(status!=KERN_SUCCESS||(maximum&VM_PROT_WRITE)==0)")
 cleanup_end = aot_memory.find("return NULL;", guard)
@@ -1760,6 +1766,15 @@ for token in (
         print(f"XCHG register interpreter test missing {token!r}", file=sys.stderr)
         failed = True
 aot_workflow = Path(".github/workflows/validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
+aot_execution_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
+for token in ("iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(0)",
+              "iSteamAOTExecutableMemoryInvoke(revocationRegion, &revocationState)",
+              "precondition(!executor.refreshAvailability())",
+              "executor.cachedBlockCount == 0"):
+    if token not in aot_execution_tests:
+        print(f"AOT readiness-revocation test missing {token!r}", file=sys.stderr)
+        failed = True
+
 for token in ("KenranButoAOTExecutableMemory.c", "KenranButoAOTExecution.swift",
               "test_x86_64_interpreter.swift", "test_aot_translator_allocation_hot_path.py",
               "-D KENRAN_BUTO_AOT_TESTS"):

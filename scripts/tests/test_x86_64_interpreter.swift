@@ -1919,7 +1919,64 @@ struct InterpreterTests {
             precondition(hybrid.instructionCount == baseline.instructionCount)
             for r in 0..<16 { precondition(hybrid.registerValue(r) == baseline.registerValue(r)) }
             precondition(executor.blocksExecuted >= 2)
-            print("Kenran Butō AOT native block execution, exact-RIP side exit and differential passed")
+
+            // Allocate while JIT is ready, revoke readiness, and prove the C
+            // invocation guard returns before touching guest state.
+            let returnInstruction: [UInt8] = [0xC0, 0x03, 0x5F, 0xD6] // AArch64 RET
+            var revocationError = [CChar](repeating: 0, count: 256)
+            iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(1)
+            let revocationRegion = returnInstruction.withUnsafeBytes { code in
+                revocationError.withUnsafeMutableBufferPointer { error in
+                    iSteamAOTExecutableMemoryCreate(code.baseAddress, code.count, error.baseAddress, error.count)
+                }
+            }
+            guard let revocationRegion else {
+                preconditionFailure("Could not allocate the JIT readiness-revocation test block")
+            }
+            let revocationMemory = GuestMemory(size: 4096)
+            var revocationCallbacks = KenranButoAOTExecutor.makeMemoryCallbacks(for: revocationMemory)
+            var revocationRegisters = [UInt64](repeating: 0, count: 16)
+            var revocationState = KenranButoAOTGuestState()
+            let revocationStateReady = revocationRegisters.withUnsafeMutableBufferPointer { registers in
+                withUnsafePointer(to: &revocationCallbacks) { callbacks in
+                    iSteamAOTGuestStateInitialize(&revocationState, registers.baseAddress,
+                        0x2000, 0x202, 0, 0, callbacks, 16)
+                }
+            }
+            precondition(revocationStateReady && iSteamAOTGuestStateIsValid(&revocationState))
+            revocationState.instructions_executed = 7
+            revocationState.exit_reason = 1
+            revocationState.exit_address = 0x1234
+            revocationState.exit_rip = 0x2000
+            iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(0)
+            precondition(!iSteamAOTExecutableMemoryInvoke(revocationRegion, &revocationState))
+            precondition(revocationState.instructions_executed == 7)
+            precondition(revocationState.exit_reason == 1)
+            precondition(revocationState.exit_address == 0x1234)
+            precondition(revocationState.exit_rip == 0x2000)
+            iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(1)
+            precondition(iSteamAOTExecutableMemoryInvoke(revocationRegion, &revocationState))
+            precondition(revocationState.instructions_executed == 0)
+            precondition(revocationState.exit_reason == 0)
+            precondition(revocationState.exit_address == 0)
+            precondition(revocationState.exit_rip == 0x2000)
+            iSteamAOTExecutableMemoryDestroy(revocationRegion)
+
+            // The Swift executor must discard cached blocks after live readiness disappears.
+            precondition(executor.cachedBlockCount > 0)
+            iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(0)
+            precondition(!executor.refreshAvailability())
+            precondition(executor.cachedBlockCount == 0)
+            precondition(executor.cachedExecutableBytes == 0)
+            var revokedRegisters = [UInt64](repeating: 0, count: 16)
+            let revokedExecution = executor.execute(guestCode: program, registers: &revokedRegisters,
+                rip: 0x1000, rflags: 0x202, fsBase: 0, gsBase: 0,
+                memory: hybridMemory, maximumInstructions: 8)
+            precondition(revokedExecution == nil)
+            precondition(executor.cachedBlockCount == 0)
+            iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(-1)
+
+            print("Kenran Butō AOT native block execution, exact-RIP side exit, differential and JIT revocation passed")
         } else {
             print("Kenran Butō AOT native execution skipped: host lacks ARM64 executable-memory support")
         }

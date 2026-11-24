@@ -2,6 +2,12 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(KENRAN_BUTO_AOT_TESTS)
+static int sTestAvailabilityOverride = -1;
+void iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(int available) {
+ sTestAvailabilityOverride = available;
+}
+#endif
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -27,6 +33,9 @@ static size_t mapped_size_for(size_t n){long p=sysconf(_SC_PAGESIZE);size_t page
 static void deallocate_mach_address(vm_address_t a,size_t n){if(a&&n)(void)vm_deallocate(mach_task_self(),a,(vm_size_t)n);}
 #endif
 bool iSteamAOTExecutableMemoryIsAvailable(void){
+#if defined(KENRAN_BUTO_AOT_TESTS)
+ if(sTestAvailabilityOverride>=0)return sTestAvailabilityOverride!=0;
+#endif
 #if defined(__APPLE__) && defined(__arm64__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
  if(!iSteamJITHasGetTaskAllow()||!iSteamJITIsReady())return false;
  int mode=iSteamJITGetProtocolMode();

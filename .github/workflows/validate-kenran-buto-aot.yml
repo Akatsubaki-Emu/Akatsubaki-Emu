@@ -143,7 +143,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          clang -std=c11 -Wall -Wextra -Werror -I iSteam \
+          clang -std=c11 -Wall -Wextra -Werror -D KENRAN_BUTO_AOT_TESTS -I iSteam \
             -c iSteam/KenranButoAOTExecutableMemory.c \
             -o "$RUNNER_TEMP/kenran-buto-aot-memory.o"
       - name: Execute ABI, AOT block and interpreter side-exit tests on ARM64
