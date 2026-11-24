@@ -5,6 +5,7 @@ final class QEMUBackend {
     private let configuration: VMConfiguration
     private let builder: QEMUCommandBuilder
     private let runtime = QEMUNativeRuntime.shared
+    private var sessionGeneration: UInt64?
 
     init(configuration: VMConfiguration) {
         self.configuration = configuration
@@ -17,15 +18,23 @@ final class QEMUBackend {
     }
 
     func start(diskImage: URL, writableDiskImage: URL? = nil, firmware: URL? = nil) throws {
-        try runtime.start(configuration: configuration, diskImage: diskImage,
-                          writableDiskImage: writableDiskImage, firmware: firmware)
+        sessionGeneration = try runtime.start(configuration: configuration, diskImage: diskImage,
+                                              writableDiskImage: writableDiskImage, firmware: firmware)
     }
 
-    @discardableResult func stop() -> Bool { runtime.stop() }
+    @discardableResult func reset() -> Bool {
+        guard let sessionGeneration else { return false }
+        return runtime.reset(sessionGeneration: sessionGeneration)
+    }
 
-    var isRunning: Bool { runtime.isRunning }
-    var isActive: Bool { runtime.isActive }
-    var lastError: String? { runtime.lastError }
+    @discardableResult func stop() -> Bool {
+        guard let sessionGeneration else { return true }
+        return runtime.stop(sessionGeneration: sessionGeneration)
+    }
+
+    var isRunning: Bool { runtime.isRunning(sessionGeneration: sessionGeneration) }
+    var isActive: Bool { runtime.isActive(sessionGeneration: sessionGeneration) }
+    var lastError: String? { runtime.lastError(sessionGeneration: sessionGeneration) }
 
     private static func quote(_ value: String) -> String {
         if value.rangeOfCharacter(from: .whitespacesAndNewlines) == nil { return value }

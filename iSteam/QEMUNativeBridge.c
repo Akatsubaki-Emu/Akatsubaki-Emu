@@ -290,7 +290,12 @@ bool isteam_qemu_start(int argc, const char * const *argv,
 static bool qmp_write_all(int fd, const char *bytes, size_t length) {
     size_t offset = 0;
     while (offset < length) {
-        ssize_t written = send(fd, bytes + offset, length - offset, 0);
+#ifdef MSG_NOSIGNAL
+        const int send_flags = MSG_NOSIGNAL;
+#else
+        const int send_flags = 0;
+#endif
+        ssize_t written = send(fd, bytes + offset, length - offset, send_flags);
         if (written < 0 && errno == EINTR) continue;
         if (written <= 0) return false;
         offset += (size_t)written;

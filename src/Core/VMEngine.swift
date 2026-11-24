@@ -1,7 +1,7 @@
 import Foundation
 
 /// Coordinates guest sessions over one process-lifetime QEMU runtime.
-/// Guest stop pauses the VM through QMP; the next launch resets and resumes it.
+/// Guest stop pauses the VM through QMP; the next launch resumes it without resetting RAM.
 final class VMEngine {
     enum State: Equatable {
         case stopped
@@ -111,9 +111,9 @@ final class VMEngine {
         monitor?.cancel()
         monitor = nil
         startupDeadline = nil
-        // QEMUNativeRuntime is process-wide. A failed attach must not pause
-        // a guest session that may already be owned by another VMEngine.
-        backend = nil
+        // This backend holds a generation lease only after a successful start,
+        // so this pause cannot affect a different VMEngine's guest.
+        if backend?.stop() ?? true { backend = nil }
         setState(.failed(message))
         EmulationLog.shared.write(message)
     }

@@ -15,6 +15,7 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn('"system_reset"', bridge)
         self.assertIn("SO_RCVTIMEO", bridge)
         self.assertIn("SO_NOSIGPIPE", bridge)
+        self.assertIn("MSG_NOSIGNAL", bridge)
         self.assertIn("g_has_started = true", bridge)
         self.assertEqual(bridge.count("g_has_started = false;"), 1)  # declaration only; never reset after launch
 
@@ -30,13 +31,24 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
         backend = (root / "src" / "QEMU" / "QEMUBackend.swift").read_text(encoding="utf-8")
+        start = runtime.split("func start(", 1)[1].split("private static func containedRegularFile", 1)[0]
+        reset = runtime.split("func reset(sessionGeneration", 1)[1].split("func stop(sessionGeneration", 1)[0]
         self.assertIn("static let shared = QEMUNativeRuntime()", runtime)
         self.assertIn("QEMUNativeRuntime.shared", backend)
         self.assertIn("sessionKey == requestedSessionKey", runtime)
-        self.assertIn('Self.sendQMP("system_reset")', runtime)
-        self.assertIn('Self.sendQMP("cont")', runtime)
+        self.assertIn("guard isPaused else", runtime)
+        self.assertNotIn('Self.sendQMP("system_reset")', start)
+        self.assertIn('Self.sendQMP("cont")', start)
+        self.assertIn('Self.sendQMP("system_reset")', reset)
         self.assertIn('Self.sendQMP("stop")', runtime)
         self.assertIn("private(set) var isPaused = false", runtime)
+        self.assertIn("private var sessionGeneration: UInt64 = 0", runtime)
+        self.assertIn("advanceSessionGeneration()", runtime)
+        self.assertIn("guard expected == sessionGeneration else { return true }", runtime)
+        self.assertIn("private var sessionGeneration: UInt64?", backend)
+        self.assertIn("sessionGeneration = try runtime.start", backend)
+        self.assertIn("runtime.stop(sessionGeneration: sessionGeneration)", backend)
+        self.assertIn("runtime.isRunning(sessionGeneration: sessionGeneration)", backend)
         self.assertIn("Restart Akatsubaki Emu to switch guests", runtime)
 
     def test_vm_engine_stops_by_pausing_instead_of_waiting_for_process_exit(self):
@@ -44,6 +56,7 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         engine = (root / "src" / "Core" / "VMEngine.swift").read_text(encoding="utf-8")
         self.assertIn("guard candidate.stop() else", engine)
         self.assertIn("QEMU process retained for repeat launches", engine)
+        self.assertIn("if backend?.stop() ?? true", engine)
         self.assertNotIn("restart requires relaunching Akatsubaki Emu", engine)
 
 

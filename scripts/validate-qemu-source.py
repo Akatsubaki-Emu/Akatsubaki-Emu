@@ -617,12 +617,12 @@ required = {
         "startupDeadline = .now() + 60",
         "within 60 seconds",
         "backend = candidate",
+        "if backend?.stop() ?? true",
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
         "let requestedJIT = configuration.accelerator == .jit",
         "var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)",
         "isteam_qemu_start",
-        "isteam_qemu_request_stop",
         "findUEFIFirmwarePair(in directory: URL)",
         "findUEFIVariables(matching firmware: URL, in directory: URL)",
         "OVMF_CODE.fd",
@@ -643,8 +643,25 @@ required = {
         "values?.isRegularFile == true",
         "firmwareVariables: selectedFirmwareVariables",
         "startAccessingSecurityScopedResource()",
-        "releaseScopesWhenStopped()",
         "configuration.requiresUEFI",
+        "private var sessionGeneration: UInt64 = 0",
+        "guard isPaused else",
+        "advanceSessionGeneration()",
+        "func reset(sessionGeneration expected: UInt64) -> Bool",
+        "func stop(sessionGeneration expected: UInt64) -> Bool",
+        "guard expected == sessionGeneration else { return true }",
+        "func isRunning(sessionGeneration expected: UInt64?) -> Bool",
+        "func isActive(sessionGeneration expected: UInt64?) -> Bool",
+        "func lastError(sessionGeneration expected: UInt64?) -> String?",
+    ],
+    "src/QEMU/QEMUBackend.swift": [
+        "private var sessionGeneration: UInt64?",
+        "sessionGeneration = try runtime.start",
+        "runtime.stop(sessionGeneration: sessionGeneration)",
+        "runtime.reset(sessionGeneration: sessionGeneration)",
+        "runtime.isRunning(sessionGeneration: sessionGeneration)",
+        "runtime.isActive(sessionGeneration: sessionGeneration)",
+        "runtime.lastError(sessionGeneration: sessionGeneration)",
     ],
     "iSteam/QEMUNativeBridge.c": [
         "bool isteam_qemu_validate_library(",
@@ -672,6 +689,7 @@ required = {
         "ISTEAM_QEMU_MAX_TOTAL_ARGUMENT_BYTES",
         "strnlen(argv[i], ISTEAM_QEMU_MAX_ARGUMENT_BYTES + 1u)",
         "error_buffer && error_capacity > 0",
+        "MSG_NOSIGNAL",
     ],
     "scripts/tests/fake_qemu_runtime.c": [
         "#ifndef FAKE_QEMU_NO_JIT_CALLBACK",
@@ -1618,7 +1636,7 @@ for token in ("#if KENRAN_BUTO_AOT_TESTS", "iSteamAOTGuestMemoryRead",
               "Kenran Butō AOT native block execution",
               "cachedBlockCount", "cachedExecutableBytes",
               "unavailableAOT.executeCalls == 0",
-              "unsupportedStart.executeCalls == 0"):
+              "readyAOT.executeCalls == 0"):
     if token not in aot_tests:
         print(f"AOT runtime regression missing {token!r}", file=sys.stderr)
         failed = True
@@ -1686,7 +1704,7 @@ qmp_runtime = Path("src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8
 qmp_backend = Path("src/QEMU/QEMUBackend.swift").read_text(encoding="utf-8")
 qmp_engine = Path("src/Core/VMEngine.swift").read_text(encoding="utf-8")
 for token in ("bool isteam_qemu_qmp_command", "AF_UNIX", "qmp_capabilities",
-              "SO_RCVTIMEO", "SO_NOSIGPIPE", '"system_reset"', '"cont"', '"stop"',
+              "SO_RCVTIMEO", "SO_NOSIGPIPE", "MSG_NOSIGNAL", '"system_reset"', '"cont"', '"stop"',
               "g_has_started = true", "attempt < 20", "nanosleep(&delay, NULL)"):
     if token not in qmp_bridge:
         print(f"QEMU QMP bridge missing {token!r}", file=sys.stderr)
@@ -1713,7 +1731,16 @@ for token in ("static let shared = QEMUNativeRuntime()", "private init()",
 if "QEMUNativeRuntime.shared" not in qmp_backend:
     print("QEMUBackend does not share the process-lifetime runtime", file=sys.stderr)
     failed = True
-for token in ("guard candidate.stop() else", "QEMU process retained for repeat launches"):
+for token in ("private var sessionGeneration: UInt64?", "sessionGeneration = try runtime.start",
+              "runtime.stop(sessionGeneration: sessionGeneration)",
+              "runtime.reset(sessionGeneration: sessionGeneration)",
+              "runtime.isRunning(sessionGeneration: sessionGeneration)",
+              "runtime.isActive(sessionGeneration: sessionGeneration)",
+              "runtime.lastError(sessionGeneration: sessionGeneration)"):
+    if token not in qmp_backend:
+        print(f"QEMUBackend session lease missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("guard candidate.stop() else", "if backend?.stop() ?? true", "QEMU process retained for repeat launches"):
     if token not in qmp_engine:
         print(f"VMEngine does not pause and retain QEMU for repeat launches: {token!r}", file=sys.stderr)
         failed = True

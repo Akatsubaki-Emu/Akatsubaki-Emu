@@ -18,13 +18,15 @@ final class QEMUNativeRuntime {
     private(set) var started = false
     private(set) var isPaused = false
     private var sessionKey: String?
+    private var sessionGeneration: UInt64 = 0
     private var controlError: String?
     private var scopedURLs: [URL] = []
 
     private init() {}
 
+    @discardableResult
     func start(configuration: VMConfiguration, diskImage: URL, writableDiskImage: URL? = nil,
-               firmware: URL? = nil) throws {
+               firmware: URL? = nil) throws -> UInt64 {
         stateLock.lock()
         defer { stateLock.unlock() }
         try configuration.validateForStart()
@@ -115,18 +117,21 @@ final class QEMUNativeRuntime {
                     "The in-process QEMU runtime is already bound to another VM configuration. Restart Akatsubaki Emu to switch guests."
                 )
             }
-            if isPaused {
-                let resumed = Self.sendQMP("cont")
-                let alreadyRunning = resumed.error?.localizedCaseInsensitiveContains("already running") == true
-                guard resumed.success || alreadyRunning else {
-                    controlError = resumed.error
-                    throw RuntimeError.runtimeUnavailable(resumed.error ?? "QEMU did not acknowledge cont.")
-                }
-                isPaused = false
+            guard isPaused else {
+                throw RuntimeError.runtimeUnavailable(
+                    "A QEMU guest is already running. Duplicate active starts are rejected."
+                )
             }
+            let resumed = Self.sendQMP("cont")
+            let alreadyRunning = resumed.error?.localizedCaseInsensitiveContains("already running") == true
+            guard resumed.success || alreadyRunning else {
+                controlError = resumed.error
+                throw RuntimeError.runtimeUnavailable(resumed.error ?? "QEMU did not acknowledge cont.")
+            }
+            isPaused = false
             controlError = nil
             EmulationLog.shared.write("QEMU guest resumed through the persistent QMP session.")
-            return
+            return advanceSessionGeneration()
         }
 
         var newlyScoped: [URL] = []
@@ -197,6 +202,13 @@ final class QEMUNativeRuntime {
         controlError = nil
         EmulationLog.shared.write("QEMU launch requested with boot media \(diskImage.lastPathComponent)"
             + (writableDiskImage.map { " and writable disk \($0.lastPathComponent)" } ?? ""))
+        return advanceSessionGeneration()
+    }
+
+    private func advanceSessionGeneration() -> UInt64 {
+        sessionGeneration &+= 1
+        if sessionGeneration == 0 { sessionGeneration = 1 }
+        return sessionGeneration
     }
 
     private static func containedRegularFile(named names: [String], in directory: URL) -> URL? {
@@ -355,13 +367,14 @@ final class QEMUNativeRuntime {
     }
 
     @discardableResult
-    func reset() -> Bool {
+    func reset(sessionGeneration expected: UInt64) -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
         guard started else {
             controlError = "QEMU runtime has not been started."
             return false
         }
+        guard expected == sessionGeneration else { return false }
         let result = Self.sendQMP("system_reset")
         guard result.success else {
             controlError = result.error ?? "QEMU did not acknowledge system_reset."
@@ -384,10 +397,11 @@ final class QEMUNativeRuntime {
     }
 
     @discardableResult
-    func stop() -> Bool {
+    func stop(sessionGeneration expected: UInt64) -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
         guard started else { return true }
+        guard expected == sessionGeneration else { return true }
         guard !isPaused else { return true }
         let result = Self.sendQMP("stop")
         let alreadyStopped = result.error?.localizedCaseInsensitiveContains("already stopped") == true
@@ -441,6 +455,29 @@ final class QEMUNativeRuntime {
         return guestShouldRun && isteam_qemu_is_running()
     }
     var isActive: Bool { isteam_qemu_is_active() }
+
+    func isRunning(sessionGeneration expected: UInt64?) -> Bool {
+        stateLock.lock()
+        let ownsRunningSession = expected == sessionGeneration && expected != nil && started && !isPaused
+        stateLock.unlock()
+        return ownsRunningSession && isteam_qemu_is_running()
+    }
+
+    func isActive(sessionGeneration expected: UInt64?) -> Bool {
+        stateLock.lock()
+        let ownsActiveSession = expected == sessionGeneration && expected != nil && started
+        stateLock.unlock()
+        return ownsActiveSession && isteam_qemu_is_active()
+    }
+
+    func lastError(sessionGeneration expected: UInt64?) -> String? {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard expected == sessionGeneration, expected != nil else { return nil }
+        if let controlError { return controlError }
+        let message = String(cString: isteam_qemu_last_error())
+        return message.isEmpty ? nil : message
+    }
 
     var lastError: String? {
         stateLock.lock()
