@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 
 /// Couples the AOT translator to Kenran Butō's validated artifact cache.
@@ -43,7 +42,7 @@ final class KenranButoAOTCompiler {
         let guestByteBudget = min(maximumGuestBytes, X86_64AOTTranslator.maximumGuestByteBudget)
         let outputByteBudget = min(maximumOutputBytes, X86_64AOTTranslator.maximumOutputBudget)
         let identity = TranslationCacheIdentity(
-            guestCodeSHA256: Self.sha256(guestCode),
+            guestCodeSHA256: SHA256Hex.digest(guestCode),
             guestArchitecture: "x86_64",
             translatorIdentifier: X86_64AOTTranslator.translatorIdentifier,
             translatorVersion: X86_64AOTTranslator.translatorVersion,
@@ -77,7 +76,4 @@ final class KenranButoAOTCompiler {
         return Compilation(translation: translation, cacheHit: false)
     }
 
-    private static func sha256(_ data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-    }
 }

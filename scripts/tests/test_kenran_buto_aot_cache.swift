@@ -11,11 +11,56 @@ struct KenranButoAOTCacheTests {
         let compiler = KenranButoAOTCompiler(cache: cache)
         let guest = Data([0xB8, 0x2A, 0x00, 0x00, 0x00, 0x90])
 
+
+        let sha256ABC: [UInt8] = [
+            0xBA, 0x78, 0x16, 0xBF, 0x8F, 0x01, 0xCF, 0xEA,
+            0x41, 0x41, 0x40, 0xDE, 0x5D, 0xAE, 0x22, 0x23,
+            0xB0, 0x03, 0x61, 0xA3, 0x96, 0x17, 0x7A, 0x9C,
+            0xB4, 0x10, 0xFF, 0x61, 0xF2, 0x00, 0x15, 0xAD
+        ]
+        precondition(SHA256Hex.encode(sha256ABC) ==
+                     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+
         let first = try compiler.compile(guest, guestABI: "sysv-linux-x86_64")
         precondition(!first.cacheHit)
         precondition(first.translation.isComplete)
         precondition(first.translation.instructionCount == 2)
         precondition(first.translation.isValid(for: guest))
+
+
+        let untouchedRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "kenran-cache-no-create-\(UUID().uuidString)", isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: untouchedRoot) }
+        let untouched = TranslationCache(directory: untouchedRoot)
+        let identity = TranslationCacheIdentity(
+            guestCodeSHA256: SHA256Hex.digest(guest),
+            guestArchitecture: "x86_64",
+            translatorIdentifier: X86_64AOTTranslator.translatorIdentifier,
+            translatorVersion: X86_64AOTTranslator.translatorVersion,
+            hostArchitecture: X86_64AOTTranslator.hostArchitecture,
+            cpuFeatures: X86_64AOTTranslator.cpuFeatures,
+            guestABI: KenranButoAOTCompiler.cacheGuestABI("sysv-linux-x86_64")
+        )
+        guard try untouched.load(identity) == nil else {
+            fatalError("A missing cache directory unexpectedly returned an entry")
+        }
+        guard !FileManager.default.fileExists(atPath: untouchedRoot.path) else {
+            fatalError("A cache read created the directory")
+        }
+        _ = try untouched.path(for: identity)
+        _ = untouched.path(for: "read-only-path")
+        guard try untouched.statistics().entryCount == 0 else {
+            fatalError("Missing cache directory did not report empty statistics")
+        }
+        try untouched.removeAll()
+        guard !FileManager.default.fileExists(atPath: untouchedRoot.path) else {
+            fatalError("Read-only cache operations created the directory")
+        }
+        try untouched.store(try JSONEncoder().encode(first.translation), for: identity)
+        guard FileManager.default.fileExists(atPath: untouchedRoot.path) else {
+            fatalError("Cache store did not create the directory")
+        }
 
         let second = try compiler.compile(guest, guestABI: "sysv-linux-x86_64")
         precondition(second.cacheHit)
