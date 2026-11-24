@@ -9,7 +9,11 @@ struct LocalDevVPNCallbackTests {
             ("com.xthrx.istem://localdevvpn", true),
             ("com.xthrx.istem://localdevvpn?status=failed", false),
             ("com.xthrx.istem://localdevvpn?status=disconnected", false),
-            ("com.xthrx.istem://localdevvpn?status=connecting", false)
+            ("com.xthrx.istem://localdevvpn?status=connecting", false),
+            ("com.xthrx.istem://other?status=connected", false),
+            ("com.xthrx.istem://localdevvpn?status=connected&status=failed", false),
+            ("com.xthrx.istem://localdevvpn?status=failed&status=connected", false),
+            ("com.xthrx.istem://localdevvpn?status=", false)
         ]
 
         for (rawURL, expected) in cases {
