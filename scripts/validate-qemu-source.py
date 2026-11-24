@@ -1689,13 +1689,14 @@ for token in ("maximumInstructions", "maximumOutputBytes", "maximumGuestBytes",
     if token not in aot_translator:
         print(f"AOT translator missing bounded/fixed-buffer contract {token!r}", file=sys.stderr)
         failed = True
-for token in ("case 0x8D:", "addShiftedRegister", "addImmediate", "ripRelative", "guestRIP", 'static let translatorVersion = "8"'):
+for token in ("case 0x63:", "case 0x0F:", "extendRegister", "case 0x8D:", "addShiftedRegister", "addImmediate", "ripRelative", "guestRIP", 'static let translatorVersion = "9"'):
     if token not in aot_translator:
         print(f"AOT LEA translator contract missing {token!r}", file=sys.stderr)
         failed = True
 aot_translator_tests = Path("scripts/tests/test_kenran_buto_aot_translator.swift").read_text(encoding="utf-8")
 for token in ("0x8B010802", "0x91004042", "0x0B010402",
-              "leaRipRelative", "guestRIP", "leaLargeDisplacement", 'translatorVersion == "8"'):
+              "leaRipRelative", "guestRIP", "leaLargeDisplacement", "movzxHighByte",
+              "movsxHighByte", "movsxd64", "0x53083C00", "0x93407C60", 'translatorVersion == "9"'):
     if token not in aot_translator_tests:
         print(f"AOT LEA regression missing {token!r}", file=sys.stderr)
         failed = True

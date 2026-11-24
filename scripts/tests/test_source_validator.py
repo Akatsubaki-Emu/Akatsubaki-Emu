@@ -850,8 +850,10 @@ class SourceValidatorTests(unittest.TestCase):
     def test_aot_architecture_docs_match_translator_version(self):
         root = Path(__file__).resolve().parents[2]
         docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
-        self.assertIn("Translator version 8 emits", docs)
-        self.assertIn("Translator version 8 enforces", docs)
+        self.assertIn("Translator version 9 emits", docs)
+        self.assertIn("Translator version 9 enforces", docs)
+        self.assertIn("register-only MOVZX/MOVSX", docs)
+        self.assertIn("MOVSXD", docs)
         self.assertIn("accumulator/register XCHG", docs)
 
     def test_kenran_buto_aot_is_opt_in_and_fails_closed(self):
@@ -867,7 +869,10 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("func refreshAvailability() -> Bool", executor)
         self.assertIn("func refreshAvailability() -> Bool", interpreter)
         self.assertIn("aotExecutor?.refreshAvailability() == true", interpreter)
-        self.assertIn("static let translatorVersion = \"8\"", translator)
+        self.assertIn("static let translatorVersion = \"9\"", translator)
+        self.assertIn("case 0x0F:", translator)
+        self.assertIn("case 0x63:", translator)
+        self.assertIn("extendRegister", translator)
         self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", provider)
         invoke = provider.split("bool iSteamAOTExecutableMemoryInvoke", 1)[1].split("void iSteamAOTExecutableMemoryDestroy", 1)[0]
         self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", invoke)

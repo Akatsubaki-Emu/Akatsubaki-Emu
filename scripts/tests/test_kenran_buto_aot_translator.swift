@@ -152,7 +152,7 @@ struct KenranButoAOTTranslatorTests {
         let exchange32HighWithIgnoredIndex = translator.translate(Data([0x43, 0x87, 0xC0]))
         precondition(exchange32HighWithIgnoredIndex.isComplete && exchange32HighWithIgnoredIndex.instructionCount == 1)
         precondition(exchange32HighWithIgnoredIndex.guestBytesConsumed == 3)
-        precondition(exchange32HighWithIgnoredIndex.machineCode == [0x4A000108, 0x4A000100, 0x4A000108])
+        precondition(exchange32HighWithIgnoredIndex.machineCode == exchange32High.machineCode)
 
         let extendedAccumulatorExchange = translator.translate(Data([0x4D, 0x97]))
         precondition(extendedAccumulatorExchange.isComplete && extendedAccumulatorExchange.instructionCount == 1)
@@ -185,6 +185,58 @@ struct KenranButoAOTTranslatorTests {
         let xchgSameRegister = translator.translate(Data([0x87, 0xC0]))
         precondition(xchgSameRegister.isComplete && xchgSameRegister.instructionCount == 1)
         precondition(word(xchgSameRegister.machineCode, 0) == 0x2A0003E0)
+
+        // Register-only MOVZX/MOVSX byte and word sources to 32/64-bit destinations.
+        let movzxByte = translator.translate(Data([0x0F, 0xB6, 0xC3]))
+        precondition(movzxByte.isComplete && movzxByte.instructionCount == 1)
+        precondition(word(movzxByte.machineCode, 0) == 0x53001C60)
+        let movzxWord = translator.translate(Data([0x0F, 0xB7, 0xC3]))
+        precondition(movzxWord.isComplete && word(movzxWord.machineCode, 0) == 0x53003C60)
+        let movzxByte64 = translator.translate(Data([0x48, 0x0F, 0xB6, 0xC3]))
+        precondition(movzxByte64.isComplete && word(movzxByte64.machineCode, 0) == 0xD3401C60)
+        let movzxWord64 = translator.translate(Data([0x48, 0x0F, 0xB7, 0xC3]))
+        precondition(movzxWord64.isComplete && word(movzxWord64.machineCode, 0) == 0xD3403C60)
+        let movsxByte = translator.translate(Data([0x0F, 0xBE, 0xC3]))
+        precondition(movsxByte.isComplete && word(movsxByte.machineCode, 0) == 0x13001C60)
+        let movsxWord = translator.translate(Data([0x0F, 0xBF, 0xC3]))
+        precondition(movsxWord.isComplete && word(movsxWord.machineCode, 0) == 0x13003C60)
+        let movsxByte64 = translator.translate(Data([0x48, 0x0F, 0xBE, 0xC3]))
+        precondition(movsxByte64.isComplete && word(movsxByte64.machineCode, 0) == 0x93401C60)
+        let movsxWord64 = translator.translate(Data([0x48, 0x0F, 0xBF, 0xC3]))
+        precondition(movsxWord64.isComplete && word(movsxWord64.machineCode, 0) == 0x93403C60)
+
+        // Without REX, rm=4 is AH. Any REX prefix selects SPL instead.
+        let movzxHighByte = translator.translate(Data([0x0F, 0xB6, 0xC4]))
+        precondition(movzxHighByte.isComplete && word(movzxHighByte.machineCode, 0) == 0x53083C00)
+        let movsxHighByte = translator.translate(Data([0x0F, 0xBE, 0xC4]))
+        precondition(movsxHighByte.isComplete && word(movsxHighByte.machineCode, 0) == 0x13083C00)
+        let movzxREXByte = translator.translate(Data([0x40, 0x0F, 0xB6, 0xC4]))
+        precondition(movzxREXByte.isComplete && word(movzxREXByte.machineCode, 0) == 0x53001C80)
+        let movzxREXExtended = translator.translate(Data([0x4D, 0x0F, 0xB6, 0xC8]))
+        precondition(movzxREXExtended.isComplete && word(movzxREXExtended.machineCode, 0) == 0xD3401D09)
+
+        // MOVSXD r64,r/m32 uses a 64-bit SBFM and honours REX.R/REX.B.
+        let movsxd64 = translator.translate(Data([0x48, 0x63, 0xC3]))
+        precondition(movsxd64.isComplete && word(movsxd64.machineCode, 0) == 0x93407C60)
+        let movsxdExtended = translator.translate(Data([0x4D, 0x63, 0xC8]))
+        precondition(movsxdExtended.isComplete && word(movsxdExtended.machineCode, 0) == 0x93407D09)
+        let movsxdMemory = translator.translate(Data([0x48, 0x63, 0x00]))
+        precondition(movsxdMemory.stopReason == .unsupportedInstruction && movsxdMemory.guestBytesConsumed == 0)
+        let movsxdWithoutREXW = translator.translate(Data([0x63, 0xC3]))
+        precondition(movsxdWithoutREXW.stopReason == .unsupportedInstruction && movsxdWithoutREXW.guestBytesConsumed == 0)
+
+        // MOVZX/SX can follow an eligible block-start MOV in one translated block.
+        let movThenExtend = translator.translate(Data([0xB8, 1, 0, 0, 0, 0x0F, 0xB6, 0xC0, 0x0F, 0x0B]))
+        precondition(movThenExtend.stopReason == .unsupportedInstruction)
+        precondition(movThenExtend.guestBytesConsumed == 8 && movThenExtend.instructionCount == 2)
+        precondition(word(movThenExtend.machineCode, 1) == 0x53001C00)
+
+        let movzxMemory = translator.translate(Data([0x0F, 0xB6, 0x00]))
+        precondition(movzxMemory.stopReason == .unsupportedInstruction && movzxMemory.guestBytesConsumed == 0)
+        let movzxTruncated = translator.translate(Data([0x0F, 0xB6]))
+        precondition(movzxTruncated.stopReason == .truncatedInstruction && movzxTruncated.guestBytesConsumed == 0)
+        let movzxUnknown = translator.translate(Data([0x0F, 0x0B]))
+        precondition(movzxUnknown.stopReason == .unsupportedInstruction && movzxUnknown.guestBytesConsumed == 0)
 
         let xchgMemory = translator.translate(Data([0x48, 0x87, 0x08]))
         precondition(xchgMemory.stopReason == .unsupportedInstruction)
@@ -263,7 +315,7 @@ struct KenranButoAOTTranslatorTests {
         precondition(multiInstructionBlock.guestBytesConsumed == 20)
         precondition(multiInstructionBlock.instructionCount == 4)
         precondition(multiInstructionBlock.fallbackOpcode == 0x0F)
-        precondition(X86_64AOTTranslator.translatorVersion == "8")
+        precondition(X86_64AOTTranslator.translatorVersion == "9")
         let oversizedBudgets = translator.translate(
             guest, maximumInstructions: Int.max,
             maximumOutputBytes: Int.max & ~3,

@@ -50,7 +50,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
 struct X86_64AOTTranslator {
     static let translatorIdentifier = "kenran-buto-aot-arm64"
     // Bump whenever emitted code or decoding semantics change.
-    static let translatorVersion = "8"
+    static let translatorVersion = "9"
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
@@ -400,6 +400,82 @@ struct X86_64AOTTranslator {
                 }
                 }
 
+            case 0x63:
+                // MOVSXD r64,r/m32 is safe for register operands: SBFM
+                // sign-extends the low 32 bits without changing guest flags.
+                guard (rex & 0x08) != 0 else {
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+                guard cursor < bytes.count else {
+                    if bytes.count < guestCodeCount {
+                        return result(output, consumed: start, instructions: instructions,
+                                      reason: .inputLimit, fallbackOffset: start)
+                    }
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .truncatedInstruction, opcode: bytes[start])
+                }
+                let modRM = bytes[cursor]
+                cursor += 1
+                guard modRM >> 6 == 0b11 else {
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+                let destination = Int((modRM >> 3) & 0x07) | ((rex & 0x04) != 0 ? 8 : 0)
+                let source = Int(modRM & 0x07) | ((rex & 0x01) != 0 ? 8 : 0)
+                words.append(Self.extendRegister(source, to: destination, sourceBits: 32,
+                                                 sourceLSB: 0, is64Bit: true, signExtend: true))
+
+            case 0x0F:
+                // Register-only MOVZX/MOVSX byte/word forms. Memory operands
+                // and unrelated 0F opcodes remain interpreter side exits.
+                guard cursor < bytes.count else {
+                    if bytes.count < guestCodeCount {
+                        return result(output, consumed: start, instructions: instructions,
+                                      reason: .inputLimit, fallbackOffset: start)
+                    }
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .truncatedInstruction, opcode: bytes[start])
+                }
+                let secondOpcode = bytes[cursor]
+                cursor += 1
+                let sourceBits: Int
+                let signExtend: Bool
+                switch secondOpcode {
+                case 0xB6: sourceBits = 8; signExtend = false
+                case 0xB7: sourceBits = 16; signExtend = false
+                case 0xBE: sourceBits = 8; signExtend = true
+                case 0xBF: sourceBits = 16; signExtend = true
+                default:
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+                guard cursor < bytes.count else {
+                    if bytes.count < guestCodeCount {
+                        return result(output, consumed: start, instructions: instructions,
+                                      reason: .inputLimit, fallbackOffset: start)
+                    }
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .truncatedInstruction, opcode: bytes[start])
+                }
+                let modRM = bytes[cursor]
+                cursor += 1
+                guard modRM >> 6 == 0b11 else {
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
+                }
+                let destination = Int((modRM >> 3) & 0x07) | ((rex & 0x04) != 0 ? 8 : 0)
+                let sourceField = Int(modRM & 0x07)
+                let highByteRegister = rex == 0 && (4...7).contains(sourceField)
+                let source = highByteRegister
+                    ? sourceField - 4
+                    : sourceField | ((rex & 0x01) != 0 ? 8 : 0)
+                let sourceLSB = highByteRegister ? 8 : 0
+                words.append(Self.extendRegister(source, to: destination,
+                                                 sourceBits: sourceBits, sourceLSB: sourceLSB,
+                                                 is64Bit: (rex & 0x08) != 0,
+                                                 signExtend: signExtend))
+
             case 0xF3:
                 // ENDBR64 is not assumed to be a NOP: guest CET policy is not
                 // modelled yet, so preserve it for the interpreter fallback.
@@ -526,6 +602,23 @@ struct X86_64AOTTranslator {
     private static func moveRegister(_ source: Int, to destination: Int, is64Bit: Bool) -> UInt32 {
         let base: UInt32 = is64Bit ? 0xAA0003E0 : 0x2A0003E0
         return base | (UInt32(source) << 16) | UInt32(destination)
+    }
+
+    /// UBFM/SBFM implement register-only MOVZX/MOVSX/MOVSXD. A nonzero
+    /// sourceLSB selects AH/CH/DH/BH when the instruction has no REX prefix.
+    private static func extendRegister(_ source: Int, to destination: Int,
+                                       sourceBits: Int, sourceLSB: Int,
+                                       is64Bit: Bool, signExtend: Bool) -> UInt32 {
+        let opcode: UInt32
+        if signExtend {
+            opcode = is64Bit ? 0x93400000 : 0x13000000
+        } else {
+            opcode = is64Bit ? 0xD3400000 : 0x53000000
+        }
+        let immr = UInt32(sourceLSB)
+        let imms = UInt32(sourceLSB + sourceBits - 1)
+        return opcode | (immr << 16) | (imms << 10)
+            | (UInt32(source) << 5) | UInt32(destination)
     }
 
     /// XCHG preserves guest flags. Three flag-neutral EOR operations swap
