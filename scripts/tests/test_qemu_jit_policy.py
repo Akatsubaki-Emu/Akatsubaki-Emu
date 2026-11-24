@@ -19,6 +19,17 @@ class QEMUJITPolicyTests(unittest.TestCase):
         coordinator = (root / "iSteam" / "JITCoordinator.swift").read_text(encoding="utf-8")
         self.assertIn("return isStikDebugAvailable && hasGetTaskAllow && isQEMUProtocolAvailable && isJITReady", coordinator)
 
+    def test_display_retries_automatic_tci_fallback_if_jit_is_lost_at_launch(self):
+        root = Path(__file__).resolve().parents[2]
+        display = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("startTCIFallbackIfAllowed(reason: JITCoordinator.shared.unavailableReason)", display)
+        self.assertIn("RuntimeSettings.shared.acceleration.allowsTCIFallback", display)
+        self.assertIn("QEMURuntimeStatus.inspect(requiresJIT: false)", display)
+        self.assertIn("case .ready:", display)
+        self.assertIn("case .unavailable(let tciReason):", display)
+        self.assertIn("self?.startTCIFallbackIfAllowed(reason: message)", display)
+        self.assertIn("guard RuntimeSettings.shared.acceleration.allowsTCIFallback else", display)
+
     def test_tci_is_selectable_and_legacy_tci_values_are_preserved(self):
         root = Path(__file__).resolve().parents[2]
         settings = (root / "src" / "Core" / "RuntimeSettings.swift").read_text(encoding="utf-8")

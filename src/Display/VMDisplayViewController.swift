@@ -137,16 +137,19 @@ final class VMDisplayViewController: UIViewController {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if configuration.accelerator == .jit {
             guard JITCoordinator.shared.isQEMUProtocolAvailable else {
-                status.text = "QEMU JIT unavailable • use the no-JIT TCI interpreter or configure StikDebug"
-                EmulationLog.shared.write(status.text ?? "QEMU JIT unavailable")
+                startTCIFallbackIfAllowed(reason: JITCoordinator.shared.unavailableReason)
                 return
             }
             if !JITCoordinator.shared.isQEMUJITReady {
                 status.text = "Waiting for JIT • preparing LocalDevVPN and StikDebug"
                 JITCoordinator.shared.requestJIT(from: self, onFailure: { [weak self] message in
-                    self?.status.text = "JIT failed • \(message)"
+                    DispatchQueue.main.async {
+                        self?.startTCIFallbackIfAllowed(reason: message)
+                    }
                 }) { [weak self] in
-                    self?.startEngine()
+                    DispatchQueue.main.async {
+                        self?.startEngine()
+                    }
                 }
             } else {
                 startEngine()
@@ -158,6 +161,24 @@ final class VMDisplayViewController: UIViewController {
         #else
         startEngine()
         #endif
+    }
+
+    private func startTCIFallbackIfAllowed(reason: String) {
+        guard RuntimeSettings.shared.acceleration.allowsTCIFallback else {
+            status.text = "QEMU JIT unavailable • \(reason)"
+            EmulationLog.shared.write("QEMU JIT unavailable and automatic TCI fallback is disabled: \(reason)")
+            return
+        }
+
+        switch QEMURuntimeStatus.inspect(requiresJIT: false) {
+        case .ready:
+            status.text = "JIT unavailable • starting no-JIT QEMU TCI interpreter"
+            EmulationLog.shared.write("QEMU JIT unavailable; Automatic mode is falling back to TCI: \(reason)")
+            startEngine()
+        case .unavailable(let tciReason):
+            status.text = "QEMU JIT unavailable • \(reason). TCI fallback unavailable • \(tciReason)"
+            EmulationLog.shared.write("QEMU TCI fallback unavailable: \(tciReason)")
+        }
     }
 
     private func startEngine() {
