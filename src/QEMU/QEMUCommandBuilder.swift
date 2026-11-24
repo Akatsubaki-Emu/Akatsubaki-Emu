@@ -32,7 +32,8 @@ enum QEMUDiskImageFormat: String {
 }
 
 struct QEMUCommandBuilder {
-    static let qmpSocketPath = "/tmp/akatsubaki-qmp.sock"
+    // Keep the local QMP endpoint inside this app’s sandboxed temporary directory.
+    static let qmpSocketPath = FileManager.default.temporaryDirectory.appendingPathComponent("q.sock").path
     let configuration: VMConfiguration
 
     func arguments(diskImage: URL? = nil, writableDiskImage: URL? = nil,
