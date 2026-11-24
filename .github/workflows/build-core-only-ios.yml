@@ -1,0 +1,159 @@
+name: Build Core-Only iOS IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-only-ios-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-core-only-ios:
+    if: github.ref == 'refs/heads/main'
+    name: Build unsigned iOS IPA without QEMU
+    runs-on: xcode-27
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select Xcode and report toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          XCODE_MAJOR="${XCODE_VERSION%%.*}"
+          XCODE_REST="${XCODE_VERSION#*.}"
+          XCODE_MINOR="${XCODE_REST%%.*}"
+          if (( XCODE_MAJOR < 27 || (XCODE_MAJOR == 27 && XCODE_MINOR < 1) )); then
+            echo "Xcode 27.1 or newer is required; found $XCODE_VERSION." >&2
+            exit 1
+          fi
+          xcodebuild -version
+          swift --version
+
+      - name: Verify this is a QEMU-free source build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f iSteam.xcodeproj/project.pbxproj
+          if grep -nE 'QEMU(-TCI|-JIT)?\.framework|QEMU_RUNTIME_MANIFEST|QEMU_EFI' iSteam.xcodeproj/project.pbxproj; then
+            echo 'The Xcode project links or embeds QEMU; refusing a core-only build.' >&2
+            exit 1
+          fi
+          test -f src/Runtime/X86_64AOTTranslator.swift
+          test -f src/Runtime/LinuxSyscallDispatcher.swift
+          test -f src/Runtime/ELF64Loader.swift
+
+      - name: Run repository source-contract and Python regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/validate-qemu-source.py
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+
+      - name: Run AOT translator regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/akatsubaki-core-tests"
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/X86_64AOTTranslator.swift \
+            scripts/tests/test_kenran_buto_aot_translator.swift \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/aot-translator-tests"
+          "$RUNNER_TEMP/akatsubaki-core-tests/aot-translator-tests"
+
+      - name: Run x86-64 interpreter regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/X86_64ALU.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            src/Runtime/X86_64Interpreter.swift \
+            scripts/tests/test_x86_64_interpreter.swift \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/interpreter-tests"
+          "$RUNNER_TEMP/akatsubaki-core-tests/interpreter-tests"
+
+      - name: Run static ELF loader and syscall execution tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/ELF64Loader.swift \
+            src/Runtime/X86_64ALU.swift \
+            src/Runtime/LinuxProcessStackBuilder.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            src/Runtime/X86_64Interpreter.swift \
+            scripts/tests/test_static_elf_execution.swift \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/static-elf-tests"
+          "$RUNNER_TEMP/akatsubaki-core-tests/static-elf-tests"
+
+      - name: Run hybrid backend routing tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/ExecutionBackendRouter.swift \
+            scripts/tests/test_execution_backend_router.swift \
+            -o "$RUNNER_TEMP/akatsubaki-core-tests/backend-router-tests"
+          "$RUNNER_TEMP/akatsubaki-core-tests/backend-router-tests"
+
+      - name: Build iOS device app without code signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          DERIVED="$RUNNER_TEMP/akatsubaki-core-only-derived"
+          mkdir -p "$RUNNER_TEMP/akatsubaki-core-only-logs"
+          set -o pipefail
+          xcodebuild \
+            -project iSteam.xcodeproj \
+            -scheme iSteam \
+            -sdk iphoneos \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$DERIVED" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build 2>&1 | tee "$RUNNER_TEMP/akatsubaki-core-only-logs/xcodebuild.log"
+          APP_PATH="$(find "$DERIVED/Build/Products" -maxdepth 3 -type d -path '*/Release-iphoneos/*.app' -print -quit)"
+          test -n "$APP_PATH" && test -d "$APP_PATH"
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+
+      - name: Package unsigned QEMU-free IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIST="$GITHUB_WORKSPACE/dist-core-only"
+          STAGE="$RUNNER_TEMP/akatsubaki-core-only-stage"
+          rm -rf "$DIST" "$STAGE"
+          mkdir -p "$DIST" "$STAGE/Payload"
+          ditto "$APP_PATH" "$STAGE/Payload/$(basename "$APP_PATH")"
+          (
+            cd "$STAGE"
+            /usr/bin/zip -qry "$DIST/Akatsubaki-Emu-CoreOnly-iOS.ipa" Payload
+          )
+          cp docs/CORE_ONLY_IOS_TEST_BUILD.md "$DIST/README.md"
+          {
+            echo "Commit: $GITHUB_SHA"
+            echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"
+            echo "QEMU runtime embedded: no"
+            echo "Signing: unsigned; install with SideStore or another permitted signer"
+          } > "$DIST/build-info.txt"
+          cp "$RUNNER_TEMP/akatsubaki-core-only-logs/xcodebuild.log" "$DIST/xcodebuild.log"
+
+      - name: Validate core-only IPA
+        shell: bash
+        run: bash scripts/validate-core-only-ipa.sh dist-core-only/Akatsubaki-Emu-CoreOnly-iOS.ipa
+
+      - name: Upload private test-build artifact (not a release)
+        uses: actions/upload-artifact@v7
+        with:
+          name: Akatsubaki-Emu-CoreOnly-iOS-${{ github.run_number }}
+          path: dist-core-only/
+          if-no-files-found: error
+          retention-days: 7
