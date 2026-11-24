@@ -217,6 +217,12 @@ required = {
         "test_capability_probe_accepts_tci_when_jit_runtime_is_missing",
         "test_runtime_start_falls_back_to_tci_when_jit_is_unavailable",
     ],
+    "scripts/tests/test_merge_qemu_runtime_variants.py": [
+        "def test_rejects_substring_only_lifecycle_exports",
+        "def test_rejects_substring_only_jit_callback_export",
+        "def test_allows_unrelated_tci_symbol_with_jit_callback_prefix",
+        "def test_rejects_multiline_runtime_manifest",
+    ],
     "scripts/tests/test_qemu_build_patches.py": [
         "test_tci_build_uses_upstream_ios_se_scheme_and_product",
         "test_qemu_dependency_cache_version_matches_validation_contracts",
@@ -679,6 +685,8 @@ required = {
     ],
     "scripts/merge-qemu-runtime-variants.sh": [
         "required_symbols=(qemu_init qemu_main_loop qemu_cleanup qemu_system_shutdown_request)",
+        "manifest_lines=\"$(awk 'END { print NR }' \"$package/QEMU/runtime-library-path.txt\")\"",
+        '[[ "$manifest_lines" -eq 1 ]]',
         'grep -Eq "[[:space:]]_?${symbol}$" "$JIT_DIR/exports.txt" || fail "JIT artifact is missing required export: $symbol"',
         'grep -Eq "[[:space:]]_?${symbol}$" "$TCI_DIR/exports.txt" || fail "TCI artifact is missing required export: $symbol"',
         "grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks$' \"$JIT_DIR/exports.txt\"",
@@ -1331,6 +1339,8 @@ for token in [
     "-fno-objc-msgsend-class-selector-stubs",
     "export OBJCFLAGS=",
     'grep -Eq "[[:space:]]_?${symbol}$" "$exports"',
+    "manifest_lines=\"$(awk 'END { print NR }' \"$manifest\")\"",
+    'test "$manifest_lines" -eq 1',
     "utm-ios-arm64-deps-v15-",
     "spirv-tools",
     "spirv-llvm-translator",
