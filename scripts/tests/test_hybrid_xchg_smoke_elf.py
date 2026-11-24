@@ -57,6 +57,21 @@ class HybridXCHGSmokeELFTests(unittest.TestCase):
                 self.assertEqual(completed.stdout, b"hello\n")
                 self.assertEqual(completed.stderr, b"")
 
+                # Corrupt each XCHG input independently: its CMP/JNE guard must
+                # take the failure path instead of printing a false success.
+                for label, immediate_offset in (("xchg32", 0x1000 + 6), ("xchg64", 0x1000 + 18)):
+                    broken = bytearray(image)
+                    broken[immediate_offset] = 1
+                    broken_path = Path(temporary) / f"{label}-failure.elf"
+                    broken_path.write_bytes(broken)
+                    broken_path.chmod(0o755)
+                    failed = subprocess.run(
+                        [str(broken_path)], capture_output=True, check=False, timeout=5,
+                    )
+                    self.assertEqual(failed.returncode, 1, label)
+                    self.assertEqual(failed.stdout, b"", label)
+                    self.assertEqual(failed.stderr, b"", label)
+
 
 if __name__ == "__main__":
     unittest.main()
