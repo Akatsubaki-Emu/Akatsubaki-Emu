@@ -18,6 +18,14 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("g_has_started = true", bridge)
         self.assertEqual(bridge.count("g_has_started = false;"), 1)  # declaration only; never reset after launch
 
+    def test_native_bridge_rejects_arbitrary_qmp_commands(self):
+        root = Path(__file__).resolve().parents[2]
+        bridge = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
+        native_test = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
+        self.assertIn("Invalid QMP socket path or unsupported command", bridge)
+        self.assertIn("isteam_qemu_qmp_command", native_test)
+        self.assertIn("unsupported command", native_test)
+
     def test_runtime_reuses_same_configuration_and_rejects_different_guests(self):
         root = Path(__file__).resolve().parents[2]
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
