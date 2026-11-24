@@ -35,6 +35,13 @@ enum GuestEngineError: Error {
     case invalidState(String)
 }
 
+enum GuestMemoryTransactionResult: Int32 {
+    case success = 0
+    case invalid = 1
+    case alreadyMapped = 2
+    case allocationFailed = 3
+}
+
 final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
@@ -116,6 +123,59 @@ final class GuestMemory {
             }
         }
         return true
+    }
+
+    func hasMappedPages(offset: UInt64, length: UInt64) -> Bool {
+        guard length > 0, offset <= size, length <= size - offset else { return false }
+        guard permissionsEnabled else { return true }
+        let first = offset / pageSize
+        let last = (offset + length - 1) / pageSize
+        return (first...last).allSatisfy { pagePermissions[$0] != nil }
+    }
+
+    @discardableResult
+    func mapTransaction(offset: UInt64, length: UInt64, permissions: UInt8,
+                        replaceExisting: Bool) -> GuestMemoryTransactionResult {
+        guard permissionsEnabled, offset % pageSize == 0, length > 0,
+              permissions & ~UInt8(0x7) == 0,
+              offset <= size, length <= size - offset else { return .invalid }
+        let first = offset / pageSize
+        let last = (offset + length - 1) / pageSize
+        if !replaceExisting && (first...last).contains(where: { pagePermissions[$0] != nil }) {
+            return .alreadyMapped
+        }
+        for page in first...last {
+            let start = page * pageSize
+            let end = start + min(pageSize, size - start)
+            if start < end {
+                bytes.replaceSubrange(Int(start)..<Int(end),
+                                      with: repeatElement(0, count: Int(end - start)))
+            }
+        }
+        return map(offset: offset, length: length, permissions: permissions, merge: false)
+            ? .success : .allocationFailed
+    }
+
+    @discardableResult
+    func resizeBreak(from oldBreak: UInt64, to newBreak: UInt64) -> GuestMemoryTransactionResult {
+        guard oldBreak <= size, newBreak <= size else { return .invalid }
+        let firstNewPage = oldBreak / pageSize + (oldBreak % pageSize == 0 ? 0 : 1)
+        let lastNewPage = newBreak / pageSize + (newBreak % pageSize == 0 ? 0 : 1)
+        if newBreak > oldBreak, lastNewPage > firstNewPage {
+            return mapTransaction(offset: firstNewPage * pageSize,
+                                  length: (lastNewPage - firstNewPage) * pageSize,
+                                  permissions: 3, replaceExisting: false)
+        }
+        if newBreak < oldBreak {
+            let firstRemovedPage = newBreak / pageSize + (newBreak % pageSize == 0 ? 0 : 1)
+            let lastRemovedPage = oldBreak / pageSize + (oldBreak % pageSize == 0 ? 0 : 1)
+            if lastRemovedPage > firstRemovedPage,
+               !unmap(offset: firstRemovedPage * pageSize,
+                      length: (lastRemovedPage - firstRemovedPage) * pageSize) {
+                return .invalid
+            }
+        }
+        return .success
     }
 
     func readByte(offset: UInt64) -> UInt8? {

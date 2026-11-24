@@ -496,6 +496,10 @@ required = {
         "func writeUInt32(_ value: UInt32, offset: UInt64) -> Bool",
         "interpreter.run(maxInstructions: 64)",
         "func writeUInt64Pair(_ first: UInt64, _ second: UInt64, offset: UInt64) -> Bool",
+        "enum GuestMemoryTransactionResult: Int32",
+        "func hasMappedPages(offset: UInt64, length: UInt64) -> Bool",
+        "func mapTransaction(offset: UInt64, length: UInt64, permissions: UInt8,",
+        "func resizeBreak(from oldBreak: UInt64, to newBreak: UInt64) -> GuestMemoryTransactionResult",
     ],
     "scripts/tests/test_linux_process_stack.swift": [
         "auxiliary[3] == 0x40040",
@@ -590,6 +594,12 @@ required = {
         "precondition(fsSegmentMemory.readUInt64(offset: 0x1080) == 0x1000)",
         "precondition(syscallInterpreter.registerValue(1) == 21)",
         "precondition(syscallInterpreter.registerValue(11) == 0x46)",
+        "enum GuestMemoryTransactionResult: Int32",
+        "func hasMappedPages(offset: UInt64, length: UInt64) -> Bool",
+        "func mapTransaction(offset: UInt64, length: UInt64, permissions: UInt8,",
+        "func protect(offset: UInt64, length: UInt64, permissions: UInt8) -> Bool",
+        "func unmap(offset: UInt64, length: UInt64) -> Bool",
+        "func resizeBreak(from oldBreak: UInt64, to newBreak: UInt64) -> GuestMemoryTransactionResult",
     ],
     "src/QEMU/QEMUCommandBuilder.swift": [
         "firmwareVariables: URL? = nil",
@@ -1138,8 +1148,9 @@ required = {
         "scripts/tests/test_vnc_key_state.swift",
         "runs-on: xcode-27",
         'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
-        'case "$XCODE_VERSION" in',
-        "27.1*|27.[2-9]*) ;;",
+        'if ! awk -v version="$XCODE_VERSION"',
+        'major > 27 || (major == 27 && minor >= 1)',
+        
     ],
     "scripts/check-build-freshness.sh": [
         "git fetch --no-tags --unshallow origin main",

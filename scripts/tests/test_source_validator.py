@@ -160,9 +160,18 @@ class SourceValidatorTests(unittest.TestCase):
     def test_native_runtime_probes_loadability_before_start(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
-        self.assertIn("let requiresJIT = configuration.accelerator == .jit", source)
-        self.assertIn("switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", source)
-        self.assertNotIn("switch QEMURuntimeStatus.locate()", source)
+        self.assertIn("let requestedJIT = configuration.accelerator == .jit", source)
+        self.assertIn("var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", source)
+        self.assertIn("switch runtimeStatus", source)
+        self.assertIn('Self.sendQMP("stop")', source)
+        self.assertIn('Self.sendQMP("cont")', source)
+        self.assertIn('Self.sendQMP("system_reset")', source)
+        self.assertIn("func reset(sessionGeneration expected: UInt64) -> Bool", source)
+        self.assertIn("func stop(sessionGeneration expected: UInt64) -> Bool", source)
+        self.assertIn("guard expected == sessionGeneration else { return true }", source)
+        self.assertIn("sessionKey == requestedSessionKey", source)
+        self.assertIn("QEMUCommandBuilder.qmpSocketPath.utf8.count < 104", source)
+        self.assertNotIn("releaseScopesWhenStopped()", source)
 
     def test_repository_validation_checks_runtime_validator_shell_syntax(self):
         root = Path(__file__).resolve().parents[2]
@@ -528,10 +537,10 @@ class SourceValidatorTests(unittest.TestCase):
         workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
         self.assertIn("runs-on: xcode-27", workflow)
         self.assertIn('XCODE_DEVELOPER_DIR="$(xcode-select -p)"', workflow)
-        self.assertIn('case "$XCODE_VERSION" in', workflow)
-        self.assertIn("27.1*|27.[2-9]*) ;;", workflow)
+        self.assertIn('if ! awk -v version="$XCODE_VERSION"', workflow)
+        self.assertIn('split(version, p, "[.]")', workflow)
+        self.assertIn("major > 27 || (major == 27 && minor >= 1)", workflow)
         self.assertIn("Expected Xcode 27.1 or later on the xcode-27 runner", workflow)
-
 
     def test_release_and_platform_validation_require_xcode_27_1_or_later(self):
         root = Path(__file__).resolve().parents[2]
@@ -544,12 +553,12 @@ class SourceValidatorTests(unittest.TestCase):
             with self.subTest(workflow=name):
                 self.assertIn("runs-on: xcode-27", job)
                 self.assertIn('XCODE_DEVELOPER_DIR="$(xcode-select -p)"', job)
-                self.assertIn('case "$XCODE_VERSION" in', job)
-                self.assertIn("27.1*|27.[2-9]*) ;;", job)
+                self.assertIn('if ! awk -v version="$XCODE_VERSION"', job)
+                self.assertIn('split(version, p, "[.]")', job)
+                self.assertIn("major > 27 || (major == 27 && minor >= 1)", job)
                 self.assertIn("Expected Xcode 27.1 or later on the xcode-27 runner", job)
         self.assertIn("runs-on: ubuntu-24.04", release_publish)
         self.assertIn("sha256sum -c", release_publish)
-
 
     def test_static_pie_relocation_uses_loader_method_not_shadowed_parameter(self):
         root = Path(__file__).resolve().parents[2]
