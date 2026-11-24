@@ -20,6 +20,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         let height: Int
         let sequence: UInt64
         let generation: UInt64
+        let sessionGeneration: UInt64
     }
 
     let name = "VirtIO GPU • Metal"
@@ -39,6 +40,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     private var framebufferWidth: Int
     private var framebufferHeight: Int
     private var framebufferGeneration: UInt64 = 0
+    private var sessionGeneration: UInt64 = 0
     private var nextFrameSequence: UInt64 = 0
     private var publishedFrameSequence: UInt64 = 0
     private var pendingFullFrame: PendingFrame?
@@ -87,6 +89,28 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         scheduleDisplayUpdate()
     }
 
+    func setSessionGeneration(_ generation: UInt64) {
+        textureLock.lock()
+        guard generation >= sessionGeneration else {
+            textureLock.unlock()
+            return
+        }
+        guard generation != sessionGeneration else {
+            textureLock.unlock()
+            return
+        }
+        sessionGeneration = generation
+        framebufferGeneration &+= 1
+        framebuffer = nil
+        framebufferSlots.removeAll(keepingCapacity: false)
+        nextFrameSequence = 0
+        publishedFrameSequence = 0
+        pendingFullFrame = nil
+        requiresFullFrameUpload = true
+        textureLock.unlock()
+        scheduleDisplayUpdate()
+    }
+
     private func scheduleDisplayUpdate() {
         textureLock.lock()
         let shouldSchedule = !displayUpdateScheduled
@@ -112,7 +136,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     }
 
     func submit(frame: Data, width frameWidth: Int, height frameHeight: Int,
-                dirtyRegion: GPUFrameRegion?) {
+                dirtyRegion: GPUFrameRegion?, sessionGeneration frameSessionGeneration: UInt64) {
         guard frameWidth > 0, frameHeight > 0,
               frameWidth <= 8192, frameHeight <= 8192,
               frameWidth <= maxFramebufferBytes / frameHeight / 4,
@@ -137,6 +161,10 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         }
 
         textureLock.lock()
+        guard frameSessionGeneration == sessionGeneration else {
+            textureLock.unlock()
+            return
+        }
         if framebufferWidth != frameWidth || framebufferHeight != frameHeight {
             framebufferGeneration &+= 1
             framebufferSlots.removeAll(keepingCapacity: true)
@@ -172,7 +200,8 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         } else {
             // Keep only the newest complete snapshot while every texture is busy.
             pendingFullFrame = PendingFrame(data: frame, width: frameWidth, height: frameHeight,
-                                            sequence: sequence, generation: generation)
+                                            sequence: sequence, generation: generation,
+                                            sessionGeneration: frameSessionGeneration)
             requiresFullFrameUpload = true
             textureLock.unlock()
             return
@@ -200,6 +229,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         textureLock.lock()
         slot.isUploading = false
         let publish = generation == framebufferGeneration
+            && frameSessionGeneration == sessionGeneration
             && sequence >= publishedFrameSequence
             && framebufferSlots.contains(where: { $0 === slot })
         if publish {
@@ -243,6 +273,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
             return
         }
         guard pending.generation == framebufferGeneration,
+              pending.sessionGeneration == sessionGeneration,
               pending.width == framebufferWidth,
               pending.height == framebufferHeight else {
             pendingFullFrame = nil
@@ -286,6 +317,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         textureLock.lock()
         slot.isUploading = false
         let publish = pending.generation == framebufferGeneration
+            && pending.sessionGeneration == sessionGeneration
             && pending.sequence >= publishedFrameSequence
             && framebufferSlots.contains(where: { $0 === slot })
         if publish {
@@ -324,6 +356,8 @@ extension MetalGPUBackend: MTKViewDelegate {
         textureLock.lock()
         let source: FramebufferSlot?
         let isUploading = framebuffer?.isUploading ?? false
+        let drawSessionGeneration = sessionGeneration
+        let drawFramebufferGeneration = framebufferGeneration
         if let current = framebuffer, !isUploading {
             current.readers += 1
             source = current
@@ -366,7 +400,25 @@ extension MetalGPUBackend: MTKViewDelegate {
             encoder.endEncoding()
         }
 
-        commandBuffer.present(drawable)
-        commandBuffer.commit()
+        if let source {
+            // Recheck at the final consumer, after encoding but immediately before
+            // enqueueing presentation. Session replacement invalidates queued work.
+            textureLock.lock()
+            let isCurrent = drawSessionGeneration == sessionGeneration
+                && drawFramebufferGeneration == framebufferGeneration
+                && framebuffer === source
+            if isCurrent {
+                commandBuffer.present(drawable)
+                commandBuffer.commit()
+            }
+            textureLock.unlock()
+            if !isCurrent {
+                release(source)
+                return
+            }
+        } else {
+            commandBuffer.present(drawable)
+            commandBuffer.commit()
+        }
     }
 }
