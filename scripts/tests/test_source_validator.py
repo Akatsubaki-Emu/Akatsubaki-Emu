@@ -525,8 +525,8 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("runs-on: xcode-27", workflow)
         self.assertIn('XCODE_DEVELOPER_DIR="$(xcode-select -p)"', workflow)
         self.assertIn('case "$XCODE_VERSION" in', workflow)
-        self.assertIn("27.*) ;;", workflow)
-        self.assertIn("Expected Xcode 27.x on the xcode-27 runner", workflow)
+        self.assertIn("27.1*|27.[2-9]*) ;;", workflow)
+        self.assertIn("Expected Xcode 27.1 or later on the xcode-27 runner", workflow)
 
 
     def test_release_and_platform_validation_require_xcode_27_1_or_later(self):

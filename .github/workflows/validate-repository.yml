@@ -225,8 +225,8 @@ jobs:
           for token in [
               'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
               'case "$XCODE_VERSION" in',
-              '27.*) ;;',
-              'Expected Xcode 27.x on the xcode-27 runner',
+              '27.1*|27.[2-9]*) ;;',
+              'Expected Xcode 27.1 or later on the xcode-27 runner',
           ]:
               if token not in qemu:
                   raise SystemExit("QEMU build must select and verify its Xcode 27 toolchain: " + token)
