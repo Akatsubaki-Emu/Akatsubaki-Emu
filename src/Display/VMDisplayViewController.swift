@@ -80,7 +80,7 @@ final class VMDisplayViewController: UIViewController {
                 self.releaseGuestInputs()
                 self.vncClient.stop()
             case .stopped:
-                self.status.text = "Guest stopped. Relaunch Akatsubaki Emu before starting another QEMU session."
+                self.status.text = "Guest session is stopped or paused. Start again to launch or resume the configured VM."
                 self.releaseGuestInputs()
                 self.vncClient.stop()
             case .failed(let message):
