@@ -10,7 +10,7 @@ class ELFSnapshotContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         source = LOADER.read_text(encoding="utf-8")
-        cls.snapshot = source.split("final class OpenedFileSnapshot", 1)[1].split("\\n    func load(", 1)[0]
+        cls.snapshot = source.split("final class OpenedFileSnapshot", 1)[1].split("\n    func load(", 1)[0]
         cls.test_source = STATIC_ELF_TEST.read_text(encoding="utf-8")
 
     def test_snapshot_is_bound_to_a_regular_open_descriptor(self):

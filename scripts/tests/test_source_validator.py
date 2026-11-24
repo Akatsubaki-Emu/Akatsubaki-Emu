@@ -865,7 +865,11 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", provider)
         invoke = provider.split("bool iSteamAOTExecutableMemoryInvoke", 1)[1].split("void iSteamAOTExecutableMemoryDestroy", 1)[0]
         self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", invoke)
-        self.assertIn("let budget = Int(min(remaining, 16))", interpreter)
+        self.assertIn("private static let maximumAOTInstructionBatch = 16", interpreter)
+        self.assertIn("private static let maximumX86InstructionLength = 15", interpreter)
+        self.assertIn("let budget = Int(min(remaining, UInt64(Self.maximumAOTInstructionBatch)))", interpreter)
+        self.assertIn("let maximumAOTBytes = min(", interpreter)
+        self.assertIn("budget * Self.maximumX86InstructionLength", interpreter)
         self.assertIn("let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff", interpreter)
 
     def test_vnc_frames_are_rejected_after_session_replacement(self):

@@ -1623,7 +1623,11 @@ for token in ("KenranButoAOTGuestState", "makeMemoryCallbacks(for:memory)",
         failed = True
 for token in ("aotExecutor.execute(", "rip = result.exitRip", "aotExecutor?.invalidateAll()",
               "canStartAOTBlock()", "aotPageRemaining",
-              "let budget = Int(min(remaining, 16))",
+              "private static let maximumAOTInstructionBatch = 16",
+              "private static let maximumX86InstructionLength = 15",
+              "let budget = Int(min(remaining, UInt64(Self.maximumAOTInstructionBatch)))",
+              "let maximumAOTBytes = min(",
+              "budget * Self.maximumX86InstructionLength",
               "let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff",
               "aotExecutor?.refreshAvailability() == true",
               "if stopRequested { return .interrupted }"):

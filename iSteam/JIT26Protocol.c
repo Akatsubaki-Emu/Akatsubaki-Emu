@@ -48,7 +48,7 @@ static int iSteamJITHardwareTXMMode(void) {
     if (memoryMap == IO_OBJECT_NULL) return ISTEAM_JIT_PROTOCOL_UNKNOWN;
 
     CFTypeRef keysValue = IORegistryEntryCreateCFProperty(
-        memoryMap, kIORegistryEntryPropertyKeysKey, kCFAllocatorDefault, 0
+        memoryMap, CFSTR(kIORegistryEntryPropertyKeysKey), kCFAllocatorDefault, 0
     );
     IOObjectRelease(memoryMap);
     if (keysValue == NULL || CFGetTypeID(keysValue) != CFArrayGetTypeID()) {

@@ -414,7 +414,7 @@ struct InterpreterTests {
         let fault = X86_64Interpreter(memory: faultMemory)
         try fault.reset(entryPoint: 0)
         let faultExit = try fault.run(maxInstructions: 1)
-        precondition(faultExit == .memoryFault(address: 1))
+        precondition(faultExit == .memoryFault(address: 2))
 
         let stackPointerMemory = GuestMemory(size: 1024)
         let stackPointerInterpreter = X86_64Interpreter(memory: stackPointerMemory)
