@@ -61,6 +61,7 @@ jobs:
           committer_message: "chore: update metrics overview [skip ci]"
 
   team:
+    needs: cancel-stale
     runs-on: ubuntu-latest
     if: github.actor != 'github-actions[bot]'
     steps:
