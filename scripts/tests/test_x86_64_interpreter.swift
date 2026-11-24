@@ -1727,11 +1727,13 @@ struct InterpreterTests {
             try xchgExtendedBaseline.reset(entryPoint: 0x2000)
             try xchgExtendedHybrid.reset(entryPoint: 0x2000)
             let blocksBeforeXCHGExtended = executor.blocksExecuted
-            let xchgExtendedBaselineExit = xchgExtendedBaseline.run(maxInstructions: 8)
-            let xchgExtendedHybridExit = xchgExtendedHybrid.run(maxInstructions: 8)
+            let xchgExtendedBaselineExit = try xchgExtendedBaseline.run(maxInstructions: 8)
+            let xchgExtendedHybridExit = try xchgExtendedHybrid.run(maxInstructions: 8)
             precondition(xchgExtendedBaselineExit == .unsupportedInstruction(address: 0x2017))
             precondition(xchgExtendedHybridExit == xchgExtendedBaselineExit)
-            precondition(xchgExtendedBaseline.registers == xchgExtendedHybrid.registers)
+            for index in 0..<16 {
+                precondition(xchgExtendedBaseline.registerValue(index) == xchgExtendedHybrid.registerValue(index))
+            }
             precondition(xchgExtendedBaseline.conditionFlags == xchgExtendedHybrid.conditionFlags)
             precondition(xchgExtendedHybrid.registerValue(8) == 0x99AABBCCDDEEFF00)
             precondition(xchgExtendedHybrid.registerValue(9) == 0x1122334455667788)
@@ -1752,11 +1754,13 @@ struct InterpreterTests {
             try xchgSame32Baseline.reset(entryPoint: 0x3000)
             try xchgSame32Hybrid.reset(entryPoint: 0x3000)
             let blocksBeforeXCHGSame32 = executor.blocksExecuted
-            let xchgSame32BaselineExit = xchgSame32Baseline.run(maxInstructions: 8)
-            let xchgSame32HybridExit = xchgSame32Hybrid.run(maxInstructions: 8)
+            let xchgSame32BaselineExit = try xchgSame32Baseline.run(maxInstructions: 8)
+            let xchgSame32HybridExit = try xchgSame32Hybrid.run(maxInstructions: 8)
             precondition(xchgSame32BaselineExit == .unsupportedInstruction(address: 0x300C))
             precondition(xchgSame32HybridExit == xchgSame32BaselineExit)
-            precondition(xchgSame32Baseline.registers == xchgSame32Hybrid.registers)
+            for index in 0..<16 {
+                precondition(xchgSame32Baseline.registerValue(index) == xchgSame32Hybrid.registerValue(index))
+            }
             precondition(xchgSame32Baseline.conditionFlags == xchgSame32Hybrid.conditionFlags)
             precondition(xchgSame32Hybrid.registerValue(0) == 0x55667788)
             precondition(executor.blocksExecuted == blocksBeforeXCHGSame32 + 1)
@@ -1815,9 +1819,13 @@ struct InterpreterTests {
             }
             precondition(xchgRegisterHybrid.registerValue(0) == 2)
             precondition(xchgRegisterHybrid.registerValue(3) == 1)
-            let xchgRegisterStackPointer = xchgRegisterHybrid.registerValue(4)
-            precondition(xchgRegisterStackPointer == xchgRegisterBaseline.registerValue(4))
-            precondition(xchgRegisterHybridMemory.readUInt64(at: xchgRegisterStackPointer) == 1)
+            guard let xchgRegisterStackPointer = xchgRegisterHybrid.registerValue(4),
+                  let xchgRegisterBaselineStackPointer = xchgRegisterBaseline.registerValue(4) else {
+                preconditionFailure("XCHG register test lost its stack pointer")
+            }
+            precondition(xchgRegisterStackPointer == xchgRegisterBaselineStackPointer)
+            precondition(xchgRegisterHybridMemory.readUInt64(offset: xchgRegisterStackPointer) == 1)
+            precondition(xchgRegisterBaselineMemory.readUInt64(offset: xchgRegisterBaselineStackPointer) == 1)
             precondition(executor.blocksExecuted == blocksBeforeXCHGRegister + 2)
 
 
