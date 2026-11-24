@@ -39,11 +39,11 @@ required = {
         "private var sessionGeneration: UInt64 = 0",
         "guard !Task.isCancelled, self.sessionGeneration == generation else { return false }",
         "guard !Task.isCancelled, self.sessionGeneration == generation,",
-        "self.connection === candidate else { return false }"
+        "self.connection === candidate else { return false }",
         "guard activated else {",
         "let wasCurrent = self.withStateLock",
         "guard self.sessionGeneration == generation, self.connection === candidate else { return false }",
-        "self.sessionGeneration == generation && self.connection === candidate && self.connected"
+        "self.sessionGeneration == generation && self.connection === candidate && self.connected",
         "self.connection = nil",
         "self.pendingSendGroup = DispatchGroup()",
         "_ = self.keyState.releaseAll()",
@@ -167,7 +167,7 @@ required = {
         "private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64?",
         "private func mappedRangesAfterMapping(",
         "private func mappedRangesAfterRemoving(",
-        "private func firstMappedRangeEnding(after address: UInt64) -> Int"
+        "private func firstMappedRangeEnding(after address: UInt64) -> Int",
         "private func validateRange(address: UInt64, length: UInt64) -> UInt64",
         "guard !endOverflow, end <= memory.size",
         "let nextMappedRanges = mappedRangesAfterMapping(",
@@ -175,12 +175,12 @@ required = {
         "mappedRanges = nextMappedRanges",
         "memory.mapTransaction(",
         "memory.resizeBreak(from: previousBreak, to: requested)",
-        "memory.unmap(offset: address, length: size)"
+        "memory.unmap(offset: address, length: size)",
         "result.insert(newRange, at: lower)",
         "result.append(range.lowerBound..<newRange.lowerBound)",
         "result.append(newRange.upperBound..<range.upperBound)",
         "result.append(range.lowerBound..<removed.lowerBound)",
-        "result.append(removed.upperBound..<range.upperBound)"
+        "result.append(removed.upperBound..<range.upperBound)",
         "for scalar in text.unicodeScalars",
         "chunkBytes + scalarByteCount > 4096",
         "logGuestOutput(bytes, descriptor: descriptor)",
@@ -321,7 +321,7 @@ required = {
         "precondition(memory.read(offset: 0x40000, length: 2) == nil)",
         "precondition(memory.read(offset: 0x4B000, length: 3) == nil)",
         "precondition(memory.read(offset: mapped, length: 3) == Data([0, 0, 0]))",
-        "precondition(memory.read(offset: mapped + 4096, length: 3) == Data([4, 5, 6]))"
+        "precondition(memory.read(offset: mapped + 4096, length: 3) == Data([4, 5, 6]))",
         "let unmapRemainder = dispatcher.dispatch(number: 11, arguments: [mapped + 4096, 4096, 0, 0, 0, 0])!",
         "precondition(written == 12_000)",
         "let unicodeOutput = String(repeating: \"🙂\", count: 3_000)",
@@ -806,7 +806,6 @@ required = {
         "TCG with a 128 MiB translation-block cache and split-WX; requires physical iOS 26+ and a supported StikDebug JIT session.",
         "case .automatic, .qemuJIT, .qemuInterpreter: return true",
         "Uses QEMU's threaded TCI interpreter without JIT entitlements or executable-memory support. Slower than JIT; startup validates the bundled device-arm64 TCI runtime.",
-        "Built and packaged by CI; disabled until physical iOS startup is verified.",
     ],
     "src/Core/VMConfiguration.swift": [
         "static var defaultAccelerator: Accelerator",
@@ -1122,7 +1121,7 @@ required = {
         "runs-on: xcode-27",
         'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
         'case "$XCODE_VERSION" in',
-        "27.1*|27.[2-9]*) ;;"
+        "27.1*|27.[2-9]*) ;;",
     ],
     "scripts/check-build-freshness.sh": [
         "git fetch --no-tags --unshallow origin main",
