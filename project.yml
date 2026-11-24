@@ -13,6 +13,7 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.9"
+    CLANG_CXX_LANGUAGE_STANDARD: "gnu++17"
     ARCHS: "arm64"
     EXCLUDED_ARCHS[sdk=iphonesimulator*]: "arm64e"
 targets:
