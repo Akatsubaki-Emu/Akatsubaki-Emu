@@ -172,6 +172,16 @@ jobs:
             scripts/tests/test_x86_64_interpreter.swift \
             -o "$RUNNER_TEMP/test-x86-64-interpreter"
           "$RUNNER_TEMP/test-x86-64-interpreter"
+      - name: Test LocalDevVPN callback status handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            iSteam/LocalDevVPNCallback.swift \
+            scripts/tests/test_localdevvpn_callback.swift \
+            -o "$RUNNER_TEMP/localdevvpn-callback-tests"
+          "$RUNNER_TEMP/localdevvpn-callback-tests"
+
       - name: Test game library filtering, ordering, and tag collection
         if: matrix.scheme == 'iSteam'
         run: |

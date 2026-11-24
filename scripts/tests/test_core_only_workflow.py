@@ -16,6 +16,7 @@ class CoreOnlyIOSWorkflowTests(unittest.TestCase):
         self.assertIn("Xcode 27.1 or newer is required", workflow)
         self.assertIn("CODE_SIGNING_ALLOWED=NO", workflow)
         self.assertIn("scripts/validate-core-only-ipa.sh", workflow)
+        self.assertIn("test_localdevvpn_callback.swift", workflow)
         self.assertIn("actions/checkout@v7", workflow)
         self.assertIn("actions/upload-artifact@v7", workflow)
         self.assertNotIn("softprops/action-gh-release", workflow)

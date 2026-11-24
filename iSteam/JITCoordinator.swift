@@ -144,6 +144,13 @@ final class JITCoordinator {
     @discardableResult
     func handleCallback(_ url: URL) -> Bool {
         guard url.scheme == Bundle.main.bundleIdentifier, waitingForLocalDevVPN, isRequestInProgress else { return false }
+        guard LocalDevVPNCallback.didConnect(url) else {
+            failRequest(
+                "LocalDevVPN reported that the tunnel did not connect. Check the VPN app's connection and permission, then retry.",
+                title: "LocalDevVPN failed"
+            )
+            return true
+        }
         waitingForLocalDevVPN = false
         let generation = requestGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in

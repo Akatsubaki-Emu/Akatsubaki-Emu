@@ -102,6 +102,16 @@ jobs:
             -o "$RUNNER_TEMP/akatsubaki-core-tests/backend-router-tests"
           "$RUNNER_TEMP/akatsubaki-core-tests/backend-router-tests"
 
+      - name: Test LocalDevVPN callback status handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            iSteam/LocalDevVPNCallback.swift \
+            scripts/tests/test_localdevvpn_callback.swift \
+            -o "$RUNNER_TEMP/localdevvpn-callback-tests"
+          "$RUNNER_TEMP/localdevvpn-callback-tests"
+
       - name: Build iOS device app without code signing
         shell: bash
         run: |
