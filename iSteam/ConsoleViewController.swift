@@ -110,8 +110,10 @@ final class ConsoleViewController: UIViewController {
         ) { [weak self] result in
             guard let self else { return }
             switch result {
+            case .success(.exited(let status)):
+                self.appendStatus("\n\nGuest process exited with status \(status).")
             case .success(.halted):
-                self.appendStatus("\n\nGuest process exited.")
+                self.appendStatus("\n\nGuest process halted.")
             case .success(.interrupted):
                 self.appendStatus("\n\nGuest process stopped.")
             case .success(let exit):

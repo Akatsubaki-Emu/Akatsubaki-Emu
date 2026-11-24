@@ -119,7 +119,7 @@ final class LinuxSyscallDispatcher {
         case 228:
             return .returned(writeTimespec(clock: arg0, at: arg1))
         case 231, 60:
-            return .exited(Int32(truncatingIfNeeded: arg0))
+            return .exited(Int32(arg0 & 0xFF))
         case 273:
             return .returned(0)
         case 318:

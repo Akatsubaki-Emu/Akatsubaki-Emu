@@ -24,6 +24,7 @@ protocol GuestCPUBackend {
 
 enum GuestCPUExit: Equatable {
     case halted, instructionLimit, interrupted
+    case exited(Int32)
     case memoryFault(address: UInt64)
     case unsupportedInstruction(address: UInt64)
     case backendUnavailable(String)
@@ -619,7 +620,7 @@ struct StaticELFExecutionTests {
         )
         let previousMessageCount = EmulationLog.shared.messages.count
         let exit = try interpreter.run(maxInstructions: 128)
-        precondition(exit == .halted, "Generated hybrid smoke guest did not exit cleanly")
+        precondition(exit == .exited(0), "Generated hybrid smoke guest did not exit with status 0")
         let smokeMessages = EmulationLog.shared.messages.dropFirst(previousMessageCount)
         // Guest output is stored as line-normalized log entries without newline delimiters.
         precondition(smokeMessages.contains { $0.contains("KENRAN_BUTO_XCHG_OK") },

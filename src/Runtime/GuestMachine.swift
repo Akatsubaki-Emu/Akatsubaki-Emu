@@ -15,6 +15,7 @@ protocol GuestCPUBackend: AnyObject {
 enum GuestCPUExit: Equatable {
     case instructionLimit
     case halted
+    case exited(Int32)
     case interrupted
     case unsupportedInstruction(address: UInt64)
     case memoryFault(address: UInt64)
@@ -281,7 +282,7 @@ final class GuestMachine {
                 switch exit {
                 case .instructionLimit: state = .configured
                 case .interrupted: state = .paused
-                case .halted: state = .stopped
+                case .halted, .exited(_): state = .stopped
                 case .unsupportedInstruction, .memoryFault, .backendUnavailable:
                     state = .failed(String(describing: exit))
                 }

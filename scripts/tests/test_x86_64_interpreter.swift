@@ -17,6 +17,7 @@ protocol GuestCPUBackend {
 
 enum GuestCPUExit: Equatable {
     case halted, instructionLimit, interrupted
+    case exited(Int32)
     case memoryFault(address: UInt64)
     case unsupportedInstruction(address: UInt64)
     case backendUnavailable(String)
@@ -1005,6 +1006,40 @@ struct InterpreterTests {
         try unsupportedByteImmediate.reset(entryPoint: 0)
         let unsupportedByteImmediateExit = try unsupportedByteImmediate.run(maxInstructions: 2)
         precondition(unsupportedByteImmediateExit == .unsupportedInstruction(address: 0))
+
+        // Linux exit and exit_group expose the low eight bits of the status.
+        let exitCases: [(syscall: UInt32, requested: UInt32, expected: Int32)] = [
+            (60, 0, 0),
+            (60, 7, 7),
+            (60, 256, 0),
+            (231, UInt32.max, 255)
+        ]
+        for exitCase in exitCases {
+            let exitMemory = GuestMemory(size: 32)
+            let syscallNumber = exitCase.syscall
+            let requestedStatus = exitCase.requested
+            let exitProgram: [UInt8] = [
+                0xB8,
+                UInt8(truncatingIfNeeded: syscallNumber),
+                UInt8(truncatingIfNeeded: syscallNumber >> 8),
+                UInt8(truncatingIfNeeded: syscallNumber >> 16),
+                UInt8(truncatingIfNeeded: syscallNumber >> 24),
+                0xBF,
+                UInt8(truncatingIfNeeded: requestedStatus),
+                UInt8(truncatingIfNeeded: requestedStatus >> 8),
+                UInt8(truncatingIfNeeded: requestedStatus >> 16),
+                UInt8(truncatingIfNeeded: requestedStatus >> 24),
+                0x0F, 0x05
+            ]
+            precondition(exitMemory.write(Data(exitProgram), offset: 0))
+            let exitInterpreter = X86_64Interpreter(memory: exitMemory)
+            try exitInterpreter.reset(entryPoint: 0)
+            let exitResult = try exitInterpreter.run(maxInstructions: 3)
+            precondition(
+                exitResult == .exited(exitCase.expected),
+                "Linux syscall \(syscallNumber) returned \(exitResult), expected status \(exitCase.expected)"
+            )
+        }
 
         let syscallMemory = GuestMemory(size: 4 * 1024 * 1024)
         let syscallProgram: [UInt8] = [

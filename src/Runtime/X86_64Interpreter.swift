@@ -771,10 +771,10 @@ final class X86_64Interpreter: GuestCPUBackend {
                         switch outcome {
                         case .returned(let value):
                             registers[0] = value
-                        case .exited:
+                        case .exited(let status):
                             halted = true
                             instructionCount &+= 1
-                            return .halted
+                            return .exited(status)
                         }
                     }
                 } else if second == 0xB6 || second == 0xBE {
