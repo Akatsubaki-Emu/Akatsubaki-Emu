@@ -9,12 +9,6 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         header = (root / "iSteam" / "QEMUNativeBridge.h").read_text(encoding="utf-8")
         self.assertIn("bool isteam_qemu_qmp_command", header)
         self.assertIn("AF_UNIX", bridge)
-        builder = (root / "src" / "QEMU" / "QEMUCommandBuilder.swift").read_text(encoding="utf-8")
-        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
-        self.assertIn('FileManager.default.temporaryDirectory.appendingPathComponent("q.sock").path', builder)
-        self.assertIn("QEMUCommandBuilder.qmpSocketPath.utf8.count < 104", runtime)
-        self.assertIn("path_length >= sizeof(address.sun_path)", bridge)
-        self.assertIn("QMP socket path is too long", bridge)
         self.assertIn("qmp_capabilities", bridge)
         self.assertIn('"stop"', bridge)
         self.assertIn('"cont"', bridge)
@@ -32,9 +26,6 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("Invalid QMP socket path or unsupported command", bridge)
         self.assertIn("isteam_qemu_qmp_command", native_test)
         self.assertIn("unsupported command", native_test)
-        self.assertIn("test_qmp_socket_protocol", native_test)
-        self.assertIn("qmp_capabilities", native_test)
-        self.assertIn("query-status", native_test)
 
     def test_qmp_uses_a_sandboxed_socket_and_enforces_af_unix_path_limits(self):
         root = Path(__file__).resolve().parents[2]

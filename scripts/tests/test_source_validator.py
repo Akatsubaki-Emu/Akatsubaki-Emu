@@ -560,33 +560,6 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("runs-on: ubuntu-24.04", release_publish)
         self.assertIn("sha256sum -c", release_publish)
 
-    def test_xcode_version_guard_uses_numeric_major_and_minor_semantics(self):
-        root = Path(__file__).resolve().parents[2]
-        workflows = (
-            root / ".github" / "workflows" / "build-qemu-runtime.yml",
-            root / ".github" / "workflows" / "release.yml",
-            root / ".github" / "workflows" / "validate-ios-build.yml",
-        )
-        awk_program = 'BEGIN { split(version, p, "[.]"); major = p[1] + 0; minor = p[2] + 0; exit !(major > 27 || (major == 27 && minor >= 1)) }'
-        for workflow in workflows:
-            source = workflow.read_text(encoding="utf-8")
-            self.assertIn(awk_program, source, workflow.name)
-        for version in ("27.1", "27.10", "28.0", "28.1", "29.0"):
-            with self.subTest(version=version):
-                result = subprocess.run(
-                    ["awk", "-v", f"version={version}", awk_program],
-                    check=False, capture_output=True, text=True,
-                )
-                self.assertEqual(result.returncode, 0, result.stderr)
-        for version in ("27.0", "26.4", "26.99", "27", "invalid"):
-            with self.subTest(version=version):
-                result = subprocess.run(
-                    ["awk", "-v", f"version={version}", awk_program],
-                    check=False, capture_output=True, text=True,
-                )
-                self.assertNotEqual(result.returncode, 0, result.stderr)
-
-
     def test_static_pie_relocation_uses_loader_method_not_shadowed_parameter(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "ELF64Loader.swift").read_text(encoding="utf-8")

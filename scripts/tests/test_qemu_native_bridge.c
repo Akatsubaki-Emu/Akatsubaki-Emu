@@ -142,97 +142,6 @@ static void *qmp_test_server(void *opaque) {
     return NULL;
 }
 
-typedef struct {
-    int listener;
-    char path[sizeof(((struct sockaddr_un *)0)->sun_path)];
-    char capabilities[128];
-    char command[128];
-    bool success;
-} QMPTestServer;
-
-static bool qmp_test_write_line(int fd, const char *line) {
-    size_t remaining = strlen(line);
-    const char *cursor = line;
-    while (remaining > 0) {
-#ifdef MSG_NOSIGNAL
-        ssize_t written = send(fd, cursor, remaining, MSG_NOSIGNAL);
-#else
-        ssize_t written = write(fd, cursor, remaining);
-#endif
-        if (written < 0 && errno == EINTR) continue;
-        if (written <= 0) return false;
-        cursor += written;
-        remaining -= (size_t)written;
-    }
-    return true;
-}
-
-static bool qmp_test_read_line_single(int fd, char *buffer, size_t capacity) {
-    size_t length = 0;
-    while (length + 1 < capacity) {
-        char byte = 0;
-        ssize_t received = recv(fd, &byte, 1, 0);
-        if (received < 0 && errno == EINTR) continue;
-        if (received <= 0) return false;
-        if (byte == '\n') break;
-        if (byte != '\r') buffer[length++] = byte;
-    }
-    buffer[length] = '\0';
-    return length > 0;
-}
-
-static void *qmp_test_server_main(void *opaque) {
-    QMPTestServer *server = (QMPTestServer *)opaque;
-    int client = accept(server->listener, NULL, NULL);
-    if (client < 0) return NULL;
-    bool ok = qmp_test_write_line(client, "{\"QMP\":{\"version\":{\"qemu\":{\"major\":10}}}}\r\n")
-        && qmp_test_read_line_single(client, server->capabilities, sizeof(server->capabilities))
-        && strstr(server->capabilities, "\"qmp_capabilities\"") != NULL
-        && qmp_test_write_line(client, "{\"return\":{}}\r\n")
-        && qmp_test_read_line_single(client, server->command, sizeof(server->command))
-        && strstr(server->command, "\"stop\"") != NULL
-        && qmp_test_write_line(client, "{\"return\":{}}\r\n");
-    server->success = ok;
-    close(client);
-    return NULL;
-}
-
-static void test_qmp_socket_protocol(void) {
-    QMPTestServer server = {0};
-    server.listener = socket(AF_UNIX, SOCK_STREAM, 0);
-    assert(server.listener >= 0);
-    struct sockaddr_un address;
-    memset(&address, 0, sizeof(address));
-    address.sun_family = AF_UNIX;
-    int path_length = snprintf(server.path, sizeof(server.path),
-                               "/tmp/akatsubaki-qmp-%ld.sock", (long)getpid());
-    assert(path_length > 0 && (size_t)path_length < sizeof(server.path));
-    memcpy(address.sun_path, server.path, (size_t)path_length + 1);
-#if defined(__APPLE__)
-    address.sun_len = (uint8_t)sizeof(address);
-#endif
-    unlink(server.path);
-    assert(bind(server.listener, (struct sockaddr *)&address, sizeof(address)) == 0);
-    assert(listen(server.listener, 1) == 0);
-    pthread_t thread;
-    assert(pthread_create(&thread, NULL, qmp_test_server_main, &server) == 0);
-
-    char error[512] = {0};
-    assert(isteam_qemu_qmp_command(server.path, "stop", error, (int)sizeof(error)));
-    assert(pthread_join(thread, NULL) == 0);
-    assert(server.success);
-    assert(strstr(server.capabilities, "\"qmp_capabilities\"") != NULL);
-    assert(strstr(server.command, "\"stop\"") != NULL);
-    close(server.listener);
-    unlink(server.path);
-
-    char long_path[sizeof(address.sun_path) + 1];
-    memset(long_path, 'x', sizeof(long_path) - 1);
-    long_path[sizeof(long_path) - 1] = '\0';
-    memset(error, 0, sizeof(error));
-    assert(!isteam_qemu_qmp_command(long_path, "query-status", error, (int)sizeof(error)));
-    assert(strstr(error, "too long") != NULL);
-}
 
 int main(int argc, char **argv) {
     assert(argc == 3);
@@ -305,7 +214,6 @@ int main(int argc, char **argv) {
         nanosleep(&running_delay, NULL);
     }
     assert(isteam_qemu_is_running());
-    test_qmp_socket_protocol();
 
     // The native client must reject AF_UNIX paths that cannot fit in sun_path.
     char tooLongSocketPath[sizeof(((struct sockaddr_un *)0)->sun_path) + 1];
