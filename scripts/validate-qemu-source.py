@@ -1777,10 +1777,13 @@ for token in ("iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(0)",
 
 for token in ("KenranButoAOTExecutableMemory.c", "KenranButoAOTExecution.swift",
               "test_x86_64_interpreter.swift", "test_aot_translator_allocation_hot_path.py",
-              "-D KENRAN_BUTO_AOT_TESTS"):
+              "-D KENRAN_BUTO_AOT_TESTS", "-Xcc -DKENRAN_BUTO_AOT_TESTS"):
     if token not in aot_workflow:
         print(f"AOT workflow missing {token!r}", file=sys.stderr)
         failed = True
+if aot_workflow.count("-Xcc -DKENRAN_BUTO_AOT_TESTS") != 2:
+    print("AOT workflow must forward KENRAN_BUTO_AOT_TESTS to both Swift Clang imports", file=sys.stderr)
+    failed = True
 
 
 # VNC session generation must survive every asynchronous framebuffer boundary.

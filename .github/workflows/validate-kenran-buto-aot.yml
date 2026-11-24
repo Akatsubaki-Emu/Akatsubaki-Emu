@@ -153,6 +153,7 @@ jobs:
           set -euo pipefail
           test "$(uname -m)" = "arm64" || { echo "Native AOT execution requires an ARM64 runner." >&2; exit 1; }
           swiftc -parse-as-library -swift-version 5 -D KENRAN_BUTO_AOT_TESTS \
+            -Xcc -DKENRAN_BUTO_AOT_TESTS \
             -import-objc-header iSteam/JIT26Protocol.h \
             src/Performance/TranslationCache.swift \
             src/Runtime/X86_64AOTTranslator.swift \
@@ -172,6 +173,7 @@ jobs:
         run: |
           set -euo pipefail
           swiftc -parse-as-library -swift-version 5 -D KENRAN_BUTO_AOT_TESTS \
+            -Xcc -DKENRAN_BUTO_AOT_TESTS \
             -import-objc-header iSteam/JIT26Protocol.h \
             src/Performance/TranslationCache.swift \
             src/Runtime/X86_64AOTTranslator.swift \
