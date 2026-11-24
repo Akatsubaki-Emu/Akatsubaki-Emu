@@ -74,3 +74,6 @@ The current repository configuration and the active engineering write-target ins
 - GitHub Actions run on GitHub, not on the GitLab-only commits. The AOT workflow still shows only the old run #213, the core-only IPA workflow has zero runs, and the QEMU workflow's latest visible run #34 is from an older commit. The GitLab pipeline also failed before runner assignment with `ci_quota_exceeded`.
 
 **Required owner decision:** explicitly authorize a one-time fast-forward synchronization of GitLab main to GitHub main for this repository, or change the active write-target policy to match the repository's GitHub-canonical workflow. Until that decision is made, do not push, force-push, reverse the mirror, or alter the existing sync workflows. This is the current blocker preventing the new iOS SDK compile and IPA workflows from seeing the latest fixes.
+
+
+See [Legacy feature parity and remaining requirements](LEGACY_FEATURE_PARITY.md) for the broader feature requests recovered from earlier project conversations.

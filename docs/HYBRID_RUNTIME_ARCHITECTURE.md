@@ -201,3 +201,6 @@ On iOS 26+ hardware, either TXM or SPTM selects StikDebug `universal.js`. QEMU k
 
 
 The first TXM/SPTM prepare requires a live StikDebug attachment and a separate explicit prepare call. Availability checks are side-effect-free; after the prepared-arena detach returns, the arena-ready state is reused for subsequent AOT work.
+
+
+See [Legacy feature parity and remaining requirements](LEGACY_FEATURE_PARITY.md) for the older launcher, storage, controller, keyboard, Steam, Android, VR, tvOS and visionOS requests and their current implementation boundaries.

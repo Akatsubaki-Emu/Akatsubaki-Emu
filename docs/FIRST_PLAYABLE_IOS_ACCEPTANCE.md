@@ -1,7 +1,7 @@
 # First playable iOS acceptance and remaining feature backlog
 
 **Last audited:** 2026-11-24  
-**Scope:** Kenran Butō's first reproducible iOS guest-execution milestone. This is a checklist, not a claim that the milestone has shipped.
+**Scope:** Kenran Butō's first reproducible iOS guest-execution milestone. This is a checklist, not a claim that the milestone has shipped. See [Legacy feature parity and remaining requirements](LEGACY_FEATURE_PARITY.md) for the older cross-chat feature requests and their current implementation status.
 
 ## Current implementation boundary
 

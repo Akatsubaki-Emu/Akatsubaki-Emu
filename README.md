@@ -34,6 +34,8 @@
 - **First playable physical iOS build: February–May 2027.** This is an ambitious planning estimate, not a promised release date. It depends on completing and integrating the Kenran Butō execution path, the required AOT/runtime and ABI work, a reproducible physical-device build, and basic guest display/input. The estimate must be revised as real integration, CI and device-test evidence becomes available.
 - **Full emulator completion: not yet estimable.** Broad Windows/Linux compatibility, graphics translation and other production features remain outside the first-playable milestone; there is not enough verified progress to give them a reliable completion date.
 
+Engineering status: [First-playable acceptance](docs/FIRST_PLAYABLE_IOS_ACCEPTANCE.md) · [Legacy feature parity](docs/LEGACY_FEATURE_PARITY.md) · [FEXCore/Box64 iOS integration audit](docs/FEXCORE_IOS_PORT_AUDIT.md)
+
 
 ## Downloads
 
