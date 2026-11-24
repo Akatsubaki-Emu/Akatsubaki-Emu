@@ -24,6 +24,7 @@ class HybridRuntimeSmokeELFTests(unittest.TestCase):
             self.assertEqual(image[:4], b"\x7fELF")
             self.assertEqual(image[4:7], bytes((2, 1, 1)))
             fields = struct.unpack_from("<16sHHIQQQIHHHHHH", image, 0)
+            # ELF64 ET_EXEC, not PIE or an interpreter-backed dynamic image.
             self.assertEqual(fields[1], 2)
             self.assertEqual(fields[2], 62)
             self.assertEqual(fields[4], 0x401000)

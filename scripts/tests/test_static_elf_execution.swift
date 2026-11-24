@@ -649,25 +649,31 @@ struct StaticELFExecutionTests {
 
     static func testGeneratedRuntimeSmokeELF(at url: URL) throws {
         let memory = GuestMemory(size: 16 * 1024 * 1024)
-        let image = try ELF64Loader().load(url, into: memory)
+        let image = try ELF64Loader().load(url, into: memory, expectedArchitecture: .x86_64)
         precondition(image.entryPoint == 0x401000, "Runtime smoke ELF entry point changed")
 
         let stack = try LinuxProcessStackBuilder().build(
-            image: image,
-            arguments: [url.lastPathComponent],
+            executablePath: url.path,
+            arguments: [],
             environment: ["PATH": "/bin"],
             memory: memory,
+            entryPoint: image.entryPoint,
+            programHeaders: .init(
+                address: image.programHeaderAddress,
+                entrySize: image.programHeaderEntrySize,
+                count: image.programHeaderCount
+            ),
+            maximumImageAddress: image.maximumGuestAddress,
             randomBytes: Data(repeating: 0x5A, count: 16)
         )
         let interpreter = X86_64Interpreter(memory: memory)
         try interpreter.reset(entryPoint: image.entryPoint)
         try interpreter.setInitialStackPointer(stack.stackPointer)
-        let (programBreak, overflow) = image.maximumGuestAddress.addingReportingOverflow(0x1000)
+        let (programBreak, overflow) = image.maximumGuestAddress.addingReportingOverflow(4095)
         precondition(!overflow, "Runtime smoke ELF program break overflow")
         try interpreter.configureLinuxProcess(
-            programBreak: programBreak,
-            stackBase: stack.stackBase,
-            randomBytes: Data(repeating: 0xA5, count: 16)
+            programBreak: programBreak & ~UInt64(4095),
+            stackBase: stack.stackBase
         )
 
         let previousMessageCount = EmulationLog.shared.messages.count

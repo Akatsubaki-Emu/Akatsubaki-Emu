@@ -533,7 +533,7 @@ required = {
         "func resizeBreak(from oldBreak: UInt64, to newBreak: UInt64) -> GuestMemoryTransactionResult",
         "static func testGeneratedRuntimeSmokeELF(at url: URL) throws",
         "KENRAN_BUTO_RUNTIME_OK",
-        "runtime smoke guest did not exit with status 0",
+        "Runtime smoke guest did not exit with status 0",
         "memory.readByte(offset: 0x402104)",
     ],
     "scripts/tests/test_linux_process_stack.swift": [
@@ -1753,7 +1753,7 @@ for token in ("hasBase = false", "AOT execution passes the guest block RIP to th
         failed = True
 
 xchg_register_translator = Path("src/Runtime/X86_64AOTTranslator.swift").read_text(encoding="utf-8")
-for token in ('static let translatorVersion = "8"', "case 0x87:", "case 0x90...0x97:", "exchangeRegisters", "0xCA000000", "0x4A000000"):
+for token in ('static let translatorVersion = "9"', "case 0x87:", "case 0x90...0x97:", "exchangeRegisters", "0xCA000000", "0x4A000000"):
     if token not in xchg_register_translator:
         print(f"XCHG register translator contract missing {token!r}", file=sys.stderr)
         failed = True
@@ -1964,7 +1964,7 @@ xchg_interpreter_source = Path("src/Runtime/X86_64Interpreter.swift").read_text(
 xchg_translator_tests = Path("scripts/tests/test_kenran_buto_aot_translator.swift").read_text(encoding="utf-8")
 xchg_interpreter_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
 xchg_allocation_tests = Path("scripts/tests/test_aot_translator_allocation_hot_path.py").read_text(encoding="utf-8")
-for token in ('static let translatorVersion = "8"', "case 0x90...0x97:",
+for token in ('static let translatorVersion = "9"', "case 0x90...0x97:",
               "private static func exchangeRegisters", "0xCA000000", "0x4A000000"):
     if token not in xchg_translator_source:
         print(f"AOT XCHG translator contract missing {token!r}", file=sys.stderr)
