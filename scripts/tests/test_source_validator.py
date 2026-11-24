@@ -50,13 +50,15 @@ class SourceValidatorTests(unittest.TestCase):
         cache = (root / "src" / "Performance" / "TranslationCache.swift").read_text(encoding="utf-8")
         for token in (
             "guard !Task.isCancelled, self.sessionGeneration == generation else { return false }",
-            "guard !Task.isCancelled, self.sessionGeneration == generation, self.connection === candidate else { return false }",
+            "guard !Task.isCancelled, self.sessionGeneration == generation,",
+            "guard self.sessionGeneration == generation, self.connection === candidate else { return false }",
             "SHA256Hex.digest(Data(key.utf8))",
         ):
             with self.subTest(token=token):
                 self.assertIn(token, validator)
         self.assertNotIn("SHA256.hash(data: Data(key.utf8))", validator)
-        self.assertIn("self.sessionGeneration == generation", vnc_test)
+        self.assertIn("guard !Task.isCancelled, self.sessionGeneration == generation,", vnc_test)
+        self.assertIn("guard self.sessionGeneration == generation, self.connection === candidate else { return false }", vnc_test)
         self.assertIn("SHA256Hex.digest(Data(key.utf8))", cache)
 
 
