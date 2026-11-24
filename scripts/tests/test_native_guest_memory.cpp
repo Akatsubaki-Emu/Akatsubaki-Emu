@@ -331,6 +331,10 @@ int main() {
     const uint64_t finalPageLength = UINT64_MAX - finalPage;
     assert(isteam_guest_memory_map(huge, finalPage, finalPageLength, 3, false));
     assert(isteam_guest_memory_write(huge, finalPage, &fallbackMarker, 1));
+    // Range queries must also remain proportional to allocated pages, even
+    // when the guest address space spans almost the entire uint64_t domain.
+    assert(isteam_guest_memory_has_mapped_pages(huge, 0, UINT64_MAX));
+    assert(!isteam_guest_memory_has_mapped_pages(huge, 0, pageSize));
     // A huge sparse unmap must visit allocated pages, not every virtual page.
     assert(isteam_guest_memory_unmap(huge, 0, UINT64_MAX));
     assert(isteam_guest_memory_allocated_pages(huge) == 0);
