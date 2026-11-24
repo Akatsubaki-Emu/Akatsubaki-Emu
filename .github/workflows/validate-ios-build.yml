@@ -10,15 +10,40 @@ on:
       - project.yml
       - scripts/tests/**
       - scripts/validate-qemu-source.py
+      - scripts/check-validation-freshness.sh
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: platform-compile-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
 
 jobs:
+  check-validation-freshness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      current: ${{ steps.freshness.outputs.current }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Check whether this validation run is still current
+        id: freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(bash scripts/check-validation-freshness.sh "$GITHUB_SHA")"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "Validation freshness: $current"
+
   build-platform-simulators:
+    needs: check-validation-freshness
+    if: needs.check-validation-freshness.outputs.current == 'true'
     runs-on: xcode-27
     timeout-minutes: 45
     strategy:
@@ -197,6 +222,8 @@ jobs:
 
 
   build-ios-device:
+    needs: check-validation-freshness
+    if: needs.check-validation-freshness.outputs.current == 'true'
     runs-on: xcode-27
     timeout-minutes: 45
     steps:
