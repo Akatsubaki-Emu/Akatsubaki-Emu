@@ -1584,6 +1584,26 @@ struct InterpreterTests {
             precondition(leaFirstHybrid.registerValue(2) == 16)
             precondition(executor.blocksExecuted == blocksBeforeLEAFirst + 1)
 
+            // Register-immediate C7 /0 must also enter AOT directly and preserve
+            // x86's sign-extension of imm32 into a 64-bit destination.
+            let movImmediateFirstProgram = Data([
+                0x48, 0xC7, 0xC0, 0x00, 0x00, 0x00, 0x80, 0x0F, 0x0B
+            ])
+            let movImmediateFirstMemory = GuestMemory(size: 8192)
+            precondition(movImmediateFirstMemory.write(movImmediateFirstProgram, offset: 0x1000))
+            let blocksBeforeMovImmediate = executor.blocksExecuted
+            let movImmediateFirstBaseline = X86_64Interpreter(memory: movImmediateFirstMemory)
+            try movImmediateFirstBaseline.reset(entryPoint: 0x1000)
+            let movImmediateFirstBaselineExit = try movImmediateFirstBaseline.run(maxInstructions: 8)
+            let movImmediateFirstHybrid = X86_64Interpreter(memory: movImmediateFirstMemory, aotExecutor: executor)
+            try movImmediateFirstHybrid.reset(entryPoint: 0x1000)
+            let movImmediateFirstHybridExit = try movImmediateFirstHybrid.run(maxInstructions: 8)
+            precondition(movImmediateFirstHybridExit == movImmediateFirstBaselineExit)
+            precondition(movImmediateFirstHybridExit == .unsupportedInstruction(address: 0x1007))
+            precondition(movImmediateFirstHybrid.instructionCount == movImmediateFirstBaseline.instructionCount)
+            precondition(movImmediateFirstHybrid.registerValue(0) == 0xFFFF_FFFF_8000_0000)
+            precondition(executor.blocksExecuted == blocksBeforeMovImmediate + 1)
+
             let baselineMemory = GuestMemory(size: 8192)
             precondition(baselineMemory.write(program, offset: 0x1000))
             let baseline = X86_64Interpreter(memory: baselineMemory)

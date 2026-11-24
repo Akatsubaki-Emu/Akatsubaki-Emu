@@ -1030,11 +1030,26 @@ final class X86_64Interpreter: GuestCPUBackend {
         case 0x89, 0x8B:
             guard cursor + 1 < instructionWindowLength else { return false }
             return instructionWindow[cursor + 1] >> 6 == 0b11
+        case 0xC7:
+            return canTranslateRegisterImmediateMOVAtCurrentWindow(opcodeOffset: cursor, rex: rex)
         case 0x8D:
             return canTranslateLEAAtCurrentWindow(opcodeOffset: cursor, rex: rex)
         default:
             return false
         }
+    }
+
+    /// C7 /0 is AOT-eligible only for a complete register-immediate form.
+    /// Memory destinations, other group extensions and REX.R forms side-exit.
+    private func canTranslateRegisterImmediateMOVAtCurrentWindow(opcodeOffset: Int, rex: UInt8) -> Bool {
+        let modRMOffset = opcodeOffset + 1
+        guard opcodeOffset + 6 <= 15,
+              opcodeOffset + 6 <= instructionWindowLength,
+              modRMOffset < instructionWindowLength else { return false }
+        let modRM = instructionWindow[modRMOffset]
+        return modRM >> 6 == 0b11
+            && ((modRM >> 3) & 0x07) == 0
+            && rex & 0x04 == 0
     }
 
     /// Keep unsupported LEA forms on the interpreter path so one rejected

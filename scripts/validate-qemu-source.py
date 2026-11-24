@@ -1652,12 +1652,16 @@ for token in ("test_guest_input_is_borrowed_without_copying_to_a_byte_array",
     if token not in aot_allocation_test:
         print(f"AOT allocation regression missing {token!r}", file=sys.stderr)
         failed = True
+x86_interpreter = Path("src/Runtime/X86_64Interpreter.swift").read_text(encoding="utf-8")
 aot_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
 for token in ("#if KENRAN_BUTO_AOT_TESTS", "iSteamAOTGuestMemoryRead",
               "sideExit!.exitRip == 0x100A",
               "Kenran Butō AOT native block execution", "leaProgram", "0x190",
               "leaFirstProgram", "blocksBeforeLEAFirst",
               "executor.blocksExecuted == blocksBeforeLEAFirst + 1",
+              "movImmediateFirstProgram", "blocksBeforeMovImmediate",
+              "executor.blocksExecuted == blocksBeforeMovImmediate + 1",
+              "0xFFFF_FFFF_8000_0000",
               "cachedBlockCount", "cachedExecutableBytes",
               "unavailableAOT.executeCalls == 0",
               "readyAOT.executeCalls == 0"):
@@ -1665,7 +1669,8 @@ for token in ("#if KENRAN_BUTO_AOT_TESTS", "iSteamAOTGuestMemoryRead",
         print(f"AOT runtime regression missing {token!r}", file=sys.stderr)
         failed = True
 aot_eligibility = x86_interpreter[x86_interpreter.index("private func canStartAOTBlock"):x86_interpreter.index("private func prepareInstructionWindow")]
-for token in ("case 0x8D:", "canTranslateLEAAtCurrentWindow"):
+for token in ("case 0x8D:", "canTranslateLEAAtCurrentWindow",
+              "case 0xC7:", "canTranslateRegisterImmediateMOVAtCurrentWindow"):
     if token not in aot_eligibility:
         print(f"AOT eligibility regression missing {token!r}", file=sys.stderr)
         failed = True

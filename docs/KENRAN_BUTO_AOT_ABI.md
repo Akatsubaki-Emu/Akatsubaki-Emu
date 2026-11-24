@@ -9,6 +9,7 @@ The current translator emits only operations whose semantics are fully modelled:
 - NOP
 - MOV r32/r64, imm32/imm64
 - register-only MOV r/m32/r/m64, r32/r64 and the reverse direction
+- C7 /0 register-only MOV r/m32, imm32 and MOV r/m64, sign-extended imm32
 - LEA r32/r64 with base/index/SIB addressing, scales 1/2/4/8 and signed combined displacement in the range -4095...4095
 - LEA r32/r64 with no base and no index using a sign-extended disp32 constant
 
@@ -92,7 +93,7 @@ AOT is injected only at the Linux ELF launch boundary. Other guest-machine users
 
 ## Cache and resource limits
 
-The translation identity includes guest-code SHA-256, guest ABI, translator version (currently 4), host architecture, CPU features, ABI version, and the instruction/input/output budgets. Cached artifacts are structurally validated and compared with a canonical translation before reuse. Cache I/O failure is an optimization miss, not an execution failure.
+The translation identity includes guest-code SHA-256, guest ABI, translator version (currently 5), host architecture, CPU features, ABI version, and the instruction/input/output budgets. Cached artifacts are structurally validated and compared with a canonical translation before reuse. Cache I/O failure is an optimization miss, not an execution failure.
 
 The executor is capped at 64 executable blocks and 16 MiB of page-rounded executable mappings. Translation is capped at 4,096 instructions, 65,536 guest bytes, and 1 MiB of emitted code. The interpreter currently supplies at most one 4 KiB guest page to a block.
 
