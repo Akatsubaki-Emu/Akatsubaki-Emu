@@ -1783,8 +1783,9 @@ qmp_docs = Path("docs/HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8
 if "q.sock" not in qmp_docs or "/tmp/akatsubaki-qmp.sock" in qmp_docs:
     print("Hybrid runtime documentation contains a stale or missing QMP socket path", file=sys.stderr)
     failed = True
-xcode_guard_tests = Path("scripts/tests/test_xcode_version_guard.py").read_text(encoding="utf-8")
-for token in ("XCODE_VERSION_GUARDS", "27.10", "28.0", "27.0", "26.4"):
+xcode_guard_tests = Path("scripts/tests/test_source_validator.py").read_text(encoding="utf-8")
+for token in ("test_xcode_version_guard_uses_numeric_major_and_minor_semantics",
+              "awk_program", "27.10", "28.0", "27.0", "26.4"):
     if token not in xcode_guard_tests:
         print(f"Xcode version semantic regression missing {token!r}", file=sys.stderr)
         failed = True

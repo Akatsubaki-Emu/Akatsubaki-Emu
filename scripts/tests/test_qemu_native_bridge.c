@@ -17,11 +17,6 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <time.h>
-#include <errno.h>
-#include <stdint.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
 
 bool iSteamJITIsReady(void) { return false; }
 void *iSteamJITPrepareRegion(void *address, size_t size) { (void)address; (void)size; return NULL; }
@@ -172,7 +167,7 @@ static bool qmp_test_write_line(int fd, const char *line) {
     return true;
 }
 
-static bool qmp_test_read_line(int fd, char *buffer, size_t capacity) {
+static bool qmp_test_read_line_single(int fd, char *buffer, size_t capacity) {
     size_t length = 0;
     while (length + 1 < capacity) {
         char byte = 0;
@@ -191,10 +186,10 @@ static void *qmp_test_server_main(void *opaque) {
     int client = accept(server->listener, NULL, NULL);
     if (client < 0) return NULL;
     bool ok = qmp_test_write_line(client, "{\"QMP\":{\"version\":{\"qemu\":{\"major\":10}}}}\r\n")
-        && qmp_test_read_line(client, server->capabilities, sizeof(server->capabilities))
+        && qmp_test_read_line_single(client, server->capabilities, sizeof(server->capabilities))
         && strstr(server->capabilities, "\"qmp_capabilities\"") != NULL
         && qmp_test_write_line(client, "{\"return\":{}}\r\n")
-        && qmp_test_read_line(client, server->command, sizeof(server->command))
+        && qmp_test_read_line_single(client, server->command, sizeof(server->command))
         && strstr(server->command, "\"stop\"") != NULL
         && qmp_test_write_line(client, "{\"return\":{}}\r\n");
     server->success = ok;
