@@ -1705,7 +1705,7 @@ for token in ("-no-shutdown", "-qmp", "unix:\\(Self.qmpSocketPath),server=on,wai
 for token in ("static let shared = QEMUNativeRuntime()", "private init()",
               "sessionKey == requestedSessionKey", 'Self.sendQMP("system_reset")',
               'Self.sendQMP("cont")', 'Self.sendQMP("stop")',
-              "private(set) var isPaused = false", "QEMU process and disk scopes remain available"):
+              "private(set) var isPaused = false", "the process and disk scopes remain available"):
     if token not in qmp_runtime:
         print(f"Persistent QEMU runtime missing {token!r}", file=sys.stderr)
         failed = True
