@@ -37,3 +37,8 @@ Expected console output includes Linux, x86_64, KENRAN_BUTO_RUNTIME_OK, and gues
 This guest checks separate RX and RW mappings, the zero-filled data segment, guest-memory write/read permissions, syscall dispatch, stdout and process-exit propagation in one no-JIT interpreter run. The XCHG guest remains the focused instruction/ALU smoke test.
 
 On a physical iPad, import both ELF files from the core-only IPA's smoke-kit artifact through Import Game / Executable, launch them from My Games, and verify both markers and exit statuses. Host execution of the Python-generated ELF is not a substitute for this device test.
+
+
+## GitLab validation artifact
+
+The GitLab main-branch API/web validation pipeline also builds and runs both static guests and retains them as job artifacts for seven days. The job is deliberately manual/API-triggered; if GitLab reports shared-runner quota exhaustion, no tests have run and the pipeline must be retried after quota is restored.

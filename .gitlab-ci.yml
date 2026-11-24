@@ -18,6 +18,8 @@ core-source-and-elf-validation:
     - mkdir -p build
     - python3 scripts/build_hybrid_xchg_smoke_elf.py build/hybrid_xchg_smoke.elf
     - ./build/hybrid_xchg_smoke.elf
+    - python3 scripts/build_hybrid_runtime_smoke_elf.py build/hybrid_runtime_smoke.elf
+    - ./build/hybrid_runtime_smoke.elf
     - python3 scripts/validate-qemu-source.py
     - python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
   artifacts:
@@ -25,3 +27,4 @@ core-source-and-elf-validation:
     expire_in: 7 days
     paths:
       - build/hybrid_xchg_smoke.elf
+      - build/hybrid_runtime_smoke.elf

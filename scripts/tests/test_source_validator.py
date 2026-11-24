@@ -43,6 +43,20 @@ class SourceValidatorTests(unittest.TestCase):
                 f"duplicate source-contract tokens for {key.value}: {duplicate_tokens}",
             )
 
+    def test_gitlab_validation_pipeline_builds_both_static_elf_guests(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".gitlab-ci.yml").read_text(encoding="utf-8")
+        for token in (
+            "python3 scripts/build_hybrid_xchg_smoke_elf.py build/hybrid_xchg_smoke.elf",
+            "./build/hybrid_xchg_smoke.elf",
+            "python3 scripts/build_hybrid_runtime_smoke_elf.py build/hybrid_runtime_smoke.elf",
+            "./build/hybrid_runtime_smoke.elf",
+            "build/hybrid_runtime_smoke.elf",
+            "expire_in: 7 days",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, workflow)
+
     def test_source_contracts_track_vnc_generation_and_shared_cache_digest(self):
         root = Path(__file__).resolve().parents[2]
         validator = (root / "scripts" / "validate-qemu-source.py").read_text(encoding="utf-8")
