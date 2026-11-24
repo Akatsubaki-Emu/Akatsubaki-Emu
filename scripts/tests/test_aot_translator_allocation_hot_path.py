@@ -34,6 +34,13 @@ class AOTTranslatorAllocationHotPathTests(unittest.TestCase):
         self.assertNotIn("Data(", lea)
         self.assertNotIn("Array(", lea)
 
+    def test_xchg_uses_flag_neutral_eor_without_scratch_register(self):
+        self.assertIn("private static func exchangeRegisters", SOURCE)
+        self.assertIn("0xCA000000", SOURCE)
+        self.assertIn("0x4A000000", SOURCE)
+        self.assertIn("words.append(first)", SOURCE)
+        self.assertNotIn("moveRegister(16", SOURCE)
+
     def test_move_immediate_does_not_allocate_chunk_or_word_arrays(self):
         move = section("private static func moveImmediate(", "private static func moveWide(")
         self.assertNotIn("[UInt16]", move)

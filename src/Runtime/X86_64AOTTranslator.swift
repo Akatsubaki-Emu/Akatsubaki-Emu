@@ -50,7 +50,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
 struct X86_64AOTTranslator {
     static let translatorIdentifier = "kenran-buto-aot-arm64"
     // Bump whenever emitted code or decoding semantics change.
-    static let translatorVersion = "6"
+    static let translatorVersion = "7
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
@@ -129,13 +129,12 @@ struct X86_64AOTTranslator {
 
             switch opcode {
             case 0x90:
-                // REX.B changes 90 into XCHG accumulator, r8. Do not erase
-                // that guest-visible register update by translating it as NOP.
-                guard rex & 0x01 == 0 else {
-                    return fallback(output, consumed: start, instructions: instructions,
-                                    reason: .unsupportedInstruction, opcode: bytes[start])
-                }
-                words.append(0xD503201F)
+                let register = (rex & 0x01) != 0 ? 8 : 0
+                words = Self.exchangeRegisters(0, register, is64Bit: (rex & 0x08) != 0)
+
+            case 0x91...0x97:
+                let register = Int(opcode - 0x90) | ((rex & 0x01) != 0 ? 8 : 0)
+                words = Self.exchangeRegisters(0, register, is64Bit: (rex & 0x08) != 0)
 
             case 0xB8...0xBF:
                 let register = Int(opcode - 0xB8) | ((rex & 0x01) != 0 ? 8 : 0)
@@ -502,5 +501,22 @@ struct X86_64AOTTranslator {
     private static func moveRegister(_ source: Int, to destination: Int, is64Bit: Bool) -> UInt32 {
         let base: UInt32 = is64Bit ? 0xAA0003E0 : 0x2A0003E0
         return base | (UInt32(source) << 16) | UInt32(destination)
+    }
+
+    /// XCHG preserves guest flags. Three flag-neutral EOR operations swap
+    /// the two guest registers without borrowing a non-guest host register.
+    private static func exchangeRegisters(_ left: Int, _ right: Int, is64Bit: Bool) -> EncodedWords {
+        var words = EncodedWords()
+        guard left != right else {
+            words.append(0xD503201F)
+            return words
+        }
+        let opcode: UInt32 = is64Bit ? 0xCA000000 : 0x4A000000
+        let first = opcode | (UInt32(right) << 16) | (UInt32(left) << 5) | UInt32(left)
+        let second = opcode | (UInt32(right) << 16) | (UInt32(left) << 5) | UInt32(right)
+        words.append(first)
+        words.append(second)
+        words.append(first)
+        return words
     }
 }

@@ -1632,13 +1632,13 @@ for token in ("maximumInstructions", "maximumOutputBytes", "maximumGuestBytes",
     if token not in aot_translator:
         print(f"AOT translator missing bounded/fixed-buffer contract {token!r}", file=sys.stderr)
         failed = True
-for token in ("case 0x8D:", "addShiftedRegister", "addImmediate", "ripRelative", "guestRIP", 'static let translatorVersion = "6"'):
+for token in ("case 0x8D:", "addShiftedRegister", "addImmediate", "ripRelative", "guestRIP", 'static let translatorVersion = "7"'):
     if token not in aot_translator:
         print(f"AOT LEA translator contract missing {token!r}", file=sys.stderr)
         failed = True
 aot_translator_tests = Path("scripts/tests/test_kenran_buto_aot_translator.swift").read_text(encoding="utf-8")
 for token in ("0x8B010802", "0x91004042", "0x0B010402",
-              "leaRipRelative", "guestRIP", "leaLargeDisplacement", 'translatorVersion == "6"'):
+              "leaRipRelative", "guestRIP", "leaLargeDisplacement", 'translatorVersion == "7"'):
     if token not in aot_translator_tests:
         print(f"AOT LEA regression missing {token!r}", file=sys.stderr)
         failed = True
@@ -1847,6 +1847,33 @@ if "String(format:" in translation_cache_source or "String(format:" in aot_compi
     failed = True
 if "SHA256Hex.digest(guestCode)" not in aot_compiler_source:
     print("AOT compiler: missing shared SHA-256 hex encoder", file=sys.stderr)
+    failed = True
+
+
+
+xchg_translator_source = Path("src/Runtime/X86_64AOTTranslator.swift").read_text(encoding="utf-8")
+xchg_interpreter_source = Path("src/Runtime/X86_64Interpreter.swift").read_text(encoding="utf-8")
+xchg_translator_tests = Path("scripts/tests/test_kenran_buto_aot_translator.swift").read_text(encoding="utf-8")
+xchg_interpreter_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
+xchg_allocation_tests = Path("scripts/tests/test_aot_translator_allocation_hot_path.py").read_text(encoding="utf-8")
+for token in ('static let translatorVersion = "7"', "case 0x91...0x97:",
+              "private static func exchangeRegisters", "0xCA000000", "0x4A000000"):
+    if token not in xchg_translator_source:
+        print(f"AOT XCHG translator contract missing {token!r}", file=sys.stderr)
+        failed = True
+if "case 0x90...0x97:" not in xchg_interpreter_source:
+    print("AOT XCHG block-entry eligibility is missing", file=sys.stderr)
+    failed = True
+for token in ("0x4A010000", "0xCA080000", "0xCA0F000F", "extendedAccumulatorExchange"):
+    if token not in xchg_translator_tests:
+        print(f"AOT XCHG encoding regression missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("xchgStartMemory", "xchgProgram", "blocksBeforeXCHG"):
+    if token not in xchg_interpreter_tests:
+        print(f"AOT XCHG interpreter regression missing {token!r}", file=sys.stderr)
+        failed = True
+if "test_xchg_uses_flag_neutral_eor_without_scratch_register" not in xchg_allocation_tests:
+    print("AOT XCHG fixed-buffer regression is missing", file=sys.stderr)
     failed = True
 
 

@@ -133,14 +133,27 @@ struct KenranButoAOTTranslatorTests {
         precondition(leaOutputLimited.stopReason == .outputLimit)
         precondition(leaOutputLimited.guestBytesConsumed == 0 && leaOutputLimited.machineCode.isEmpty)
 
-        // Both REX.B variants of 90 are XCHG, not NOP.
-        for rex in [UInt8(0x41), UInt8(0x49)] {
-            let exchange = translator.translate(Data([rex, 0x90]))
-            precondition(exchange.stopReason == .unsupportedInstruction)
-            precondition(exchange.guestBytesConsumed == 0)
-            precondition(exchange.fallbackOpcode == rex)
-            precondition(exchange.machineCode.isEmpty)
-        }
+        // Register-only accumulator XCHG forms preserve 32/64-bit semantics.
+        let exchanges = translator.translate(Data([0x91, 0x49, 0x90]))
+        precondition(exchanges.isComplete && exchanges.instructionCount == 2)
+        precondition(word(exchanges.machineCode, 0) == 0x4A010000)
+        precondition(word(exchanges.machineCode, 1) == 0x4A010001)
+        precondition(word(exchanges.machineCode, 2) == 0x4A010000)
+        precondition(word(exchanges.machineCode, 3) == 0xCA080000)
+        precondition(word(exchanges.machineCode, 4) == 0xCA080008)
+        precondition(word(exchanges.machineCode, 5) == 0xCA080000)
+
+        let exchange32High = translator.translate(Data([0x41, 0x90]))
+        precondition(exchange32High.isComplete && exchange32High.instructionCount == 1)
+        precondition(word(exchange32High.machineCode, 0) == 0x4A080000)
+        precondition(word(exchange32High.machineCode, 1) == 0x4A080008)
+        precondition(word(exchange32High.machineCode, 2) == 0x4A080000)
+
+        let extendedAccumulatorExchange = translator.translate(Data([0x4D, 0x97]))
+        precondition(extendedAccumulatorExchange.isComplete && extendedAccumulatorExchange.instructionCount == 1)
+        precondition(word(extendedAccumulatorExchange.machineCode, 0) == 0xCA0F0000)
+        precondition(word(extendedAccumulatorExchange.machineCode, 1) == 0xCA0F000F)
+        precondition(word(extendedAccumulatorExchange.machineCode, 2) == 0xCA0F0000)
 
         // The complete x86 instruction length, including REX prefixes and
         // immediate bytes, must not exceed the architectural 15-byte limit.
@@ -211,7 +224,7 @@ struct KenranButoAOTTranslatorTests {
         precondition(multiInstructionBlock.guestBytesConsumed == 20)
         precondition(multiInstructionBlock.instructionCount == 4)
         precondition(multiInstructionBlock.fallbackOpcode == 0x0F)
-        precondition(X86_64AOTTranslator.translatorVersion == "6")
+        precondition(X86_64AOTTranslator.translatorVersion == "7")
         let oversizedBudgets = translator.translate(
             guest, maximumInstructions: Int.max,
             maximumOutputBytes: Int.max & ~3,

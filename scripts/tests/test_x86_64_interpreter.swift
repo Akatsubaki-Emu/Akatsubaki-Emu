@@ -319,6 +319,18 @@ struct InterpreterTests {
         precondition(readyAOT.refreshCalls == 1)
         precondition(unsupportedStartMemory.readPrefixCalls == 1)
 
+
+        // REX.B accumulator XCHG must be offered to the AOT executor at block entry.
+        let xchgStartMemory = GuestMemory(size: 64)
+        precondition(xchgStartMemory.write(Data([0x49, 0x90, 0xCC]), offset: 0))
+        let xchgStartAOT = TestAOTExecutor(isAvailable: true)
+        let xchgStartInterpreter = X86_64Interpreter(memory: xchgStartMemory, aotExecutor: xchgStartAOT)
+        try xchgStartInterpreter.reset(entryPoint: 0)
+        let xchgStartExit = try xchgStartInterpreter.run(maxInstructions: 2)
+        precondition(xchgStartExit == .unsupportedInstruction(address: 2))
+        precondition(xchgStartAOT.executeCalls == 1)
+        precondition(xchgStartAOT.refreshCalls == 1)
+
         // A rejected native block must not rebuild a 4 KiB page window at each later instruction.
         let decliningAOTMemory = GuestMemory(size: 64)
         let decliningProgram: [UInt8] = [
@@ -1633,6 +1645,44 @@ struct InterpreterTests {
             precondition(pageCrossingHybrid.instructionCount == pageCrossingBaseline.instructionCount)
             precondition(pageCrossingHybrid.registerValue(0) == 42)
             precondition(executor.blocksExecuted == blocksBeforePageCrossing)
+
+
+            // MOVs form the first AOT block, PUSH side-exits to the interpreter,
+            // and XCHG must then be admitted as the next AOT block.
+            let xchgProgram = Data([
+                0xB8, 0x01, 0, 0, 0,
+                0xB9, 0x02, 0, 0, 0,
+                0x50,
+                0x91,
+                0x0F, 0x0B
+            ])
+            let xchgBaselineMemory = GuestMemory(size: 8192)
+            let xchgHybridMemory = GuestMemory(size: 8192)
+            precondition(xchgBaselineMemory.write(xchgProgram, offset: 0x1000))
+            precondition(xchgHybridMemory.write(xchgProgram, offset: 0x1000))
+            let xchgBaseline = X86_64Interpreter(memory: xchgBaselineMemory)
+            try xchgBaseline.reset(entryPoint: 0x1000)
+            let xchgBaselineExit = try xchgBaseline.run(maxInstructions: 8)
+            let blocksBeforeXCHG = executor.blocksExecuted
+            let xchgHybrid = X86_64Interpreter(memory: xchgHybridMemory, aotExecutor: executor)
+            try xchgHybrid.reset(entryPoint: 0x1000)
+            let xchgHybridExit = try xchgHybrid.run(maxInstructions: 8)
+            precondition(xchgHybridExit == xchgBaselineExit)
+            precondition(xchgHybridExit == .unsupportedInstruction(address: 0x100C))
+            precondition(xchgHybrid.instructionCount == xchgBaseline.instructionCount)
+            precondition(xchgHybrid.conditionFlags == xchgBaseline.conditionFlags)
+            for index in 0..<16 {
+                precondition(xchgHybrid.registerValue(index) == xchgBaseline.registerValue(index))
+            }
+            precondition(xchgHybrid.registerValue(0) == 2)
+            precondition(xchgHybrid.registerValue(1) == 1)
+            let xchgHybridStack = xchgHybrid.registerValue(4)!
+            let xchgBaselineStack = xchgBaseline.registerValue(4)!
+            precondition(xchgHybridMemory.readUInt64(offset: xchgHybridStack) == 1)
+            precondition(xchgBaselineMemory.readUInt64(offset: xchgBaselineStack) == 1)
+            precondition(executor.blocksExecuted == blocksBeforeXCHG + 2)
+
+
 
             let baselineMemory = GuestMemory(size: 8192)
             precondition(baselineMemory.write(program, offset: 0x1000))

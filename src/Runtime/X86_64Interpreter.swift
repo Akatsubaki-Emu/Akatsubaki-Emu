@@ -1025,8 +1025,8 @@ final class X86_64Interpreter: GuestCPUBackend {
         }
         guard cursor < instructionWindowLength else { return false }
         switch instructionWindow[cursor] {
-        case 0x90:
-            return rex & 0x01 == 0
+        case 0x90...0x97:
+            return true
         case 0xB8...0xBF:
             return true
         case 0x89, 0x8B:
