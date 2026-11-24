@@ -77,14 +77,14 @@ def build_elf() -> bytes:
     emit("bf 01 00 00 00")
     emit("0f 05")
 
-    message = b"hello\\n"
+    message = b"hello\n"
     message_offset = len(code)
     struct.pack_into("<i", code, lea_offset + 3, message_offset - (lea_offset + 7))
     for displacement_offset, label in fixups:
         struct.pack_into("<i", code, displacement_offset, labels[label] - (displacement_offset + 4))
     code.extend(message)
 
-    ident = b"\\x7fELF" + bytes((2, 1, 1, 0)) + bytes(8)
+    ident = b"\x7fELF" + bytes((2, 1, 1, 0)) + bytes(8)
     header = struct.pack("<16sHHIQQQIHHHHHH", ident, 2, 62, 1,
                          ENTRY_POINT, 64, 0, 0, 64, 56, 1, 0, 0, 0)
     total_size = CODE_OFFSET + len(code)
@@ -94,6 +94,7 @@ def build_elf() -> bytes:
     if padding_length < 0:
         raise RuntimeError("ELF headers exceed the code offset.")
     return header + phdr + bytes(padding_length) + bytes(code)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
