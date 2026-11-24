@@ -966,7 +966,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             rip &+= 1
             return value
         }
-        guard let value = memory.readByte(offset: rip) else { return nil }
+        guard let value = memory.readExecuteByte(offset: rip) else { return nil }
         instructionWindowCursor += 1
         rip &+= 1
         return value

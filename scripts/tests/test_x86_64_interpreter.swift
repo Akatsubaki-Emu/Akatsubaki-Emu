@@ -32,17 +32,26 @@ final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
     private(set) var readByteCalls = 0
+    private(set) var readExecuteByteCalls = 0
     private(set) var readUInt16Calls = 0
     private(set) var readPrefixCalls = 0
+    private var executableBytes: [Bool]
 
     init(size: UInt64) {
         self.size = size
         bytes = [UInt8](repeating: 0, count: Int(size))
+        executableBytes = [Bool](repeating: true, count: Int(size))
     }
 
     func readByte(offset: UInt64) -> UInt8? {
         readByteCalls += 1
         guard offset < size else { return nil }
+        return bytes[Int(offset)]
+    }
+
+    func readExecuteByte(offset: UInt64) -> UInt8? {
+        readExecuteByteCalls += 1
+        guard offset < size, executableBytes[Int(offset)] else { return nil }
         return bytes[Int(offset)]
     }
 
@@ -62,12 +71,21 @@ final class GuestMemory {
     func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int? {
         readPrefixCalls += 1
         guard offset <= size else { return nil }
-        let count = Int(min(UInt64(buffer.count), size - offset))
-        if count > 0 {
-            let start = Int(offset)
-            for index in 0..<count { buffer[index] = bytes[start + index] }
+        let maximumCount = Int(min(UInt64(buffer.count), size - offset))
+        let start = Int(offset)
+        var count = 0
+        while count < maximumCount && executableBytes[start + count] {
+            buffer[count] = bytes[start + count]
+            count += 1
         }
         return count
+    }
+
+    func setExecutable(_ enabled: Bool, offset: UInt64, length: Int) -> Bool {
+        guard length >= 0, offset <= size, UInt64(length) <= size - offset else { return false }
+        let start = Int(offset)
+        for index in 0..<length { executableBytes[start + index] = enabled }
+        return true
     }
 
     func readUInt32(offset: UInt64) -> UInt32? {
@@ -863,6 +881,19 @@ struct InterpreterTests {
         try edgeInterpreter.reset(entryPoint: 4095)
         let edgeExit = try edgeInterpreter.run(maxInstructions: 2)
         precondition(edgeExit == .memoryFault(address: 4096))
+        precondition(edgeMemory.readExecuteByteCalls == 1)
+        precondition(edgeMemory.readByteCalls == 0)
+
+        let executeBoundaryMemory = GuestMemory(size: 8192)
+        precondition(executeBoundaryMemory.write(Data([0xB8, 0x78]), offset: 4094))
+        precondition(executeBoundaryMemory.write(Data([0x56, 0x34, 0x12]), offset: 4096))
+        precondition(executeBoundaryMemory.setExecutable(false, offset: 4096, length: 4096))
+        let executeBoundaryInterpreter = X86_64Interpreter(memory: executeBoundaryMemory)
+        try executeBoundaryInterpreter.reset(entryPoint: 4094)
+        let executeBoundaryExit = try executeBoundaryInterpreter.run(maxInstructions: 1)
+        precondition(executeBoundaryExit == .memoryFault(address: 4096))
+        precondition(executeBoundaryMemory.readExecuteByteCalls == 1)
+        precondition(executeBoundaryMemory.readByteCalls == 0)
 
         let selfModifyingMemory = GuestMemory(size: 64)
         precondition(selfModifyingMemory.write(Data([
