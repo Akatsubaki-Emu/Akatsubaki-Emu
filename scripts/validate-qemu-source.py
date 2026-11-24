@@ -1197,6 +1197,7 @@ required = {
         "def test_meson_patcher_changes_only_the_objc_compiler_block",
         "def test_meson_patcher_fails_closed_if_objc_block_changes",
         "def test_meson_patcher_handles_qemu_common_flags_variant",
+        "def test_meson_patcher_ignores_later_objc_summary_conditionals",
         "def test_meson_patcher_fails_closed_if_objc_block_is_missing",
         "def test_meson_patcher_rejects_duplicate_objc_blocks",
         "def test_meson_patcher_rejects_objc_flag_outside_its_block",
