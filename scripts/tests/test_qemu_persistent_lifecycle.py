@@ -16,7 +16,7 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("SO_RCVTIMEO", bridge)
         self.assertIn("SO_NOSIGPIPE", bridge)
         self.assertIn("g_has_started = true", bridge)
-        self.assertNotIn("g_has_started = false", bridge)
+        self.assertEqual(bridge.count("g_has_started = false;"), 1)  # declaration only; never reset after launch
 
     def test_runtime_reuses_same_configuration_and_rejects_different_guests(self):
         root = Path(__file__).resolve().parents[2]
