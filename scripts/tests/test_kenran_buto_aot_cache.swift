@@ -33,6 +33,32 @@ struct KenranButoAOTCacheTests {
         let statisticsAfterFallback = try cache.statistics()
         precondition(statisticsAfterFallback.entryCount == 2)
 
+        // Execution budgets are part of the cache identity; an artifact
+        // compiled under a smaller budget must never alias the default block.
+        let instructionLimited = try compiler.compile(
+            guest, guestABI: "sysv-linux-x86_64", maximumInstructions: 1
+        )
+        precondition(!instructionLimited.cacheHit)
+        precondition(instructionLimited.translation.stopReason == .instructionLimit)
+        let instructionLimitedAgain = try compiler.compile(
+            guest, guestABI: "sysv-linux-x86_64", maximumInstructions: 1
+        )
+        precondition(instructionLimitedAgain.cacheHit)
+
+        let inputLimited = try compiler.compile(
+            guest, guestABI: "sysv-linux-x86_64", maximumGuestBytes: 5
+        )
+        precondition(!inputLimited.cacheHit)
+        precondition(inputLimited.translation.stopReason == .inputLimit)
+
+        let outputLimited = try compiler.compile(
+            guest, guestABI: "sysv-linux-x86_64", maximumOutputBytes: 4
+        )
+        precondition(!outputLimited.cacheHit)
+        precondition(outputLimited.translation.stopReason == .outputLimit)
+        let statisticsAfterBudgets = try cache.statistics()
+        precondition(statisticsAfterBudgets.entryCount == 5)
+
         print("Kenran Butō AOT artifact cache round-trip, ABI isolation and fallback passed")
     }
 }
