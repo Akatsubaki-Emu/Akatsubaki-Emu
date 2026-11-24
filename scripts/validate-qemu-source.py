@@ -472,10 +472,6 @@ required = {
         "Image/stack overlap should fail.",
     ],
     "scripts/tests/test_x86_64_interpreter.swift": [
-        "KENRAN_BUTO_AOT_TESTS",
-        "aotExecutor.refreshAvailability()",
-        "aotExecutor.blocksExecuted > 0",
-        "interpreter_side_exit=verified",
         "stackPointerInterpreter.setInitialStackPointer(0x100)",
         "precondition(arithmetic.registerValue(3) == 2)",
         "precondition(signed.registerValue(3) == 2)",
@@ -592,8 +588,8 @@ required = {
         "backend = candidate",
     ],
     "src/QEMU/QEMUNativeRuntime.swift": [
-        "let requiresJIT = configuration.accelerator == .jit",
-        "switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)",
+        "let requestedJIT = configuration.accelerator == .jit",
+        "var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)",
         "isteam_qemu_start",
         "isteam_qemu_request_stop",
         "findUEFIFirmwarePair(in directory: URL)",
@@ -726,7 +722,7 @@ required = {
         "level: .loadable",
         "level == .operational",
         "if probeQEMU",
-        "QEMURuntimeStatus.inspect(bundle: bundle)",
+        "QEMURuntimeStatus.inspect(bundle: bundle, requiresJIT: true)",
     ],
     "src/Steam/GameLauncher.swift": [
         "RuntimeCapabilityRegistry.current",
