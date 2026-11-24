@@ -1712,7 +1712,7 @@ struct InterpreterTests {
                 0x91,
                 0x0F, 0x0B
             ])
-                    let xchgExtendedRegisterProgram = Data([
+            let xchgExtendedRegisterProgram = Data([
                 0x49, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, // mov r8, 0x1122334455667788
                 0x49, 0xB9, 0x00, 0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x99, // mov r9, 0x99AABBCCDDEEFF00
                 0x4D, 0x87, 0xC8,                                           // xchg r8, r9
@@ -1761,7 +1761,7 @@ struct InterpreterTests {
             precondition(xchgSame32Hybrid.registerValue(0) == 0x55667788)
             precondition(executor.blocksExecuted == blocksBeforeXCHGSame32 + 1)
 
-    let xchgBaselineMemory = GuestMemory(size: 8192)
+            let xchgBaselineMemory = GuestMemory(size: 8192)
             let xchgHybridMemory = GuestMemory(size: 8192)
             precondition(xchgBaselineMemory.write(xchgProgram, offset: 0x1000))
             precondition(xchgHybridMemory.write(xchgProgram, offset: 0x1000))
