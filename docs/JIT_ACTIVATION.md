@@ -24,7 +24,7 @@
 - Sign Akatsubaki with a profile that preserves `get-task-allow`.
 - When running inside LiveContainer, enable StikDebug's **Use LiveContainer's Bundle ID** option.
 
-The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM hardware classification independently follows the public model/version rules in [StikDebug's ProcessInfo+TXM implementation](https://github.com/StikDebug/StikDebug/blob/main/StikDebug/Support/ProcessInfo+TXM.swift).
+The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user. The app uses LocalDevVPN's URL activation interface and StikDebug's documented JIT request interface; it does not redistribute either helper. TXM classification reads the keys at `IODeviceTree:/chosen/memory-map` through IOKit, matching StikJIT's protocol detection. A valid registry result containing `TXM` selects the StikDebug breakpoint allocator; a valid result without `TXM` selects standard split-WX. Missing, malformed, empty, or unreadable registry data is UNKNOWN and blocks QEMU startup; it is never treated as a standard device.
 The **Increased Memory Limit** capability is separate from `get-task-allow`. Requesting that memory capability does not grant `get-task-allow` or make the process debuggable; the development provisioning profile must still provide `get-task-allow=true`.
 
 The helper apps are not embedded in Akatsubaki. They remain external dependencies and must be installed/configured by the user.
