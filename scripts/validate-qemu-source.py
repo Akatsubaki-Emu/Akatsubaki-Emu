@@ -1415,25 +1415,29 @@ if ios_package_start < 0 or ios_package_end < 0:
 else:
     ios_package = release_workflow[ios_package_start:ios_package_end]
     for token in [
-        'test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt"',
-        'test -s "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_init$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_main_loop$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_cleanup$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?qemu_system_shutdown_request$\' "$RUNTIME_DIR/exports.txt"',
-        'grep -Eq \' _?isteam_qemu_set_jit_callbacks$\' "$RUNTIME_DIR/exports.txt"',
-        'TCI_RUNTIME_DIR="$RUNTIME_DIR/QEMU/TCI"',
-        'test -s "$TCI_RUNTIME_DIR/runtime-library-path.txt"',
-        'test -s "$TCI_RUNTIME_DIR/exports.txt"',
-        'TCI_RUNTIME_REL="$(head -n 1 "$TCI_RUNTIME_DIR/runtime-library-path.txt")"',
-        'test -s "$RUNTIME_DIR/$TCI_RUNTIME_REL"',
-        'test -s "$APP/QEMU/TCI/runtime-library-path.txt"',
-        'test -s "$APP/$TCI_RUNTIME_REL"',
-        'test -s "$APP/QEMU/TCI/exports.txt"',
+        'test -d "$RUNTIME_DIR/QEMU/JIT"',
+        'test -d "$RUNTIME_DIR/QEMU/TCI"',
+        'for MODE in JIT TCI; do',
+        'MODE_MANIFEST="$MODE_DIR/runtime-library-path.txt"',
+        'MODE_EXPORTS="$MODE_DIR/exports.txt"',
+        'test -s "$MODE_MANIFEST"',
+        'test -s "$MODE_EXPORTS"',
+        'test -s "$RUNTIME_DIR/$RUNTIME_REL"',
+        "grep -Eq ' _?qemu_init$' \"$MODE_EXPORTS\"",
+        "grep -Eq ' _?qemu_main_loop$' \"$MODE_EXPORTS\"",
+        "grep -Eq ' _?qemu_cleanup$' \"$MODE_EXPORTS\"",
+        "grep -Eq ' _?qemu_system_shutdown_request$' \"$MODE_EXPORTS\"",
+        "grep -Eq ' _?isteam_qemu_set_jit_callbacks$' \"$MODE_EXPORTS\"",
+        'cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"',
+        'test -s "$APP/$RUNTIME_REL"',
+        'No QEMU $MODE data files were embedded.',
     ]:
         if token not in ios_package:
             print(f"release workflow: runtime packaging guard missing: {token}", file=sys.stderr)
             failed = True
+    if 'test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt"' in ios_package:
+        print("release workflow: obsolete root-level QEMU manifest assumption remains", file=sys.stderr)
+        failed = True
     if "No verified QEMU runtime artifact is available" in ios_package:
         print("release workflow: must not silently publish IPA without QEMU", file=sys.stderr)
         failed = True
