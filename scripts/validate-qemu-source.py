@@ -1484,6 +1484,28 @@ for token in ("endbr64Memory", "malformedEndbr64Memory", "truncatedEndbr64Memory
         print(f"x86-64 interpreter tests: missing ENDBR64 prefix regression {token!r}", file=sys.stderr)
         failed = True
 
+translation_cache_source = Path("src/Performance/TranslationCache.swift").read_text(encoding="utf-8")
+aot_compiler_source = Path("src/Runtime/KenranButoAOTCompiler.swift").read_text(encoding="utf-8")
+for token in (
+    "private let rootDirectory: URL?",
+    "private func ensureCacheDirectory() throws -> URL",
+    "rootDirectory.resolvingSymlinksInPath()",
+    "pruneCache(keeping: file, in: root)",
+    "enum SHA256Hex",
+    "SHA256Hex.digest",
+    "if cpuFeatures.count < 2",
+):
+    if token not in translation_cache_source:
+        print(f"translation cache: missing hot-path contract {token!r}", file=sys.stderr)
+        failed = True
+if "String(format:" in translation_cache_source or "String(format:" in aot_compiler_source:
+    print("translation cache: formatted-string SHA-256 hex encoding regressed", file=sys.stderr)
+    failed = True
+if "SHA256Hex.digest(guestCode)" not in aot_compiler_source:
+    print("AOT compiler: missing shared SHA-256 hex encoder", file=sys.stderr)
+    failed = True
+
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")

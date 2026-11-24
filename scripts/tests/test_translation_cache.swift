@@ -18,6 +18,40 @@ struct TranslationCacheTests {
             guestABI: "linux-x86_64"
         )
         let translated = Data([0x1F, 0x20, 0x03, 0xD5, 0xC0, 0x03, 0x5F, 0xD6])
+        let sha256ABC = [UInt8]([
+            0xBA, 0x78, 0x16, 0xBF, 0x8F, 0x01, 0xCF, 0xEA,
+            0x41, 0x41, 0x40, 0xDE, 0x5D, 0xAE, 0x22, 0x23,
+            0xB0, 0x03, 0x61, 0xA3, 0x96, 0x17, 0x7A, 0x9C,
+            0xB4, 0x10, 0xFF, 0x61, 0xF2, 0x00, 0x15, 0xAD
+        ])
+        guard SHA256Hex.encode(sha256ABC) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" else {
+            fatalError("SHA-256 hexadecimal encoding changed")
+        }
+        let untouchedRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "kenran-cache-no-create-\(UUID().uuidString)", isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: untouchedRoot) }
+        let untouched = TranslationCache(directory: untouchedRoot)
+        guard try untouched.load(identity) == nil else {
+            fatalError("A missing cache directory unexpectedly returned an entry")
+        }
+        guard !FileManager.default.fileExists(atPath: untouchedRoot.path) else {
+            fatalError("A cache read created the directory")
+        }
+        _ = try untouched.path(for: identity)
+        _ = untouched.path(for: "read-only-path")
+        guard try untouched.statistics().entryCount == 0 else {
+            fatalError("Missing cache directory did not report empty statistics")
+        }
+        try untouched.removeAll()
+        guard !FileManager.default.fileExists(atPath: untouchedRoot.path) else {
+            fatalError("Read-only cache operations created the directory")
+        }
+        try untouched.store(translated, for: identity)
+        guard FileManager.default.fileExists(atPath: untouchedRoot.path) else {
+            fatalError("Cache store did not create the directory")
+        }
+
         try cache.store(translated, for: identity)
         guard try cache.load(identity) == translated else {
             fatalError("Stored translation did not round-trip")

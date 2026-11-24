@@ -1,6 +1,24 @@
 import Foundation
 import CryptoKit
 
+enum SHA256Hex {
+    private static let digits = Array("0123456789abcdef".utf8)
+
+    static func encode<S: Sequence>(_ digest: S) -> String where S.Element == UInt8 {
+        var encoded = [UInt8]()
+        encoded.reserveCapacity(digest.underestimatedCount * 2)
+        for byte in digest {
+            encoded.append(digits[Int(byte >> 4)])
+            encoded.append(digits[Int(byte & 0x0F)])
+        }
+        return String(decoding: encoded, as: UTF8.self)
+    }
+
+    static func digest(_ data: Data) -> String {
+        encode(SHA256.hash(data: data))
+    }
+}
+
 struct TranslationCacheIdentity: Codable, Equatable {
     let guestCodeSHA256: String
     let guestArchitecture: String
@@ -22,7 +40,11 @@ struct TranslationCacheIdentity: Codable, Equatable {
         self.translatorIdentifier = translatorIdentifier
         self.translatorVersion = translatorVersion
         self.hostArchitecture = hostArchitecture
-        self.cpuFeatures = Array(Set(cpuFeatures)).sorted()
+        if cpuFeatures.count < 2 {
+            self.cpuFeatures = cpuFeatures
+        } else {
+            self.cpuFeatures = Array(Set(cpuFeatures)).sorted()
+        }
         self.guestABI = guestABI
     }
 
@@ -86,15 +108,17 @@ final class TranslationCache {
 
     private let fm: FileManager
     private let lock = NSLock()
-    private let rootDirectoryOverride: URL?
+    private let rootDirectory: URL?
     private let maximumCodeBytes: Int
     private let maximumEntryBytes: Int
     private let maximumCacheBytes: UInt64
     private let maximumEntries: Int
 
     private init() {
-        fm = .default
-        rootDirectoryOverride = nil
+        let manager = FileManager.default
+        fm = manager
+        rootDirectory = manager.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("iSteam/TranslationCache", isDirectory: true)
         maximumCodeBytes = Self.defaultMaximumCodeBytes
         maximumEntryBytes = Self.defaultMaximumEntryBytes
         maximumCacheBytes = Self.defaultMaximumCacheBytes
@@ -107,7 +131,7 @@ final class TranslationCache {
          maximumEntries: Int = TranslationCache.defaultMaximumEntries,
          fileManager: FileManager = .default) {
         fm = fileManager
-        rootDirectoryOverride = directory.standardizedFileURL
+        rootDirectory = directory.standardizedFileURL
         self.maximumCodeBytes = min(max(1, maximumCodeBytes), 64 * 1024 * 1024)
         self.maximumEntryBytes = min(max(self.maximumCodeBytes, maximumEntryBytes), 80 * 1024 * 1024)
         self.maximumCacheBytes = max(1, maximumCacheBytes)
@@ -115,14 +139,14 @@ final class TranslationCache {
     }
 
     var directory: URL {
-        (try? cacheDirectory()) ?? fm.temporaryDirectory
+        rootDirectory ?? fm.temporaryDirectory
             .appendingPathComponent("iSteam-TranslationCache", isDirectory: true)
     }
 
     func prepare() {
         lock.lock()
         defer { lock.unlock() }
-        guard let url = try? cacheDirectory() else {
+        guard let url = try? ensureCacheDirectory() else {
             EmulationLog.shared.write("Translation cache unavailable")
             return
         }
@@ -130,9 +154,7 @@ final class TranslationCache {
     }
 
     func path(for key: String) -> URL {
-        let digest = SHA256.hash(data: Data(key.utf8))
-            .map { String(format: "%02x", $0) }
-            .joined()
+        let digest = SHA256Hex.digest(Data(key.utf8))
         return directory.appendingPathComponent(digest + ".translation", isDirectory: false)
     }
 
@@ -140,7 +162,8 @@ final class TranslationCache {
         guard identity.isValid else { throw CacheError.invalidIdentity }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        return try cacheDirectory().appendingPathComponent(
+        guard let rootDirectory else { throw CacheError.unavailableDirectory }
+        return rootDirectory.appendingPathComponent(
             Self.digest(try encoder.encode(identity)) + ".translation",
             isDirectory: false
         )
@@ -161,7 +184,8 @@ final class TranslationCache {
             return nil
         }
 
-        let root = try cacheDirectory().resolvingSymlinksInPath().standardizedFileURL
+        guard let rootDirectory else { throw CacheError.unavailableDirectory }
+        let root = rootDirectory.resolvingSymlinksInPath().standardizedFileURL
         let rootPrefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
         let resolved = file.resolvingSymlinksInPath().standardizedFileURL
         guard resolved.path.hasPrefix(rootPrefix) else {
@@ -198,6 +222,7 @@ final class TranslationCache {
         lock.lock()
         defer { lock.unlock() }
 
+        let root = try ensureCacheDirectory()
         let file = try path(for: identity)
         let entry = Entry(
             schemaVersion: Self.schemaVersion,
@@ -217,7 +242,7 @@ final class TranslationCache {
         }
         try encoded.write(to: file, options: .atomic)
         do {
-            try pruneCache(keeping: file)
+            try pruneCache(keeping: file, in: root)
         } catch {
             try? fm.removeItem(at: file)
             throw error
@@ -236,7 +261,10 @@ final class TranslationCache {
     func removeAll() throws {
         lock.lock()
         defer { lock.unlock() }
-        let root = try cacheDirectory()
+        guard let root = rootDirectory else { throw CacheError.unavailableDirectory }
+        guard fm.fileExists(atPath: root.path) else { return }
+        let rootValues = try root.resourceValues(forKeys: [.isDirectoryKey])
+        guard rootValues.isDirectory == true else { throw CacheError.unavailableDirectory }
         guard let files = fm.enumerator(
             at: root,
             includingPropertiesForKeys: [.isRegularFileKey],
@@ -250,7 +278,12 @@ final class TranslationCache {
     func statistics() throws -> Statistics {
         lock.lock()
         defer { lock.unlock() }
-        let root = try cacheDirectory()
+        guard let root = rootDirectory else { throw CacheError.unavailableDirectory }
+        guard fm.fileExists(atPath: root.path) else {
+            return Statistics(entryCount: 0, totalBytes: 0)
+        }
+        let rootValues = try root.resourceValues(forKeys: [.isDirectoryKey])
+        guard rootValues.isDirectory == true else { throw CacheError.unavailableDirectory }
         guard let files = fm.enumerator(
             at: root,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
@@ -271,28 +304,19 @@ final class TranslationCache {
         return Statistics(entryCount: count, totalBytes: total)
     }
 
-    private func cacheDirectory() throws -> URL {
-        let root: URL
-        if let rootDirectoryOverride {
-            root = rootDirectoryOverride
-        } else {
-            guard let base = fm.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-                throw CacheError.unavailableDirectory
-            }
-            root = base.appendingPathComponent("iSteam/TranslationCache", isDirectory: true)
-        }
+    private func ensureCacheDirectory() throws -> URL {
+        guard let rootDirectory else { throw CacheError.unavailableDirectory }
         do {
-            try fm.createDirectory(at: root, withIntermediateDirectories: true)
-            let values = try root.resourceValues(forKeys: [.isDirectoryKey])
+            try fm.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+            let values = try rootDirectory.resourceValues(forKeys: [.isDirectoryKey])
             guard values.isDirectory == true else { throw CacheError.unavailableDirectory }
-            return root
+            return rootDirectory
         } catch {
             throw CacheError.unavailableDirectory
         }
     }
 
-    private func pruneCache(keeping newestFile: URL) throws {
-        let root = try cacheDirectory()
+    private func pruneCache(keeping newestFile: URL, in root: URL) throws {
         guard let files = fm.enumerator(
             at: root,
             includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey],
@@ -328,6 +352,6 @@ final class TranslationCache {
     }
 
     private static func digest(_ data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        SHA256Hex.digest(data)
     }
 }
