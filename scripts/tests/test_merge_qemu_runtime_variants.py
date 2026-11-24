@@ -10,7 +10,7 @@ LIFECYCLE = ["qemu_init", "qemu_main_loop", "qemu_cleanup", "qemu_system_shutdow
 
 def make_package(root: Path, mode: str, *, revision: str = "utm-revision-1", callback: bool | None = None,
                  missing_symbol: str | None = None, qemu_bytes: str | None = None,
-                 shared_bytes: str = "shared dependency") -> Path:
+                 shared_bytes: str = "shared dependency", extra_symbols: list[str] | None = None) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     (root / "Frameworks" / "QEMU.framework").mkdir(parents=True)
     (root / "Frameworks" / "Shared.framework").mkdir(parents=True)
@@ -23,10 +23,11 @@ def make_package(root: Path, mode: str, *, revision: str = "utm-revision-1", cal
     (root / "QEMU" / "runtime-library-path.txt").write_text(
         "Frameworks/QEMU.framework/QEMU\n", encoding="utf-8"
     )
-    symbols = [symbol for symbol in LIFECYCLE if symbol != missing_symbol]
+    symbols = [f"00000000 T _{symbol}" for symbol in LIFECYCLE if symbol != missing_symbol]
     include_callback = mode == "jit" if callback is None else callback
     if include_callback:
-        symbols.append("isteam_qemu_set_jit_callbacks")
+        symbols.append("00000000 T _isteam_qemu_set_jit_callbacks")
+    symbols.extend(extra_symbols or [])
     (root / "exports.txt").write_text("\n".join(symbols) + "\n", encoding="utf-8")
     (root / "BUILD-INFO.txt").write_text(mode + " build\n", encoding="utf-8")
     (root / "QEMU" / "bios.bin").write_text(mode + " bios\n", encoding="utf-8")
@@ -94,6 +95,49 @@ class MergeQEMURuntimeVariantsTests(unittest.TestCase):
         result = self.run_merge(tci=tci)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unexpectedly contains", result.stderr)
+
+    def test_rejects_substring_only_lifecycle_exports(self):
+        for mode in ("jit", "tci"):
+            with self.subTest(mode=mode):
+                package = make_package(
+                    self.build / f"bad-{mode}",
+                    mode,
+                    missing_symbol="qemu_init",
+                    extra_symbols=["00000000 T _qemu_init_extra"],
+                )
+                result = self.run_merge(jit=package) if mode == "jit" else self.run_merge(tci=package)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("qemu_init", result.stderr)
+
+    def test_rejects_substring_only_jit_callback_export(self):
+        jit = make_package(
+            self.build / "bad-jit-callback",
+            "jit",
+            callback=False,
+            extra_symbols=["00000000 T _isteam_qemu_set_jit_callbacks_extra"],
+        )
+        result = self.run_merge(jit=jit)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing the StikJIT callback", result.stderr)
+
+    def test_allows_unrelated_tci_symbol_with_jit_callback_prefix(self):
+        tci = make_package(
+            self.build / "tci-callback-prefix",
+            "tci",
+            callback=False,
+            extra_symbols=["00000000 T _isteam_qemu_set_jit_callbacks_extra"],
+        )
+        result = self.run_merge(tci=tci)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_multiline_runtime_manifest(self):
+        (self.tci / "QEMU" / "runtime-library-path.txt").write_text(
+            "Frameworks/QEMU.framework/QEMU\nFrameworks/Other.framework/Other\n",
+            encoding="utf-8",
+        )
+        result = self.run_merge()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("exactly one line", result.stderr)
 
     def test_rejects_mismatched_utm_revisions(self):
         tci = make_package(self.build / "bad-tci", "tci", revision="other-revision")
