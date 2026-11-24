@@ -832,6 +832,13 @@ class SourceValidatorTests(unittest.TestCase):
         )[0]
         self.assertIn("opcodeOffset + 6 <= pageRemaining", helper)
 
+    def test_aot_architecture_docs_match_translator_version(self):
+        root = Path(__file__).resolve().parents[2]
+        docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
+        self.assertIn("Translator version 7 emits", docs)
+        self.assertIn("Translator version 7 enforces", docs)
+        self.assertIn("accumulator/register XCHG", docs)
+
     def test_kenran_buto_aot_is_opt_in_and_fails_closed(self):
         root = Path(__file__).resolve().parents[2]
         machine = (root / "src" / "Runtime" / "GuestMachine.swift").read_text(encoding="utf-8")
@@ -845,7 +852,7 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("func refreshAvailability() -> Bool", executor)
         self.assertIn("func refreshAvailability() -> Bool", interpreter)
         self.assertIn("aotExecutor?.refreshAvailability() == true", interpreter)
-        self.assertIn("static let translatorVersion = \"6\"", translator)
+        self.assertIn("static let translatorVersion = \"7\"", translator)
         self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", provider)
         invoke = provider.split("bool iSteamAOTExecutableMemoryInvoke", 1)[1].split("void iSteamAOTExecutableMemoryDestroy", 1)[0]
         self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", invoke)
