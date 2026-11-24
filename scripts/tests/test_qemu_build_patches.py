@@ -443,7 +443,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
 
         metrics_source = (root / ".github/workflows/Update stats.yml").read_text(encoding="utf-8")
         self.assertIn("group: update-repository-metrics-${{ github.ref }}", metrics_source)
-        self.assertIn("cancel-in-progress: true", metrics_source)
+        self.assertIn("cancel-in-progress: false", metrics_source)
         self.assertIn("  cancel-stale:", metrics_source)
         self.assertEqual(metrics_source.count("    needs: cancel-stale"), 2)
         self.assertIn("actions: write", metrics_source)
