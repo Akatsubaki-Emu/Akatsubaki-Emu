@@ -31,6 +31,15 @@ on:
       - "scripts/tests/test_kenran_buto_aot_*.swift"
       - "scripts/tests/test_aot_translator_allocation_hot_path.py"
       - "scripts/tests/test_source_validator.py"
+      - "scripts/tests/test_aot_executable_arena.c"
+      - "iSteam/AOTExecutableArena.c"
+      - "scripts/tests/test_native_guest_machine_smoke.swift"
+      - "src/Runtime/ExecutionBackendRouter.swift"
+      - "scripts/tests/test_execution_backend_router.swift"
+      - ".github/workflows/build-core-only-ios.yml"
+      - ".github/workflows/build-qemu-runtime.yml"
+      - ".github/workflows/validate-kenran-buto-aot.yml"
+      - "docs/FEXCORE_IOS_PORT_AUDIT.md"
   pull_request:
     paths:
       - "src/Runtime/X86_64AOTTranslator.swift"
@@ -58,7 +67,16 @@ on:
       - "docs/KENRAN_BUTO_AOT_ABI.md"
       - "src/Performance/TranslationCache.swift"
       - "scripts/tests/test_kenran_buto_aot_*.swift"
+      - "scripts/tests/test_source_validator.py"
+      - "scripts/tests/test_aot_executable_arena.c"
+      - "iSteam/AOTExecutableArena.c"
+      - "scripts/tests/test_native_guest_machine_smoke.swift"
+      - "src/Runtime/ExecutionBackendRouter.swift"
+      - "scripts/tests/test_execution_backend_router.swift"
+      - ".github/workflows/build-core-only-ios.yml"
+      - ".github/workflows/build-qemu-runtime.yml"
       - ".github/workflows/validate-kenran-buto-aot.yml"
+      - "docs/FEXCORE_IOS_PORT_AUDIT.md"
   workflow_dispatch:
 
 concurrency:
@@ -74,6 +92,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - name: Validate GitHub Actions workflow YAML
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; Dir.glob(".github/workflows/*.{yml,yaml}").sort.each { |path| YAML.load_file(path, aliases: true); puts "Validated #{path}" }'
       - name: Verify fixed-buffer translator allocation contract
         shell: bash
         run: |
@@ -89,6 +112,23 @@ jobs:
             scripts/tests/test_vm_configuration_validation.swift \
             -o "$RUNNER_TEMP/test-vm-configuration-validation"
           "$RUNNER_TEMP/test-vm-configuration-validation"
+      - name: Run TXM executable arena allocator tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang -std=c11 -Wall -Wextra -Werror -pthread -I iSteam \
+            iSteam/AOTExecutableArena.c scripts/tests/test_aot_executable_arena.c \
+            -o "$RUNNER_TEMP/test-aot-executable-arena"
+          "$RUNNER_TEMP/test-aot-executable-arena"
+      - name: Validate backend routing and anti-cheat policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/ExecutionBackendRouter.swift \
+            scripts/tests/test_execution_backend_router.swift \
+            -o "$RUNNER_TEMP/test-execution-backend-router"
+          "$RUNNER_TEMP/test-execution-backend-router"
       - name: Run repository source-contract tests
         shell: bash
         run: |

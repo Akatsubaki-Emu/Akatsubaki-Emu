@@ -954,5 +954,21 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("test_partial_and_wrong_size_frees_are_rejected", tests)
         self.assertIn("test_randomized_allocation_and_free_stress", tests)
 
+    def test_aot_workflow_validates_yaml_and_covers_runtime_regressions(self):
+        workflow = (ROOT / ".github" / "workflows" / "validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
+        required = (
+            "Validate GitHub Actions workflow YAML",
+            'YAML.load_file(path, aliases: true)',
+            "scripts/tests/test_aot_executable_arena.c",
+            "iSteam/AOTExecutableArena.c",
+            "scripts/tests/test_native_guest_machine_smoke.swift",
+            "scripts/tests/test_execution_backend_router.swift",
+            ".github/workflows/build-qemu-runtime.yml",
+            ".github/workflows/build-core-only-ios.yml",
+        )
+        for token in required:
+            with self.subTest(token=token):
+                self.assertIn(token, workflow)
+
 if __name__ == "__main__":
     unittest.main()
