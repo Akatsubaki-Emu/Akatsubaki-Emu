@@ -282,8 +282,8 @@ jobs:
               grep -Eq "[[:space:]]_?${symbol}$" "$exports" || { echo "$mode runtime is missing $symbol." >&2; exit 1; }
             done
             if [ "$mode" = "JIT" ]; then
-              grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks || { echo "JIT callback export is missing." >&2; exit 1; }
-            elif grep -Eq ' _?isteam_qemu_set_jit_callbacks$' "$exports"; then
+              grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks$' "$exports" || { echo "JIT callback export is missing." >&2; exit 1; }
+            elif grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks$' "$exports"; then
               echo "TCI runtime must not export the JIT callback." >&2
               exit 1
             fi
