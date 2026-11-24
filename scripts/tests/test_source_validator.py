@@ -98,6 +98,26 @@ class SourceValidatorTests(unittest.TestCase):
             with self.subTest(symbol=symbol):
                 self.assertIn(f"grep -Eq ' _?{symbol}$'", ios_package)
 
+    def test_release_ipa_validates_both_mode_specific_qemu_manifests(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        ios_package = workflow.split("- name: Build and package iOS IPA", 1)[1].split(
+            "- name: Build and package tvOS IPA", 1
+        )[0]
+        for token in (
+            'for MODE in JIT TCI; do',
+            'MODE_MANIFEST="$MODE_DIR/runtime-library-path.txt"',
+            'MODE_EXPORTS="$MODE_DIR/exports.txt"',
+            'test -s "$RUNTIME_DIR/$RUNTIME_REL"',
+            'cp -R "$RUNTIME_DIR/QEMU/." "$APP/QEMU/"',
+            'test -s "$APP/$RUNTIME_REL"',
+            'elif grep -Eq \' _?isteam_qemu_set_jit_callbacks$\' "$MODE_EXPORTS"',
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, ios_package)
+        self.assertNotIn('test -s "$RUNTIME_DIR/QEMU/runtime-library-path.txt"', ios_package)
+
+
     def test_qemu_packager_has_one_complete_candidate_scan(self):
         root = Path(__file__).resolve().parents[2]
         package = (root / "scripts" / "package-utm-qemu-runtime.sh").read_text(encoding="utf-8")
