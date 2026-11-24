@@ -500,7 +500,31 @@ struct StaticELFExecutionTests {
 
         let loaded = try snapshot.read()
         precondition(loaded == original, "ELF bytes must come from the descriptor that was size-checked")
-        print("Descriptor-bound ELF snapshot path-replacement regression passed")
+
+        let growthURL = directory.appendingPathComponent("growing.elf")
+        try original.write(to: growthURL)
+        let growthSnapshot = try ELF64Loader.OpenedFileSnapshot(url: growthURL)
+        let growthWriter = try FileHandle(forWritingTo: growthURL)
+        try growthWriter.seekToEnd()
+        try growthWriter.write(contentsOf: Data([0xAA]))
+        try growthWriter.close()
+        do {
+            _ = try growthSnapshot.read()
+            preconditionFailure("ELF snapshot must reject file growth after its size check")
+        } catch ELF64Loader.LoadError.unreadable {}
+
+        let truncationURL = directory.appendingPathComponent("truncated.elf")
+        try original.write(to: truncationURL)
+        let truncationSnapshot = try ELF64Loader.OpenedFileSnapshot(url: truncationURL)
+        let truncationWriter = try FileHandle(forWritingTo: truncationURL)
+        try truncationWriter.truncate(atOffset: 2)
+        try truncationWriter.close()
+        do {
+            _ = try truncationSnapshot.read()
+            preconditionFailure("ELF snapshot must reject file truncation after its size check")
+        } catch ELF64Loader.LoadError.unreadable {}
+
+        print("Descriptor-bound ELF snapshot path-replacement, growth and truncation regressions passed")
     }
 
     static func main() throws {
