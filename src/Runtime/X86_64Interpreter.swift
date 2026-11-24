@@ -149,6 +149,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                               result.guestBytesConsumed > 0 && result.instructionCount > 0 else {
                             return .backendUnavailable("Kenran Butō AOT side exit did not preserve exact guest RIP.")
                         }
+                        if stopRequested { return .interrupted }
                         continue
                     }
                 }
