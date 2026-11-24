@@ -156,6 +156,8 @@ case "$candidate" in
     ;;
 esac
 
+bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" "$MODE"
+
 # The app resolves the runtime through this manifest rather than assuming
 # that every UTM revision names its loadable library the same way.
 printf '%s\n' "$runtime_relative" > "$MODE_DIR/runtime-library-path.txt"

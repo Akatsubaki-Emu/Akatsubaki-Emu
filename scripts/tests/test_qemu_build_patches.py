@@ -226,10 +226,12 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
             result = subprocess.run(["bash", "-n", str(root / relative)], text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, f"{relative}: {result.stderr}")
 
+        jit_packager = (root / "scripts/package-utm-qemu-runtime.sh").read_text(encoding="utf-8")
+        self.assertIn('bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" "$MODE"', jit_packager)
         tci_packager = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
         self.assertIn('[ "$has_jit_callbacks" = false ]', tci_packager)
         self.assertIn("QEMU-TCI.framework", tci_packager)
-        self.assertIn('scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci_packager)
+        self.assertIn('bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" tci', tci_packager)
 
     def test_qemu_packagers_reject_output_paths_that_overlap_the_archive(self):
         root = Path(__file__).resolve().parents[2]

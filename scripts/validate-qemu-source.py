@@ -245,6 +245,7 @@ required = {
         "#define mach_vm_deallocate vm_deallocate",
         "test_release_publication_is_serialized_and_skips_stale_main_builds",
         "test_qemu_xcode_minimum_accepts_later_major_versions",
+        "test_qemu_runtime_packaging_scripts_have_valid_shell_syntax",
     ],
     "scripts/tests/test_jit_coordinator.py": [
         "test_stikdebug_availability_is_limited_to_physical_ios_devices",
@@ -673,13 +674,14 @@ required = {
         '[ "$source_dir" = "$data_dir" ] && continue',
         'target_dir="$OUT/QEMU/firmware/$relative_dir"',
         'cp "$firmware_file" "$target_dir/"',
+        'bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" "$MODE"',
     ],
     "scripts/package-utm-qemu-tci-runtime.sh": [
         'APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"',
         "UTM SE.app missing from archive",
         "has_jit_callbacks=false",
         "QEMU-TCI.framework",
-        'bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci',
+        'bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" tci',
         "No UTM QEMU TCI dynamic library with lifecycle/shutdown exports and without the StikJIT callback export was found.",
         "runtime-library-path.txt",
     ],
