@@ -62,3 +62,15 @@
 7. Add Wine/Proton, DirectX/Vulkan/Metal and Windows PE execution only after the underlying user-mode engine and syscall/loader layers are operational.
 
 **Verification rule:** source code, a build workflow, a loadable dylib, a host smoke test and a simulator run are separate evidence levels. The backend registry must remain fail-closed until a concrete iOS artifact executes a known guest correctly on a physical iPad.
+
+## Repository synchronization blocker
+
+The current repository configuration and the active engineering write-target instruction disagree:
+
+- GitLab project metadata identifies this project as imported from GitHub, with `import_type=github` and GitHub's repository URL as `import_url`.
+- The repository's `docs/GIT_SYNC.md` says GitHub is canonical and GitLab is a downstream mirror. The existing `blank.yml` and `reconcile-gitlab-main.yml` workflows sync GitHub to GitLab; they do not sync GitLab to GitHub. The Git sync documentation says GitLab CI is retired.
+- The active project instructions for this engineering work designate GitLab main as the write target. I have therefore committed to GitLab main and have not pushed to GitHub or changed mirror direction.
+- At this audit, GitHub main is `42a0687b76a9f9a125b581ffa829d6766f7a42f8` and GitLab main is `0e3995a3a749e137e34820203e13488727869a00`. GitLab's compare API confirms the latter is a direct child of the former, so the current delta is a fast-forward candidate and requires no force push.
+- GitHub Actions run on GitHub, not on the GitLab-only commits. The AOT workflow still shows only the old run #213, the core-only IPA workflow has zero runs, and the QEMU workflow's latest visible run #34 is from an older commit. The GitLab pipeline also failed before runner assignment with `ci_quota_exceeded`.
+
+**Required owner decision:** explicitly authorize a one-time fast-forward synchronization of GitLab main to GitHub main for this repository, or change the active write-target policy to match the repository's GitHub-canonical workflow. Until that decision is made, do not push, force-push, reverse the mirror, or alter the existing sync workflows. This is the current blocker preventing the new iOS SDK compile and IPA workflows from seeing the latest fixes.
