@@ -3,26 +3,41 @@ from pathlib import Path
 
 
 class LinuxMappingOrderTests(unittest.TestCase):
-    def test_mapped_ranges_stay_sorted_without_per_call_sort_allocations(self):
+    def test_mapped_ranges_stay_sorted_and_updates_are_transactional(self):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
-        self.assertIn("private func insertMappedRange(_ newRange: Range<UInt64>)", source)
+
+        self.assertIn("private func mappedRangesAfterMapping(", source)
+        self.assertIn("private func mappedRangesAfterRemoving(", source)
         self.assertIn("private func firstMappedRangeEnding(after address: UInt64) -> Int", source)
-        self.assertIn("insertMappedRange(address..<end)", source)
+        self.assertIn("result.insert(newRange, at: lower)", source)
+        self.assertIn("result.append(range.lowerBound..<newRange.lowerBound)", source)
+        self.assertIn("result.append(newRange.upperBound..<range.upperBound)", source)
+        self.assertIn("result.append(range.lowerBound..<removed.lowerBound)", source)
+        self.assertIn("result.append(removed.upperBound..<range.upperBound)", source)
         self.assertIn("firstMappedRangeEnding(after: candidate)", source)
-        self.assertIn("firstMappedRangeEnding(after: cursor)", source)
-        self.assertIn("let firstPotential = firstMappedRangeEnding(after: address)", source)
+        self.assertIn("firstMappedRangeEnding(after: initialProgramBreak)", source)
         self.assertNotIn("mappedRanges.sorted", source)
         self.assertNotIn("mappedRanges.firstIndex(where:", source)
-        self.assertIn("mappedRanges.first?.lowerBound ?? mmapCursor", source)
-        mapping = source.split("private func mapAnonymous", 1)[1].split("private func insertMappedRange", 1)[0]
-        self.assertIn("var overlappingRanges: [Range<UInt64>] = []", mapping)
-        self.assertIn("while index < mappedRanges.count && mappedRanges[index].lowerBound < end", mapping)
-        self.assertIn("let overlapStart = max(address, overlap.lowerBound)", mapping)
-        self.assertIn("let overlapEnd = min(end, overlap.upperBound)", mapping)
-        self.assertIn("if zeroCursor < overlapStart", mapping)
-        self.assertIn("if zeroCursor < end", mapping)
-        self.assertNotIn("rangeWasCleared", mapping)
+
+        mapping = source.split("private func mapAnonymous", 1)[1].split(
+            "private func mappedRangesAfterMapping", 1
+        )[0]
+        self.assertIn("let nextMappedRanges = mappedRangesAfterMapping(", mapping)
+        self.assertIn("memory.mapTransaction(", mapping)
+        self.assertLess(mapping.index("let nextMappedRanges"), mapping.index("memory.mapTransaction("))
+        self.assertIn("mappedRanges = nextMappedRanges", mapping)
+
+        unmapping = source.split("private func unmap", 1)[1].split(
+            "private func protect", 1
+        )[0]
+        self.assertIn("let nextMappedRanges = mappedRangesAfterRemoving(address..<end)", unmapping)
+        self.assertIn("memory.unmap(offset: address, length: size)", unmapping)
+        self.assertLess(
+            unmapping.index("let nextMappedRanges"),
+            unmapping.index("memory.unmap(offset: address, length: size)"),
+        )
+        self.assertIn("mappedRanges = nextMappedRanges", unmapping)
 
 
 if __name__ == "__main__":
