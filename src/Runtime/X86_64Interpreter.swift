@@ -4,6 +4,7 @@ enum KenranButoAOTExitReason: UInt32 { case none=0, unsupportedInstruction=1, tr
 struct KenranButoAOTExecutionResult { let guestBytesConsumed:Int; let instructionCount:Int; let exitReason:KenranButoAOTExitReason; let exitRip:UInt64; let exitAddress:UInt64 }
 protocol KenranButoAOTExecuting: AnyObject {
     var isAvailable: Bool { get }
+    func refreshAvailability() -> Bool
     func execute(guestCode:Data,registers:inout [UInt64],rip:UInt64,rflags:UInt64,fsBase:UInt64,gsBase:UInt64,memory:GuestMemory,maximumInstructions:Int)->KenranButoAOTExecutionResult?
     func invalidateAll()
 }
@@ -93,8 +94,9 @@ final class X86_64Interpreter: GuestCPUBackend {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         if halted { return .halted }
         var executed: UInt64 = 0
-        // The native C invoke boundary rechecks live JIT readiness for every block.
-        let aotIsAvailable = aotExecutor?.isAvailable == true
+        // Refresh Swift-side readiness and evict cached executable blocks when JIT is unavailable.
+        // The native C invoke boundary independently rechecks readiness for every block.
+        let aotIsAvailable = aotExecutor?.refreshAvailability() == true
         var aotDeclined = false
         let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff
         while executed < maxInstructions {

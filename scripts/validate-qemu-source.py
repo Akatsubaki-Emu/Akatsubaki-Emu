@@ -1611,6 +1611,7 @@ for token in ("aotExecutor.execute(", "rip = result.exitRip", "aotExecutor?.inva
               "canStartAOTBlock()", "aotPageRemaining",
               "let budget = Int(min(remaining, 16))",
               "let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff",
+              "aotExecutor?.refreshAvailability() == true",
               "if stopRequested { return .interrupted }"):
     if token not in aot_interpreter:
         print(f"AOT interpreter integration missing {token!r}", file=sys.stderr)
@@ -1664,7 +1665,10 @@ for token in ("#if KENRAN_BUTO_AOT_TESTS", "iSteamAOTGuestMemoryRead",
               "0xFFFF_FFFF_8000_0000",
               "cachedBlockCount", "cachedExecutableBytes",
               "unavailableAOT.executeCalls == 0",
-              "readyAOT.executeCalls == 0"):
+              "unavailableAOT.refreshCalls == 1",
+              "unavailableAOT.invalidationCalls == invalidationsBeforeRun + 1",
+              "readyAOT.executeCalls == 0",
+              "readyAOT.refreshCalls == 1"):
     if token not in aot_tests:
         print(f"AOT runtime regression missing {token!r}", file=sys.stderr)
         failed = True

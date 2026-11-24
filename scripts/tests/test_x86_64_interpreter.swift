@@ -262,8 +262,16 @@ final class GuestMemory {
 final class TestAOTExecutor: KenranButoAOTExecuting {
     let isAvailable: Bool
     private(set) var executeCalls = 0
+    private(set) var refreshCalls = 0
+    private(set) var invalidationCalls = 0
 
     init(isAvailable: Bool) { self.isAvailable = isAvailable }
+
+    func refreshAvailability() -> Bool {
+        refreshCalls += 1
+        if !isAvailable { invalidateAll() }
+        return isAvailable
+    }
 
     func execute(guestCode: Data, registers: inout [UInt64], rip: UInt64,
                  rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
@@ -272,7 +280,7 @@ final class TestAOTExecutor: KenranButoAOTExecuting {
         return nil
     }
 
-    func invalidateAll() {}
+    func invalidateAll() { invalidationCalls += 1 }
 }
 
 final class EmulationLog {
@@ -291,9 +299,12 @@ struct InterpreterTests {
         let unavailableAOT = TestAOTExecutor(isAvailable: false)
         let noJITInterpreter = X86_64Interpreter(memory: noJITMemory, aotExecutor: unavailableAOT)
         try noJITInterpreter.reset(entryPoint: 0)
+        let invalidationsBeforeRun = unavailableAOT.invalidationCalls
         let noJITExit = try noJITInterpreter.run(maxInstructions: 4)
         precondition(noJITExit == .halted)
         precondition(unavailableAOT.executeCalls == 0)
+        precondition(unavailableAOT.refreshCalls == 1)
+        precondition(unavailableAOT.invalidationCalls == invalidationsBeforeRun + 1)
         precondition(noJITMemory.readPrefixCalls == 2)
 
         // Unsupported starts are rejected before asking the AOT executor to compile.
@@ -305,6 +316,7 @@ struct InterpreterTests {
         let unsupportedStartExit = try unsupportedStart.run(maxInstructions: 1)
         precondition(unsupportedStartExit == .unsupportedInstruction(address: 0))
         precondition(readyAOT.executeCalls == 0)
+        precondition(readyAOT.refreshCalls == 1)
         precondition(unsupportedStartMemory.readPrefixCalls == 1)
 
         // A rejected native block must not rebuild a 4 KiB page window at each later instruction.
