@@ -3,6 +3,7 @@
 > DISCLAIMER
 >
 > **please read this before using this application**
+> 
 > **Important Notice Regarding Akatsubaki Emu’s current development stage**
 >
 > Akatsubaki Emu is still in development and is highly unstable, which means **you may lose your data or get banned**.
