@@ -74,3 +74,10 @@ This avoids asking StikDebug to prepare a new executable region for every transl
 **TXM session policy:** the current readiness contract deliberately keeps StikDebug attached; `iSteamJITDetach` remains a no-op. The official StikJIT guide recommends preparing initial regions and detaching afterward. The arena reduces region preparation to one request, but post-detach readiness and executable-mapping lifetime have not been verified on a physical iPad. Do not claim the TXM JIT path is device-verified until that test is recorded. If StikDebug 3.2.2 or a fresh RPPairing file is required by the current iOS 27.2 pairing flow, update/re-pair the external helper before testing; older StikDebug 3.1.x sessions are not accepted as proof.
 
 The standard non-TXM split-WX allocator remains unchanged. If the TXM arena cannot be prepared or becomes exhausted, AOT allocation fails closed and the x86-64 interpreter remains the fallback.
+
+
+## StikDebug pairing recovery for iOS 26/27
+
+Use the current [StikDebug 3.2.2 release](https://github.com/StikDebug/StikDebug/releases/tag/3.2.2) or newer for the TXM/JIT26 integration. Older 3.1.x installations are not accepted as proof of the current TXM path. Generate a fresh `RPPairing` file and import it into StikDebug after updating.
+
+If LocalDevVPN/StikDebug pairing still fails with a missing `public_key` field or TLS tunnel timeout, [StikDebug issue #471](https://github.com/StikDebug/StikDebug/issues/471) records a user-reported recovery: delete StikDebug completely (do not offload it), restart the device, reinstall StikDebug, create a new pairing file, and import that file. This is a reported workaround, not a guarantee. The interpreter smoke guest does not require JIT; this setup is needed to validate AOT acceleration.

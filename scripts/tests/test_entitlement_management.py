@@ -164,5 +164,14 @@ class EntitlementManagementSourceTests(unittest.TestCase):
         self.assertIn("formatter.timeZone = .gmt", self.anisette)
         self.assertIn('formattedJSON["timeZone"] = TimeZone.current.abbreviation()', self.anisette)
 
+    def test_sidestore_free_team_memory_signing_caveat_and_runtime_fallback_are_documented(self):
+        docs = (self.root / "docs" / "IOS_ENTITLEMENTS.md").read_text(encoding="utf-8")
+        vm = (self.root / "src" / "Core" / "VMConfiguration.swift").read_text(encoding="utf-8")
+        self.assertIn("SideStore issue #1616", docs)
+        self.assertIn("SideSign PR #4", docs)
+        self.assertIn("not a launch blocker", docs)
+        self.assertIn("os_proc_available_memory()", vm)
+        self.assertIn("linuxMemoryBudgetMB", vm)
+
 if __name__ == "__main__":
     unittest.main()

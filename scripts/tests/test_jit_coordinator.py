@@ -139,5 +139,14 @@ class JITCoordinatorSourceTests(unittest.TestCase):
         self.assertIn("presentationController = controller", rejected)
         self.assertNotIn("onJITFailure = onFailure", rejected)
 
+    def test_ios_26_27_stikdebug_pairing_recovery_is_documented(self):
+        root = Path(__file__).resolve().parents[2]
+        docs = (root / "docs" / "JIT_ACTIVATION.md").read_text(encoding="utf-8")
+        self.assertIn("StikDebug 3.2.2", docs)
+        self.assertIn("RPPairing", docs)
+        self.assertIn("issue #471", docs)
+        self.assertIn("delete StikDebug completely", docs)
+        self.assertIn("interpreter smoke guest does not require JIT", docs)
+
 if __name__ == "__main__":
     unittest.main()
