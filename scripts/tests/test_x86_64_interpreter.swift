@@ -1072,6 +1072,21 @@ struct InterpreterTests {
         precondition(executeBoundaryMemory.readExecuteByteCalls == 1)
         precondition(executeBoundaryMemory.readByteCalls == 0)
 
+        let executeBoundary64Memory = GuestMemory(size: 8192)
+        precondition(executeBoundary64Memory.write(Data([
+            0x48, 0xB8, 0x11, 0x22, 0x33, 0x44
+        ]), offset: 4090))
+        precondition(executeBoundary64Memory.write(Data([
+            0x55, 0x66, 0x77, 0x88
+        ]), offset: 4096))
+        precondition(executeBoundary64Memory.setExecutable(false, offset: 4096, length: 4096))
+        let executeBoundary64Interpreter = X86_64Interpreter(memory: executeBoundary64Memory)
+        try executeBoundary64Interpreter.reset(entryPoint: 4090)
+        let executeBoundary64Exit = try executeBoundary64Interpreter.run(maxInstructions: 1)
+        precondition(executeBoundary64Exit == .memoryFault(address: 4096))
+        precondition(executeBoundary64Memory.readExecuteByteCalls == 1)
+        precondition(executeBoundary64Memory.readByteCalls == 0)
+
         let selfModifyingMemory = GuestMemory(size: 64)
         precondition(selfModifyingMemory.write(Data([
             0xB8, 0xF4, 0x00, 0x00, 0x00,

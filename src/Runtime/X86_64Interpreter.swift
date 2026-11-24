@@ -1166,9 +1166,11 @@ final class X86_64Interpreter: GuestCPUBackend {
             rip &+= 4
             return value
         }
-        guard let value = readExecutableInteger(at: rip, byteCount: 4).map(UInt32.init(truncatingIfNeeded:)) else { return nil }
-        instructionWindowCursor += 4
-        rip &+= 4
+        var value: UInt32 = 0
+        for index in 0..<4 {
+            guard let byte = fetchByte() else { return nil }
+            value |= UInt32(byte) << (index * 8)
+        }
         return value
     }
 
@@ -1192,9 +1194,11 @@ final class X86_64Interpreter: GuestCPUBackend {
             rip &+= 8
             return value
         }
-        guard let value = readExecutableInteger(at: rip, byteCount: 8) else { return nil }
-        instructionWindowCursor += 8
-        rip &+= 8
+        var value: UInt64 = 0
+        for index in 0..<8 {
+            guard let byte = fetchByte() else { return nil }
+            value |= UInt64(byte) << (index * 8)
+        }
         return value
     }
 
