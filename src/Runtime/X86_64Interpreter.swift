@@ -1015,24 +1015,34 @@ final class X86_64Interpreter: GuestCPUBackend {
     /// Probe the architectural instruction window before reading a full AOT block.
     /// Only flag-neutral instructions implemented by the current translator are eligible.
     private func canStartAOTBlock() -> Bool {
+        // The interpreter may fetch across executable pages, but an AOT block
+        // is deliberately bounded to the page containing its entry RIP.
+        let pageRemaining = 4096 - Int(rip & 0xFFF)
         var cursor = 0
         var rex: UInt8 = 0
-        while cursor < instructionWindowLength,
+        while cursor < min(instructionWindowLength, pageRemaining),
               (0x40...0x4F).contains(instructionWindow[cursor]) {
             rex = instructionWindow[cursor]
             cursor += 1
             if cursor >= 15 { return false }
         }
-        guard cursor < instructionWindowLength else { return false }
+        guard cursor < instructionWindowLength, cursor < pageRemaining else { return false }
         switch instructionWindow[cursor] {
         case 0x90...0x97:
             return true
         case 0x87:
+            guard cursor + 2 <= instructionWindowLength,
+                  cursor + 2 <= pageRemaining else { return false }
             return canTranslateRegisterXCHGAtCurrentWindow(opcodeOffset: cursor)
         case 0xB8...0xBF:
-            return true
+            let immediateBytes = rex & 0x08 != 0 ? 8 : 4
+            let instructionEnd = cursor + 1 + immediateBytes
+            return instructionEnd <= 15
+                && instructionEnd <= instructionWindowLength
+                && instructionEnd <= pageRemaining
         case 0x89, 0x8B:
-            guard cursor + 1 < instructionWindowLength else { return false }
+            guard cursor + 2 <= instructionWindowLength,
+                  cursor + 2 <= pageRemaining else { return false }
             return instructionWindow[cursor + 1] >> 6 == 0b11
         case 0xC7:
             return canTranslateRegisterImmediateMOVAtCurrentWindow(opcodeOffset: cursor, rex: rex)
@@ -1068,6 +1078,7 @@ final class X86_64Interpreter: GuestCPUBackend {
     /// instruction does not disable later AOT blocks for the rest of the run.
     private func canTranslateLEAAtCurrentWindow(opcodeOffset: Int, rex: UInt8) -> Bool {
         let modRMOffset = opcodeOffset + 1
+        let pageRemaining = 4096 - Int(rip & 0xFFF)
         guard modRMOffset < instructionWindowLength else { return false }
         let modRM = instructionWindow[modRMOffset]
         let mode = modRM >> 6
@@ -1096,7 +1107,8 @@ final class X86_64Interpreter: GuestCPUBackend {
         let displacementBytes = mode == 1 ? 1 : ((mode == 2 || (mode == 0 && !hasBase)) ? 4 : 0)
         let displacementOffset = modRMOffset + 1 + (hasSIB ? 1 : 0)
         let instructionEnd = displacementOffset + displacementBytes
-        guard instructionEnd <= 15, instructionEnd <= instructionWindowLength else { return false }
+        guard instructionEnd <= 15, instructionEnd <= instructionWindowLength,
+              instructionEnd <= pageRemaining else { return false }
 
         if (hasBase || hasIndex) && displacementBytes > 0 {
             let displacement: Int64

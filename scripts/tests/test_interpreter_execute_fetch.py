@@ -18,5 +18,22 @@ class InterpreterExecuteFetchTests(unittest.TestCase):
         self.assertIn("memory.readPrefix(offset: address, into: &instructionWindow)", SOURCE)
 
 
+    def test_aot_eligibility_never_crosses_guest_page_boundary(self):
+        eligibility = SOURCE.split("private func canStartAOTBlock() -> Bool {", 1)[1].split(
+            "private func canTranslateRegisterXCHGAtCurrentWindow", 1
+        )[0]
+        self.assertIn("let pageRemaining = 4096 - Int(rip & 0xFFF)", eligibility)
+        self.assertIn("cursor < min(instructionWindowLength, pageRemaining)", eligibility)
+        self.assertIn("cursor + 2 <= pageRemaining", eligibility)
+        self.assertIn("let immediateBytes = rex & 0x08 != 0 ? 8 : 4", eligibility)
+        self.assertIn("instructionEnd <= pageRemaining", eligibility)
+
+        lea = SOURCE.split("private func canTranslateLEAAtCurrentWindow", 1)[1].split(
+            "private func prepareInstructionWindow", 1
+        )[0]
+        self.assertIn("instructionEnd <= pageRemaining", lea)
+
+
+
 if __name__ == "__main__":
     unittest.main()
