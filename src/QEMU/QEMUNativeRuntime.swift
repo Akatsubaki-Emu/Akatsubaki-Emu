@@ -30,30 +30,20 @@ final class QEMUNativeRuntime {
         var effectiveConfiguration = configuration
         var requiresJIT = requestedJIT
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
-        if requiresJIT && !JITCoordinator.shared.isQEMUJITReady {
-            requiresJIT = false
-            EmulationLog.shared.write("QEMU JIT is unavailable; falling back to the TCI no-JIT runtime.")
+        if requiresJIT {
+            guard JITCoordinator.shared.isQEMUJITReady else {
+                throw RuntimeError.runtimeUnavailable(
+                    "The selected QEMU JIT runtime requires physical iOS 26+, the get-task-allow entitlement, a supported StikDebug protocol and a ready JIT session."
+                )
+            }
+        } else {
+            throw RuntimeError.runtimeUnavailable("The no-JIT TCI runtime is not packaged yet.")
         }
         #endif
 
-        var runtimeStatus = QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)
-        if case .unavailable(let jitReason) = runtimeStatus, requiresJIT {
-            let tciStatus = QEMURuntimeStatus.inspect(requiresJIT: false)
-            switch tciStatus {
-            case .ready:
-                requiresJIT = false
-                runtimeStatus = tciStatus
-                EmulationLog.shared.write("QEMU JIT runtime failed preflight; falling back to TCI: \\(jitReason)")
-            case .unavailable(let tciReason):
-                throw RuntimeError.runtimeUnavailable(
-                    "QEMU JIT runtime unavailable: \\(jitReason) TCI runtime unavailable: \\(tciReason)"
-                )
-            }
-        }
-
         let libraryURL: URL
         let dataDirectory: URL
-        switch runtimeStatus {
+        switch QEMURuntimeStatus.inspect(requiresJIT: requiresJIT) {
         case .unavailable(let reason):
             throw RuntimeError.runtimeUnavailable(reason)
         case .ready(let library, let data):
