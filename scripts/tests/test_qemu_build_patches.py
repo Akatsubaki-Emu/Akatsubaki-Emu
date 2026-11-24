@@ -495,13 +495,20 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("spirv-llvm-translator", source)
 
     def test_qemu_workflow_uses_supported_xcode_for_objc_class_selector_stubs(self):
-        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
-        source = workflow.read_text(encoding="utf-8")
-        self.assertIn("Verify Objective-C class-selector stub compatibility", source)
-        self.assertIn("runs-on: xcode-27", source)
-        self.assertIn('XCODE_DEVELOPER_DIR="$(xcode-select -p)"', source)
-        self.assertIn('case "$XCODE_VERSION" in', source)
-        self.assertIn("27.*)", source)
+        root = Path(__file__).resolve().parents[2]
+        for relative in (
+            ".github/workflows/build-qemu-runtime.yml",
+            ".github/workflows/release.yml",
+        ):
+            source = (root / relative).read_text(encoding="utf-8")
+            self.assertIn("runs-on: xcode-27", source)
+            self.assertIn('XCODE_DEVELOPER_DIR="$(xcode-select -p)"', source)
+            self.assertIn('awk -v version="$XCODE_VERSION"', source)
+            self.assertIn('split(version, p, "[.]")', source)
+            self.assertIn("major > 27 || (major == 27 && minor >= 1)", source)
+            self.assertNotIn('case "$XCODE_VERSION" in', source)
+            self.assertIn("Expected Xcode 27.1 or later", source)
+        source = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
         self.assertNotIn("Xcode_27.1.app", source)
         self.assertNotIn('if [ "$XCODE_VERSION" != "27.1" ]; then', source)
         self.assertIn("utm-ios-arm64-deps-v15-", source)
@@ -515,6 +522,26 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn('if grep -Fq \'_objc_msgSendClass\' <<<"$SYMBOLS"; then', source)
         self.assertNotIn('nm -u "$PROBE_OBJECT" | grep', source)
         self.assertNotIn("\n; then\n", source)
+
+    def test_qemu_xcode_minimum_accepts_later_major_versions(self):
+        awk_program = 'BEGIN { split(version, p, "[.]"); major = p[1] + 0; minor = p[2] + 0; exit !(major > 27 || (major == 27 && minor >= 1)) }'
+        cases = {
+            "26.9": False,
+            "27.0": False,
+            "27.0.9": False,
+            "27.1": True,
+            "27.9": True,
+            "28.0": True,
+            "29.1": True,
+        }
+        for version, accepted in cases.items():
+            result = subprocess.run(
+                ["awk", "-v", f"version={version}", awk_program],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0 if accepted else 1, version)
+
 
     def test_build_freshness_script_ignores_only_non_build_paths(self):
         root = Path(__file__).resolve().parents[2]

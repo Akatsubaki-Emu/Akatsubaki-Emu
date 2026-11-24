@@ -64,13 +64,10 @@ jobs:
             exit 1
           fi
           XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
-          case "$XCODE_VERSION" in
-            27.1*|27.[2-9]*) ;;
-            *)
-              echo "Expected Xcode 27.1 or later on the xcode-27 runner, selected $XCODE_VERSION." >&2
-              exit 1
-              ;;
-          esac
+          if ! awk -v version="$XCODE_VERSION" 'BEGIN { split(version, p, "[.]"); major = p[1] + 0; minor = p[2] + 0; exit !(major > 27 || (major == 27 && minor >= 1)) }'; then
+            echo "Expected Xcode 27.1 or later on the xcode-27 runner, selected $XCODE_VERSION." >&2
+            exit 1
+          fi
           echo "Using Xcode $XCODE_VERSION at $XCODE_DEVELOPER_DIR"
           xcodebuild -version
           IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"

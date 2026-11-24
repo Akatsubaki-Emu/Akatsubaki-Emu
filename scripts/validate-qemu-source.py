@@ -238,6 +238,7 @@ required = {
         "#define mach_vm_protect vm_protect",
         "#define mach_vm_deallocate vm_deallocate",
         "test_release_publication_is_serialized_and_skips_stale_main_builds",
+        "test_qemu_xcode_minimum_accepts_later_major_versions",
     ],
     "scripts/tests/test_jit_coordinator.py": [
         "test_stikdebug_availability_is_limited_to_physical_ios_devices",
@@ -1086,8 +1087,9 @@ required = {
         "scripts/tests/test_vnc_key_state.swift",
         "runs-on: xcode-27",
         'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
-        'case "$XCODE_VERSION" in',
-        "27.1*|27.[2-9]*) ;;",
+        'awk -v version="$XCODE_VERSION"',
+        'split(version, p, "[.]")',
+        "major > 27 || (major == 27 && minor >= 1)",
     ],
     "scripts/check-build-freshness.sh": [
         "git fetch --no-tags --unshallow origin main",
@@ -1335,8 +1337,9 @@ for token in [
     "steps.xcode.outputs.version",
     "runs-on: xcode-27",
     'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
-    'case "$XCODE_VERSION" in',
-    "27.1*|27.[2-9]*) ;;",
+    'awk -v version="$XCODE_VERSION"',
+    'split(version, p, "[.]")',
+        "major > 27 || (major == 27 && minor >= 1)",
     "Expected Xcode 27.1 or later on the xcode-27 runner",
     "PROBE_BINARY=",
     "-Wl,-objc_stubs_fast",
@@ -1385,8 +1388,9 @@ else:
     for token in [
         "runs-on: xcode-27",
         'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
-        'case "$XCODE_VERSION" in',
-        "27.1*|27.[2-9]*) ;;",
+        'awk -v version="$XCODE_VERSION"',
+        'split(version, p, "[.]")',
+        "major > 27 || (major == 27 && minor >= 1)",
     ]:
         if token not in release_build_job:
             print(f"release workflow: Apple build job missing {token!r}", file=sys.stderr)
