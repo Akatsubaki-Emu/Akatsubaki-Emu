@@ -1202,6 +1202,8 @@ required = {
         "def test_meson_patcher_fails_closed_if_objc_block_changes",
         "def test_meson_patcher_handles_qemu_common_flags_variant",
         "def test_meson_patcher_ignores_later_objc_summary_conditionals",
+        "def test_meson_patcher_handles_nested_if_before_compiler_call",
+        "def test_meson_patcher_rejects_unterminated_nested_if",
         "def test_meson_patcher_fails_closed_if_objc_block_is_missing",
         "def test_meson_patcher_rejects_duplicate_objc_blocks",
         "def test_meson_patcher_rejects_objc_flag_outside_its_block",
@@ -1372,6 +1374,10 @@ for token in [
     if token not in release_workflow:
         print(f"release workflow: validation-only path should not trigger QEMU release builds: {token}", file=sys.stderr)
         failed = True
+release_job_count = release_workflow.count("\n  release:\n")
+if release_job_count != 1:
+    print(f"release workflow: expected exactly one release job, found {release_job_count}", file=sys.stderr)
+    failed = True
 release_build_start = release_workflow.find("\n  build:\n")
 release_publish_start = release_workflow.find("\n  release:\n", release_build_start)
 if release_build_start < 0 or release_publish_start < 0:
