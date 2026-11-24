@@ -61,8 +61,7 @@ final class VMEngine {
             monitor = timer
             timer.resume()
         } catch {
-            backend?.stop()
-            backend = nil
+            if backend?.stop() ?? true { backend = nil }
             setState(.failed(error.localizedDescription))
             EmulationLog.shared.write("Session start failed: \(error.localizedDescription)")
         }
@@ -110,8 +109,7 @@ final class VMEngine {
         monitor?.cancel()
         monitor = nil
         startupDeadline = nil
-        backend?.stop()
-        backend = nil
+        if backend?.stop() ?? true { backend = nil }
         setState(.failed(message))
         EmulationLog.shared.write(message)
     }
