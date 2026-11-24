@@ -439,6 +439,10 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertIn("group: isteam-release-publish-", release_job)
         self.assertIn("cancel-in-progress: false", release_job)
 
+        metrics_source = (root / ".github/workflows/Update stats.yml").read_text(encoding="utf-8")
+        self.assertIn("group: update-repository-metrics-${{ github.ref }}", metrics_source)
+        self.assertIn("cancel-in-progress: true", metrics_source)
+
     def test_qemu_runtime_exports_are_matched_exactly(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
         source = workflow.read_text(encoding="utf-8")
@@ -540,6 +544,23 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
             environment = os.environ.copy()
             environment["GITHUB_REF"] = "refs/heads/main"
             environment["GITHUB_SHA"] = base_sha
+            result = subprocess.run(
+                ["bash", str(repository / "scripts/check-build-freshness.sh"), base_sha],
+                cwd=repository,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.stdout.strip(), "true", result.stderr)
+
+            (repository / ".github/workflows").mkdir(parents=True)
+            (repository / ".github/workflows/Update stats.yml").write_text(
+                "name: Update Repository Metrics" + chr(10), encoding="utf-8"
+            )
+            git("add", ".")
+            git("commit", "-m", "metrics-only workflow change")
+            git("push", "origin", "main")
             result = subprocess.run(
                 ["bash", str(repository / "scripts/check-build-freshness.sh"), base_sha],
                 cwd=repository,
