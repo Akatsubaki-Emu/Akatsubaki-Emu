@@ -14,7 +14,9 @@ class VNCPointerAllocationTests(unittest.TestCase):
         self.assertNotIn("Data([", drain_start)
         drain = movement.split("sendQueue.async", 1)[1]
         self.assertIn("let latestPosition = withStateLock", drain)
-        self.assertIn("let message = Data([", drain)
+        self.assertIn("let message = Self.pointerEvent(", drain)
+        pointer_encoder = source.split("private static func pointerEvent", 1)[1].split("private static func keyEvent", 1)[0]
+        self.assertIn("Data([", pointer_encoder)
         self.assertIn("connection.send(content: message", drain)
 
 
