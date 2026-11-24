@@ -117,12 +117,11 @@ final class QEMUNativeRuntime {
                 controlError = reset.error
                 throw RuntimeError.runtimeUnavailable(reset.error ?? "QEMU did not acknowledge system_reset.")
             }
-            if isPaused {
-                let resumed = Self.sendQMP("cont")
-                guard resumed.success else {
-                    controlError = resumed.error
-                    throw RuntimeError.runtimeUnavailable(resumed.error ?? "QEMU did not acknowledge cont.")
-                }
+            let resumed = Self.sendQMP("cont")
+            if !resumed.success
+                && !(resumed.error?.localizedCaseInsensitiveContains("already running") ?? false) {
+                controlError = resumed.error
+                throw RuntimeError.runtimeUnavailable(resumed.error ?? "QEMU did not acknowledge cont.")
             }
             isPaused = false
             controlError = nil
@@ -355,7 +354,9 @@ final class QEMUNativeRuntime {
         guard started else { return true }
         guard !isPaused else { return true }
         let result = Self.sendQMP("stop")
-        guard result.success else {
+        let alreadyStopped = result.error?.localizedCaseInsensitiveContains("already stopped") == true
+            || result.error?.localizedCaseInsensitiveContains("not running") == true
+        guard result.success || alreadyStopped else {
             controlError = result.error ?? "QEMU did not acknowledge the pause request."
             EmulationLog.shared.write("QEMU pause failed: \(controlError ?? "unknown QMP error")")
             return false
