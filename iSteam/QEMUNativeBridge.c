@@ -384,6 +384,10 @@ bool isteam_qemu_qmp_command(const char *socket_path, const char *command,
 
     struct timeval timeout = {2, 0};
     (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+#if defined(SO_NOSIGPIPE)
+    int no_sigpipe = 1;
+    (void)setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
+#endif
     (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
     char response[4096] = {0};
