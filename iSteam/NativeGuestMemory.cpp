@@ -116,10 +116,12 @@ void eraseBackingPagesLocked(ISteamGuestMemory *memory, uint64_t firstPage,
                              uint64_t lastPage) {
     if (lastPage < firstPage) return;
     if (memory->usesDensePages) {
-        if (memory->densePages.empty() || firstPage >= memory->densePages.size()) return;
-        const uint64_t finalPage = std::min<uint64_t>(lastPage, memory->densePages.size() - 1);
-        for (uint64_t page = firstPage; page <= finalPage; ++page) {
-            removeDensePage(memory, page);
+        // Visit allocated pages rather than every virtual page in a sparse range.
+        size_t index = 0;
+        while (index < memory->denseAllocatedPageIndices.size()) {
+            const uint64_t page = memory->denseAllocatedPageIndices[index];
+            if (page >= firstPage && page <= lastPage) removeDensePage(memory, page);
+            else ++index;
         }
         return;
     }
@@ -145,9 +147,9 @@ void zeroAllocatedRangeLocked(ISteamGuestMemory *memory, uint64_t offset,
     const uint64_t firstPage = offset / pageSize;
     const uint64_t lastPage = (end - 1) / pageSize;
     if (memory->usesDensePages) {
-        if (memory->densePages.empty() || firstPage >= memory->densePages.size()) return;
-        const uint64_t finalPage = std::min<uint64_t>(lastPage, memory->densePages.size() - 1);
-        for (uint64_t pageIndex = firstPage; pageIndex <= finalPage; ++pageIndex) {
+        // Zero only allocated pages; large brk changes must not walk sparse holes.
+        for (uint64_t pageIndex : memory->denseAllocatedPageIndices) {
+            if (pageIndex < firstPage || pageIndex > lastPage) continue;
             Page *page = memory->densePages[static_cast<size_t>(pageIndex)].get();
             if (!page) continue;
             const uint64_t pageStart = pageIndex * pageSize;
@@ -619,8 +621,19 @@ bool isteam_guest_memory_has_mapped_pages(ISteamGuestMemory *memory, uint64_t of
         if (!memory->permissionsEnabled) return false;
         const uint64_t firstPage = offset / pageSize;
         const uint64_t lastPage = (offset + length - 1) / pageSize;
-        for (uint64_t page = firstPage; page <= lastPage; ++page) {
-            if (pageIsMappedLocked(memory, page)) return true;
+        // A guest can reserve an enormous sparse address space. Search the
+        // allocated metadata, not every virtual page in the requested range.
+        for (const auto &entry : memory->pagePermissions) {
+            if (entry.first >= firstPage && entry.first <= lastPage) return true;
+        }
+        if (memory->usesDensePages) {
+            for (uint64_t page : memory->denseAllocatedPageIndices) {
+                if (page >= firstPage && page <= lastPage) return true;
+            }
+        } else {
+            for (const auto &entry : memory->pages) {
+                if (entry.second && entry.first >= firstPage && entry.first <= lastPage) return true;
+            }
         }
         return false;
     } catch (...) {
