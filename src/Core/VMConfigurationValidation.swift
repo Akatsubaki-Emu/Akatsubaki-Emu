@@ -1,4 +1,7 @@
 import Foundation
+#if os(iOS) || os(tvOS)
+import os
+#endif
 
 /// Validates resource requests before the engine allocates guest RAM or prepares
 /// a native backend. These limits are safety bounds, not a promise that the
@@ -9,6 +12,7 @@ extension VMConfiguration {
         case unsupportedArchitecture(VMConfiguration.Architecture)
         case unsupportedGPU(VMConfiguration.GPUModel)
         case memoryOutOfRange(Int)
+        case insufficientAvailableMemory(requestedMB: Int, availableMB: Int, reserveMB: Int)
         case cpuCountOutOfRange(Int)
         case invalidResolution(width: Int, height: Int)
         case invalidFrameRate(Int)
@@ -23,6 +27,8 @@ extension VMConfiguration {
                 return "The current iOS QEMU build only enables the non-GL VirtIO GPU path; \(gpu.rawValue) has not been verified."
             case .memoryOutOfRange(let value):
                 return "VM memory must be between 256 MB and 16384 MB (requested: \(value) MB)."
+            case .insufficientAvailableMemory(let requested, let available, let reserve):
+                return "The app currently has \(available) MB available; this VM requests \(requested) MB of guest RAM plus a \(reserve) MB host reserve. Reduce guest RAM or close other apps and retry."
             case .cpuCountOutOfRange(let value):
                 return "The virtual CPU count must be between 1 and 16 (requested: \(value))."
             case .invalidResolution(let width, let height):
@@ -33,7 +39,7 @@ extension VMConfiguration {
         }
     }
 
-    func validateForStart() throws {
+    func validateForStart(availableMemoryBytes: UInt64? = nil) throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ValidationError.emptyName
         }
@@ -45,6 +51,16 @@ extension VMConfiguration {
         }
         guard (256...16384).contains(memoryMB) else {
             throw ValidationError.memoryOutOfRange(memoryMB)
+        }
+        let availableBytes = availableMemoryBytes ?? Self.currentAvailableMemoryBytes
+        if let availableBytes {
+            let availableMB = Int(availableBytes / 1_048_576)
+            let reserveMB = max(512, memoryMB / 4)
+            guard availableMB >= memoryMB + reserveMB else {
+                throw ValidationError.insufficientAvailableMemory(
+                    requestedMB: memoryMB, availableMB: availableMB, reserveMB: reserveMB
+                )
+            }
         }
         guard (1...16).contains(cpuCount) else {
             throw ValidationError.cpuCountOutOfRange(cpuCount)
@@ -61,5 +77,13 @@ extension VMConfiguration {
         guard (24...120).contains(displayFPS) else {
             throw ValidationError.invalidFrameRate(displayFPS)
         }
+    }
+
+    private static var currentAvailableMemoryBytes: UInt64? {
+#if os(iOS) || os(tvOS)
+        return UInt64(os_proc_available_memory())
+#else
+        return nil
+#endif
     }
 }

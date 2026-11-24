@@ -151,3 +151,11 @@ QEMU's native library remains a process-global, one-shot initialization. The app
 VNC frames carry the QEMUVNCClient session generation from the locked framebuffer snapshot through VirtIOGPU and the Metal backend. Session replacement invalidates pending uploads, pending full-frame snapshots and published framebuffer slots. The Metal draw path rechecks both session and framebuffer generations immediately before command-buffer presentation, so work queued by an old VNC connection cannot replace the new session's frame.
 
 The QMP and frame-generation source tests verify these lifecycle contracts. They do not replace physical iPad testing of QEMU initialization, QMP socket availability, JIT policy, guest boot, display and input, repeat launches or persistent guest state.
+
+## iOS guest RAM and no-JIT launch budget
+
+The iOS/tvOS Linux profile chooses a 256–1024 MB guest-RAM default from `os_proc_available_memory()`, rounded down to 256 MB steps. The budget reserves at least 512 MB or one third of the process's currently available memory for QEMU, VNC, Metal and the host UI. Windows and SteamOS profiles use a 2 GB iOS/tvOS default; non-iOS defaults remain 4 GB.
+
+Immediately before QEMU startup, `VMConfiguration.validateForStart` rechecks current available memory. It requires guest RAM plus a host reserve of at least 512 MB or 25% of guest RAM, whichever is larger. If the budget is insufficient, launch fails with an actionable message rather than overcommitting memory and risking jetsam. The no-JIT TCI path does not require executable-memory JIT; JIT remains optional and respects the selected accelerator policy.
+
+The available-memory API is advisory and changes during the app lifecycle; the implementation rechecks at launch rather than caching a device-wide RAM figure. See [Apple's `os_proc_available_memory` documentation](https://developer.apple.com/documentation/os/os_proc_available_memory).

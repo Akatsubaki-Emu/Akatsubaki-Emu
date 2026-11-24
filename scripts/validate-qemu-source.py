@@ -1877,6 +1877,26 @@ if "test_xchg_uses_flag_neutral_eor_without_scratch_register" not in xchg_alloca
     failed = True
 
 
+vm_configuration_source = Path("src/Core/VMConfiguration.swift").read_text(encoding="utf-8")
+vm_validation_source = Path("src/Core/VMConfigurationValidation.swift").read_text(encoding="utf-8")
+vm_memory_tests = Path("scripts/tests/test_vm_configuration_validation.swift").read_text(encoding="utf-8")
+for token in ("recommendedLinuxMemoryMB", "linuxMemoryBudgetMB", "os_proc_available_memory()",
+              "memoryMB: recommendedLinuxMemoryMB"):
+    if token not in vm_configuration_source:
+        print(f"iOS guest memory default missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("insufficientAvailableMemory", "availableMemoryBytes: UInt64? = nil",
+              "max(512, memoryMB / 4)"):
+    if token not in vm_validation_source:
+        print(f"iOS guest memory validation missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("linuxMemoryBudgetMB(availableMemoryMB:", "insufficientAvailableMemory",
+              "VM configuration memory budget tests passed"):
+    if token not in vm_memory_tests:
+        print(f"iOS guest memory regression missing {token!r}", file=sys.stderr)
+        failed = True
+
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")

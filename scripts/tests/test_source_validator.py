@@ -872,6 +872,20 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("framebuffer === source", metal)
         self.assertIn("sessionGeneration: generation", display)
 
+    def test_ios_guest_memory_budget_is_adaptive_and_revalidated(self):
+        root = Path(__file__).resolve().parents[2]
+        configuration = (root / "src" / "Core" / "VMConfiguration.swift").read_text(encoding="utf-8")
+        validation = (root / "src" / "Core" / "VMConfigurationValidation.swift").read_text(encoding="utf-8")
+        workflow = (root / ".github" / "workflows" / "validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
+        self.assertIn("recommendedLinuxMemoryMB", configuration)
+        self.assertIn("linuxMemoryBudgetMB(availableMemoryMB:", configuration)
+        self.assertIn("os_proc_available_memory()", configuration)
+        self.assertIn("memoryMB: recommendedLinuxMemoryMB", configuration)
+        self.assertIn("insufficientAvailableMemory", validation)
+        self.assertIn("availableMemoryBytes: UInt64? = nil", validation)
+        self.assertIn("max(512, memoryMB / 4)", validation)
+        self.assertIn("test_vm_configuration_validation.swift", workflow)
+
     def test_qemu_uses_persistent_qmp_control_without_relaunching_process(self):
         root = Path(__file__).resolve().parents[2]
         bridge = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
