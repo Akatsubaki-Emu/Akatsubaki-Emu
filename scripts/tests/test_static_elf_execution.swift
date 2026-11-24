@@ -570,7 +570,7 @@ struct StaticELFExecutionTests {
         let exit = try interpreter.run(maxInstructions: 128)
         precondition(exit == .halted, "Generated hybrid smoke guest did not exit cleanly")
         let smokeMessages = EmulationLog.shared.messages.dropFirst(previousMessageCount)
-        precondition(smokeMessages.contains { $0.contains("hello\\n") },
+        precondition(smokeMessages.contains { $0.contains("hello\n") },
                      "Generated hybrid smoke guest did not write its marker")
         print("Generated hybrid XCHG smoke ELF executed through the no-JIT interpreter")
     }
