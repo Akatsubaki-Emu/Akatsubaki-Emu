@@ -95,6 +95,7 @@ final class X86_64Interpreter: GuestCPUBackend {
         var executed: UInt64 = 0
         // The native C invoke boundary rechecks live JIT readiness for every block.
         let aotIsAvailable = aotExecutor?.isAvailable == true
+        var aotDeclined = false
         let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff
         while executed < maxInstructions {
             if executed & stopCheckMask == 0 {
@@ -107,7 +108,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             let instructionAddress = rip
             instructionLengthExceeded = false
             prepareInstructionWindow(at: instructionAddress)
-            if let aotExecutor, aotIsAvailable, canStartAOTBlock() {
+            if let aotExecutor, aotIsAvailable, !aotDeclined, canStartAOTBlock() {
                 // Never cross the current guest page while forming a translated block.
                 // The architectural x86 decoder retains its independent 15-byte window.
                 let aotPageRemaining = 4096 - Int(instructionAddress & 0xFFF)
@@ -151,6 +152,9 @@ final class X86_64Interpreter: GuestCPUBackend {
                         }
                         if stopRequested { return .interrupted }
                         continue
+                    } else {
+                        // A declined native block disables AOT for the rest of this run.
+                        aotDeclined = true
                     }
                 }
             }

@@ -217,6 +217,29 @@ struct InterpreterTests {
         precondition(readyAOT.executeCalls == 0)
         precondition(unsupportedStartMemory.readPrefixCalls == 1)
 
+        // A rejected native block must not rebuild a 4 KiB page window at each later instruction.
+        let decliningAOTMemory = GuestMemory(size: 64)
+        let decliningProgram: [UInt8] = [
+            0xB8, 0x2A, 0, 0, 0,
+            0xBB, 0x07, 0, 0, 0,
+            0x90,
+            0xCC
+        ]
+        precondition(decliningAOTMemory.write(Data(decliningProgram), offset: 0))
+        let decliningAOT = TestAOTExecutor(isAvailable: true)
+        let decliningAOTInterpreter = X86_64Interpreter(
+            memory: decliningAOTMemory,
+            aotExecutor: decliningAOT
+        )
+        try decliningAOTInterpreter.reset(entryPoint: 0)
+        let decliningAOTExit = try decliningAOTInterpreter.run(maxInstructions: 8)
+        precondition(decliningAOTExit == .unsupportedInstruction(address: 11))
+        precondition(decliningAOT.executeCalls == 1)
+        precondition(decliningAOTMemory.readPrefixCalls == 5)
+        precondition(decliningAOTInterpreter.registerValue(0) == 42)
+        precondition(decliningAOTInterpreter.registerValue(3) == 7)
+        precondition(decliningAOTInterpreter.instructionCount == 3)
+
         let memory = GuestMemory(size: 4096)
         let program: [UInt8] = [
             0x48, 0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
