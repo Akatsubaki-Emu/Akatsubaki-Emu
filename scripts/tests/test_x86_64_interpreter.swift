@@ -264,6 +264,8 @@ final class TestAOTExecutor: KenranButoAOTExecuting {
     private(set) var executeCalls = 0
     private(set) var refreshCalls = 0
     private(set) var invalidationCalls = 0
+    private(set) var lastGuestCodeWindowLength = 0
+    private(set) var lastInstructionBudget = 0
 
     init(isAvailable: Bool) { self.isAvailable = isAvailable }
 
@@ -277,6 +279,8 @@ final class TestAOTExecutor: KenranButoAOTExecuting {
                  rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
                  memory: GuestMemory, maximumInstructions: Int) -> KenranButoAOTExecutionResult? {
         executeCalls += 1
+        lastGuestCodeWindowLength = guestCode.count
+        lastInstructionBudget = maximumInstructions
         return nil
     }
 
@@ -330,6 +334,22 @@ struct InterpreterTests {
         precondition(xchgStartExit == .unsupportedInstruction(address: 2))
         precondition(xchgStartAOT.executeCalls == 1)
         precondition(xchgStartAOT.refreshCalls == 1)
+        precondition(xchgStartAOT.lastGuestCodeWindowLength == 30)
+        precondition(xchgStartAOT.lastGuestCodeWindowLength <= xchgStartAOT.lastInstructionBudget * 15)
+
+        // A translated block must also stop its input window at a guest-page boundary.
+        let pageBoundaryAOTMemory = GuestMemory(size: 8192)
+        precondition(pageBoundaryAOTMemory.write(Data([0x49, 0x90, 0xCC]), offset: 0xFF0))
+        let pageBoundaryAOT = TestAOTExecutor(isAvailable: true)
+        let pageBoundaryInterpreter = X86_64Interpreter(
+            memory: pageBoundaryAOTMemory,
+            aotExecutor: pageBoundaryAOT
+        )
+        try pageBoundaryInterpreter.reset(entryPoint: 0xFF0)
+        let pageBoundaryExit = try pageBoundaryInterpreter.run(maxInstructions: 2)
+        precondition(pageBoundaryExit == .unsupportedInstruction(address: 0xFF2))
+        precondition(pageBoundaryAOT.lastGuestCodeWindowLength == 16)
+        precondition(pageBoundaryAOT.lastGuestCodeWindowLength <= pageBoundaryAOT.lastInstructionBudget * 15)
 
         // A rejected native block must not rebuild a 4 KiB page window at each later instruction.
         let decliningAOTMemory = GuestMemory(size: 64)

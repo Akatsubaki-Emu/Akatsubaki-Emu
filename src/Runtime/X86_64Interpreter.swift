@@ -21,7 +21,10 @@ final class X86_64Interpreter: GuestCPUBackend {
     private var registers = [UInt64](repeating: 0, count: 16)
     private var rip: UInt64 = 0
     private var instructionWindow = [UInt8](repeating: 0, count: 15)
-    private var aotInstructionWindow = [UInt8](repeating: 0, count: 4096)
+    // 16 x86 instructions × the architectural 15-byte instruction limit.
+    private static let maximumAOTInstructionBatch = 16
+    private static let maximumX86InstructionLength = 15
+    private var aotInstructionWindow = [UInt8](repeating: 0, count: 240)
     private var instructionWindowLength = 0
     private var instructionWindowCursor = 0
     private var instructionLengthExceeded = false
@@ -111,18 +114,21 @@ final class X86_64Interpreter: GuestCPUBackend {
             instructionLengthExceeded = false
             prepareInstructionWindow(at: instructionAddress)
             if let aotExecutor, aotIsAvailable, !aotDeclined, canStartAOTBlock() {
-                // Never cross the current guest page while forming a translated block.
-                // The architectural x86 decoder retains its independent 15-byte window.
+                // Bound both work and input: 16 x86 instructions consume at most
+                // 16 × 15 bytes. Never cross the current guest page.
+                let remaining = maxInstructions - executed
+                let budget = Int(min(remaining, UInt64(Self.maximumAOTInstructionBatch)))
                 let aotPageRemaining = 4096 - Int(instructionAddress & 0xFFF)
+                let maximumAOTBytes = min(
+                    aotPageRemaining,
+                    budget * Self.maximumX86InstructionLength
+                )
                 let aotWindowLength = memory.readPrefix(
                     offset: instructionAddress,
-                    maximumLength: aotPageRemaining,
+                    maximumLength: maximumAOTBytes,
                     into: &aotInstructionWindow
                 ) ?? 0
                 if aotWindowLength > 0 {
-                    let remaining = maxInstructions - executed
-                    // Bound native batches so stop requests remain responsive.
-                    let budget = Int(min(remaining, 16))
                     if let result = aotExecutor.execute(
                         guestCode: Data(aotInstructionWindow.prefix(aotWindowLength)),
                         registers: &registers, rip: instructionAddress, rflags: flags,
