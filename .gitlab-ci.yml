@@ -1,0 +1,27 @@
+stages:
+  - validate
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - when: never
+
+core-source-and-elf-validation:
+  stage: validate
+  image: python:3.12
+  variables:
+    PYTHONDONTWRITEBYTECODE: "1"
+    PYTHONUNBUFFERED: "1"
+  timeout: 20m
+  script:
+    - python3 --version
+    - mkdir -p build
+    - python3 scripts/build_hybrid_xchg_smoke_elf.py build/hybrid_xchg_smoke.elf
+    - ./build/hybrid_xchg_smoke.elf
+    - python3 scripts/validate-qemu-source.py
+    - python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - build/hybrid_xchg_smoke.elf
