@@ -19,6 +19,16 @@ class CoreOnlyIOSWorkflowTests(unittest.TestCase):
         self.assertIn("test_localdevvpn_callback.swift", workflow)
         self.assertIn("actions/checkout@v7", workflow)
         self.assertIn("actions/upload-artifact@v7", workflow)
+        self.assertIn("brew list xcodegen", workflow)
+        self.assertIn("xcodegen generate --spec project.yml", workflow)
+        self.assertLess(
+            workflow.index("xcodegen generate --spec project.yml"),
+            workflow.index("Build iOS device app without code signing"),
+        )
+        self.assertIn("scripts/build_hybrid_xchg_smoke_elf.py", workflow)
+        self.assertIn('cp "$RUNNER_TEMP/hybrid_xchg_smoke.elf" "$DIST/hybrid_xchg_smoke.elf"', workflow)
+        project = (ROOT / "project.yml").read_text()
+        self.assertIn('CLANG_CXX_LANGUAGE_STANDARD: "gnu++17"', project)
         self.assertNotIn("softprops/action-gh-release", workflow)
         self.assertNotIn("gh release create", workflow)
 

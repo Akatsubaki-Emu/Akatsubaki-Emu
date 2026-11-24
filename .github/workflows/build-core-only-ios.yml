@@ -35,6 +35,12 @@ jobs:
           xcodebuild -version
           swift --version
 
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: Generate Xcode project from project.yml
+        run: xcodegen generate --spec project.yml
+
       - name: Verify this is a QEMU-free source build
         shell: bash
         run: |
@@ -112,6 +118,9 @@ jobs:
             -o "$RUNNER_TEMP/localdevvpn-callback-tests"
           "$RUNNER_TEMP/localdevvpn-callback-tests"
 
+      - name: Build diagnostic static Linux guest
+        run: python3 scripts/build_hybrid_xchg_smoke_elf.py "$RUNNER_TEMP/hybrid_xchg_smoke.elf"
+
       - name: Build iOS device app without code signing
         shell: bash
         run: |
@@ -155,6 +164,8 @@ jobs:
             echo "Signing: unsigned; install with SideStore or another permitted signer"
           } > "$DIST/build-info.txt"
           cp "$RUNNER_TEMP/akatsubaki-core-only-logs/xcodebuild.log" "$DIST/xcodebuild.log"
+          cp "$RUNNER_TEMP/hybrid_xchg_smoke.elf" "$DIST/hybrid_xchg_smoke.elf"
+          echo "Smoke guest: hybrid_xchg_smoke.elf (static x86-64 Linux)" >> "$DIST/build-info.txt"
 
       - name: Validate core-only IPA
         shell: bash
