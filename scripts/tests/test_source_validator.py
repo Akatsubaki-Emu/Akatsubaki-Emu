@@ -765,5 +765,18 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("let budget = Int(min(remaining, 16))", interpreter)
         self.assertIn("let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff", interpreter)
 
+    def test_vnc_frames_are_rejected_after_session_replacement(self):
+        root = Path(__file__).resolve().parents[2]
+        vnc = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
+        virtio = (root / "src" / "GPU" / "VirtIOGPU.swift").read_text(encoding="utf-8")
+        metal = (root / "src" / "GPU" / "MetalGPUBackend.swift").read_text(encoding="utf-8")
+        display = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("onFrame?(generation, frame.0, frame.1, frame.2, dirtyRegion)", vnc)
+        self.assertIn("onSessionGenerationChanged?(generation)", vnc)
+        self.assertIn("guard isCurrent else { return }", virtio)
+        self.assertIn("pending.sessionGeneration == sessionGeneration", metal)
+        self.assertIn("framebuffer === source", metal)
+        self.assertIn("sessionGeneration: generation", display)
+
 if __name__ == "__main__":
     unittest.main()
