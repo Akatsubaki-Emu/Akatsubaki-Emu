@@ -577,6 +577,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
     def test_release_publication_is_serialized_and_skips_stale_main_builds(self):
         workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
         source = workflow.read_text(encoding="utf-8")
+        self.assertEqual(source.count("\n  release:\n"), 1, "release.yml must define exactly one release job")
         release_job = source.split("\n  release:\n", 1)[1]
         self.assertIn("group: isteam-release-publish-${{ matrix.channel }}", release_job)
         self.assertIn("cancel-in-progress: false", release_job)
@@ -600,6 +601,15 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         ):
             step = release_job.split("- name: " + name, 1)[1].split("\n      - name:", 1)[0]
             self.assertIn("if: steps.final-freshness.outputs.publish == 'true'", step)
+
+        ios_package = source.split("- name: Build and package iOS IPA", 1)[1].split(
+            "- name: Build and package tvOS IPA", 1
+        )[0]
+        run_marker = "        run: |\n"
+        self.assertEqual(ios_package.count(run_marker), 1)
+        ios_script = textwrap.dedent(ios_package.split(run_marker, 1)[1])
+        syntax = subprocess.run(["bash", "-n"], input=ios_script, text=True, capture_output=True)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
 
     def test_release_tag_is_created_from_the_workflow_commit(self):
