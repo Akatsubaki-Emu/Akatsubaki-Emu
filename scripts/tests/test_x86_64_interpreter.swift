@@ -1712,7 +1712,56 @@ struct InterpreterTests {
                 0x91,
                 0x0F, 0x0B
             ])
-            let xchgBaselineMemory = GuestMemory(size: 8192)
+            let xchgExtendedRegisterProgram = Data([
+        0x49, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, // mov r8, 0x1122334455667788
+        0x49, 0xB9, 0x00, 0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x99, // mov r9, 0x99AABBCCDDEEFF00
+        0x4D, 0x87, 0xC8,                                           // xchg r8, r9
+        0x0F, 0x0B
+    ])
+    let xchgExtendedBaselineMemory = GuestMemory(size: 0x4000)
+    let xchgExtendedHybridMemory = GuestMemory(size: 0x4000)
+    precondition(xchgExtendedBaselineMemory.write(offset: 0x2000, data: xchgExtendedRegisterProgram))
+    precondition(xchgExtendedHybridMemory.write(offset: 0x2000, data: xchgExtendedRegisterProgram))
+    let xchgExtendedBaseline = X86_64Interpreter(memory: xchgExtendedBaselineMemory)
+    let xchgExtendedHybrid = X86_64Interpreter(memory: xchgExtendedHybridMemory, aotExecutor: executor)
+    try xchgExtendedBaseline.reset(entryPoint: 0x2000)
+    try xchgExtendedHybrid.reset(entryPoint: 0x2000)
+    let blocksBeforeXCHGExtended = executor.blocksExecuted
+    let xchgExtendedBaselineExit = xchgExtendedBaseline.run(maxInstructions: 8)
+    let xchgExtendedHybridExit = xchgExtendedHybrid.run(maxInstructions: 8)
+    precondition(xchgExtendedBaselineExit == .unsupportedInstruction(address: 0x2017))
+    precondition(xchgExtendedHybridExit == xchgExtendedBaselineExit)
+    precondition(xchgExtendedBaseline.registers == xchgExtendedHybrid.registers)
+    precondition(xchgExtendedBaseline.conditionFlags == xchgExtendedHybrid.conditionFlags)
+    precondition(xchgExtendedHybrid.registerValue(8) == 0x99AABBCCDDEEFF00)
+    precondition(xchgExtendedHybrid.registerValue(9) == 0x1122334455667788)
+    precondition(executor.blocksExecuted == blocksBeforeXCHGExtended + 1)
+
+    // XCHG EAX,EAX is not a 64-bit no-op: its 32-bit destination write clears RAX[63:32].
+    let xchgSameRegister32Program = Data([
+        0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, // mov rax, 0x1122334455667788
+        0x87, 0xC0,                                                 // xchg eax, eax
+        0x0F, 0x0B
+    ])
+    let xchgSame32BaselineMemory = GuestMemory(size: 0x4000)
+    let xchgSame32HybridMemory = GuestMemory(size: 0x4000)
+    precondition(xchgSame32BaselineMemory.write(offset: 0x3000, data: xchgSameRegister32Program))
+    precondition(xchgSame32HybridMemory.write(offset: 0x3000, data: xchgSameRegister32Program))
+    let xchgSame32Baseline = X86_64Interpreter(memory: xchgSame32BaselineMemory)
+    let xchgSame32Hybrid = X86_64Interpreter(memory: xchgSame32HybridMemory, aotExecutor: executor)
+    try xchgSame32Baseline.reset(entryPoint: 0x3000)
+    try xchgSame32Hybrid.reset(entryPoint: 0x3000)
+    let blocksBeforeXCHGSame32 = executor.blocksExecuted
+    let xchgSame32BaselineExit = xchgSame32Baseline.run(maxInstructions: 8)
+    let xchgSame32HybridExit = xchgSame32Hybrid.run(maxInstructions: 8)
+    precondition(xchgSame32BaselineExit == .unsupportedInstruction(address: 0x300C))
+    precondition(xchgSame32HybridExit == xchgSame32BaselineExit)
+    precondition(xchgSame32Baseline.registers == xchgSame32Hybrid.registers)
+    precondition(xchgSame32Baseline.conditionFlags == xchgSame32Hybrid.conditionFlags)
+    precondition(xchgSame32Hybrid.registerValue(0) == 0x55667788)
+    precondition(executor.blocksExecuted == blocksBeforeXCHGSame32 + 1)
+
+    let xchgBaselineMemory = GuestMemory(size: 8192)
             let xchgHybridMemory = GuestMemory(size: 8192)
             precondition(xchgBaselineMemory.write(xchgProgram, offset: 0x1000))
             precondition(xchgHybridMemory.write(xchgProgram, offset: 0x1000))
