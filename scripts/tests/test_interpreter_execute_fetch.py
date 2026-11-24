@@ -15,7 +15,7 @@ class InterpreterExecuteFetchTests(unittest.TestCase):
 
     def test_instruction_window_stays_bounded_to_one_instruction(self):
         self.assertIn("private var instructionWindow = [UInt8](repeating: 0, count: 15)", SOURCE)
-        self.assertIn("memory.readPrefix(offset: rip, into: &instructionWindow)", SOURCE)
+        self.assertIn("memory.readPrefix(offset: address, into: &instructionWindow)", SOURCE)
 
 
 if __name__ == "__main__":

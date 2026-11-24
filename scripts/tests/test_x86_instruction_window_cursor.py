@@ -12,7 +12,7 @@ class X86InstructionWindowTests(unittest.TestCase):
         self.assertIn("instructionWindowCursor < instructionWindowLength", interpreter)
         self.assertIn("instructionWindowLength - instructionWindowCursor >= 4", interpreter)
         self.assertIn("instructionWindowLength - instructionWindowCursor >= 8", interpreter)
-        self.assertIn("func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int?", memory)
+        self.assertIn("func readPrefix(offset: UInt64, maximumLength: Int? = nil, into buffer: inout [UInt8]) -> Int?", memory)
         self.assertNotIn("instructionWindowOffset", interpreter)
         self.assertNotIn("Data(count: 15)", interpreter)
 

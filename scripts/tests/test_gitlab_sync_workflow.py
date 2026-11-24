@@ -69,7 +69,7 @@ class GitHubActionsOwnershipTests(unittest.TestCase):
         self.assertIn("needs: [overview, team]", workflow)
         self.assertIn("actions: write", workflow)
         self.assertIn("GH_TOKEN: ${{ github.token }}", workflow)
-        self.assertIn("gh workflow run blank.yml --ref main", workflow)
+        self.assertIn('gh workflow run blank.yml --repo "${GITHUB_REPOSITORY}" --ref main', workflow)
 
 
 if __name__ == "__main__":

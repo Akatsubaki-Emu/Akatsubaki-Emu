@@ -28,15 +28,17 @@ class WindowsPESectionIndexTests(unittest.TestCase):
         self.assertIn("while lower < upper", lookup)
         self.assertIn("virtualSections[middle].virtualAddress <= rva", lookup)
         file_offset = section("func fileOffset(forRVA rva: UInt32, length: Int = 1)", "private func section(forRVA")
-        self.assertIn("section(forRVA: rva", file_offset)
+        self.assertIn("fileBackedRange(forRVA: rva, allowEnd: length == 0)", file_offset)
         contiguous = section("private func contiguousFileLength(forRVA rva: UInt32)", "private func readCString")
-        self.assertIn("section(forRVA: rva)", contiguous)
+        self.assertIn("fileBackedRange(forRVA: rva).length", contiguous)
+
 
     def test_zero_length_boundary_keeps_legacy_file_order(self):
         lookup = section("private func section(forRVA rva: UInt32, allowEnd: Bool = false)", "private func readImports()")
         self.assertIn("if allowEnd", lookup)
-        self.assertIn("UInt64(rva) <= end", lookup)
+        self.assertIn("address > start && address == end", lookup)
         self.assertIn("Zero-length PE boundary mapping changed", SWIFT_TEST)
+
 
     def test_file_backed_range_is_shared(self):
         mapping = section("private func fileBackedRange(forRVA rva: UInt32, allowEnd: Bool = false)", "private struct RVAFileCursor")

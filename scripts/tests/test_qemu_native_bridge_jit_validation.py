@@ -53,7 +53,8 @@ class QEMUNativeBridgeJITValidationTests(unittest.TestCase):
         self.assertIn('requiresJIT ? "JIT" : "TCI"', status)
         self.assertIn('QEMU-TCI.framework/QEMU', status)
         self.assertIn("libraryPath, requiresJIT, baseAddress", status)
-        self.assertIn("let requiresJIT = configuration.accelerator == .jit", runtime)
+        self.assertIn("let requestedJIT = configuration.accelerator == .jit", runtime)
+        self.assertIn("var requiresJIT = requestedJIT", runtime)
         self.assertIn("QEMURuntimeStatus.inspect(requiresJIT: requiresJIT)", runtime)
         self.assertIn("libraryPath, requiresJIT, error", runtime)
 

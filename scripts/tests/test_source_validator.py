@@ -219,7 +219,7 @@ class SourceValidatorTests(unittest.TestCase):
         merge = (root / "scripts" / "merge-qemu-runtime-variants.sh").read_text(encoding="utf-8")
         self.assertIn("has_jit_callbacks=false", tci)
         self.assertIn("QEMU-TCI.framework", tci)
-        self.assertIn('bash scripts/validate-qemu-runtime.sh "$OUT/$runtime_relative" tci', tci)
+        self.assertIn('bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" tci', tci)
         self.assertIn("StikJIT callback export: absent by design", tci)
         self.assertIn('grep -Eq "[[:space:]]_?${symbol}$" "$JIT_DIR/exports.txt"', merge)
         self.assertIn('grep -Eq "[[:space:]]_?${symbol}$" "$TCI_DIR/exports.txt"', merge)
@@ -401,8 +401,9 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "WindowsPEImage.swift").read_text(encoding="utf-8")
         reader = source.split("private func readCString", 1)[1].split("\n    private static func require", 1)[0]
-        self.assertIn("let offset = try fileOffset(forRVA: rva)", reader)
-        self.assertIn("let available = try contiguousFileLength(forRVA: rva)", reader)
+        self.assertIn("let mapping = try fileBackedRange(forRVA: rva)", reader)
+        self.assertIn("let offset = mapping.offset", reader)
+        self.assertIn("let scanLength = min(limit, mapping.length)", reader)
         self.assertIn("file[range].firstIndex(of: 0)", reader)
         self.assertNotIn("for delta in 0..<limit", reader)
 
@@ -430,9 +431,12 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src" / "Runtime" / "LinuxSyscallDispatcher.swift").read_text(encoding="utf-8")
         self.assertIn("private func findFreeAddress(startingAt start: UInt64, size: UInt64, limit: UInt64) -> UInt64?", source)
-        self.assertIn("if noReplace { return errno(17) }", source)
+        self.assertIn("while memory.hasMappedPages(offset: candidate, length: size)", source)
         self.assertIn("private func validateRange(address: UInt64, length: UInt64) -> UInt64", source)
-        self.assertIn("cursor = min(end, range.upperBound)", source)
+        self.assertIn("while cursor < end", source)
+        self.assertIn("memory.hasMappedPages(offset: cursor, length: 4096)", source)
+        self.assertIn("cursor = next", source)
+
 
     def test_guest_image_load_resets_cpu_and_clears_memory_once_in_loader(self):
         root = Path(__file__).resolve().parents[2]
@@ -619,14 +623,16 @@ class SourceValidatorTests(unittest.TestCase):
         docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
         self.assertIn("QEMU TCG + JIT", settings)
         self.assertIn("QEMU TCI (no JIT)", settings)
-        self.assertIn("Threaded TCG interpreter (TCI); does not require executable-memory JIT", settings)
+        self.assertIn("Uses QEMU's threaded TCI interpreter without JIT entitlements or executable-memory support.", settings)
+        self.assertIn("TCG with a 128 MiB translation-block cache and split-WX", settings)
         self.assertIn("?? .linuxVM", settings)
         self.assertNotIn("Slower compatibility fallback", settings)
         self.assertIn('configuration.accelerator == .jit ? "tcg,tb-size=128,split-wx=on" : "tcg"', builder)
         self.assertNotIn("tcg,tb-size=64,split-wx=on", builder)
         self.assertIn("QEMU TCG uses JIT code generation", docs)
-        self.assertIn("The runtime workflow builds the upstream UTM `iOS` and `iOS-SE` schemes using the `ios` and `ios-tci` dependency targets", docs)
+        self.assertIn("ios-tci dependency targets", docs)
         self.assertIn("successful hosted dual-runtime build and physical guest boot remain unverified", docs)
+
 
     def test_linux_arm32_translator_requires_linux_syscall_abi(self):
         root = Path(__file__).resolve().parents[2]

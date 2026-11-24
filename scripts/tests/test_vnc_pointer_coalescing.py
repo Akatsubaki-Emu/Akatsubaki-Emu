@@ -28,11 +28,12 @@ class VNCPointerCoalescingTests(unittest.TestCase):
         source = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
         start = source.split("func start(port:", 1)[1].split("func stop()", 1)[0]
         self.assertIn("let installed = self.withStateLock", start)
-        self.assertIn("guard !Task.isCancelled else { return false }", start)
+        self.assertIn("guard !Task.isCancelled, self.sessionGeneration == generation else { return false }", start)
         self.assertIn("self.connection = candidate", start)
         self.assertIn("guard installed else {", start)
-        self.assertLess(start.index("guard !Task.isCancelled"), start.index("self.connection = candidate"))
+        self.assertLess(start.index("guard !Task.isCancelled, self.sessionGeneration == generation"), start.index("self.connection = candidate"))
         self.assertLess(start.index("self.connection = candidate"), start.index("guard installed else"))
+
 
     def test_touch_gamepad_view_button_is_routed_to_guest_back_key(self):
         root = Path(__file__).resolve().parents[2]
@@ -52,16 +53,17 @@ class VNCPointerCoalescingTests(unittest.TestCase):
         self.assertIn("self.connected = false", install)
         self.assertIn("self.pointerSendBatch = nil", install)
         activation = start.split("try await self.performHandshake(candidate)", 1)[1].split("self.onStatus", 1)[0]
-        self.assertIn("guard !Task.isCancelled, self.connection === candidate else { return false }", activation)
+        self.assertIn("guard !Task.isCancelled, self.sessionGeneration == generation, self.connection === candidate else { return false }", activation)
         self.assertIn("guard activated else {", activation)
         catch = start.split("} catch {", 1)[1].split("if attempt < 119", 1)[0]
         self.assertIn("let wasCurrent = self.withStateLock", catch)
-        self.assertIn("guard self.connection === candidate else { return false }", catch)
+        self.assertIn("guard self.sessionGeneration == generation, self.connection === candidate else { return false }", catch)
         self.assertIn("self.connection = nil", catch)
         self.assertIn("self.connected = false", catch)
         self.assertIn("self.pendingSendGroup = DispatchGroup()", catch)
         self.assertIn("_ = self.keyState.releaseAll()", catch)
         self.assertIn("if wasCurrent", catch)
+
 
 
 if __name__ == "__main__":

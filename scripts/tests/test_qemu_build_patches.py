@@ -158,7 +158,11 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertIn("https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}", twice)
         self.assertIn('case "$PLATFORM" in', twice)
         self.assertIn('*-tci) ;; # TCI_BUILD_FLAGS already selects the threaded interpreter and guest targets.', twice)
-        self.assertIn("TCI mode: skipping the StikJIT executable-region patch.", twice)
+        patcher_case = twice.split('case "$PLATFORM" in')[-1].split("esac", 1)[0]
+        tci_branch = patcher_case.split("    *)", 1)[0]
+        self.assertIn("ISTEAM_QEMU_TCI_EXPORT_PATCHER", tci_branch)
+        self.assertIn('python3 "$ISTEAM_QEMU_TCI_EXPORT_PATCHER" "$QEMU_DIR/system/qemu.symbols"', tci_branch)
+        self.assertNotIn("ISTEAM_QEMU_JIT_PATCHER", tci_branch)
         self.assertIn("$TCI_BUILD_FLAGS", twice)
         shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
         self.assertEqual(shell_check.returncode, 0, shell_check.stderr)

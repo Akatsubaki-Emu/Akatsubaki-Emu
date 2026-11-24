@@ -63,7 +63,7 @@ struct RuntimeCapabilityRegistry {
                 case .unavailable(let tciReason):
                     records[.qemuTCG] = RuntimeCapabilityRecord(
                         level: .missing,
-                        detail: "JIT probe: \\(jitReason) TCI probe: \\(tciReason)"
+                        detail: "JIT probe: \(jitReason) TCI probe: \(tciReason)"
                     )
                 }
             }
