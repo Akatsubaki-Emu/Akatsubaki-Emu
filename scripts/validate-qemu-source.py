@@ -1717,8 +1717,12 @@ for token in ("guard candidate.stop() else", "QEMU process retained for repeat l
         print(f"VMEngine does not pause and retain QEMU for repeat launches: {token!r}", file=sys.stderr)
         failed = True
 qmp_tests = Path("scripts/tests/test_qemu_persistent_lifecycle.py").read_text(encoding="utf-8")
+qmp_native_tests = Path("scripts/tests/test_qemu_native_bridge.c").read_text(encoding="utf-8")
 if "QEMUPersistentLifecycleTests" not in qmp_tests:
     print("QEMU persistent lifecycle regression tests are missing", file=sys.stderr)
+    failed = True
+if "isteam_qemu_qmp_command" not in qmp_native_tests or "unsupported command" not in qmp_native_tests:
+    print("Native QMP command whitelist regression is missing", file=sys.stderr)
     failed = True
 
 if failed:
