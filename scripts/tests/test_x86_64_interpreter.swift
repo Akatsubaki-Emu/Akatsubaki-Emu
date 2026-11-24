@@ -68,10 +68,11 @@ final class GuestMemory {
         return true
     }
 
-    func readPrefix(offset: UInt64, into buffer: inout [UInt8]) -> Int? {
+    func readPrefix(offset: UInt64, maximumLength: Int? = nil, into buffer: inout [UInt8]) -> Int? {
         readPrefixCalls += 1
         guard offset <= size else { return nil }
-        let maximumCount = Int(min(UInt64(buffer.count), size - offset))
+        let limit = min(buffer.count, max(0, maximumLength ?? buffer.count))
+        let maximumCount = Int(min(UInt64(limit), size - offset))
         let start = Int(offset)
         var count = 0
         while count < maximumCount && executableBytes[start + count] {
@@ -168,6 +169,22 @@ final class GuestMemory {
     }
 }
 
+final class TestAOTExecutor: KenranButoAOTExecuting {
+    let isAvailable: Bool
+    private(set) var executeCalls = 0
+
+    init(isAvailable: Bool) { self.isAvailable = isAvailable }
+
+    func execute(guestCode: Data, registers: inout [UInt64], rip: UInt64,
+                 rflags: UInt64, fsBase: UInt64, gsBase: UInt64,
+                 memory: GuestMemory, maximumInstructions: Int) -> KenranButoAOTExecutionResult? {
+        executeCalls += 1
+        return nil
+    }
+
+    func invalidateAll() {}
+}
+
 final class EmulationLog {
     static let shared = EmulationLog()
     private(set) var messages: [String] = []
@@ -177,6 +194,29 @@ final class EmulationLog {
 @main
 struct InterpreterTests {
     static func main() throws {
+        // A JIT-unavailable device must stay on the interpreter without building
+        // or copying the 4 KiB AOT window for each instruction.
+        let noJITMemory = GuestMemory(size: 64)
+        precondition(noJITMemory.write(Data([0xB8, 0x2A, 0, 0, 0, 0xF4]), offset: 0))
+        let unavailableAOT = TestAOTExecutor(isAvailable: false)
+        let noJITInterpreter = X86_64Interpreter(memory: noJITMemory, aotExecutor: unavailableAOT)
+        try noJITInterpreter.reset(entryPoint: 0)
+        let noJITExit = try noJITInterpreter.run(maxInstructions: 4)
+        precondition(noJITExit == .halted)
+        precondition(unavailableAOT.executeCalls == 0)
+        precondition(noJITMemory.readPrefixCalls == 2)
+
+        // Unsupported starts are rejected before asking the AOT executor to compile.
+        let unsupportedStartMemory = GuestMemory(size: 64)
+        precondition(unsupportedStartMemory.write(Data([0xCC]), offset: 0))
+        let readyAOT = TestAOTExecutor(isAvailable: true)
+        let unsupportedStart = X86_64Interpreter(memory: unsupportedStartMemory, aotExecutor: readyAOT)
+        try unsupportedStart.reset(entryPoint: 0)
+        let unsupportedStartExit = try unsupportedStart.run(maxInstructions: 1)
+        precondition(unsupportedStartExit == .unsupportedInstruction(address: 0))
+        precondition(readyAOT.executeCalls == 0)
+        precondition(unsupportedStartMemory.readPrefixCalls == 1)
+
         let memory = GuestMemory(size: 4096)
         let program: [UInt8] = [
             0x48, 0xB8, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -1301,6 +1341,102 @@ struct InterpreterTests {
         precondition(leaveFaultExit == .memoryFault(address: 72))
         precondition(leaveFault.registerValue(4) == 56)
         precondition(leaveFault.registerValue(5) == 72)
+
+#if KENRAN_BUTO_AOT_TESTS
+        precondition(MemoryLayout<KenranButoAOTGuestState>.size == 96)
+        precondition(MemoryLayout<KenranButoAOTMemoryCallbacks>.size == 32)
+        let callbackMemory = GuestMemory(size: 4096)
+        precondition(callbackMemory.write(Data([0x11,0x22,0x33,0x44]), offset: 128))
+        var callbacks = KenranButoAOTExecutor.makeMemoryCallbacks(for: callbackMemory)
+        var callbackRegisters = [UInt64](repeating: 0, count: 16)
+        var callbackState = KenranButoAOTGuestState()
+        let stateReady = callbackRegisters.withUnsafeMutableBufferPointer { regs in
+            withUnsafePointer(to: &callbacks) { cb in
+                iSteamAOTGuestStateInitialize(&callbackState, regs.baseAddress, 0x1000, 0x202, 0, 0, cb, 16)
+            }
+        }
+        precondition(stateReady && iSteamAOTGuestStateIsValid(&callbackState))
+        var bytes = [UInt8](repeating: 0, count: 4)
+        let readOK = bytes.withUnsafeMutableBufferPointer { p in
+            iSteamAOTGuestMemoryRead(&callbackState, 128, UnsafeMutableRawPointer(p.baseAddress!), p.count)
+        }
+        precondition(readOK && bytes == [0x11,0x22,0x33,0x44])
+        let replacement:[UInt8] = [0xAA,0xBB,0xCC,0xDD]
+        let writeOK = replacement.withUnsafeBufferPointer { p in
+            iSteamAOTGuestMemoryWrite(&callbackState, 132, UnsafeRawPointer(p.baseAddress!), p.count)
+        }
+        precondition(writeOK)
+        var faultByte: UInt8 = 0
+        let faultOK = withUnsafeMutablePointer(to: &faultByte) { p in
+            iSteamAOTGuestMemoryRead(&callbackState, 4096, UnsafeMutableRawPointer(p), 1)
+        }
+        precondition(!faultOK && callbackState.exit_reason == 7)
+        precondition(callbackState.exit_address == 4096 && callbackState.exit_rip == 0x1000)
+
+        if iSteamAOTExecutableMemoryIsAvailable() {
+            let program = Data([0xB8,0x01,0,0,0,0xBB,0x02,0,0,0,0x01,0xD8,0xF4])
+            let hybridMemory = GuestMemory(size: 8192)
+            precondition(hybridMemory.write(program, offset: 0x1000))
+            let executor = KenranButoAOTExecutor()
+            var regs = [UInt64](repeating: 0, count: 16)
+            let sideExit = executor.execute(guestCode: program, registers: &regs, rip: 0x1000,
+                rflags: 0x202, fsBase: 0, gsBase: 0, memory: hybridMemory, maximumInstructions: 8)
+            precondition(sideExit != nil && sideExit!.guestBytesConsumed == 10)
+            precondition(sideExit!.instructionCount == 2 && sideExit!.exitRip == 0x100A)
+            precondition(sideExit!.exitReason == .unsupportedInstruction)
+            precondition(regs[0] == 1 && regs[3] == 2)
+
+            let multiProgram = Data([
+                0xB8,0x01,0,0,0, 0xBB,0x02,0,0,0,
+                0xB9,0x03,0,0,0, 0xBA,0x04,0,0,0, 0x0F,0x0B
+            ])
+            let multiMemory = GuestMemory(size: 8192)
+            precondition(multiMemory.write(multiProgram, offset: 0x1000))
+            var multiRegisters = [UInt64](repeating: 0, count: 16)
+            let multiResult = executor.execute(guestCode: multiProgram, registers: &multiRegisters,
+                rip: 0x1000, rflags: 0x202, fsBase: 0, gsBase: 0, memory: multiMemory, maximumInstructions: 8)
+            precondition(multiResult != nil && multiResult!.guestBytesConsumed == 20)
+            precondition(multiResult!.instructionCount == 4 && multiResult!.exitRip == 0x1014)
+            precondition(multiResult!.exitReason == .unsupportedInstruction)
+            precondition(multiRegisters[0] == 1 && multiRegisters[3] == 2 &&
+                         multiRegisters[1] == 3 && multiRegisters[2] == 4)
+
+            let multiInterpreter = X86_64Interpreter(memory: multiMemory, aotExecutor: executor)
+            try multiInterpreter.reset(entryPoint: 0x1000)
+            let multiExit = try multiInterpreter.run(maxInstructions: 8)
+            precondition(multiExit == .unsupportedInstruction(address: 0x1014))
+            precondition(multiInterpreter.instructionCount == 4)
+            precondition(executor.cachedBlockCount <= 64)
+            precondition(executor.cachedExecutableBytes <= 16 * 1024 * 1024)
+            for index in 0..<96 {
+                let value = UInt32(index)
+                let code = Data([0xB8, UInt8(truncatingIfNeeded: value), 0, 0, 0])
+                var cacheRegisters = [UInt64](repeating: 0, count: 16)
+                let cacheResult = executor.execute(guestCode: code, registers: &cacheRegisters,
+                    rip: 0x1000 + UInt64(index) * 16, rflags: 0x202, fsBase: 0, gsBase: 0,
+                    memory: multiMemory, maximumInstructions: 4)
+                precondition(cacheResult != nil)
+            }
+            precondition(executor.cachedBlockCount <= 64)
+            precondition(executor.cachedExecutableBytes <= 16 * 1024 * 1024)
+
+            let baselineMemory = GuestMemory(size: 8192)
+            precondition(baselineMemory.write(program, offset: 0x1000))
+            let baseline = X86_64Interpreter(memory: baselineMemory)
+            try baseline.reset(entryPoint: 0x1000)
+            let baselineExit = try baseline.run(maxInstructions: 8)
+            let hybrid = X86_64Interpreter(memory: hybridMemory, aotExecutor: executor)
+            try hybrid.reset(entryPoint: 0x1000)
+            let hybridExit = try hybrid.run(maxInstructions: 8)
+            precondition(hybridExit == baselineExit && hybridExit == .halted)
+            precondition(hybrid.instructionCount == baseline.instructionCount)
+            for r in 0..<16 { precondition(hybrid.registerValue(r) == baseline.registerValue(r)) }
+            precondition(executor.blocksExecuted >= 2)
+            print("Kenran Butō AOT native block execution, exact-RIP side exit and differential passed")
+        } else {
+            print("Kenran Butō AOT native execution skipped: host lacks ARM64 executable-memory support")
+        }
+#endif
 
         print("x86-64 interpreter register, memory addressing, 16-bit operand reads, ALU flags, stack frames, indirect control flow, instruction windows, brk syscall, budget and fault tests passed")
     }
