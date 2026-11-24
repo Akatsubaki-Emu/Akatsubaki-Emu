@@ -1653,12 +1653,19 @@ if (
 ):
     print("AOT TXM arena setup failure paths do not release both aliases", file=sys.stderr)
     failed = True
-txm_block_remap = aot_memory.split("kern_return_t status=vm_remap(mach_task_self(),&execute", 1)[1].split("return NULL;", 1)[0]
+standard_remap = aot_memory.split("kern_return_t status=vm_remap(mach_task_self(),&execute", 1)[1].split("if(mprotect((void *)execute,mapped,PROT_READ|PROT_EXEC)!=0)", 1)[0]
 if (
-    "deallocate_mach_address(execute,mapped)" not in txm_block_remap
-    or "iSteamAOTExecutableArenaFree(sTXMArena,offset,mapped)" not in txm_block_remap
+    "if(execute)(void)munmap((void *)execute,mapped);" not in standard_remap
+    or "(void)munmap(write,mapped)" not in standard_remap
 ):
-    print("AOT TXM block remap failure path does not return allocation to shared arena", file=sys.stderr)
+    print("AOT standard JIT remap failure path does not release both mappings", file=sys.stderr)
+    failed = True
+standard_protect = aot_memory.split("if(mprotect((void *)execute,mapped,PROT_READ|PROT_EXEC)!=0)", 1)[1].split("return NULL;", 1)[0]
+if (
+    "(void)munmap((void *)execute,mapped)" not in standard_protect
+    or "(void)munmap(write,mapped)" not in standard_protect
+):
+    print("AOT standard JIT protection failure path does not release both mappings", file=sys.stderr)
     failed = True
 for token in ("KenranButoAOTGuestState", "makeMemoryCallbacks(for:memory)",
               "iSteamAOTExecutableMemoryInvoke", "maximumCachedBlocks=64",

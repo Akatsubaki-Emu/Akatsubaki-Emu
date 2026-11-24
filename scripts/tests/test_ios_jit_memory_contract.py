@@ -56,13 +56,16 @@ class IOSJITMemoryContractTests(unittest.TestCase):
         self.assertIn("r->arena_owned=true", self.aot_memory)
 
 
-    def test_txm_arena_failure_paths_release_aliases_and_recycle_blocks(self):
+    def test_txm_arena_and_standard_jit_failure_paths_release_aliases(self):
         txm_setup = self.aot_memory.split("static bool ensure_txm_arena", 1)[1].split("#endif", 1)[0]
         self.assertEqual(txm_setup.count("deallocate_mach_address(write,AOT_TXM_ARENA_BYTES)"), 3)
         self.assertEqual(txm_setup.count("deallocate_mach_address((vm_address_t)exec,AOT_TXM_ARENA_BYTES)"), 3)
-        block_remap = self.aot_memory.split("kern_return_t status=vm_remap(mach_task_self(),&execute", 1)[1].split("return NULL;", 1)[0]
-        self.assertIn("deallocate_mach_address(execute,mapped)", block_remap)
-        self.assertIn("iSteamAOTExecutableArenaFree(sTXMArena,offset,mapped)", block_remap)
+        standard_remap = self.aot_memory.split("kern_return_t status=vm_remap(mach_task_self(),&execute", 1)[1].split("if(mprotect((void *)execute,mapped,PROT_READ|PROT_EXEC)!=0)", 1)[0]
+        self.assertIn("if(execute)(void)munmap((void *)execute,mapped);", standard_remap)
+        self.assertIn("(void)munmap(write,mapped)", standard_remap)
+        standard_protect = self.aot_memory.split("if(mprotect((void *)execute,mapped,PROT_READ|PROT_EXEC)!=0)", 1)[1].split("return NULL;", 1)[0]
+        self.assertIn("(void)munmap((void *)execute,mapped)", standard_protect)
+        self.assertIn("(void)munmap(write,mapped)", standard_protect)
 
 if __name__ == "__main__":
     unittest.main()
