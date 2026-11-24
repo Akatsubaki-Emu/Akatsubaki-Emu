@@ -133,3 +133,15 @@ The current conservative translator is a bounded bring-up subset, not an executa
 The focused regression harness is `scripts/tests/test_kenran_buto_aot_translator.swift`. It checks AArch64 MOVZ/MOVK encodings, register moves, both REX.B exchange forms, legal 15-byte and rejected 16-byte instructions, input limits, ENDBR64 fallback, unsupported/truncated boundaries, and output/instruction budgets. `.github/workflows/validate-kenran-buto-aot.yml` compiles and runs both the decoder harness and translation-cache integration harness on macOS.
 
 These changes improve decoder safety and regression coverage only. The emitter still produces standalone instruction words rather than a versioned guest-state block ABI; it does not yet save/restore guest registers and flags, allocate executable memory, dispatch translated blocks, or resume the interpreter after side exits. Do not mark `.staticAOT` operational or route real guest processes through it until those execution and differential-correctness layers are implemented and tested on device.
+
+## Kenran Butō executable AOT subset
+
+The ARM64 executable-memory provider and Swift execution adapter now connect the bounded translator to the x86-64 interpreter. The launch path injects this adapter only for Linux ELF guests; generic GuestMachine users remain interpreter-only unless they explicitly inject an executor.
+
+The current translated subset is deliberately narrow: NOP, MOV immediate-to-register, and register-only MOV. ENDBR64, arithmetic, memory operations, control flow, syscalls and all other unsupported instructions side-exit to the interpreter at the exact guest RIP. No full Linux ABI or general x86-64 compatibility is implied.
+
+The native ABI is versioned and size-checked. Guest registers are copied into the ARM64 call registers and written back on return. The executor validates state pointers, budgets, register state and exact byte accounting; failed native invocation restores the original registers. The C invocation boundary rechecks live JIT readiness before each block, so a revoked or unavailable JIT session falls back to interpretation.
+
+Executable blocks use separate writable and executable mappings and are capped at 64 blocks / 16 MiB of page-rounded executable memory. The translation cache identity includes ABI and resource budgets, and cached artifacts are compared with a canonical translation before reuse. The translator uses bounded input/output budgets and a fixed four-word instruction emission buffer.
+
+The dedicated ARM64 workflow now has ABI, memory-callback, side-exit, differential interpreter, cache-limit and static-ELF hybrid tests. These are hosted validation gates only. Physical iPad execution, JIT entitlement behavior, app signing, graphics/input, persistent guest state and repeat-launch cleanup still require device verification.
