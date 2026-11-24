@@ -207,16 +207,19 @@ jobs:
               raise SystemExit("Apple builds must not use an unpinned macOS 15 runner.")
           if "runs-on: xcode-27" not in release or "runs-on: xcode-27" not in platform_validation:
               raise SystemExit("Apple builds must use the xcode-27 runner image.")
-          xcode_contract = [
+          xcode_common = [
               'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
-              'case "$XCODE_VERSION" in',
-              '27.1*|27.[2-9]*) ;;',
+              'XCODE_VERSION="$(xcodebuild -version',
               'Expected Xcode 27.1 or later on the xcode-27 runner',
           ]
-          for workflow in (release, platform_validation):
-              for token in xcode_contract:
+          for label, workflow in (("release", release), ("platform validation", platform_validation)):
+              for token in xcode_common:
                   if token not in workflow:
-                      raise SystemExit("Apple build workflow must pin and verify Xcode 27.1 or later: " + token)
+                      raise SystemExit(f"{label} workflow is missing Xcode 27.1+ verification: " + token)
+              case_guard = '27.1*|27.[2-9]*) ;;' in workflow
+              awk_guard = 'major > 27 || (major == 27 && minor >= 1)' in workflow
+              if not (case_guard or awk_guard):
+                  raise SystemExit(f"{label} workflow does not enforce Xcode 27.1 or later.")
           release_job = release.split("\n  release:\n", 1)[1]
           if "group: isteam-release-publish-${{ matrix.channel }}" not in release_job or "cancel-in-progress: false" not in release_job:
               raise SystemExit("Release-channel publication must remain serialized.")
@@ -227,12 +230,12 @@ jobs:
               raise SystemExit("Platform validation should not duplicate release builds on every main push.")
           for token in [
               'XCODE_DEVELOPER_DIR="$(xcode-select -p)"',
-              'case "$XCODE_VERSION" in',
-              '27.*) ;;',
-              'Expected Xcode 27.x on the xcode-27 runner',
+              'XCODE_VERSION="$(xcodebuild -version',
+              'major > 27 || (major == 27 && minor >= 1)',
+              'Expected Xcode 27.1 or later on the xcode-27 runner',
           ]:
               if token not in qemu:
-                  raise SystemExit("QEMU build must select and verify its Xcode 27 toolchain: " + token)
+                  raise SystemExit("QEMU build must select and verify Xcode 27.1 or later: " + token)
           if "spirv-tools" not in qemu or "spirv-llvm-translator" not in qemu:
               raise SystemExit("QEMU Mesa dependency build must install SPIRV-Tools and its LLVM translator.")
           if "utm-ios-arm64-deps-v15-" not in qemu:
