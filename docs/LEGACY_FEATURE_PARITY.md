@@ -50,7 +50,7 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 
 ## Current hard blockers
 
-- GitLab main is the active write target for this engineering work, but the repository documentation configures GitHub as canonical and GitLab as a downstream mirror. GitHub Actions cannot see the newer GitLab-only commits until the repository owner resolves that policy conflict.
+- GitLab main remains the active write target. Although repository documentation describes GitHub as canonical, the asynchronous sync has now propagated the JIT guard and CI changes: GitHub main is at 88818734 and GitLab main is one documentation commit ahead at f1d55957. The remaining parity-document commit is awaiting propagation; the sync direction should not be changed.
 - The GitLab pipeline failed before runner assignment with quota exhaustion; no CI job log exists.
 - The AOT workflow's iPhoneOS SDK compile and focused JIT tests have not run on GitHub.
 - The core-only IPA workflow has zero runs. No IPA, SideStore install or physical iPad guest execution is verified.

@@ -63,17 +63,15 @@
 
 **Verification rule:** source code, a build workflow, a loadable dylib, a host smoke test and a simulator run are separate evidence levels. The backend registry must remain fail-closed until a concrete iOS artifact executes a known guest correctly on a physical iPad.
 
-## Repository synchronization blocker
+## Repository synchronization status
 
-The current repository configuration and the active engineering write-target instruction disagree:
+The repository documentation still describes GitHub as canonical and GitLab as a downstream mirror, while the active engineering instructions for this work designate GitLab main as the write target. The observed synchronization behaviour is asynchronous:
 
-- GitLab project metadata identifies this project as imported from GitHub, with `import_type=github` and GitHub's repository URL as `import_url`.
-- The repository's `docs/GIT_SYNC.md` says GitHub is canonical and GitLab is a downstream mirror. The existing `blank.yml` and `reconcile-gitlab-main.yml` workflows sync GitHub to GitLab; they do not sync GitLab to GitHub. The Git sync documentation says GitLab CI is retired.
-- The active project instructions for this engineering work designate GitLab main as the write target. I have therefore committed to GitLab main and have not pushed to GitHub or changed mirror direction.
-- At this audit, GitHub main is `42a0687b76a9f9a125b581ffa829d6766f7a42f8` and GitLab main is `0e3995a3a749e137e34820203e13488727869a00`. GitLab's compare API confirms the latter is a direct child of the former, so the current delta is a fast-forward candidate and requires no force push.
-- GitHub Actions run on GitHub, not on the GitLab-only commits. The AOT workflow still shows only the old run #213, the core-only IPA workflow has zero runs, and the QEMU workflow's latest visible run #34 is from an older commit. The GitLab pipeline also failed before runner assignment with `ci_quota_exceeded`.
+- GitLab project metadata reports an import from GitHub, and the visible GitHub workflows document GitHub-to-GitLab reconciliation.
+- Despite that documentation, GitHub main has now received the GitLab commits `0e3995a3` and `88818734`. The exact reverse-sync mechanism is not visible in the checked-in GitHub workflow files; do not alter it.
+- At this check, GitHub main is `8881873490aece8e62f2620c3aaa8edd50f8e856` and GitLab main is `f1d55957c68a2a0b9eff207623d719dc9494b880`. The remaining GitLab commit is a direct child of GitHub main, so only the legacy feature-parity documentation is still waiting to propagate.
+- The JIT live-session guard, corrected AArch64 detach assembly, explicit prepare API and iOS arm64 compile step are already present on GitHub. However, GitHub Actions has not automatically run them: the AOT workflow still shows run #213 on the older source-contract failure, and the core-only IPA workflow still has zero runs.
+- The QEMU workflow's latest visible run #34 is from an older commit and failed YAML parsing before build execution. Current main includes the YAML correction and the AOT workflow now validates workflow YAML.
+- GitLab CI is documented as retired; the most recent attempted GitLab pipeline also failed before runner assignment with `ci_quota_exceeded`.
 
-**Required owner decision:** explicitly authorize a one-time fast-forward synchronization of GitLab main to GitHub main for this repository, or change the active write-target policy to match the repository's GitHub-canonical workflow. Until that decision is made, do not push, force-push, reverse the mirror, or alter the existing sync workflows. This is the current blocker preventing the new iOS SDK compile and IPA workflows from seeing the latest fixes.
-
-
-See [Legacy feature parity and remaining requirements](LEGACY_FEATURE_PARITY.md) for the broader feature requests recovered from earlier project conversations.
+**Current action:** keep GitLab main as the write target and allow the existing asynchronous sync to finish. Then manually dispatch the AOT validation workflow and Build Core-Only iOS IPA workflow. Do not force-push, change mirror direction or rewrite sync workflows. The remaining blocker is the absence of a new GitHub Actions run and physical iPad evidence, not a need for a reverse push authorization.
