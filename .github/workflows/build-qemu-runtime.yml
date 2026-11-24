@@ -268,6 +268,8 @@ jobs:
           cp UTM/UTMBuildTCI.xcarchive/Info.plist build/qemu-runtime-tci/UTM-archive-Info.plist
 
           bash scripts/merge-qemu-runtime-variants.sh build/qemu-runtime-jit build/qemu-runtime-tci build/qemu-runtime
+          test -s build/qemu-runtime/QEMU-SOURCE-URL.txt || { echo "Merged runtime is missing QEMU source provenance." >&2; exit 1; }
+          grep -Fxq "$EXPECTED_QEMU_SOURCE_URL" build/qemu-runtime/QEMU-SOURCE-URL.txt || { echo "Merged runtime QEMU source provenance does not match the pinned source." >&2; exit 1; }
           for mode in JIT TCI; do
             mode_dir="build/qemu-runtime/QEMU/$mode"
             manifest="$mode_dir/runtime-library-path.txt"

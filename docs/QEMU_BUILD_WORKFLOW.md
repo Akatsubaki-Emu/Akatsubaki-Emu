@@ -13,7 +13,7 @@ This note documents the iOS device-arm64 QEMU runtime build in `.github/workflow
 
 ## Pinned upstream source
 
-The runtime workflow checks out UTM at the immutable source revision [`3d4b8d8cb1ce93a8b1a9610695c12487685f0c15`](https://github.com/utmapp/UTM/commit/3d4b8d8cb1ce93a8b1a9610695c12487685f0c15), which reports UTM version **5.0.9**. It intentionally does not track the moving `main` branch. Recursive submodules are resolved from the pinned UTM tree, and the workflow records the actual checked-out superproject revision in both JIT and TCI artifacts.
+The runtime workflow checks out UTM at the immutable source revision [`3d4b8d8cb1ce93a8b1a9610695c12487685f0c15`](https://github.com/utmapp/UTM/commit/3d4b8d8cb1ce93a8b1a9610695c12487685f0c15), which reports UTM version **5.0.9**. It intentionally does not track the moving `main` branch. Recursive submodules are resolved from the pinned UTM tree. The workflow verifies that this UTM revision selects QEMU `v10.0.12-utm`, writes the source URL into both JIT and TCI input packages, and the merge step verifies that both inputs agree and preserves the common URL at the final combined runtime root. The actual checked-out UTM revision is also recorded in the merged artifact.
 
 Update this pin only after reviewing the upstream changes, submodule revisions, iOS/iOS-SE schemes, dependency targets, local QEMU patch compatibility and applicable third-party notices. The JIT and TCI archives must both pass the runtime packagers and export checks before a new pin is accepted.
 

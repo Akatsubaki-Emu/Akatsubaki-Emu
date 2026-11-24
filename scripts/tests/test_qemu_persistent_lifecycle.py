@@ -60,6 +60,18 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("QEMU-SOURCE-URL.txt", package)
         self.assertIn("UTM-SOURCE-REVISION.txt", package)
 
+    def test_qemu_runtime_merge_preserves_qemu_source_provenance(self):
+        root = Path(__file__).resolve().parents[2]
+        merge = (root / "scripts" / "merge-qemu-runtime-variants.sh").read_text(encoding="utf-8")
+        workflow = (root / ".github" / "workflows" / "build-qemu-runtime.yml").read_text(encoding="utf-8")
+        self.assertIn('[[ -s "$package/QEMU-SOURCE-URL.txt" ]]', merge)
+        self.assertIn('jit_qemu_source_url="$(tr -d', merge)
+        self.assertIn('tci_qemu_source_url="$(tr -d', merge)
+        self.assertIn('printf \'%s\\n\' "$jit_qemu_source_url" > "$TEMP_OUT/QEMU-SOURCE-URL.txt"', merge)
+        self.assertIn('echo "QEMU_SOURCE_URL=$jit_qemu_source_url"', merge)
+        self.assertIn('test -s build/qemu-runtime/QEMU-SOURCE-URL.txt', workflow)
+        self.assertIn('grep -Fxq "$EXPECTED_QEMU_SOURCE_URL" build/qemu-runtime/QEMU-SOURCE-URL.txt', workflow)
+
     def test_qmp_socket_path_failure_releases_scoped_resources(self):
         root = Path(__file__).resolve().parents[2]
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")

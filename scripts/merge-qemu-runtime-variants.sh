@@ -46,6 +46,9 @@ for package in "$JIT_DIR" "$TCI_DIR"; do
   [[ "$manifest_lines" -eq 1 ]] || fail "runtime library manifest must contain exactly one line: $package"
   [[ -s "$package/exports.txt" ]] || fail "missing exports report: $package"
 done
+jit_qemu_source_url="$(tr -d '\r\n' < "$JIT_DIR/QEMU-SOURCE-URL.txt")"
+tci_qemu_source_url="$(tr -d '\r\n' < "$TCI_DIR/QEMU-SOURCE-URL.txt")"
+[[ -n "$jit_qemu_source_url" && "$jit_qemu_source_url" == "$tci_qemu_source_url" ]] || fail "JIT and TCI artifacts were built from different or empty QEMU source URLs"
 
 jit_revision="$(tr -d '\r\n' < "$JIT_DIR/UTM-SOURCE-REVISION.txt")"
 tci_revision="$(tr -d '\r\n' < "$TCI_DIR/UTM-SOURCE-REVISION.txt")"
@@ -151,6 +154,7 @@ printf '%s\n' "$tci_library_merged" > "$TEMP_OUT/QEMU/TCI/runtime-library-path.t
 cp "$JIT_DIR/exports.txt" "$TEMP_OUT/QEMU/JIT/exports.txt"
 cp "$TCI_DIR/exports.txt" "$TEMP_OUT/QEMU/TCI/exports.txt"
 cp "$JIT_DIR/UTM-SOURCE-REVISION.txt" "$TEMP_OUT/UTM-SOURCE-REVISION.txt"
+printf '%s\n' "$jit_qemu_source_url" > "$TEMP_OUT/QEMU-SOURCE-URL.txt"
 cp "$JIT_DIR/UTM-archive-Info.plist" "$TEMP_OUT/UTM-JIT-archive-Info.plist" 2>/dev/null || true
 cp "$TCI_DIR/UTM-archive-Info.plist" "$TEMP_OUT/UTM-TCI-archive-Info.plist" 2>/dev/null || true
 
@@ -158,6 +162,7 @@ cp "$TCI_DIR/UTM-archive-Info.plist" "$TEMP_OUT/UTM-TCI-archive-Info.plist" 2>/d
   echo "JIT=$jit_library"
   echo "TCI=$tci_library_merged"
   echo "UTM_REVISION=$jit_revision"
+  echo "QEMU_SOURCE_URL=$jit_qemu_source_url"
 } > "$TEMP_OUT/QEMU/runtime-mode-manifest.txt"
 {
   echo "=== JIT runtime ==="
