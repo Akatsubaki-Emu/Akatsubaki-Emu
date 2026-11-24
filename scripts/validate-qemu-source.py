@@ -57,9 +57,9 @@ required = {
         "test_pointer_updates_coalesce_per_connection_on_ordered_send_queue",
         "test_cancelled_reader_cannot_install_connection_after_stop",
         "test_reconnect_does_not_publish_unhandshaken_or_stale_connection",
-        "guard !Task.isCancelled, self.connection === candidate else { return false }",
+        "guard !Task.isCancelled, self.sessionGeneration == generation else { return false }",
         "let wasCurrent = self.withStateLock",
-        "guard self.connection === candidate else { return false }",
+        "guard !Task.isCancelled, self.sessionGeneration == generation, self.connection === candidate else { return false }"",
         "self.pendingSendGroup = DispatchGroup()",
         "if wasCurrent",
         "_ = self.keyState.releaseAll()",
@@ -136,7 +136,7 @@ required = {
         "VMConfiguration.defaultSteamOS",
     ],
     "src/Performance/TranslationCache.swift": [
-        "SHA256.hash(data: Data(key.utf8))",
+        "SHA256Hex.digest(Data(key.utf8))",
     ],
     "scripts/tests/test_windows_pe_image.swift": [
         "relocationDirectoryRVA: UInt32 = 0",

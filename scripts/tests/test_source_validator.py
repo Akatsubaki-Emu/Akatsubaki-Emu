@@ -43,6 +43,23 @@ class SourceValidatorTests(unittest.TestCase):
                 f"duplicate source-contract tokens for {key.value}: {duplicate_tokens}",
             )
 
+    def test_source_contracts_track_vnc_generation_and_shared_cache_digest(self):
+        root = Path(__file__).resolve().parents[2]
+        validator = (root / "scripts" / "validate-qemu-source.py").read_text(encoding="utf-8")
+        vnc_test = (root / "scripts" / "tests" / "test_vnc_pointer_coalescing.py").read_text(encoding="utf-8")
+        cache = (root / "src" / "Performance" / "TranslationCache.swift").read_text(encoding="utf-8")
+        for token in (
+            "guard !Task.isCancelled, self.sessionGeneration == generation else { return false }",
+            "guard !Task.isCancelled, self.sessionGeneration == generation, self.connection === candidate else { return false }",
+            "SHA256Hex.digest(Data(key.utf8))",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, validator)
+        self.assertNotIn("SHA256.hash(data: Data(key.utf8))", validator)
+        self.assertIn("self.sessionGeneration == generation", vnc_test)
+        self.assertIn("SHA256Hex.digest(Data(key.utf8))", cache)
+
+
     def test_backend_error_contract_uses_typed_error_description(self):
         root = Path(__file__).resolve().parents[2]
         validator = (root / "scripts" / "validate-qemu-source.py").read_text(encoding="utf-8")
