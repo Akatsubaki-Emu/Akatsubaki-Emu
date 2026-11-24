@@ -41,11 +41,13 @@ class HybridXCHGSmokeELFTests(unittest.TestCase):
 
             guest_code = image[0x1000:]
             self.assertEqual(guest_code[10], 0x91)
+            self.assertIn(bytes.fromhex("49 91"), guest_code)
+            self.assertEqual(guest_code.count(bytes.fromhex("83 f8 00 75")), 2)
             lea = guest_code.index(bytes.fromhex("48 8d 35"))
             displacement = struct.unpack_from("<i", guest_code, lea + 3)[0]
             message_offset = lea + 7 + displacement
             self.assertEqual(guest_code[message_offset:], b"hello\n")
-            self.assertEqual(guest_code.count(bytes.fromhex("0f 05")), 2)
+            self.assertEqual(guest_code.count(bytes.fromhex("0f 05")), 3)
 
             if sys.platform == "linux" and platform.machine().lower() in {"x86_64", "amd64"}:
                 completed = subprocess.run(
