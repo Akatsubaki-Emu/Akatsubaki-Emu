@@ -115,20 +115,17 @@ final class QEMUNativeRuntime {
                     "The in-process QEMU runtime is already bound to another VM configuration. Restart Akatsubaki Emu to switch guests."
                 )
             }
-            let reset = Self.sendQMP("system_reset")
-            guard reset.success else {
-                controlError = reset.error
-                throw RuntimeError.runtimeUnavailable(reset.error ?? "QEMU did not acknowledge system_reset.")
+            if isPaused {
+                let resumed = Self.sendQMP("cont")
+                let alreadyRunning = resumed.error?.localizedCaseInsensitiveContains("already running") == true
+                guard resumed.success || alreadyRunning else {
+                    controlError = resumed.error
+                    throw RuntimeError.runtimeUnavailable(resumed.error ?? "QEMU did not acknowledge cont.")
+                }
+                isPaused = false
             }
-            let resumed = Self.sendQMP("cont")
-            if !resumed.success
-                && !(resumed.error?.localizedCaseInsensitiveContains("already running") ?? false) {
-                controlError = resumed.error
-                throw RuntimeError.runtimeUnavailable(resumed.error ?? "QEMU did not acknowledge cont.")
-            }
-            isPaused = false
             controlError = nil
-            EmulationLog.shared.write("QEMU guest reset and resumed through the persistent QMP session.")
+            EmulationLog.shared.write("QEMU guest resumed through the persistent QMP session.")
             return
         }
 
@@ -150,6 +147,11 @@ final class QEMUNativeRuntime {
         }
 
         EmulationLog.shared.write("QEMU effective accelerator: \(requiresJIT ? "JIT" : "TCI")")
+        guard QEMUCommandBuilder.qmpSocketPath.utf8.count < 104 else {
+            throw RuntimeError.runtimeUnavailable(
+                "The app temporary directory produces a QMP socket path that exceeds the AF_UNIX sun_path limit."
+            )
+        }
         try? FileManager.default.removeItem(atPath: QEMUCommandBuilder.qmpSocketPath)
         let args = QEMUCommandBuilder(configuration: effectiveConfiguration)
             .arguments(diskImage: diskImage, writableDiskImage: writableDiskImage,
@@ -350,6 +352,35 @@ final class QEMUNativeRuntime {
         // or QEMU cannot persist the guest's UEFI boot variables.
         try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
         return destination
+    }
+
+    @discardableResult
+    func reset() -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard started else {
+            controlError = "QEMU runtime has not been started."
+            return false
+        }
+        let result = Self.sendQMP("system_reset")
+        guard result.success else {
+            controlError = result.error ?? "QEMU did not acknowledge system_reset."
+            EmulationLog.shared.write("QEMU reset failed: \(controlError ?? "unknown QMP error")")
+            return false
+        }
+        if isPaused {
+            let resumed = Self.sendQMP("cont")
+            let alreadyRunning = resumed.error?.localizedCaseInsensitiveContains("already running") == true
+            guard resumed.success || alreadyRunning else {
+                controlError = resumed.error ?? "QEMU did not acknowledge cont after reset."
+                EmulationLog.shared.write("QEMU reset resume failed: \(controlError ?? "unknown QMP error")")
+                return false
+            }
+        }
+        isPaused = false
+        controlError = nil
+        EmulationLog.shared.write("QEMU guest reset through the persistent QMP session.")
+        return true
     }
 
     @discardableResult
