@@ -245,7 +245,9 @@ final class GuestMemory {
     func readPrefix(offset: UInt64, maximumLength: Int? = nil, into buffer: inout [UInt8]) -> Int? {
         readPrefixCalls += 1
         guard offset <= size else { return nil }
-        let requested = min(buffer.count, max(0, maximumLength ?? buffer.count))
+        let requestedLength = maximumLength ?? buffer.count
+        guard requestedLength >= 0 else { return nil }
+        let requested = min(buffer.count, requestedLength)
         let limit = Int(min(UInt64(requested), size - offset))
         var completed = 0
         while completed < limit {
@@ -256,6 +258,9 @@ final class GuestMemory {
             let start = Int(address)
             for index in 0..<amount { buffer[completed + index] = bytes[start + index] }
             completed += amount
+        }
+        if completed == 0 && requested > 0 && offset < size {
+            return nil
         }
         return completed
     }
@@ -493,6 +498,26 @@ struct StaticELFExecutionTests {
         }
     }
 
+    static func testExecutePrefixPermissionBoundary() {
+        let memory = GuestMemory(size: 8192)
+        precondition(memory.write(Data([0x90, 0x91, 0x92, 0x93]), offset: 4094))
+        precondition(memory.beginMapping())
+        precondition(memory.map(offset: 0, length: 4096, permissions: 5))
+        precondition(memory.map(offset: 4096, length: 4096, permissions: 1))
+
+        var window = [UInt8](repeating: 0, count: 4)
+        precondition(memory.readPrefix(offset: 4094, maximumLength: 4, into: &window) == 2,
+                     "Executable-prefix reads must stop at the first non-executable page")
+        precondition(Array(window.prefix(2)) == [0x90, 0x91])
+        precondition(memory.readExecuteByte(offset: 4096) == nil)
+        precondition(memory.readPrefix(offset: 4096, maximumLength: 4, into: &window) == nil,
+                     "A non-executable first byte must be reported as a fetch fault")
+        precondition(memory.readPrefix(offset: 4096, maximumLength: 0, into: &window) == 0)
+        precondition(memory.readPrefix(offset: 8192, maximumLength: 4, into: &window) == 0)
+        precondition(memory.readPrefix(offset: 4094, maximumLength: -1, into: &window) == nil)
+        print("Guest execute-prefix permission boundary contract passed")
+    }
+
     static func testDescriptorBoundELFSnapshot() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -603,6 +628,7 @@ struct StaticELFExecutionTests {
     }
 
     static func main() throws {
+        testExecutePrefixPermissionBoundary()
         try testDescriptorBoundELFSnapshot()
         try testFailedPIERelocationClearsGuestMemory()
         if let smokePath = CommandLine.arguments.dropFirst().first {
