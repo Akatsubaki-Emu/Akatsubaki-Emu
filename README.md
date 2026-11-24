@@ -1,6 +1,6 @@
 # Akatsubaki Emu
 
-> DISCLAIMER
+> **DISCLAIMER !**
 >
 > **please read this before using this application**
 > 
@@ -81,11 +81,11 @@ The tvOS target is an early Siri Remote-friendly interface preview. Its Launch s
 
 ### Runtime and native helpers
 
-The hybrid execution architecture is named **Kenran Butō (絢爛舞踏)**. Its planned components are Kenran Butō AOT (static x86-64 → ARM64 translation), Kenran Butō Cache (translated-code cache), Kenran Butō Router (backend selection and fallback), Kenran Butō Runtime (execution orchestration), and Kenran Butō Graphics (graphics translation). These names describe architectural responsibilities, not a claim that the corresponding engines are complete or integrated.
+The hybrid execution core is named **Kenran Butō (絢爛舞踏)**. Its planned components are Kenran Butō AOT (static x86-64 → ARM64 translation), Kenran Butō Cache (translated-code cache), Kenran Butō Router (backend selection and fallback), Kenran Butō Runtime (execution orchestration), and Kenran Butō Graphics (graphics translation). These names describe architectural responsibilities, not a claim that the corresponding engines are complete or integrated.
 
 The repository contains exploratory components for guest memory, image/file inspection, storage, display, and host-device services. The Windows and bounded static Linux ELF game-launch boundaries now invoke the **Kenran Butō** hybrid execution planner that composes cached static translation, one selected dynamic translator, diagnostic fallback, Windows compatibility, independent graphics translation, and host services. QEMU remains the full-system route; a32rt and native ARM64 remain architecture-specific paths. This is still orchestration scaffolding: the planner does not make missing backends available, and launch remains blocked until concrete runtime adapters and required ABI layers are installed. The Windows PE parser is not yet a Windows x64-to-ARM64 instruction translator. The QEMU/UTM runtime build is being developed in `.github/workflows/build-qemu-runtime.yml`; no verified runtime artifact or physical-device guest boot is established here. A working full-system emulator, Box64 execution environment, Wine/Proton, Windows API compatibility layer, functional guest networking/input path, and production-ready 3D GPU translation are not yet integrated. Android selection is a UI experiment. Compatibility with arbitrary games or anti-cheat systems is not promised.
 
-The Android DroidDeck source is not a direct iOS runtime: FEX/Proton, Turnip, Gamescope, Linux package managers, and Android-specific device access need separate Apple-platform implementations. See [DroidDeck feature-port inventory](docs/DROIDDECK_PORT_PLAN.md) and [DroidDeck port status](docs/DROIDDECK_PORT_STATUS.md).
+
 
 ## Requirements
 
@@ -96,7 +96,7 @@ The Android DroidDeck source is not a direct iOS runtime: FEX/Proton, Turnip, Ga
 - Git and an iPhone/iPad, Apple TV, or Apple Vision Pro simulator for testing.
 - Physical-device installation requires appropriate signing and provisioning.
 
-The project currently declares iOS 16, tvOS 17, and visionOS 1.0 deployment targets. Confirm the current project settings and CI logs for exact SDK compatibility.
+The project currently declares IOS 16 ~ IOS 27, tvOS 17, and visionOS 1.0 deployment targets. Confirm the current project settings and CI logs for exact SDK compatibility.
 
 ### Installation notes
 
@@ -133,7 +133,6 @@ For hosted builds, use the [Build & Release workflow](https://github.com/Akatsub
 - **Scheduled workflow:** runs daily at 02:00 UTC.
 - **Manual GitHub Actions run:** choose **Nightly** or **Main**.
 - **Release assets:** iOS, tvOS, and visionOS IPAs, each with a SHA-256 checksum.
-- **Older releases:** the workflow is configured not to automatically delete old releases.
 
 Official AltStore/PAL manifests are refreshed from published app releases by the [website repository's GitHub Actions updater](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu.github.io/blob/main/.github/workflows/update-xthrx-alt-source.yml). Builds are unsigned prototypes. ZIP and checksum validation verify packaging integrity only, not installability, runtime behavior, or guest OS compatibility.
 
@@ -141,7 +140,7 @@ More details: [Installation](INSTALL.md) · [Release workflow](docs/RELEASES.md)
 
 ## Contributing
 
-Bug reports, documentation improvements, and focused pull requests are welcome. Please read the [contributing.md](CONTRIBUTING.md) before submitting changes.
+Bug reports, documentation improvements, and focused pull requests are welcome. Please read [contributing.md](CONTRIBUTING.md) before submitting changes.
 
 ## Documentation
 
