@@ -153,6 +153,9 @@ final class QEMUNativeRuntime {
 
         EmulationLog.shared.write("QEMU effective accelerator: \(requiresJIT ? "JIT" : "TCI")")
         guard QEMUCommandBuilder.qmpSocketPath.utf8.count < 104 else {
+            // Release every security-scoped URL acquired above before this
+            // early startup failure. They are not yet owned by scopedURLs.
+            newlyScoped.forEach { $0.stopAccessingSecurityScopedResource() }
             throw RuntimeError.runtimeUnavailable(
                 "The app temporary directory produces a QMP socket path that exceeds the AF_UNIX sun_path limit."
             )
