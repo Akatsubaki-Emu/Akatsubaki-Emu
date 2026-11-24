@@ -190,3 +190,6 @@ This is useful evidence that a no-JIT Box64 user-mode path can be made to execut
 
 
 Track A now includes a second static guest, hybrid_runtime_smoke.elf, which exercises uname, write and exit through the no-JIT interpreter with separate RX/RW PT_LOAD segments. Verify its Linux/x86_64 output and exit status 0 on the physical device.
+
+
+See [FEXCore and Box64 iOS integration audit](FEXCORE_IOS_PORT_AUDIT.md) for the current upstream platform boundary, embedding requirements, Windows/graphics gaps and first-playable sequence.
