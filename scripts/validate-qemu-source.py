@@ -1687,7 +1687,7 @@ qmp_backend = Path("src/QEMU/QEMUBackend.swift").read_text(encoding="utf-8")
 qmp_engine = Path("src/Core/VMEngine.swift").read_text(encoding="utf-8")
 for token in ("bool isteam_qemu_qmp_command", "AF_UNIX", "qmp_capabilities",
               "SO_RCVTIMEO", "SO_NOSIGPIPE", '"system_reset"', '"cont"', '"stop"',
-              "g_has_started = true"):
+              "g_has_started = true", "attempt < 20", "nanosleep(&delay, NULL)"):
     if token not in qmp_bridge:
         print(f"QEMU QMP bridge missing {token!r}", file=sys.stderr)
         failed = True
@@ -1703,9 +1703,10 @@ for token in ("-no-shutdown", "-qmp", "unix:\\(Self.qmpSocketPath),server=on,wai
         print(f"QEMU command builder missing persistent-session option {token!r}", file=sys.stderr)
         failed = True
 for token in ("static let shared = QEMUNativeRuntime()", "private init()",
-              "sessionKey == requestedSessionKey", 'Self.sendQMP("system_reset")',
-              'Self.sendQMP("cont")', 'Self.sendQMP("stop")',
-              "private(set) var isPaused = false", "the process and disk scopes remain available"):
+              "private let stateLock = NSLock()", "sessionKey == requestedSessionKey",
+              'Self.sendQMP("system_reset")', 'Self.sendQMP("cont")', 'Self.sendQMP("stop")',
+              "private(set) var isPaused = false", "the process and disk scopes remain available",
+              "already stopped", "already running"):
     if token not in qmp_runtime:
         print(f"Persistent QEMU runtime missing {token!r}", file=sys.stderr)
         failed = True
@@ -1716,6 +1717,10 @@ for token in ("guard candidate.stop() else", "QEMU process retained for repeat l
     if token not in qmp_engine:
         print(f"VMEngine does not pause and retain QEMU for repeat launches: {token!r}", file=sys.stderr)
         failed = True
+qmp_command_tests = Path("scripts/tests/test_qemu_command_builder.swift").read_text(encoding="utf-8")
+if "QEMUCommandBuilder.qmpSocketPath" not in qmp_command_tests or "-no-shutdown" not in qmp_command_tests:
+    print("QEMU command-line persistence regression is missing", file=sys.stderr)
+    failed = True
 qmp_tests = Path("scripts/tests/test_qemu_persistent_lifecycle.py").read_text(encoding="utf-8")
 qmp_native_tests = Path("scripts/tests/test_qemu_native_bridge.c").read_text(encoding="utf-8")
 if "QEMUPersistentLifecycleTests" not in qmp_tests:
