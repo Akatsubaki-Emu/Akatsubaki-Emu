@@ -116,8 +116,8 @@ final class GuestMemory {
         let available = Int(min(UInt64(Int.max), size - offset))
         let count = min(maximumLength, buffer.count, available)
         guard count > 0 else { return 0 }
-        return buffer.withUnsafeMutableBytes { bytes -> Int in
-            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return 0 }
+        return buffer.withUnsafeMutableBytes { bytes -> Int? in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return nil }
             // A zero-byte prefix means the first guest byte is not executable.
             // Preserve nil for inaccessible instruction memory; zero is reserved for empty requests.
             let bytesRead = isteam_guest_memory_read_execute_prefix(native, offset, base, count)

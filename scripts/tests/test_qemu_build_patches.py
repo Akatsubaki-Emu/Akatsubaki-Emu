@@ -664,10 +664,13 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         for name in (
             "Set release metadata",
             "Publish combined release",
-            "Update rolling channel tag",
         ):
             step = release_job.split("- name: " + name, 1)[1].split("\n      - name:", 1)[0]
             self.assertIn("if: steps.final-freshness.outputs.publish == 'true'", step)
+        self.assertIn("target_commitish: ${{ github.sha }}", release_job)
+        self.assertNotIn("git tag --force", release_job)
+        self.assertNotIn("git push --force", release_job)
+
 
         ios_package = source.split("- name: Build and package iOS IPA", 1)[1].split(
             "- name: Build and package tvOS IPA", 1

@@ -246,7 +246,7 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("if grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks$' \"$TCI_DIR/exports.txt\"; then", merge)
         self.assertIn("manifest_lines=\"$(awk 'END { print NR }' \"$package/QEMU/runtime-library-path.txt\")\"", merge)
         self.assertIn('[[ "$manifest_lines" -eq 1 ]]', merge)
-        self.assertIn('mkdir -p "$OUT/Frameworks" "$OUT/QEMU/JIT" "$OUT/QEMU/TCI"', merge)
+        self.assertIn('mkdir -p "$TEMP_OUT/Frameworks" "$TEMP_OUT/QEMU/JIT" "$TEMP_OUT/QEMU/TCI"', merge)
 
     def test_guest_process_manager_validates_pe64_before_classification(self):
         root = Path(__file__).resolve().parents[2]
@@ -800,16 +800,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertLess(import_flow.index("var current = GameStore.shared.games"), import_flow.index("for profile in backup.profiles"))
         self.assertLess(import_flow.index("let validGameIDs = existingIDs.union(seen)"), import_flow.index("for profile in backup.profiles"))
 
-    def test_release_tags_are_moved_after_successful_asset_publication(self):
+    def test_release_tags_are_immutable_and_assets_publish_after_final_freshness(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-        publish = workflow.index("- name: Publish combined release")
-        move = workflow.index("- name: Update rolling channel tag")
-        self.assertLess(publish, move)
-        update = workflow[move:]
-        self.assertIn('git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"', update)
-        self.assertIn('git push --force origin "refs/tags/$RELEASE_CHANNEL"', update)
         self.assertIn("contents: write", workflow)
+        self.assertIn("tag_name: ${{ steps.meta.outputs.tag }}", workflow)
+        self.assertIn("target_commitish: ${{ github.sha }}", workflow)
+        self.assertNotIn('git tag --force "$RELEASE_CHANNEL" "$GITHUB_SHA"', workflow)
+        self.assertNotIn('git push --force origin "refs/tags/$RELEASE_CHANNEL"', workflow)
         verify = workflow.index("- name: Verify combined release assets")
         final_check = workflow.index("- name: Re-check freshness immediately before publishing")
         publish = workflow.index("- name: Publish combined release")
@@ -854,7 +852,7 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("func refreshAvailability() -> Bool", executor)
         self.assertIn("func refreshAvailability() -> Bool", interpreter)
         self.assertIn("aotExecutor?.refreshAvailability() == true", interpreter)
-        self.assertIn("static let translatorVersion = \"7\"", translator)
+        self.assertIn("static let translatorVersion = \"8\"", translator)
         self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", provider)
         invoke = provider.split("bool iSteamAOTExecutableMemoryInvoke", 1)[1].split("void iSteamAOTExecutableMemoryDestroy", 1)[0]
         self.assertIn("iSteamAOTExecutableMemoryIsAvailable()", invoke)

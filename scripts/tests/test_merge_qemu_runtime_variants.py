@@ -16,6 +16,7 @@ def make_package(root: Path, mode: str, *, revision: str = "utm-revision-1", cal
     (root / "Frameworks" / "Shared.framework").mkdir(parents=True)
     (root / "QEMU").mkdir()
     (root / "UTM-SOURCE-REVISION.txt").write_text(revision + "\n", encoding="utf-8")
+    (root / "QEMU-SOURCE-URL.txt").write_text("https://github.com/utmapp/qemu.git\n", encoding="utf-8")
     (root / "Frameworks" / "QEMU.framework" / "QEMU").write_text(
         qemu_bytes if qemu_bytes is not None else mode + " qemu binary", encoding="utf-8"
     )

@@ -53,8 +53,9 @@ class VNCPointerButtonTests(unittest.TestCase):
 
         button = source.split("func sendPointerButton", 1)[1].split("func tapPointer", 1)[0]
         tap = source.split("func tapPointer", 1)[1].split("func movePointer", 1)[0]
-        self.assertIn("enqueueSend(Self.pointerEvent", button)
-        self.assertEqual(tap.count("enqueueSend(Self.pointerEvent"), 2)
+        self.assertIn("enqueueSend(", button)
+        self.assertIn("Self.pointerEvent(", button)
+        self.assertEqual(tap.count("Self.pointerEvent("), 2)
 
 if __name__ == "__main__":
     unittest.main()
