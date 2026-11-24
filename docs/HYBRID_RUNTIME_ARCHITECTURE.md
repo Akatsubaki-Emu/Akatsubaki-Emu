@@ -118,21 +118,19 @@ The planner's availability set must be populated only by concrete runtime probes
 - A planned composition is not a working runtime. Verify physical-device boot, process launch, graphics, input/audio, shutdown and persistence before claiming compatibility.
 
  
-## Kenran Butō AOT translator bring-up
+## Kenran Butō AOT execution subset
 
-`src/Runtime/X86_64AOTTranslator.swift` provides bounded x86-64 to AArch64 block translation for NOP, exact ENDBR64-as-no-op, MOV register-immediate (32/64-bit), and register-only MOV (32/64-bit). These operations do not modify x86 arithmetic flags. The translator enforces instruction, output and guest-input budgets, rejects the REX.B `0x90` XCHG form rather than miscompiling it as NOP, and stops at the first unsupported/truncated instruction with a precise guest-byte fallback offset.
+The translator is now connected to a versioned ARM64 guest-state ABI, a W^X executable-memory provider, a bounded executable-block cache and interpreter side exits. ABI details and field offsets are documented in [KENRAN_BUTO_AOT_ABI.md](KENRAN_BUTO_AOT_ABI.md).
 
-`KenranButoAOTCompiler` validates and caches serialized translation artifacts using guest-code SHA-256, guest ABI, translator version, AArch64 target and CPU feature identity. Cache hits are revalidated against the original guest bytes.
+Translator version 3 currently emits only NOP, MOV register-immediate (32/64-bit), and register-only MOV (32/64-bit). ENDBR64, arithmetic, memory operations, branches, calls/returns, syscalls, SIMD, atomics, relocations and cross-block control flow remain interpreter fallbacks. The translated subset does not modify x86 arithmetic flags.
 
-**This remains a translation foundation, not an executable AOT runtime.** There is no guest-register context ABI, executable-memory provider, block dispatcher, cache invalidation integration for self-modifying guest code, or tested transition back into the interpreter. Arithmetic/flags, memory operands, branches, calls/returns, syscalls, SIMD, atomics, relocations and cross-block control flow remain unsupported. The router must not advertise `.staticAOT` as operational until those execution requirements and physical-iOS JIT constraints are implemented and validated.
+AOT is injected at the Linux ELF launch boundary. Generic GuestMachine instances remain interpreter-only unless an executor is explicitly supplied. The C invocation boundary rechecks JIT readiness for every block; unavailable or revoked JIT returns to the interpreter. The ARM64 workflow validates the ABI, register preservation, side-exit RIP, cache bounds and a static ELF hybrid run. This is a validated execution subset, not a general-purpose x86-64 backend or proof of physical-iPad compatibility.
 
 ## AOT decoder correctness contract
 
-The current conservative translator is a bounded bring-up subset, not an executable backend. Translator version 2 enforces the x86-64 architectural 15-byte instruction limit across the entire instruction (prefixes, opcode, ModRM and immediate), not just the prefix run. REX.B forms `41 90` and `49 90` are preserved for interpreter fallback because they encode XCHG rather than NOP. ENDBR64 is also preserved for fallback until the guest CET policy is represented. Guest-input, instruction-count and output-byte budgets stop only at instruction boundaries; unsupported and truncated instructions report the original guest offset.
+Translator version 3 enforces the x86-64 architectural 15-byte instruction limit across prefixes, opcode, ModRM and immediate. REX.B forms 41 90 and 49 90 are preserved for interpreter fallback because they encode XCHG rather than NOP. ENDBR64 is preserved for fallback until guest CET policy is represented. Guest-input, instruction-count and output-byte budgets stop only at instruction boundaries; unsupported and truncated instructions report the original guest offset.
 
-The focused regression harness is `scripts/tests/test_kenran_buto_aot_translator.swift`. It checks AArch64 MOVZ/MOVK encodings, register moves, both REX.B exchange forms, legal 15-byte and rejected 16-byte instructions, input limits, ENDBR64 fallback, unsupported/truncated boundaries, and output/instruction budgets. `.github/workflows/validate-kenran-buto-aot.yml` compiles and runs both the decoder harness and translation-cache integration harness on macOS.
-
-These changes improve decoder safety and regression coverage only. The emitter still produces standalone instruction words rather than a versioned guest-state block ABI; it does not yet save/restore guest registers and flags, allocate executable memory, dispatch translated blocks, or resume the interpreter after side exits. Do not mark `.staticAOT` operational or route real guest processes through it until those execution and differential-correctness layers are implemented and tested on device.
+The focused regression harness is scripts/tests/test_kenran_buto_aot_translator.swift. It checks AArch64 MOVZ/MOVK encodings, register moves, both REX.B exchange forms, legal 15-byte and rejected 16-byte instructions, multi-instruction blocks, hard budget clamps, input limits, ENDBR64 fallback, unsupported/truncated boundaries and output/instruction budgets. A separate allocation-contract test guards the borrowed input buffer, fixed four-word instruction buffer and single final Data copy.
 
 ## Kenran Butō executable AOT subset
 
