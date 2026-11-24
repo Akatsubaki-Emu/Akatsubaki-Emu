@@ -4,7 +4,7 @@ import Foundation
 final class QEMUBackend {
     private let configuration: VMConfiguration
     private let builder: QEMUCommandBuilder
-    private let runtime = QEMUNativeRuntime()
+    private let runtime = QEMUNativeRuntime.shared
 
     init(configuration: VMConfiguration) {
         self.configuration = configuration
@@ -21,7 +21,7 @@ final class QEMUBackend {
                           writableDiskImage: writableDiskImage, firmware: firmware)
     }
 
-    func stop() { runtime.stop() }
+    @discardableResult func stop() -> Bool { runtime.stop() }
 
     var isRunning: Bool { runtime.isRunning }
     var isActive: Bool { runtime.isActive }
