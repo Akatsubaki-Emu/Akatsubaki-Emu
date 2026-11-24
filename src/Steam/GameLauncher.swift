@@ -20,9 +20,8 @@ final class GameLauncher {
         }
 
         if format == .linuxELF {
-            // Only the built-in diagnostic interpreter is integrated today.
-            // Do not advertise FEXCore, Box64, AOT or a complete Linux syscall ABI
-            // until their concrete adapters are packaged and verified.
+            // A bounded NOP/MOV AOT fast path is injected for eligible JIT sessions.
+            // The interpreter remains the correctness fallback; this is not a full Linux ABI.
             let availability = RuntimeCapabilityRegistry.current.backendAvailability
             let request = RuntimeExecutionRequest(format: .linuxX64ELF)
             let plan = RuntimeBackendRouter.plan(for: request, availability: availability)
@@ -127,7 +126,8 @@ final class LinuxELFRuntime {
             guard let self else { return }
             let machine = GuestMachine(
                 configuration: .defaultLinux,
-                memorySize: Self.guestMemorySize
+                memorySize: Self.guestMemorySize,
+                aotExecutor: KenranButoAOTExecutor()
             )
             guard machine.state == .configured else {
                 let initializationError = machine.initializationError
