@@ -65,9 +65,9 @@ jobs:
           fi
           XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
           case "$XCODE_VERSION" in
-            27.*) ;;
+            27.1*|27.[2-9]*) ;;
             *)
-              echo "Expected Xcode 27.x on the xcode-27 runner, selected $XCODE_VERSION." >&2
+              echo "Expected Xcode 27.1 or later on the xcode-27 runner, selected $XCODE_VERSION." >&2
               exit 1
               ;;
           esac
@@ -272,6 +272,7 @@ jobs:
             exports="$mode_dir/exports.txt"
             test -s "$manifest" || { echo "Missing $mode runtime manifest." >&2; exit 1; }
             test -s "$exports" || { echo "Missing $mode export manifest." >&2; exit 1; }
+            test "$(awk 'END { print NR }' "$manifest")" -eq 1 || { echo "$mode runtime manifest must contain exactly one path." >&2; exit 1; }
             runtime_rel="$(head -n 1 "$manifest")"
             case "$runtime_rel" in
               Frameworks/*) ;;
