@@ -778,5 +778,20 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("framebuffer === source", metal)
         self.assertIn("sessionGeneration: generation", display)
 
+    def test_qemu_uses_persistent_qmp_control_without_relaunching_process(self):
+        root = Path(__file__).resolve().parents[2]
+        bridge = (root / "iSteam" / "QEMUNativeBridge.c").read_text(encoding="utf-8")
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        backend = (root / "src" / "QEMU" / "QEMUBackend.swift").read_text(encoding="utf-8")
+        builder = (root / "src" / "QEMU" / "QEMUCommandBuilder.swift").read_text(encoding="utf-8")
+        self.assertIn("AF_UNIX", bridge)
+        self.assertIn("qmp_capabilities", bridge)
+        self.assertIn("static let shared = QEMUNativeRuntime()", runtime)
+        self.assertIn('Self.sendQMP("system_reset")', runtime)
+        self.assertIn('Self.sendQMP("stop")', runtime)
+        self.assertIn("QEMUNativeRuntime.shared", backend)
+        self.assertIn("-no-shutdown", builder)
+        self.assertIn("-qmp", builder)
+
 if __name__ == "__main__":
     unittest.main()
