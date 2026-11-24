@@ -14,8 +14,38 @@ enum VMConfiguration {
 final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
+    private var permissionsEnabled = false
+    private var pagePermissions: [UInt64: UInt8] = [:]
     init(size: UInt64) { self.size = size; bytes = [UInt8](repeating: 0, count: Int(size)) }
-    func clear() { bytes = [UInt8](repeating: 0, count: Int(size)) }
+    func clear() {
+        bytes = [UInt8](repeating: 0, count: Int(size))
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = false
+    }
+    func beginMapping() -> Bool {
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = true
+        return true
+    }
+    func map(offset: UInt64, length: UInt64, permissions: UInt8, merge: Bool = false) -> Bool {
+        guard permissionsEnabled, offset % 4096 == 0, length > 0,
+              permissions & ~UInt8(7) == 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / 4096
+        let last = (offset + length - 1) / 4096
+        for page in first...last {
+            let old = pagePermissions[page] ?? 0
+            pagePermissions[page] = merge ? old | permissions : permissions
+        }
+        return true
+    }
+    func hasPermission(offset: UInt64, length: UInt64, required: UInt8) -> Bool {
+        guard offset <= size, length <= size - offset else { return false }
+        if !permissionsEnabled || length == 0 { return true }
+        let first = offset / 4096
+        let last = (offset + length - 1) / 4096
+        for page in first...last where (pagePermissions[page] ?? 0) & required != required { return false }
+        return true
+    }
     func zero(offset: UInt64, length: UInt64) -> Bool {
         guard offset <= size, length <= size - offset else { return false }
         let start = Int(offset), end = start + Int(length)
@@ -100,18 +130,21 @@ struct ELFProgramHeaderTests {
         bytes[0x200] = 0xC3
         return Data(bytes)
     }
-    static func load(_ data: Data) throws -> ELF64Loader.Image {
+    static func load(_ data: Data) throws -> (ELF64Loader.Image, GuestMemory) {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".elf")
         try data.write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
-        return try ELF64Loader().load(url, into: GuestMemory(size: 8 * 1024 * 1024),
-                                      expectedArchitecture: .x86_64)
+        let memory = GuestMemory(size: 8 * 1024 * 1024)
+        let image = try ELF64Loader().load(url, into: memory, expectedArchitecture: .x86_64)
+        return (image, memory)
     }
     static func main() throws {
-        let valid = try load(makeELF())
+        let (valid, validMemory) = try load(makeELF())
         precondition(valid.programHeaderAddress == 0x400040)
         precondition(valid.entryPoint == 0x400200)
-        let fallback = try load(makeELF(includePHDR: false))
+        precondition(validMemory.hasPermission(offset: valid.entryPoint, length: 1, required: 0x5))
+        precondition(!validMemory.hasPermission(offset: valid.entryPoint, length: 1, required: 0x2))
+        let (fallback, _) = try load(makeELF(includePHDR: false))
         precondition(fallback.programHeaderAddress == 0x400040)
         do {
             _ = try load(makeELF(phdrAddress: 0x400100))

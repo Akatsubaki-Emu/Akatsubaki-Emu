@@ -63,8 +63,10 @@ struct LinuxProcessStackBuilder {
         guard memory.size > UInt64(Self.stackSize) + Self.pageSize else { throw BuildError.stackUnavailable }
 
         let alignedTop = memory.size & ~UInt64(0xF)
-        let stackBase = alignedTop - UInt64(Self.stackSize)
+        let stackBase = (alignedTop - UInt64(Self.stackSize)) & ~(Self.pageSize - 1)
         guard maximumImageAddress <= stackBase - Self.pageSize else { throw BuildError.imageOverlapsStack }
+        guard memory.map(offset: stackBase, length: memory.size - stackBase,
+                         permissions: 0x3) else { throw BuildError.stackUnavailable }
         let random = randomBytes ?? Self.makeRandomBytes()
         var buffer = Data(count: Self.stackSize)
         var cursor = Self.stackSize

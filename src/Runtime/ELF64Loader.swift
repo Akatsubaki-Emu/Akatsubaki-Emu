@@ -4,6 +4,7 @@ import Foundation
 /// PIE support is limited to R_X86_64_RELATIVE relocations; dynamic linking is not implemented.
 final class ELF64Loader {
     private typealias LoadSegmentMapping = (virtualAddress: UInt64, fileOffset: UInt64, fileSize: UInt64, memorySize: UInt64)
+    private static let pageSize: UInt64 = 4096
 
     struct Segment {
         let guestAddress: UInt64
@@ -26,7 +27,7 @@ final class ELF64Loader {
     enum LoadError: LocalizedError {
         case unreadable, invalidMagic, unsupportedClassOrEndian
         case truncatedHeader, invalidProgramHeaderTable, noLoadableSegments
-        case invalidSegment, segmentOutsideGuestMemory, unsupportedMachine(UInt16)
+        case invalidSegment, segmentOutsideGuestMemory, memoryMappingFailed, unsupportedMachine(UInt16)
         case unsupportedFileType(UInt16), unsupportedDynamicImage, programHeadersNotMapped, fileTooLarge
 
         var errorDescription: String? {
@@ -40,6 +41,7 @@ final class ELF64Loader {
             case .noLoadableSegments: return "The ELF image contains no loadable segments."
             case .invalidSegment: return "An ELF load segment has invalid file or memory sizes."
             case .segmentOutsideGuestMemory: return "An ELF load segment does not fit in guest memory."
+            case .memoryMappingFailed: return "ELF load-segment page permissions could not be installed."
             case .unsupportedMachine(let machine): return "Unsupported ELF machine type: \(machine)."
             case .unsupportedFileType(let type): return "Unsupported ELF file type: \(type). Only ET_EXEC and self-contained static ET_DYN images are supported."
             case .unsupportedDynamicImage: return "Dynamic interpreters, dependencies, TLS and non-relative relocations are not supported."
@@ -249,6 +251,37 @@ final class ELF64Loader {
                 loadSegments: rawLoadSegments,
                 memory: memory
             )
+        }
+
+        // File bytes and relocations are written before guest permissions are
+        // enabled. Map every PT_LOAD page using ELF PF_R/PF_W/PF_X, merging
+        // permissions where distinct segments share a hardware page.
+        guard memory.beginMapping() else {
+            memory.clear()
+            throw LoadError.memoryMappingFailed
+        }
+        for segment in segments {
+            let pageStart = segment.guestAddress & ~(Self.pageSize - 1)
+            let (segmentEnd, endOverflow) = segment.guestAddress.addingReportingOverflow(segment.memorySize)
+            let (roundedEnd, roundingOverflow) = segmentEnd.addingReportingOverflow(Self.pageSize - 1)
+            guard !endOverflow, !roundingOverflow else {
+                memory.clear()
+                throw LoadError.memoryMappingFailed
+            }
+            let pageEnd = min(roundedEnd & ~(Self.pageSize - 1), memory.size)
+            guard pageEnd > pageStart else {
+                memory.clear()
+                throw LoadError.memoryMappingFailed
+            }
+            var permissions: UInt8 = 0
+            if segment.flags & 0x4 != 0 { permissions |= 0x1 } // PF_R
+            if segment.flags & 0x2 != 0 { permissions |= 0x2 } // PF_W
+            if segment.flags & 0x1 != 0 { permissions |= 0x4 } // PF_X
+            guard memory.map(offset: pageStart, length: pageEnd - pageStart,
+                             permissions: permissions, merge: true) else {
+                memory.clear()
+                throw LoadError.memoryMappingFailed
+            }
         }
         let maximumGuestAddress = orderedSegments.reduce(UInt64(0)) { max($0, $1.guestAddress + $1.memorySize) }
         return Image(entryPoint: loadedEntryPoint, machine: machine, segments: segments, loadedByteCount: total,

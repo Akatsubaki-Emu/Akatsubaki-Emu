@@ -55,6 +55,8 @@ final class GuestMemory {
     // Mirrors GuestMemory.clear(): reset bytes without changing page permissions.
     func clear() {
         bytes = [UInt8](repeating: 0, count: Int(size))
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = false
     }
 
 

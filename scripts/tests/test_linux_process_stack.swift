@@ -3,10 +3,39 @@ import Foundation
 final class GuestMemory {
     let size: UInt64
     private var bytes: [UInt8]
+    private var permissionsEnabled = false
+    private var pagePermissions: [UInt64: UInt8] = [:]
 
     init(size: UInt64) {
         self.size = size
         bytes = [UInt8](repeating: 0, count: Int(size))
+    }
+
+    func beginMapping() -> Bool {
+        pagePermissions.removeAll(keepingCapacity: true)
+        permissionsEnabled = true
+        return true
+    }
+
+    func map(offset: UInt64, length: UInt64, permissions: UInt8, merge: Bool = false) -> Bool {
+        guard permissionsEnabled, offset % 4096 == 0, length > 0,
+              permissions & ~UInt8(7) == 0, offset <= size, length <= size - offset else { return false }
+        let first = offset / 4096
+        let last = (offset + length - 1) / 4096
+        for page in first...last {
+            let old = pagePermissions[page] ?? 0
+            pagePermissions[page] = merge ? old | permissions : permissions
+        }
+        return true
+    }
+
+    func hasPermission(offset: UInt64, length: UInt64, required: UInt8) -> Bool {
+        guard offset <= size, length <= size - offset else { return false }
+        if !permissionsEnabled || length == 0 { return true }
+        let first = offset / 4096
+        let last = (offset + length - 1) / 4096
+        for page in first...last where (pagePermissions[page] ?? 0) & required != required { return false }
+        return true
     }
 
     func write(_ data: Data, sourceRange: Range<Int>, offset: UInt64) -> Bool {
@@ -54,6 +83,7 @@ final class GuestMemory {
 struct LinuxProcessStackTests {
     static func main() throws {
         let memory = GuestMemory(size: 4 * 1024 * 1024)
+        precondition(memory.beginMapping())
         let random = Data(repeating: 0xA5, count: 16)
         let result = try LinuxProcessStackBuilder().build(
             executablePath: "/bin/hello",
@@ -68,6 +98,8 @@ struct LinuxProcessStackTests {
 
         precondition(result.stackPointer & 0xF == 0)
         precondition(result.stackBase == 0x300000)
+        precondition(memory.hasPermission(offset: result.stackBase, length: 1, required: 0x3))
+        precondition(!memory.hasPermission(offset: result.stackBase, length: 1, required: 0x4))
         precondition(memory.readUInt64(offset: result.stackPointer) == 2)
         precondition(memory.readString(offset: memory.readUInt64(offset: result.argumentVectorAddress)!) == "/bin/hello")
         precondition(memory.readString(offset: memory.readUInt64(offset: result.argumentVectorAddress + 8)!) == "--version")
