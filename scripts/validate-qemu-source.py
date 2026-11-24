@@ -1628,6 +1628,53 @@ for token in ("KenranButoAOTExecutableMemory.c", "KenranButoAOTExecution.swift",
         print(f"AOT workflow missing {token!r}", file=sys.stderr)
         failed = True
 
+
+# VNC session generation must survive every asynchronous framebuffer boundary.
+vnc_client = Path("src/QEMU/QEMUVNCClient.swift").read_text(encoding="utf-8")
+gpu_contract = Path("src/GPU/GPUBackend.swift").read_text(encoding="utf-8")
+virtio_gpu = Path("src/GPU/VirtIOGPU.swift").read_text(encoding="utf-8")
+metal_gpu = Path("src/GPU/MetalGPUBackend.swift").read_text(encoding="utf-8")
+display_controller = Path("src/Display/VMDisplayViewController.swift").read_text(encoding="utf-8")
+for token in ("onFrame: ((UInt64, Data, Int, Int, GPUFrameRegion?) -> Void)?",
+              "onSessionGenerationChanged: ((UInt64) -> Void)?",
+              "onSessionGenerationChanged?(generation)",
+              "onFrame?(generation, frame.0, frame.1, frame.2, dirtyRegion)"):
+    if token not in vnc_client:
+        print(f"VNC generation propagation missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("setSessionGeneration(_ generation: UInt64)",
+              "sessionGeneration: UInt64"):
+    if token not in gpu_contract:
+        print(f"GPU backend generation contract missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("let isCurrent = generation == sessionGeneration",
+              "guard isCurrent else { return }",
+              "backend.setSessionGeneration(generation)",
+              "sessionGeneration: generation"):
+    if token not in virtio_gpu:
+        print(f"VirtIOGPU generation guard missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("guard frameSessionGeneration == sessionGeneration",
+              "pending.sessionGeneration == sessionGeneration",
+              "drawSessionGeneration == sessionGeneration",
+              "drawFramebufferGeneration == framebufferGeneration",
+              "framebuffer === source",
+              "if !isCurrent"):
+    if token not in metal_gpu:
+        print(f"Metal final-consumer generation guard missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("vncClient.onSessionGenerationChanged",
+              "self.virtioGPU.setSessionGeneration(generation)",
+              "vncClient.onFrame = { [weak self] generation, data, width, height, dirtyRegion in",
+              "sessionGeneration: generation"):
+    if token not in display_controller:
+        print(f"Display controller generation wiring missing {token!r}", file=sys.stderr)
+        failed = True
+vnc_generation_tests = Path("scripts/tests/test_vnc_frame_session_generation.py").read_text(encoding="utf-8")
+if "VNCFrameSessionGenerationTests" not in vnc_generation_tests:
+    print("VNC frame generation regression tests are missing", file=sys.stderr)
+    failed = True
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")
