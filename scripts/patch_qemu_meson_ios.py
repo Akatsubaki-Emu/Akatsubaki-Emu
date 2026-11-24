@@ -21,13 +21,32 @@ OBJC_ARGUMENTS = {
 
 
 def patch_objc_compile_flag(source: str) -> str:
-    if source.count(OBJC_BLOCK_MARKER) != 1:
-        raise SystemExit("QEMU meson.build changed: Objective-C compiler block not found exactly once")
-    block_start = source.find(OBJC_BLOCK_MARKER)
-    block_end = source.find("endif", block_start)
-    if block_end < 0:
-        raise SystemExit("QEMU meson.build changed: Objective-C compiler block is unterminated")
-    block = source[block_start:block_end]
+    # QEMU uses several unrelated `if 'objc' in all_languages` guards for
+    # summaries and feature reporting. Select the one compiler-argument block
+    # by its actual objc.get_supported_arguments() anchor, not by assuming the
+    # marker is globally unique.
+    candidates = []
+    search_from = 0
+    while True:
+        block_start = source.find(OBJC_BLOCK_MARKER, search_from)
+        if block_start < 0:
+            break
+        block_end = source.find("endif", block_start)
+        if block_end < 0:
+            raise SystemExit("QEMU meson.build changed: Objective-C compiler block is unterminated")
+        block = source[block_start:block_end]
+        if any(anchor in block for anchor in OBJC_ARGUMENTS) or any(
+            patched in block for patched in OBJC_ARGUMENTS.values()
+        ):
+            candidates.append((block_start, block))
+        search_from = block_end + len("endif")
+
+    if len(candidates) != 1:
+        raise SystemExit(
+            "QEMU meson.build changed: expected one Objective-C compiler-argument block, "
+            f"found {len(candidates)}"
+        )
+    block_start, block = candidates[0]
 
     patched_forms = [value for value in OBJC_ARGUMENTS.values() if value in block]
     patched_outside_block = [
