@@ -1677,6 +1677,50 @@ if "VNCFrameSessionGenerationTests" not in vnc_generation_tests:
     print("VNC frame generation regression tests are missing", file=sys.stderr)
     failed = True
 
+
+# QEMU remains a single process; guest sessions pause/reset through a private QMP socket.
+qmp_bridge = Path("iSteam/QEMUNativeBridge.c").read_text(encoding="utf-8")
+qmp_header = Path("iSteam/QEMUNativeBridge.h").read_text(encoding="utf-8")
+qmp_builder = Path("src/QEMU/QEMUCommandBuilder.swift").read_text(encoding="utf-8")
+qmp_runtime = Path("src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+qmp_backend = Path("src/QEMU/QEMUBackend.swift").read_text(encoding="utf-8")
+qmp_engine = Path("src/Core/VMEngine.swift").read_text(encoding="utf-8")
+for token in ("bool isteam_qemu_qmp_command", "AF_UNIX", "qmp_capabilities",
+              "SO_RCVTIMEO", "SO_NOSIGPIPE", '"system_reset"', '"cont"', '"stop"',
+              "g_has_started = true"):
+    if token not in qmp_bridge:
+        print(f"QEMU QMP bridge missing {token!r}", file=sys.stderr)
+        failed = True
+if qmp_bridge.count("g_has_started = false;") != 1:
+    print("QEMU one-shot process guard must be initialized once and never reset", file=sys.stderr)
+    failed = True
+if "isteam_qemu_qmp_command" not in qmp_header:
+    print("QEMU native bridge header is missing the QMP command contract", file=sys.stderr)
+    failed = True
+for token in ("-no-shutdown", "-qmp", "unix:\\(Self.qmpSocketPath),server=on,wait=off",
+              "static let qmpSocketPath"):
+    if token not in qmp_builder:
+        print(f"QEMU command builder missing persistent-session option {token!r}", file=sys.stderr)
+        failed = True
+for token in ("static let shared = QEMUNativeRuntime()", "private init()",
+              "sessionKey == requestedSessionKey", 'Self.sendQMP("system_reset")',
+              'Self.sendQMP("cont")', 'Self.sendQMP("stop")',
+              "private(set) var isPaused = false", "QEMU process and disk scopes remain available"):
+    if token not in qmp_runtime:
+        print(f"Persistent QEMU runtime missing {token!r}", file=sys.stderr)
+        failed = True
+if "QEMUNativeRuntime.shared" not in qmp_backend:
+    print("QEMUBackend does not share the process-lifetime runtime", file=sys.stderr)
+    failed = True
+for token in ("guard candidate.stop() else", "QEMU process retained for repeat launches"):
+    if token not in qmp_engine:
+        print(f"VMEngine does not pause and retain QEMU for repeat launches: {token!r}", file=sys.stderr)
+        failed = True
+qmp_tests = Path("scripts/tests/test_qemu_persistent_lifecycle.py").read_text(encoding="utf-8")
+if "QEMUPersistentLifecycleTests" not in qmp_tests:
+    print("QEMU persistent lifecycle regression tests are missing", file=sys.stderr)
+    failed = True
+
 if failed:
     raise SystemExit(1)
 print("QEMU bridge, guest input, runtime packaging, storage safety, and display source checks passed.")
