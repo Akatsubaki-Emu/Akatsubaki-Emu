@@ -527,8 +527,23 @@ struct StaticELFExecutionTests {
         print("Descriptor-bound ELF snapshot path-replacement, growth and truncation regressions passed")
     }
 
+    static func testRejectsNonRegularELFSnapshot() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        do {
+            _ = try ELF64Loader.OpenedFileSnapshot(url: directory)
+            preconditionFailure("A directory must not be accepted as an ELF executable")
+        } catch ELF64Loader.LoadError.unreadable {
+            print("Non-regular ELF source rejection passed")
+        }
+    }
+
     static func main() throws {
         try testDescriptorBoundELFSnapshot()
+        try testRejectsNonRegularELFSnapshot()
         let (elfData, expectedOutput) = makeELF()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".elf")
         try elfData.write(to: url)

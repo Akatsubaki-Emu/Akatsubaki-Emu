@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// Loads ELF64 ET_EXEC images and self-contained ET_DYN static PIE images.
 /// PIE support is limited to R_X86_64_RELATIVE relocations; dynamic linking is not implemented.
@@ -50,9 +55,9 @@ final class ELF64Loader {
         }
     }
 
-    /// A bounded read of the exact file opened at initialization time.
-    /// Keeping the descriptor open prevents a path swap from redirecting the bytes
-    /// after the size check; short reads and concurrent growth fail closed.
+    /// A bounded read of a regular file opened at initialization time.
+    /// fstat and every subsequent read use the same descriptor, preventing path
+    /// swaps after the size check; short reads and concurrent growth fail closed.
     final class OpenedFileSnapshot {
         private let handle: FileHandle
         let byteCount: Int
@@ -63,9 +68,17 @@ final class ELF64Loader {
             catch { throw LoadError.unreadable }
             handle = openedHandle
 
-            let length: UInt64
+            var fileStatus = stat()
+            guard fstat(openedHandle.fileDescriptor, &fileStatus) == 0,
+                  (fileStatus.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+                  fileStatus.st_size >= 0 else {
+                try? openedHandle.close()
+                throw LoadError.unreadable
+            }
+            let length = UInt64(fileStatus.st_size)
             do {
-                length = try openedHandle.seekToEnd()
+                let end = try openedHandle.seekToEnd()
+                guard end == length else { throw LoadError.unreadable }
                 try openedHandle.seek(toOffset: 0)
             } catch {
                 try? openedHandle.close()
