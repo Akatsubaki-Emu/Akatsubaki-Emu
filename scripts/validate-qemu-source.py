@@ -135,6 +135,12 @@ required = {
         "executable-library route currently accepts Windows PE metadata only",
         "SteamOS Gaming Mode",
         "VMConfiguration.defaultSteamOS",
+        "restoreImportedOperatingSystem()",
+        'UserDefaults.standard.string(forKey: "iSteam.customOSPath")',
+        "selectedDiskURL = url",
+        "values.isRegularFile == true",
+        "values.fileSize",
+        "Boot media:",
     ],
     "src/Performance/TranslationCache.swift": [
         "SHA256Hex.digest(Data(key.utf8))",
@@ -1301,8 +1307,14 @@ required = {
         "ConsoleViewController(game: games[indexPath.row])",
         "super.init(style: .insetGrouped)",
         "required init?(coder: NSCoder)",
+        'UserDefaults.standard.set(destination.path, forKey: "iSteam.customOSPath")',
+        "Launch Setup will preselect it as boot media",
     ],
-    "scripts/tests/test_source_validator.py": [
+    "scripts/tests/test_imported_os_selection.py": [
+        "test_imported_os_image_is_preselected_in_launch_setup",
+        "Launch Setup will preselect it as boot media",
+    ],
+"scripts/tests/test_source_validator.py": [
         "def test_native_bridge_enables_strict_c11_strnlen_and_covers_cleanup_race(self):",
         "int qemu_exit_status = g_qemu_main_loop();",
         "g_qemu_cleanup(qemu_exit_status)",

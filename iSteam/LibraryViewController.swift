@@ -127,7 +127,7 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
     private func updateOSStatus() {
         let osStatus: String
         if let os = UserDefaults.standard.string(forKey: "iSteam.customOSPath") {
-            osStatus = "Imported OS image: " + URL(fileURLWithPath: os).lastPathComponent + "\nSaved locally; OS boot integration is not yet implemented."
+            osStatus = "Imported OS image: " + URL(fileURLWithPath: os).lastPathComponent + "\nSaved locally; Launch Setup will preselect it as boot media. Guest boot still requires a compatible bundled QEMU runtime and suitable UEFI firmware."
         } else { osStatus = "No custom OS image imported." }
         let driveName = ExternalDriveStore.shared.rememberedName
         statusLabel.text = osStatus + (driveName.map { "\nRemembered Files location: " + $0 + "\nProvider access is revalidated when the location is used." } ?? "\nExternal storage is accessed through the iOS Files picker.")
@@ -271,7 +271,7 @@ final class LibraryViewController: UIViewController, UIDocumentPickerDelegate {
                 try ExternalDriveStore.shared.copyDocument(at: source, to: destination)
                 UserDefaults.standard.set(destination.path, forKey: "iSteam.customOSPath")
                 updateOSStatus()
-                showMessage("OS image imported", "Saved \(destination.lastPathComponent). The current VM engine does not yet boot imported ISO/disk images.")
+                showMessage("OS image imported", "Saved \(destination.lastPathComponent). Launch Setup will preselect it as boot media. Choose the matching guest profile; for an ISO installer, also choose or create a writable VM disk. A compatible bundled QEMU runtime and UEFI firmware are required.")
             } catch { showMessage("Import failed", error.localizedDescription) }
             return
         }
