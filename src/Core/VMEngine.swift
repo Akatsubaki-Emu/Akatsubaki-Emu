@@ -61,7 +61,9 @@ final class VMEngine {
             monitor = timer
             timer.resume()
         } catch {
-            if backend?.stop() ?? true { backend = nil }
+            // QEMUNativeRuntime is process-wide. A failed attach must not pause
+            // a guest session that may already be owned by another VMEngine.
+            backend = nil
             setState(.failed(error.localizedDescription))
             EmulationLog.shared.write("Session start failed: \(error.localizedDescription)")
         }
@@ -109,7 +111,9 @@ final class VMEngine {
         monitor?.cancel()
         monitor = nil
         startupDeadline = nil
-        if backend?.stop() ?? true { backend = nil }
+        // QEMUNativeRuntime is process-wide. A failed attach must not pause
+        // a guest session that may already be owned by another VMEngine.
+        backend = nil
         setState(.failed(message))
         EmulationLog.shared.write(message)
     }
