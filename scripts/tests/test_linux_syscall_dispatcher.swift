@@ -515,10 +515,14 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.readUInt64(offset: 0x1200) != nil)
         precondition(memory.readUInt64(offset: 0x1208)! < 1_000_000)
 
-        let unameResult = dispatcher.dispatch(number: 63, arguments: [0x1300, 0, 0, 0, 0, 0])!
+        let unameBuffer = dispatcher.dispatch(
+            number: 9, arguments: [0, 0x1000, 3, 0x22, UInt64.max, 0]
+        )!
+        precondition(unameBuffer < memory.size && unameBuffer & 0xFFF == 0)
+        let unameResult = dispatcher.dispatch(number: 63, arguments: [unameBuffer, 0, 0, 0, 0, 0])!
         guard case .returned(let unameStatus) = unameResult else { preconditionFailure() }
         precondition(unameStatus == 0)
-        let unameBytes = [UInt8](memory.read(offset: 0x1300, length: 390)!)
+        let unameBytes = [UInt8](memory.read(offset: unameBuffer, length: 390)!)
         let unameFields = stride(from: 0, to: 390, by: 65).map { offset -> String in
             let field = unameBytes[offset..<(offset + 65)]
             let end = field.firstIndex(of: 0) ?? field.endIndex
