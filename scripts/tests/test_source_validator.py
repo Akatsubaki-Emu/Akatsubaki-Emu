@@ -945,5 +945,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("-no-shutdown", builder)
         self.assertIn("-qmp", builder)
 
+    def test_txm_arena_tracks_exact_allocations_and_stress_regressions(self):
+        root = Path(__file__).resolve().parents[2]
+        arena = (root / "iSteam" / "AOTExecutableArena.c").read_text(encoding="utf-8")
+        tests = (root / "scripts" / "tests" / "test_aot_executable_arena.c").read_text(encoding="utf-8")
+        self.assertIn("iSteamAOTExecutableAllocation", arena)
+        self.assertIn("allocation_cursor", arena)
+        self.assertIn("test_partial_and_wrong_size_frees_are_rejected", tests)
+        self.assertIn("test_randomized_allocation_and_free_stress", tests)
+
 if __name__ == "__main__":
     unittest.main()

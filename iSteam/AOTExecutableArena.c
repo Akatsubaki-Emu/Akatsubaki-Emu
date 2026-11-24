@@ -10,9 +10,16 @@ typedef struct iSteamAOTExecutableFreeRange {
     struct iSteamAOTExecutableFreeRange *next;
 } iSteamAOTExecutableFreeRange;
 
+typedef struct iSteamAOTExecutableAllocation {
+    size_t offset;
+    size_t size;
+    struct iSteamAOTExecutableAllocation *next;
+} iSteamAOTExecutableAllocation;
+
 struct iSteamAOTExecutableArena {
     size_t capacity;
     iSteamAOTExecutableFreeRange *free_ranges;
+    iSteamAOTExecutableAllocation *allocations;
     pthread_mutex_t lock;
 };
 
@@ -50,7 +57,12 @@ bool iSteamAOTExecutableArenaAllocate(iSteamAOTExecutableArena *arena,
                                       size_t alignment,
                                       size_t *offset) {
     if (!arena || !size || !alignment || !offset) return false;
-    if (pthread_mutex_lock(&arena->lock) != 0) return false;
+    iSteamAOTExecutableAllocation *allocation = calloc(1, sizeof(*allocation));
+    if (!allocation) return false;
+    if (pthread_mutex_lock(&arena->lock) != 0) {
+        free(allocation);
+        return false;
+    }
 
     iSteamAOTExecutableFreeRange **cursor = &arena->free_ranges;
     while (*cursor) {
@@ -74,6 +86,7 @@ bool iSteamAOTExecutableArenaAllocate(iSteamAOTExecutableArena *arena,
             iSteamAOTExecutableFreeRange *tail = calloc(1, sizeof(*tail));
             if (!tail) {
                 pthread_mutex_unlock(&arena->lock);
+                free(allocation);
                 return false;
             }
             tail->offset = allocated_end;
@@ -90,12 +103,17 @@ bool iSteamAOTExecutableArenaAllocate(iSteamAOTExecutableArena *arena,
             *cursor = range->next;
             free(range);
         }
+        allocation->offset = start;
+        allocation->size = size;
+        allocation->next = arena->allocations;
+        arena->allocations = allocation;
         *offset = start;
         pthread_mutex_unlock(&arena->lock);
         return true;
     }
 
     pthread_mutex_unlock(&arena->lock);
+    free(allocation);
     return false;
 }
 
@@ -106,6 +124,17 @@ bool iSteamAOTExecutableArenaFree(iSteamAOTExecutableArena *arena,
         return false;
     size_t end = offset + size;
     if (pthread_mutex_lock(&arena->lock) != 0) return false;
+
+    /* Only an exact live allocation may be returned; partial and forged frees corrupt the arena. */
+    iSteamAOTExecutableAllocation **allocation_cursor = &arena->allocations;
+    while (*allocation_cursor &&
+           ((*allocation_cursor)->offset != offset || (*allocation_cursor)->size != size)) {
+        allocation_cursor = &(*allocation_cursor)->next;
+    }
+    if (!*allocation_cursor) {
+        pthread_mutex_unlock(&arena->lock);
+        return false;
+    }
 
     iSteamAOTExecutableFreeRange **cursor = &arena->free_ranges;
     iSteamAOTExecutableFreeRange *previous = NULL;
@@ -143,6 +172,9 @@ bool iSteamAOTExecutableArenaFree(iSteamAOTExecutableArena *arena,
         free(following);
     }
 
+    iSteamAOTExecutableAllocation *allocation = *allocation_cursor;
+    *allocation_cursor = allocation->next;
+    free(allocation);
     pthread_mutex_unlock(&arena->lock);
     return true;
 }
@@ -168,6 +200,12 @@ void iSteamAOTExecutableArenaDestroy(iSteamAOTExecutableArena *arena) {
         iSteamAOTExecutableFreeRange *next = range->next;
         free(range);
         range = next;
+    }
+    iSteamAOTExecutableAllocation *allocation = arena->allocations;
+    while (allocation) {
+        iSteamAOTExecutableAllocation *next = allocation->next;
+        free(allocation);
+        allocation = next;
     }
     pthread_mutex_destroy(&arena->lock);
     free(arena);

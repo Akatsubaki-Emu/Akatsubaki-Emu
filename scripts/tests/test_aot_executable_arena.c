@@ -71,6 +71,21 @@ static void test_concurrent_allocations_do_not_overlap(void) {
     iSteamAOTExecutableArenaDestroy(arena);
 }
 
+static void test_partial_and_wrong_size_frees_are_rejected(void) {
+    iSteamAOTExecutableArena *arena = iSteamAOTExecutableArenaCreate(32u * KiB);
+    assert(arena);
+    size_t offset = 0;
+    assert(!iSteamAOTExecutableArenaFree(arena, 0, 4u * KiB));
+    assert(iSteamAOTExecutableArenaAllocate(arena, 8u * KiB, 4u * KiB, &offset));
+    assert(!iSteamAOTExecutableArenaFree(arena, offset, 4u * KiB));
+    assert(!iSteamAOTExecutableArenaFree(arena, offset + 4u * KiB, 4u * KiB));
+    assert(!iSteamAOTExecutableArenaFree(arena, offset, 12u * KiB));
+    assert(iSteamAOTExecutableArenaFree(arena, offset, 8u * KiB));
+    assert(!iSteamAOTExecutableArenaFree(arena, offset, 8u * KiB));
+    assert(iSteamAOTExecutableArenaFreeBytes(arena) == 32u * KiB);
+    iSteamAOTExecutableArenaDestroy(arena);
+}
+
 static void test_invalid_and_overflow_requests_fail(void) {
     iSteamAOTExecutableArena *arena = iSteamAOTExecutableArenaCreate(32u * KiB);
     assert(arena);
@@ -84,10 +99,67 @@ static void test_invalid_and_overflow_requests_fail(void) {
     iSteamAOTExecutableArenaDestroy(arena);
 }
 
+typedef struct {
+    size_t offset;
+    size_t size;
+    bool active;
+} AllocationSlot;
+
+static uint32_t next_random(uint32_t *state) {
+    uint32_t value = *state;
+    value ^= value << 13;
+    value ^= value >> 17;
+    value ^= value << 5;
+    *state = value;
+    return value;
+}
+
+static void test_randomized_allocation_and_free_stress(void) {
+    enum { SLOT_COUNT = 256, OPERATIONS = 20000 };
+    const size_t capacity = 8u * 1024u * 1024u;
+    iSteamAOTExecutableArena *arena = iSteamAOTExecutableArenaCreate(capacity);
+    assert(arena);
+    AllocationSlot slots[SLOT_COUNT] = {0};
+    uint32_t random_state = 0x6b656e72u;
+
+    for (size_t operation = 0; operation < OPERATIONS; ++operation) {
+        size_t index = next_random(&random_state) % SLOT_COUNT;
+        AllocationSlot *slot = &slots[index];
+        if (slot->active) {
+            assert(iSteamAOTExecutableArenaFree(arena, slot->offset, slot->size));
+            slot->active = false;
+        } else {
+            size_t size = ((next_random(&random_state) % 8u) + 1u) * 4096u;
+            size_t alignment = 4096u << (next_random(&random_state) % 3u);
+            size_t offset = SIZE_MAX;
+            if (iSteamAOTExecutableArenaAllocate(arena, size, alignment, &offset)) {
+                assert(offset % alignment == 0);
+                for (size_t other = 0; other < SLOT_COUNT; ++other) {
+                    if (!slots[other].active) continue;
+                    size_t other_end = slots[other].offset + slots[other].size;
+                    size_t allocation_end = offset + size;
+                    assert(allocation_end <= slots[other].offset || other_end <= offset);
+                }
+                *slot = (AllocationSlot){offset, size, true};
+            }
+        }
+        assert(iSteamAOTExecutableArenaFreeBytes(arena) <= capacity);
+    }
+
+    for (size_t i = 0; i < SLOT_COUNT; ++i) {
+        if (slots[i].active)
+            assert(iSteamAOTExecutableArenaFree(arena, slots[i].offset, slots[i].size));
+    }
+    assert(iSteamAOTExecutableArenaFreeBytes(arena) == capacity);
+    iSteamAOTExecutableArenaDestroy(arena);
+}
+
 int main(void) {
     test_alignment_fragmentation_and_coalescing();
     test_concurrent_allocations_do_not_overlap();
     test_invalid_and_overflow_requests_fail();
-    puts("Kenran Butō executable arena allocator tests passed (3 suites)");
+    test_partial_and_wrong_size_frees_are_rejected();
+    test_randomized_allocation_and_free_stress();
+    puts("Kenran Butō executable arena allocator tests passed (5 suites, 20,000 stress operations)");
     return 0;
 }
