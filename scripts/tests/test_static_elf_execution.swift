@@ -301,6 +301,24 @@ final class GuestMemory {
         return Data(bytes[Int(offset)..<Int(offset) + length])
     }
 
+    func read(offset: UInt64, length: Int, into data: inout Data,
+              destinationOffset: Int) -> Bool {
+        guard length >= 0, destinationOffset >= 0,
+              destinationOffset <= data.count, length <= data.count - destinationOffset,
+              offset <= size, UInt64(length) <= size - offset,
+              hasPermission(offset: offset, length: UInt64(length), required: 1) else { return false }
+        if length == 0 { return true }
+        return data.withUnsafeMutableBytes { destination -> Bool in
+            guard let base = destination.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            let target = base.advanced(by: destinationOffset)
+            let sourceOffset = Int(offset)
+            for index in 0..<length {
+                target[index] = bytes[sourceOffset + index]
+            }
+            return true
+        }
+    }
+
     func write(_ data: Data, sourceRange: Range<Int>, offset: UInt64) -> Bool {
         guard sourceRange.lowerBound >= 0,
               sourceRange.lowerBound <= sourceRange.upperBound,
@@ -542,6 +560,15 @@ struct StaticELFExecutionTests {
     }
 
     static func main() throws {
+        let transferMemory = GuestMemory(size: 4096)
+        let transferPayload = Data([0x10, 0x20, 0x30, 0x40])
+        precondition(transferMemory.write(transferPayload, offset: 0x100))
+        var transferDestination = Data(count: 6)
+        precondition(transferMemory.read(offset: 0x100, length: 4, into: &transferDestination, destinationOffset: 1))
+        precondition(transferDestination == Data([0, 0x10, 0x20, 0x30, 0x40, 0]))
+        precondition(!transferMemory.read(offset: 0x100, length: 4, into: &transferDestination, destinationOffset: 4))
+        precondition(transferMemory.read(offset: 0x100, length: 0, into: &transferDestination, destinationOffset: 6))
+
         try testDescriptorBoundELFSnapshot()
         try testRejectsNonRegularELFSnapshot()
         let (elfData, expectedOutput) = makeELF()

@@ -78,6 +78,20 @@ final class JITCoordinator {
         return false
     }
 
+    /// Explains why QEMU's JIT protocol cannot be used so the caller can report a useful TCI fallback reason.
+    var unavailableReason: String {
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        if #available(iOS 26.0, *) {
+            return isJITProtocolKnown
+                ? "The iOS 26 JIT protocol is unavailable on this device."
+                : "Akatsubaki Emu cannot identify this device's iOS 26 JIT protocol."
+        }
+        return "The QEMU JIT protocol requires iOS 26 or later; the no-JIT TCI fallback may be used."
+        #else
+        return "QEMU JIT is only available on a physical iOS device; use the no-JIT TCI fallback."
+        #endif
+    }
+
     var isJITReady: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
         if #available(iOS 17.4, *) {
