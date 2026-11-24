@@ -429,7 +429,7 @@ final class AnisetteDataHelper
             "adi_pb": adiPb
         ], options: [])
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         
         return try await self.extractAnisetteData(data, response as? HTTPURLResponse, v3: true)
 
