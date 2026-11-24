@@ -514,11 +514,72 @@ struct StaticELFExecutionTests {
 
         let loaded = try snapshot.read()
         precondition(loaded == original, "ELF bytes must come from the descriptor that was size-checked")
-        print("Descriptor-bound ELF snapshot path-replacement regression passed")
+
+        let growthURL = directory.appendingPathComponent("growing.elf")
+        try original.write(to: growthURL)
+        let growthSnapshot = try ELF64Loader.OpenedFileSnapshot(url: growthURL)
+        let growthWriter = try FileHandle(forWritingTo: growthURL)
+        try growthWriter.seekToEnd()
+        try growthWriter.write(contentsOf: Data([0xAA]))
+        try growthWriter.close()
+        do {
+            _ = try growthSnapshot.read()
+            preconditionFailure("ELF snapshot must reject file growth after its size check")
+        } catch ELF64Loader.LoadError.unreadable {}
+
+        let truncationURL = directory.appendingPathComponent("truncated.elf")
+        try original.write(to: truncationURL)
+        let truncationSnapshot = try ELF64Loader.OpenedFileSnapshot(url: truncationURL)
+        let truncationWriter = try FileHandle(forWritingTo: truncationURL)
+        try truncationWriter.truncate(atOffset: 2)
+        try truncationWriter.close()
+        do {
+            _ = try truncationSnapshot.read()
+            preconditionFailure("ELF snapshot must reject file truncation after its size check")
+        } catch ELF64Loader.LoadError.unreadable {}
+        print("Descriptor-bound ELF snapshot path-replacement, growth and truncation regressions passed")
+    }
+
+    static func testGeneratedSmokeELF(at url: URL) throws {
+        let memory = GuestMemory(size: 16 * 1024 * 1024)
+        let image = try ELF64Loader().load(url, into: memory, expectedArchitecture: .x86_64)
+        let stack = try LinuxProcessStackBuilder().build(
+            executablePath: url.path,
+            arguments: [],
+            environment: ["PATH": "/bin"],
+            memory: memory,
+            entryPoint: image.entryPoint,
+            programHeaders: .init(
+                address: image.programHeaderAddress,
+                entrySize: image.programHeaderEntrySize,
+                count: image.programHeaderCount
+            ),
+            maximumImageAddress: image.maximumGuestAddress,
+            randomBytes: Data(repeating: 0xA5, count: 16)
+        )
+        let interpreter = X86_64Interpreter(memory: memory)
+        try interpreter.reset(entryPoint: image.entryPoint)
+        try interpreter.setInitialStackPointer(stack.stackPointer)
+        let (programBreak, overflow) = image.maximumGuestAddress.addingReportingOverflow(4095)
+        precondition(!overflow)
+        try interpreter.configureLinuxProcess(
+            programBreak: programBreak & ~UInt64(4095),
+            stackBase: stack.stackBase
+        )
+        let previousMessageCount = EmulationLog.shared.messages.count
+        let exit = try interpreter.run(maxInstructions: 128)
+        precondition(exit == .halted, "Generated hybrid smoke guest did not exit cleanly")
+        let smokeMessages = EmulationLog.shared.messages.dropFirst(previousMessageCount)
+        precondition(smokeMessages.contains { $0.contains("hello\\n") },
+                     "Generated hybrid smoke guest did not write its marker")
+        print("Generated hybrid XCHG smoke ELF executed through the no-JIT interpreter")
     }
 
     static func main() throws {
         try testDescriptorBoundELFSnapshot()
+        if let smokePath = CommandLine.arguments.dropFirst().first {
+            try testGeneratedSmokeELF(at: URL(fileURLWithPath: smokePath))
+        }
         let (elfData, expectedOutput) = makeELF()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".elf")
         try elfData.write(to: url)
