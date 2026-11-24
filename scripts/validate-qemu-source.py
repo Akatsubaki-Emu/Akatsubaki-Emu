@@ -1679,6 +1679,15 @@ for token in ("case 0x8D:", "canTranslateLEAAtCurrentWindow",
     if token not in aot_eligibility:
         print(f"AOT eligibility regression missing {token!r}", file=sys.stderr)
         failed = True
+for token in ("let rip:UInt64", "BlockKey(code:guestCode,rip:rip", "guestRIP:key.rip"):
+    if token not in aot_execution:
+        print(f"AOT in-memory cache key missing {token!r}", file=sys.stderr)
+        failed = True
+for token in ("hasBase = false", "AOT execution passes the guest block RIP to the translator."):
+    if token not in aot_interpreter:
+        print(f"RIP-relative AOT eligibility missing {token!r}", file=sys.stderr)
+        failed = True
+
 aot_workflow = Path(".github/workflows/validate-kenran-buto-aot.yml").read_text(encoding="utf-8")
 for token in ("KenranButoAOTExecutableMemory.c", "KenranButoAOTExecution.swift",
               "test_x86_64_interpreter.swift", "test_aot_translator_allocation_hot_path.py",

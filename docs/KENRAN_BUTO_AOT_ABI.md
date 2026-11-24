@@ -12,8 +12,9 @@ The current translator emits only operations whose semantics are fully modelled:
 - C7 /0 register-only MOV r/m32, imm32 and MOV r/m64, sign-extended imm32
 - LEA r32/r64 with base/index/SIB addressing, scales 1/2/4/8 and signed combined displacement in the range -4095...4095
 - LEA r32/r64 with no base and no index using a sign-extended disp32 constant
+- RIP-relative LEA r32/r64 using the next guest instruction address plus signed disp32
 
-The translator stops before the first unsupported instruction and reports the exact guest-byte offset. It does not currently emit guest memory accesses, arithmetic, branches, syscalls, privileged instructions, or SIMD. RIP-relative LEA, address-size/segment overrides, and base/index LEA displacements outside the bounded immediate subset side-exit to the interpreter. Arithmetic flags therefore remain unchanged by translated blocks. ENDBR64 remains an interpreter side-exit until guest CET policy is explicitly implemented.
+The translator stops before the first unsupported instruction and reports the exact guest-byte offset. It does not currently emit guest memory accesses, arithmetic, branches, syscalls, privileged instructions, or SIMD. RIP-relative LEA uses the guest block RIP and signed disp32; address-size/segment overrides and base/index LEA displacements outside the bounded immediate subset still side-exit to the interpreter. Arithmetic flags therefore remain unchanged by translated blocks. ENDBR64 remains an interpreter side-exit until guest CET policy is explicitly implemented.
 
 ## ABI layout
 
@@ -93,7 +94,7 @@ AOT is injected only at the Linux ELF launch boundary. Other guest-machine users
 
 ## Cache and resource limits
 
-The translation identity includes guest-code SHA-256, guest ABI, translator version (currently 5), host architecture, CPU features, ABI version, and the instruction/input/output budgets. Cached artifacts are structurally validated and compared with a canonical translation before reuse. Cache I/O failure is an optimization miss, not an execution failure.
+The translation identity includes guest-code SHA-256, guest ABI, guest block RIP, translator version (currently 6), host architecture, CPU features, ABI version, and the instruction/input/output budgets. Cached artifacts are structurally validated and compared with a canonical translation before reuse. Cache I/O failure is an optimization miss, not an execution failure.
 
 The executor is capped at 64 executable blocks and 16 MiB of page-rounded executable mappings. Translation is capped at 4,096 instructions, 65,536 guest bytes, and 1 MiB of emitted code. The interpreter currently supplies at most one 4 KiB guest page to a block.
 

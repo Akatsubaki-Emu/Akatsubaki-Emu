@@ -376,7 +376,7 @@ struct X86_64AOTTranslator {
                 }
                 }
 
-case 0xF3:
+            case 0xF3:
                 // ENDBR64 is not assumed to be a NOP: guest CET policy is not
                 // modelled yet, so preserve it for the interpreter fallback.
                 return fallback(output, consumed: start, instructions: instructions,

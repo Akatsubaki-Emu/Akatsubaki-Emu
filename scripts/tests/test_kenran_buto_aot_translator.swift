@@ -105,7 +105,7 @@ struct KenranButoAOTTranslatorTests {
         precondition(leaAbsolute.isComplete && leaAbsolute.instructionCount == 1)
         precondition(word(leaAbsolute.machineCode, 0) == 0xD2820002) // MOVZ X2, #0x1000
 
-                let leaRipRelativeBytes = Data([0x48, 0x8D, 0x35, 0xEF, 0x00, 0x00, 0x00])
+        let leaRipRelativeBytes = Data([0x48, 0x8D, 0x35, 0xEF, 0x00, 0x00, 0x00])
         let leaRipRelative = translator.translate(leaRipRelativeBytes, guestRIP: 0x40020A)
         precondition(leaRipRelative.isComplete && leaRipRelative.instructionCount == 1)
         precondition(leaRipRelative.guestBytesConsumed == 7)
