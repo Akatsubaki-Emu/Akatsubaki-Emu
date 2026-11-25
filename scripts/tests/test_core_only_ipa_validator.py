@@ -37,8 +37,8 @@ class CoreOnlyIPAValidatorTests(unittest.TestCase):
 
             tools = root / "bin"
             tools.mkdir()
-            self._write_tool(tools / "lipo", "#!/bin/sh\\nexit 0\\n")
-            self._write_tool(tools / "plutil", "#!/bin/sh\\nexit 0\\n")
+            self._write_tool(tools / "lipo", "#!/bin/sh\nexit 0\n")
+            self._write_tool(tools / "plutil", "#!/bin/sh\nexit 0\n")
             self._write_tool(tools / "PlistBuddy", """#!/bin/sh
 case "$2" in
   *CFBundleExecutable*) echo iSteam ;;
@@ -60,7 +60,7 @@ Load command 1
  ntools 1
 EOF
 else
-  printf '%s:\\\\n\\\\t/usr/lib/libSystem.B.dylib\\\\n' "$2"
+  printf '%s:\\n\\t/usr/lib/libSystem.B.dylib\\n' "$2"
 fi
 """)
 
