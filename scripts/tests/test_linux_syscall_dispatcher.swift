@@ -368,7 +368,9 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let invalidMmapFDValue) = invalidMmapFD else { preconditionFailure() }
         precondition(invalidMmapFDValue == UInt64(bitPattern: Int64(-22)))
 
-        precondition(memory.write(Data([0xCC, 0xDD, 0xEE]), offset: 0x47000))
+        // The non-fixed 0x47000 hint overlaps the existing 0x48000 mapping,
+        // so mmap relocates to 0x49000 and leaves the original hint unmapped.
+        precondition(!memory.hasMappedPages(offset: 0x47000, length: 4096))
         precondition(memory.write(Data([0x11, 0x22, 0x33]), offset: 0x49000))
         let partialFixed = dispatcher.dispatch(number: 9, arguments: [0x47000, 8192, 3, 0x32, UInt64.max, 0])!
         guard case .returned(let partialFixedAddress) = partialFixed else { preconditionFailure() }
