@@ -50,7 +50,7 @@ Host-side ELF execution, Swift regression tests, and IPA packaging are not subst
 
 ### Gate 3 — AOT/JIT correctness on device
 
-- [ ] Use StikDebug 3.2.2 or newer and generate/import a fresh \`RPPairing\` file for the current iOS pairing flow.
+- [ ] Use StikDebug 3.2.2 or newer for TXM/AOT validation. On iOS/iPadOS 27+, pair on-device through Settings → Pair a Device → Pair iPhone or iPad and complete the Developer Mode prompt; no computer or manual `RPPairing` import is required. On older supported versions, generate/import a fresh `RPPairing` file.
 - [ ] Verify the installed app has the required effective \`get-task-allow\` entitlement.
 - [ ] Verify the JIT protocol mode and TXM arena are available on a supported physical device.
 - [ ] Execute representative AOT blocks and compare register, memory, flag, and exit results against the interpreter.

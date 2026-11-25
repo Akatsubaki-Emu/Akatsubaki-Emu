@@ -18,7 +18,8 @@
 
 - Install [StikDebug](https://github.com/StikDebug/StikDebug) and [LocalDevVPN](https://github.com/jkcoxson/LocalDevVPN) separately.
 - Open LocalDevVPN once and approve its VPN configuration.
-- Import the device pairing file into StikDebug.
+- On iOS/iPadOS 27+, use StikDebug 3.2.2 or newer to pair on-device: Settings → Pair a Device → Pair iPhone or iPad, then complete the system Developer Mode pairing prompt. StikDebug saves the device-specific pairing identity automatically; no computer or manual `RPPairing` import is needed on 27+.
+- On older supported iOS versions, generate a fresh device-specific `RPPairing` file with iloader and import it into StikDebug.
 - When StikDebug shows its external JIT request confirmation, approve it; cancelling the request leaves QEMU stopped.
 - Enable iOS Developer Mode.
 - Sign Akatsubaki with a profile that preserves `get-task-allow`.
@@ -54,7 +55,7 @@ The helper apps are not embedded in Akatsubaki. They remain external dependencie
 
 - **Source readback:** completed for all changed implementation, project, settings and test files.
 - **Static contract checks:** passed for the physical-device guards, entitlement lookup, LocalDevVPN and StikDebug URL construction, iOS 26 script gate, callback registration, Security linker flags, VM launch gate and source-validator contract.
-- **Historical, pre-migration:** GitLab pipeline `3099547557` failed before runner startup with `failure_reason=ci_quota_exceeded`; its `python-source-contracts` job had `started_at=null` and no runner assigned. GitLab CI has since been retired. Current Python source-contract and regression tests run through [GitHub Actions validation](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions/workflows/validate-repository.yml), while Apple-platform compilation runs through [platform validation](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions/workflows/validate-ios-build.yml).
+- **Current validation state (2026-11-25):** GitLab main `55996e0c` and GitHub main `f2bcd957` diverge at common ancestor `8cce0419`. GitHub AOT #224, core-only IPA #10 and platform validation #861 ran on `8cce0419`. The iOS device ARM64 compile and tvOS/visionOS simulator builds passed in earlier platform run #860; AOT/core-only #224/#10 then failed at the stale Linux `exit(0)` expectation, while platform #861 failed at the unmapped mmap-hint assertion. Those test assertions are corrected on GitLab main (`bc3eab67`, `55996e0c`) but have not been rerun. GitLab pipeline `3112407904` (IID 1220) and earlier retry #1216 failed before runner assignment with `ci_quota_exceeded`. No current-main IPA or physical guest execution is verified. Do not force-push; the existing safe reconciliation workflow requires explicit owner approval.
 - **Not tested:** Python unittest execution, Xcode compilation, IPA packaging, installation, JIT activation on hardware, QEMU guest boot or persistent guest state.
 
 Do not treat source-level integration as proof of a working JIT session until a physical-device build and VM launch have been tested.
@@ -71,16 +72,16 @@ The iOS TXM/StikDebug AOT path now prepares one 32 MiB split-WX executable arena
 
 This avoids asking StikDebug to prepare a new executable region for every translated block and respects 16 KiB host-page alignment. The allocator has standalone C regression coverage for alignment, fragmentation/coalescing, exhaustion, invalid frees, overflow and concurrent allocation.
 
-**JIT session policy:** QEMU continues to use `iSteamJITDetach` as a no-op so StikDebug remains attached for lazily created QEMU regions. Kenran Butō’s fixed 32 MiB arena uses the separate `iSteamJITDetachPreparedArena` breakpoint after its RX region and writable alias are ready. `sTXMArenaReady` records that the preallocated arena remains usable after the debugger detaches; `KenranButoAOTExecution` checks this arena-specific state rather than QEMU’s attached-session readiness. This implements the prepare/alias/detach sequence, but remains unverified on physical iPad hardware. Do not claim device-ready JIT until that test is recorded. Update StikDebug to 3.2.2 or newer and create a fresh RPPairing file before testing; older 3.1.x sessions are not accepted as proof.
+**JIT session policy:** QEMU continues to use `iSteamJITDetach` as a no-op so StikDebug remains attached for lazily created QEMU regions. Kenran Butō’s fixed 32 MiB arena uses the separate `iSteamJITDetachPreparedArena` breakpoint after its RX region and writable alias are ready. `sTXMArenaReady` records that the preallocated arena remains usable after the debugger detaches; `KenranButoAOTExecution` checks this arena-specific state rather than QEMU’s attached-session readiness. This implements the prepare/alias/detach sequence, but remains unverified on physical iPad hardware. Do not claim device-ready JIT until that test is recorded. Use StikDebug 3.2.2 or newer for TXM/JIT26 testing. On iOS/iPadOS 27+, pair on-device through Settings → Pair a Device → Pair iPhone or iPad and complete the Developer Mode prompt; StikDebug saves the pairing identity automatically. On older supported versions, create/import a fresh `RPPairing` file. Older 3.1.x sessions are not accepted as proof.
 
 The standard non-TXM split-WX allocator remains unchanged. If the TXM arena cannot be prepared or becomes exhausted, AOT allocation fails closed and the x86-64 interpreter remains the fallback.
 
 
 ## StikDebug pairing recovery for iOS 26/27
 
-Use the current [StikDebug 3.2.2 release](https://github.com/StikDebug/StikDebug/releases/tag/3.2.2) or newer for the TXM/JIT26 integration. Older 3.1.x installations are not accepted as proof of the current TXM path. Generate a fresh `RPPairing` file and import it into StikDebug after updating.
+Use the current [StikDebug 3.2.2 release](https://github.com/StikDebug/StikDebug/releases/tag/3.2.2) or newer for the TXM/JIT26 integration. On iOS/iPadOS 27+, pair directly on-device through Settings → Pair a Device → Pair iPhone or iPad and complete the system Developer Mode prompt; StikDebug saves the pairing identity automatically, so no computer or manual `RPPairing` import is required. On older supported versions, generate a fresh `RPPairing` file with iloader and import it into StikDebug. A passcode change or reset invalidates the pairing; repeat pairing. See the [official StikDebug pairing guide](https://github.com/StikDebug/StikDebug/blob/main/PAIRING.md).
 
-If LocalDevVPN/StikDebug pairing still fails with a missing `public_key` field or TLS tunnel timeout, [StikDebug issue #471](https://github.com/StikDebug/StikDebug/issues/471) records a user-reported recovery: delete StikDebug completely (do not offload it), restart the device, reinstall StikDebug, create a new pairing file, and import that file. This is a reported workaround, not a guarantee. The interpreter smoke guest does not require JIT; this setup is needed to validate AOT acceleration.
+If LocalDevVPN/StikDebug pairing still fails on older supported iOS versions with a missing `public_key` field or TLS tunnel timeout, [StikDebug issue #471](https://github.com/StikDebug/StikDebug/issues/471) records a user-reported recovery: delete StikDebug completely (do not offload it), restart the device, reinstall StikDebug, create a new pairing file, and import that file. This is a reported workaround, not a guarantee. On iOS/iPadOS 27+, use the built-in on-device pairing flow first. The interpreter smoke guest does not require JIT; this setup is only needed to validate AOT acceleration.
 
 
 ## Kenran Butō post-detach readiness

@@ -1,9 +1,17 @@
 # Legacy feature parity and remaining Akatsubaki Emu requirements
 
-**Last audited:** 2026-11-24  
+**Last audited:** 2026-11-25  
 **Scope:** consolidate long-running requests from older project conversations against the current GitLab main source. Unless marked otherwise, these are source-level findings, not physical-device verification.
 
 This document complements the [first-playable acceptance checklist](FIRST_PLAYABLE_IOS_ACCEPTANCE.md) and [FEXCore/Box64 iOS integration audit](FEXCORE_IOS_PORT_AUDIT.md). It deliberately separates UI that exists from a guest runtime that has actually been proven.
+
+## Verified core progress since the previous audit
+
+- The x86-64 interpreter implements Linux syscall 158 operations `ARCH_SET_FS`, `ARCH_SET_GS`, `ARCH_GET_FS` and `ARCH_GET_GS`. The existing interpreter regression covers FS set/get and segment access; this update adds GS set/get, GS segment access, non-canonical-base rejection and invalid output-pointer handling. This is not a complete TLS runtime: `PT_TLS`, dynamic linking and broad process ABI support remain.
+- Native C-backed guest-memory tests cover 256 MiB, and commit `69e798ee` adds a 384 MiB regression that grows `brk` across the 256 MiB mmap hint, maps above the expanded heap, shrinks, rewinds the mmap cursor and checks live-mapping collision protection.
+- Commit `8f25d4c4` makes AOT availability checks side-effect-free; first TXM arena preparation is explicit in `refreshAvailability()`.
+- Commits `6332440d` and `15cf98a6` correct the earlier AOT XCHG and Python packaging-test failures. Commits `cb62b0d6`, `8cce0419`, `bc3eab67` and `55996e0c` correct the Linux `exit(0)`, mprotect-after-unmap, uname exit-status and relocated-mmap-hint regression expectations.
+- The host smoke kit has two static ELF guests and passing host builder/execution tests. This proves the payloads are valid on Linux x86-64, not that Akatsubaki Emu has executed them on an iPad.
 
 ## Feature parity
 
@@ -35,12 +43,12 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 | FEXCore primary, Box64 fallback | RuntimeBackendRouter now tests FEXCore-first selection and Box64-only fallback; no concurrent translator is selected for one process | Neither dynamic translator is integrated as an operational iOS backend. FEXCore needs a Darwin core port; the BoxiOS snapshot is no-JIT and game-specific | P1 after first playable |
 | MeloNX and SharpEmu references | Names appear in project documentation/reference material, not as integrated x86 runtime dependencies | They are separate console-emulation codebases; do not add them to Kenran Butō's x86 path without a distinct supported guest architecture and licence/architecture audit | P3/separate scope |
 | Vapor and StikStore | No current source integration was found by repository search | Do not add speculative dependencies. StosSign and StikDebug are the current relevant signing/JIT integrations | P3/separate scope |
-| Main/nightly iOS, tvOS and visionOS channels | Main/nightly release tags, iOS/tvOS/visionOS targets and a release workflow are declared | Current build outputs are unsigned prototypes; latest source is not reaching GitHub Actions because the GitLab/GitHub sync direction is unresolved | P1 |
+| Main/nightly iOS, tvOS and visionOS channels | Main/nightly release tags, iOS/tvOS/visionOS targets and a release workflow are declared | GitLab main `55996e0c` and GitHub main `f2bcd957` diverge at common ancestor `8cce0419`; GitHub has metrics-only commits while GitLab has test corrections. The existing sync refuses divergent histories; safe no-ff reconciliation requires explicit owner approval. No current-main IPA artifact is verified | P1 |
 | AltStore source and xthrx's repo feeds | Separate website/AltStore-source repository and generation workflow | This is release/distribution infrastructure, not part of the guest execution core; keep its source catalogue and Docusaurus docs separate from runtime code | P2 |
 
 ## Correct implementation order
 
-1. **First playable iOS:** restore a reproducible GitHub Actions build path, produce an unsigned core-only IPA, install it through SideStore, run both static ELF guests on the physical iPad, and record output, exit codes, cleanup and repeat launches.
+1. **First playable iOS:** obtain explicit owner approval to run the existing safe GitLab-to-GitHub no-ff reconciliation workflow, then rerun the core-only workflow against current main, produce an unsigned IPA, install it through SideStore, run both static ELF guests on the physical iPad, and record output, exit codes, cleanup and repeat launches.
 2. **Stabilise the guest lifecycle:** verify memory reset, failed-load cleanup, process stop, relaunch, persistent guest files, and the TXM/SPTM first-prepare/live-session/detach sequence with the correct StikDebug version.
 3. **Complete basic interaction:** console/framebuffer output, touch and controller input, keyboard events, audio and persistent disk access. Do this before UI polish or broad compatibility claims.
 4. **Finish the user-mode engine:** complete AOT correctness and interpreter fallbacks, Linux syscall/loader/thread/signal support, then integrate FEXCore as primary and Box64 as a measured fallback.
@@ -50,10 +58,10 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 
 ## Current hard blockers
 
-- GitLab main remains the active write target. Although repository documentation describes GitHub as canonical, the asynchronous sync has now propagated the JIT guard and CI changes: GitHub main is at 88818734 and GitLab main is one documentation commit ahead at f1d55957. The remaining parity-document commit is awaiting propagation; the sync direction should not be changed.
-- The GitLab pipeline failed before runner assignment with quota exhaustion; no CI job log exists.
-- The AOT workflow's iPhoneOS SDK compile and focused JIT tests have not run on GitHub.
-- The core-only IPA workflow has zero runs. No IPA, SideStore install or physical iPad guest execution is verified.
-- StikDebug 3.1.14, previously reported for the user's iPad, is below the documented 3.2.2 target for the current TXM/SPTM workflow; a fresh RPPairing file is required before device testing.
+- GitLab main is the active write target at `55996e0c`; GitHub main is `f2bcd957`; their common ancestor is `8cce0419`. GitHub-only descendants `9b0f6d8d` and `f2bcd957` update generated metrics SVGs. GitLab-only descendants `bc3eab67` and `55996e0c` correct test assertions. The existing sync refuses divergent histories. The existing `reconcile-gitlab-main.yml` performs a no-ff GitLab-to-GitHub merge and push; it has not been dispatched because explicit owner approval is required. No force-push, reset, rebase or branch creation is permitted.
+- GitLab pipeline `3112407904` (IID 1220) and earlier retry `311240`/IID 1216 failed before runner assignment with `ci_quota_exceeded`; no tests ran in those pipelines.
+- GitHub AOT #224 and core-only IPA #10 failed on common ancestor `8cce0419` at the Linux `exit(0)` test expectation; fixed on GitLab main by `bc3eab67`. Platform run #861 failed at the unmapped mmap-hint assertion; fixed on GitLab main by `55996e0c`. These current-main fixes have not been rerun by GitHub Actions.
+- Platform run #860 passed the iOS device ARM64 compile and tvOS/visionOS simulator compiles on the common ancestor. Build & Release completed but produced no downloadable artifact. No current-main IPA, SideStore installation or physical iPad guest execution is verified.
+- StikDebug 3.1.14, previously reported for the user's iPad, is below the 3.2.2+ baseline for TXM/AOT validation. On iOS/iPadOS 27+, pair on-device through Settings → Pair a Device → Pair iPhone or iPad; older supported versions use a fresh `RPPairing` file. JIT is optional for the initial interpreter smoke guest.
 
 **Status rule:** an option in a menu, a parser, a build workflow or a host smoke test is not equivalent to a running guest feature. Mark each item operational only after its complete path is tested on the target device.
