@@ -196,9 +196,34 @@ jobs:
           missing = [item for item in required_release if item not in release]
           if missing:
               raise SystemExit("Missing release requirements: " + ", ".join(missing))
-          paths_ignore = release.split("paths-ignore:", 1)[1].split("schedule:", 1)[0]
-          if "- .github/workflows/blank.yml" not in paths_ignore:
-              raise SystemExit("Mirror-only workflow edits must not trigger app release builds.")
+          if "paths-ignore:" in release:
+              raise SystemExit("Every main commit must trigger the release workflow; paths-ignore is not permitted.")
+          for job_name, next_job in (
+              ("qemu-runtime", "check-platform-build-freshness"),
+              ("check-platform-build-freshness", "build"),
+              ("build", "release"),
+              ("release", "enforce-no-skipped-jobs"),
+          ):
+              marker = "\\n  " + job_name + ":\\n"
+              next_marker = "\\n  " + next_job + ":\\n"
+              if marker not in release or next_marker not in release:
+                  raise SystemExit("Cannot inspect required job block: " + job_name)
+              block = release.split(marker, 1)[1].split(next_marker, 1)[0]
+              if "if: \${{ always() }}" not in block:
+                  raise SystemExit("Required job must always execute: " + job_name)
+          if "if: needs.check-push-freshness.outputs.build" in release:
+              raise SystemExit("Push freshness must not skip the QEMU runtime job.")
+          if "if: needs.check-platform-build-freshness.outputs.build" in release:
+              raise SystemExit("Freshness must not skip the platform build matrix.")
+          if "if: vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED" in release:
+              raise SystemExit("GPL approval must fail the publisher preflight, not skip jobs.")
+          if 'QEMU_GPL_APPROVED: \${{ vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED }}' not in release:
+              raise SystemExit("Publisher must read the QEMU GPL compatibility approval.")
+          if 'if [ "$QEMU_GPL_APPROVED" != "true" ]; then' not in release:
+              raise SystemExit("Publisher must fail closed when QEMU GPL approval is absent.")
+          for required in ("needs.validate-release-channel.result", "needs.qemu-runtime.result", "needs.build.result"):
+              if required not in release:
+                  raise SystemExit("Publisher preflight must verify prerequisite result: " + required)
           for obsolete in ("PAGES_TOKEN", "I-Steam/I-steam.github.io", "i-steam.github.io"):
               if obsolete in release:
                   raise SystemExit("Legacy website publishing must be handled by the website repository updater: " + obsolete)
@@ -268,8 +293,6 @@ jobs:
               raise SystemExit("Build workflows must not push or force-update repository refs.")
           if 'echo "tag=$RELEASE_CHANNEL"' not in release:
               raise SystemExit("Keep main/nightly channel tags for the AltStore/PAL updater.")
-          if "vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'" not in release:
-              raise SystemExit("Combined release must require the QEMU GPL compatibility review variable.")
           if "vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'" not in qemu:
               raise SystemExit("QEMU runtime artifact build must require the GPL compatibility review variable.")
           if "scripts/validate-qemu-runtime.sh" not in release:
