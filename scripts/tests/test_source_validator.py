@@ -115,6 +115,23 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("clearPendingStopRequest()", pause)
         self.assertIn("clearPendingStopRequest()", stop)
 
+    def test_manual_release_dispatch_requires_main_for_both_channels(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        validation = workflow.split("  validate-release-channel:", 1)[1].split(
+            "  check-push-freshness:", 1
+        )[0]
+        self.assertIn("Require main ref for every release channel", validation)
+        self.assertIn(
+            "if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'",
+            validation,
+        )
+        self.assertIn(
+            "Nightly and Main releases can only be dispatched from refs/heads/main",
+            validation,
+        )
+        self.assertNotIn("inputs.channel == 'Main'", validation)
+
     def test_release_ipa_requires_all_five_qemu_exports(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")

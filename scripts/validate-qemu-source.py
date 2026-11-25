@@ -229,6 +229,10 @@ required = {
             ],
     ".github/workflows/build-qemu-runtime.yml": [
     ],
+    ".github/workflows/release.yml": [
+        "if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'",
+        "Nightly and Main releases can only be dispatched from refs/heads/main",
+    ],
     ".github/workflows/validate-qemu-runtime-pr.yml": [
         "pull_request:",
         "branches: [main]",
