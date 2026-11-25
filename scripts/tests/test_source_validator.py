@@ -736,7 +736,8 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         settings = (root / "iSteam" / "SettingsViewController.swift").read_text(encoding="utf-8")
         project = (root / "project.yml").read_text(encoding="utf-8")
-        self.assertIn("#if os(iOS)\n        return 13\n#else\n        return 11\n#endif", settings)
+        self.assertIn("#if os(iOS)\n        return 14\n#else\n        return 11\n#endif", settings)
+        self.assertIn("#if os(iOS)\n        case 13: return AkatsubakiAppIcon.allCases.count\n#endif", settings)
         did_select = settings.split("override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath)", 1)[1]
         action = did_select.split("case 11:", 1)[1].split("case 12:", 1)[0]
         reference = action.index("EntitlementSettingsView()")
