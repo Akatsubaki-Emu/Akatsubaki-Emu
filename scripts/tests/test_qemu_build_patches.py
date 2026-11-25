@@ -788,27 +788,6 @@ build unrelated.dylib: c_LINKER other
         self.assertNotIn("-s iOS-TCI", validator)
 
 
-if __name__ == "__main__":
-    unittest.main()
- + '{ISTEAM_QEMU_TCI_TARGET_LIST:-x86_64-softmmu}"', twice)
-        self.assertIn("--target-list=$TCI_GUEST_TARGETS", twice)
-        self.assertIn('python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"', twice)
-        self.assertIn('python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"', twice)
-        self.assertLess(twice.index("ISTEAM_QEMU_JIT_PATCHER"), twice.index("ISTEAM_QEMU_MESON_PATCHER"))
-        self.assertIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"', twice)
-        self.assertNotIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$DIR/build/build.ninja"', twice)
-        self.assertIn("http://ftp.gnu.org/gnu/libiconv/*", twice)
-        self.assertIn("https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}", twice)
-        self.assertIn('case "$PLATFORM" in', twice)
-        self.assertIn('*-tci) ;; # TCI_BUILD_FLAGS already selects the threaded interpreter and guest targets.', twice)
-        patcher_case = twice.split('case "$PLATFORM" in')[-1].split("esac", 1)[0]
-        tci_branch = patcher_case.split("    *)", 1)[0]
-        self.assertIn("ISTEAM_QEMU_TCI_EXPORT_PATCHER", tci_branch)
-        self.assertIn('python3 "$ISTEAM_QEMU_TCI_EXPORT_PATCHER" "$QEMU_DIR/system/qemu.symbols"', tci_branch)
-        self.assertNotIn("ISTEAM_QEMU_JIT_PATCHER", tci_branch)
-        self.assertIn("$TCI_BUILD_FLAGS", twice)
-        shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
-        self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
 
     def test_fresh_launch_defaults_to_ubuntu(self):
         root = Path(__file__).resolve().parents[2]
