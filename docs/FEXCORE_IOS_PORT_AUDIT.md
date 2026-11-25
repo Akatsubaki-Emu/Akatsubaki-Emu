@@ -31,6 +31,16 @@
 - The snapshot is based on an older Box64 commit and contains game-specific workarounds. Do not transplant those hard-coded guest addresses into Kenran Butō. Audit the complete fork diff, build scripts, transitive libraries and symbols before packaging.
 - **Integration decision:** retain Box64 as a secondary fallback. Build and package it only after the same smoke corpus passes through the static library, its guest ABI/syscall contract is explicit, and the iOS display/input adapters are separated from game-specific hacks. FEXCore wins whenever both are operational; Box64 is selected only if FEXCore is unavailable or rejected for that workload.
 
+## 2026-11-25 20:50 UTC update — diagnostic stdin
+
+The static ELF diagnostic path no longer treats every `read(0, ...)` as immediate EOF:
+
+- `LinuxSyscallDispatcher` now has a bounded, interruptible stdin queue. Empty reads wait for input, stop interrupts a blocked read, and a failed guest-memory write does not consume queued bytes.
+- `GuestMachine` exposes enqueue/close operations; `LinuxELFRuntime` buffers input received before the guest is ready and flushes it before the ready transition while holding the runtime lock; `ConsoleViewController` provides a text input field.
+- `scripts/tests/test_linux_syscall_dispatcher.swift` covers syscall read semantics. `scripts/tests/test_guest_console_input.py` checks queue ordering and lock scope. The latter's source-contract change is commit `35257824`.
+- These changes provide text stdin only for the bounded static-ELF diagnostic runtime. They do not add a guest framebuffer or connect the QEMU/VNC gamepad and touch controls to `GuestMachine`. No physical-device interactive guest test is verified.
+- GitHub main was last synchronized at `74ebb78a`; repository validation #1207 and AOT validation #272 were pending at the last check. GitLab main had a style-only follow-up at `56df7ab0`. No successful hosted result is claimed here.
+
 ## Other runtime gaps discovered
 
 | Area | Current repository state | Required next work |
@@ -53,7 +63,7 @@
 
 ## Guest input/display integration gap
 
-- The static Linux ELF runtime captures stdout/stderr but currently returns EOF for stdin; it has no interactive guest input adapter or framebuffer.
+- The static Linux ELF diagnostic runtime captures stdout/stderr and now accepts bounded, interruptible text stdin through the console field; it still has no guest framebuffer, full HID/controller event sink, dynamic linker or general Linux ABI.
 - Touch controls, hardware keyboard/function keys, GameController and Metal display updates are wired to the QEMU/VNC path, not directly to GuestMachine.
 - Do not claim that QEMU/VNC input or graphics work for the static ELF interpreter. The two execution/display paths still need a shared guest-device boundary.
 - After the first full-system boot, unify keyboard/controller/touch input, key-up cleanup, Metal frames, audio, disk I/O and lifecycle handling behind guest-device interfaces.
