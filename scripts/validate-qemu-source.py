@@ -1508,16 +1508,25 @@ for token in [
     if token not in release_workflow:
         print(f"release workflow: build freshness or release serialization contract is missing: {token}", file=sys.stderr)
         failed = True
-if "- scripts/validate-qemu-source.py" not in release_workflow:
-    print("release workflow: source-contract validator changes should not trigger full release builds", file=sys.stderr)
-    failed = True
-for token in [
-    "- .github/workflows/validate-ios-build.yml",
-    "- .github/workflows/validate-repository.yml",
-    "- scripts/tests/**",
-]:
+# Release builds intentionally run on every main push and after GitLab mirror
+# reconciliation. Do not restore the old paths-ignore contract: it could hide
+# a mirror update from the release/build validation chain.
+for token in (
+    "  push:\n    branches: [main]\n",
+    "  workflow_run:\n    workflows: [\"Reconcile GitLab mirror history\"]\n    types: [completed]\n    branches: [main]\n",
+):
     if token not in release_workflow:
-        print(f"release workflow: validation-only path should not trigger QEMU release builds: {token}", file=sys.stderr)
+        print(f"release workflow: required main push/reconciliation trigger is missing: {token!r}", file=sys.stderr)
+        failed = True
+push_start = release_workflow.find("  push:\n")
+push_end = release_workflow.find("\n  schedule:", push_start)
+if push_start < 0 or push_end < 0:
+    print("release workflow: main push trigger block is missing or malformed", file=sys.stderr)
+    failed = True
+else:
+    push_trigger = release_workflow[push_start:push_end]
+    if "paths:" in push_trigger or "paths-ignore:" in push_trigger:
+        print("release workflow: main push must not be path-filtered", file=sys.stderr)
         failed = True
 release_job_count = release_workflow.count("\n  release:\n")
 if release_job_count != 1:
