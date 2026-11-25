@@ -853,6 +853,27 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertNotIn("git tag --force", workflow)
         self.assertNotIn("git push --force", workflow)
 
+    def test_release_workflow_fails_when_any_required_job_is_skipped(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        self.assertIn("\n  enforce-no-skipped-jobs:\n", workflow)
+        guard = workflow.split("\n  enforce-no-skipped-jobs:\n", 1)[1]
+        self.assertIn("    if: always()", guard)
+        needs = guard.split("    needs:\n", 1)[1].split("    runs-on:", 1)[0]
+        for job in (
+            "validate-release-channel",
+            "check-push-freshness",
+            "qemu-runtime",
+            "check-platform-build-freshness",
+            "build",
+            "release",
+        ):
+            with self.subTest(job=job):
+                self.assertIn(f"      - {job}\n", needs)
+        self.assertIn("JOB_RESULTS: ${{ toJSON(needs) }}", guard)
+        self.assertIn('if job.get("result") != "success"', guard)
+        self.assertIn("raise SystemExit(1)", guard)
+
     def test_mirror_reconciliation_only_changes_do_not_trigger_release_builds(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
