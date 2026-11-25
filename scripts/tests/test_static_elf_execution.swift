@@ -709,6 +709,39 @@ struct StaticELFExecutionTests {
         print("Generated runtime smoke ELF executed uname, write and exit through the interpreter")
     }
 
+    static func testSignExtensionInstructions() throws {
+        func run(_ code: Data, expectedRAX: UInt64, expectedRDX: UInt64) throws {
+            let memory = GuestMemory(size: 4096)
+            precondition(memory.write(code, offset: 0))
+#if KENRAN_BUTO_AOT_TESTS
+            let aotExecutor = KenranButoAOTExecutor()
+            precondition(aotExecutor.refreshAvailability(), "ARM64 AOT test host must provide executable memory")
+            let interpreter = X86_64Interpreter(memory: memory, aotExecutor: aotExecutor)
+#else
+            let interpreter = X86_64Interpreter(memory: memory)
+#endif
+            try interpreter.reset(entryPoint: 0)
+            let exit = try interpreter.run(maxInstructions: 4)
+            precondition(exit == .halted, "Sign-extension instruction sequence did not halt")
+            precondition(interpreter.registerValue(0) == expectedRAX, "Incorrect CWDE/CDQE result")
+            precondition(interpreter.registerValue(2) == expectedRDX, "Incorrect CDQ/CQO result")
+            precondition(interpreter.conditionFlags == 0x2, "Sign-extension instructions must preserve RFLAGS")
+#if KENRAN_BUTO_AOT_TESTS
+            precondition(aotExecutor.blocksExecuted > 0, "Sign-extension block did not execute through AOT")
+#endif
+        }
+
+        // CWDE: sign-extend AX into EAX, then CDQ: sign-extend EAX into EDX.
+        try run(Data([0xB8, 0x00, 0x80, 0x00, 0x00, 0x98, 0x99, 0xF4]),
+                expectedRAX: 0x00000000FFFF8000,
+                expectedRDX: 0x00000000FFFFFFFF)
+        // CDQE: sign-extend EAX into RAX, then CQO: sign-extend RAX into RDX.
+        try run(Data([0xB8, 0x00, 0x00, 0x00, 0x80, 0x48, 0x98, 0x48, 0x99, 0xF4]),
+                expectedRAX: 0xFFFFFFFF80000000,
+                expectedRDX: UInt64.max)
+        print("CWDE/CDQE/CDQ/CQO interpreter and AOT side-exit tests passed")
+    }
+
     static func main() throws {
         let transferMemory = GuestMemory(size: 4096)
         let transferPayload = Data([0x10, 0x20, 0x30, 0x40])
@@ -720,6 +753,7 @@ struct StaticELFExecutionTests {
         precondition(transferMemory.read(offset: 0x100, length: 0, into: &transferDestination, destinationOffset: 6))
 
         testExecutePrefixPermissionBoundary()
+        try testSignExtensionInstructions()
         try testDescriptorBoundELFSnapshot()
         try testRejectsNonRegularELFSnapshot()
         try testFailedPIERelocationClearsGuestMemory()

@@ -50,7 +50,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
 struct X86_64AOTTranslator {
     static let translatorIdentifier = "kenran-buto-aot-arm64"
     // Bump whenever emitted code or decoding semantics change.
-    static let translatorVersion = "9"
+    static let translatorVersion = "10"
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
@@ -400,6 +400,21 @@ struct X86_64AOTTranslator {
                 }
                 }
 
+            case 0x98:
+                // CWDE sign-extends AX to EAX; CDQE sign-extends EAX to RAX.
+                let is64Bit = (rex & 0x08) != 0
+                words.append(Self.extendRegister(
+                    0, to: 0, sourceBits: is64Bit ? 32 : 16,
+                    sourceLSB: 0, is64Bit: is64Bit, signExtend: true
+                ))
+
+            case 0x99:
+                // CDQ/CQO sign-extend EAX/RAX into EDX/RDX without changing flags.
+                let is64Bit = (rex & 0x08) != 0
+                words.append(Self.arithmeticShiftRight(
+                    0, to: 2, shift: is64Bit ? 63 : 31, is64Bit: is64Bit
+                ))
+
             case 0x63:
                 // MOVSXD r64,r/m32 is safe for register operands: SBFM
                 // sign-extends the low 32 bits without changing guest flags.
@@ -623,6 +638,15 @@ struct X86_64AOTTranslator {
 
     /// XCHG preserves guest flags. Three flag-neutral EOR operations swap
     /// the two guest registers without borrowing a non-guest host register.
+    /// SBFM with the full sign-bit range implements x86 CDQ/CQO as ASR.
+    private static func arithmeticShiftRight(_ source: Int, to destination: Int,
+                                             shift: Int, is64Bit: Bool) -> UInt32 {
+        let opcode: UInt32 = is64Bit ? 0x93400000 : 0x13000000
+        let widthMask = UInt32(is64Bit ? 63 : 31)
+        return opcode | (UInt32(shift) << 16) | (widthMask << 10)
+            | (UInt32(source) << 5) | UInt32(destination)
+    }
+
     private static func exchangeRegisters(_ left: Int, _ right: Int, is64Bit: Bool) -> EncodedWords {
         var words = EncodedWords()
         guard left != right else {

@@ -342,6 +342,21 @@ final class X86_64Interpreter: GuestCPUBackend {
                     guard let immediate = fetchUInt32() else { return instructionFetchFailure(at: instructionAddress) }
                     registers[index] = UInt64(immediate)
                 }
+            case 0x98: // CWDE or CDQE
+                if rex & 0x08 != 0 {
+                    let eax = UInt32(truncatingIfNeeded: registers[0])
+                    registers[0] = UInt64(bitPattern: Int64(Int32(bitPattern: eax)))
+                } else {
+                    let ax = UInt16(truncatingIfNeeded: registers[0])
+                    let signExtended = Int32(Int16(bitPattern: ax))
+                    registers[0] = UInt64(UInt32(bitPattern: signExtended))
+                }
+            case 0x99: // CDQ or CQO
+                if rex & 0x08 != 0 {
+                    registers[2] = (registers[0] & (UInt64(1) << 63)) == 0 ? 0 : UInt64.max
+                } else {
+                    registers[2] = (registers[0] & (UInt64(1) << 31)) == 0 ? 0 : UInt64(UInt32.max)
+                }
             case 0xEB: // JMP rel8
                 guard let raw = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
                 rip = addSigned(Int8(bitPattern: raw), to: rip)

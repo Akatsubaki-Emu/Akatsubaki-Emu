@@ -133,6 +133,20 @@ struct KenranButoAOTTranslatorTests {
         precondition(leaOutputLimited.stopReason == .outputLimit)
         precondition(leaOutputLimited.guestBytesConsumed == 0 && leaOutputLimited.machineCode.isEmpty)
 
+        // CWDE/CDQE and CDQ/CQO preserve x86 flags and use the fixed accumulator registers.
+        let cwde = translator.translate(Data([0x98]))
+        precondition(cwde.isComplete && cwde.instructionCount == 1)
+        precondition(word(cwde.machineCode, 0) == 0x13003C00) // SXTH W0, W0
+        let cdqe = translator.translate(Data([0x48, 0x98]))
+        precondition(cdqe.isComplete && cdqe.instructionCount == 1)
+        precondition(word(cdqe.machineCode, 0) == 0x93407C00) // SXTW X0, W0
+        let cdq = translator.translate(Data([0x99]))
+        precondition(cdq.isComplete && cdq.instructionCount == 1)
+        precondition(word(cdq.machineCode, 0) == 0x131F7C02) // ASR W2, W0, #31
+        let cqo = translator.translate(Data([0x48, 0x99]))
+        precondition(cqo.isComplete && cqo.instructionCount == 1)
+        precondition(word(cqo.machineCode, 0) == 0x937FFC02) // ASR X2, X0, #63
+
         // Register-only accumulator XCHG forms preserve 32/64-bit semantics.
         let exchanges = translator.translate(Data([0x91, 0x49, 0x90]))
         precondition(exchanges.isComplete && exchanges.instructionCount == 2)
@@ -318,7 +332,7 @@ struct KenranButoAOTTranslatorTests {
         precondition(multiInstructionBlock.guestBytesConsumed == 20)
         precondition(multiInstructionBlock.instructionCount == 4)
         precondition(multiInstructionBlock.fallbackOpcode == 0x0F)
-        precondition(X86_64AOTTranslator.translatorVersion == "9")
+        precondition(X86_64AOTTranslator.translatorVersion == "10")
         let oversizedBudgets = translator.translate(
             guest, maximumInstructions: Int.max,
             maximumOutputBytes: Int.max & ~3,
