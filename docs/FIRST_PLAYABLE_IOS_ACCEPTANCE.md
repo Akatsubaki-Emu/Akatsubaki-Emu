@@ -130,7 +130,7 @@ These items remain outside the first QEMU TCI Linux-boot milestone and should be
 
 ## Repository/CI coordination and latest validation status
 
-GitLab `main` is at `5a6b5f9d25d4cbc7c6bd60fcc2a692cbfe82038f`; its latest code-bearing commit is `f85b9d55d016120e27177b7aab1bf0f04d03001a`. GitHub `main` is still at `f93008dfb5c6143c4e9dc256fca07a363020eccd`. GitLab is the canonical development destination and is six commits ahead of the GitHub mirror (`a23d99ba`, `34491c5c`, `bc445ef5`, `b88e5029`, `f85b9d55`, `5a6b5f9d`). Do not push the stale GitHub head back to GitLab or force-sync divergent history. No branch reconciliation, merge, force-push, reset, rebase, branch creation, or deletion has been performed.
+GitLab `main` is the canonical development destination and contains the latest code-bearing commit `f85b9d55d016120e27177b7aab1bf0f04d03001a`, followed by documentation-only acceptance-record commits. GitHub `main` remains at `f93008dfb5c6143c4e9dc256fca07a363020eccd` and is behind the current GitLab main. Do not push the stale GitHub head back to GitLab or force-sync divergent history. No branch reconciliation, merge, force-push, reset, rebase, branch creation, or deletion has been performed.
 
 ### Current source changes
 
