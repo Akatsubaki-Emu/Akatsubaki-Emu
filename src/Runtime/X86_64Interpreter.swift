@@ -203,6 +203,8 @@ final class X86_64Interpreter: GuestCPUBackend {
                 opcode = next
             }
 
+            // F3 90 is PAUSE, a spin-wait hint with NOP architectural effects.
+            if endbrPrefix && opcode == 0x90 { endbrPrefix = false }
             if endbrPrefix && opcode != 0x0F {
                 rip = instructionAddress
                 return .unsupportedInstruction(address: instructionAddress)

@@ -2036,6 +2036,17 @@ struct InterpreterTests {
             precondition(cpuidExtended.registerValue(2)! & ((1 << 11) | (1 << 20) | (1 << 29)) == ((1 << 11) | (1 << 20) | (1 << 29)))
             precondition(cpuidExtended.registerValue(2)! & (1 << 26) == 0)
 
+            // PAUSE (F3 90) is a safe no-op hint for guest spin-wait loops.
+            let pauseProgram = Data([0xF3, 0x90, 0x0F, 0x0B])
+            let pauseMemory = GuestMemory(size: 0x2000)
+            precondition(pauseMemory.write(pauseProgram, offset: 0x0B00))
+            let pause = X86_64Interpreter(memory: pauseMemory)
+            try pause.reset(entryPoint: 0x0B00)
+            let pauseExit = try pause.run(maxInstructions: 8)
+            precondition(pauseExit == .unsupportedInstruction(address: 0x0B02))
+            precondition(pause.instructionCount == 1)
+            precondition(pause.conditionFlags == 0x2)
+
             // RDTSC returns the monotonic virtual nanosecond counter in EDX:EAX.
             let rdtscProgram = Data([0x0F, 0x31, 0x0F, 0x0B])
             let rdtscMemory = GuestMemory(size: 0x2000)
