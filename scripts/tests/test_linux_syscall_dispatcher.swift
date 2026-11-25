@@ -202,6 +202,10 @@ struct LinuxSyscallDispatcherTests {
         let dispatcher = LinuxSyscallDispatcher(memory: memory)
         try dispatcher.configure(programBreak: 0x40000, stackBase: 0x3F0000)
 
+        // Clock and timeval syscalls write into this low guest scratch page.
+        precondition(memory.mapTransaction(offset: 0x1000, length: 4096,
+                                            permissions: 0x3, replaceExisting: false) == .success)
+
         // Output buffers are guest allocations; process setup clears stale page mappings.
         precondition(memory.mapTransaction(offset: 0x3F1000, length: 0x4000,
                                             permissions: 0x3, replaceExisting: false) == .success)
@@ -514,9 +518,10 @@ struct LinuxSyscallDispatcherTests {
         guard case .returned(let invalidRandomFlagsValue) = invalidRandomFlags else { preconditionFailure() }
         precondition(invalidRandomFlagsValue == UInt64(bitPattern: Int64(-22)))
 
-        let random = dispatcher.dispatch(number: 318, arguments: [0x40800, 32, 0, 0, 0, 0])!
+        let random = dispatcher.dispatch(number: 318, arguments: [mapped, 32, 0, 0, 0, 0])!
         guard case .returned(let randomValue) = random else { preconditionFailure() }
         precondition(randomValue == 32)
+        precondition(memory.read(offset: mapped, length: 32) != nil)
 
         let clock = dispatcher.dispatch(number: 228, arguments: [1, 0x1100, 0, 0, 0, 0])!
         guard case .returned(let clockValue) = clock else { preconditionFailure() }
