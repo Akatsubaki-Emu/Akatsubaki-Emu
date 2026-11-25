@@ -380,7 +380,9 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.read(offset: 0x49000, length: 3) == Data([0x11, 0x22, 0x33]))
         let preservedSuffixProtection = dispatcher.dispatch(number: 10, arguments: [0x49000, 4096, 1, 0, 0, 0])!
         guard case .returned(let preservedSuffixResult) = preservedSuffixProtection else { preconditionFailure() }
-        precondition(preservedSuffixResult == UInt64(bitPattern: Int64(-38)))
+        precondition(preservedSuffixResult == 0)
+        precondition(memory.read(offset: 0x49000, length: 3) == Data([0x11, 0x22, 0x33]))
+        precondition(!memory.write(Data([0x44]), offset: 0x49000))
 
         let outputLog = EmulationLog()
         let outputDispatcher = LinuxSyscallDispatcher(memory: memory, log: outputLog)
