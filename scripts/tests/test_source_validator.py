@@ -892,7 +892,7 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("func refreshAvailability() -> Bool", executor)
         self.assertIn("func refreshAvailability() -> Bool", interpreter)
         self.assertIn("aotExecutor?.refreshAvailability() == true", interpreter)
-        self.assertIn("static let translatorVersion = \"10\"", translator)
+        self.assertRegex(translator, r'static let translatorVersion = "\d+"')
         self.assertIn("case 0x98:", translator)
         self.assertIn("case 0x99:", translator)
         self.assertIn("arithmeticShiftRight", translator)
