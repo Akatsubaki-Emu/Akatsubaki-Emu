@@ -68,6 +68,7 @@ The source includes separate entries for iOS Main, iOS Nightly, tvOS Main, and t
 
 - Experimental library and import flows for executable and operating-system files.
 - Local VM/session configuration and last-session metadata.
+- Four selectable Icon Composer app icons in Settings; Main defaults to Default and Nightly defaults to Simple.
 - File selection and shared-directory handling.
 - Bounded, read-only metadata inspection for Windows PE and Linux ELF files.
 - A bounded static x86-64 Linux ELF execution path through `GuestMachine`, native C-backed guest memory, a Linux syscall subset, and the x86-64 interpreter; host-side regression coverage exists, but physical iOS execution is not yet verified.
