@@ -1922,6 +1922,25 @@ struct InterpreterTests {
             precondition(xchgBaselineMemory.readUInt64(offset: xchgBaselineStack) == 1)
             precondition(executor.blocksExecuted == blocksBeforeXCHG + 2)
 
+            // Memory-form XCHG is implicitly atomic; keep it unsupported until guest-memory atomics exist.
+            let xchgMemoryProgram = Data([
+                0x48, 0xB8, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x48, 0xB9, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+                0x48, 0x87, 0x08,
+                0x0F, 0x0B
+            ])
+            let xchgMemory = GuestMemory(size: 0x4000)
+            precondition(xchgMemory.write(xchgMemoryProgram, offset: 0x1000))
+            precondition(xchgMemory.writeUInt64(0x0123456789ABCDEF, offset: 0x2000))
+            let xchgMemoryInterpreter = X86_64Interpreter(memory: xchgMemory)
+            try xchgMemoryInterpreter.reset(entryPoint: 0x1000)
+            let xchgMemoryExit = try xchgMemoryInterpreter.run(maxInstructions: 8)
+            precondition(xchgMemoryExit == .unsupportedInstruction(address: 0x1014))
+            precondition(xchgMemoryInterpreter.instructionCount == 2)
+            precondition(xchgMemoryInterpreter.registerValue(0) == 0x2000)
+            precondition(xchgMemoryInterpreter.registerValue(1) == 0x1122334455667788)
+            precondition(xchgMemory.readUInt64(offset: 0x2000) == 0x0123456789ABCDEF)
+
             // Register-only 0x87 XCHG must start a native block after interpreter PUSH.
             let xchgRegisterProgram = Data([
                 0xB8,0x01,0x00,0x00,0x00,
