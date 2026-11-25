@@ -20,7 +20,9 @@ final class GameLauncher {
         }
 
         if format == .linuxELF {
-// A bounded NOP/MOV/C7/LEA/accumulator-and-register-XCHG AOT fast path is injected for eligible JIT sessions.
+// The bounded register-only AOT path covers NOP/XCHG, immediate and register MOV,
+            // C7 /0, LEA, sign-extension, MOVSXD, MOVZX/MOVSX and BSWAP.
+            // Unsupported or memory-form instructions side-exit to the interpreter.
             // The interpreter remains the correctness fallback; this is not a full Linux ABI.
             let availability = RuntimeCapabilityRegistry.current.backendAvailability
             let request = RuntimeExecutionRequest(format: .linuxX64ELF)
