@@ -18,7 +18,7 @@ final class SettingsViewController: UITableViewController {
 
     override func numberOfSections(in tableView: UITableView) -> Int {
 #if os(iOS)
-        return 13
+        return 14
 #else
         return 11
 #endif
@@ -33,12 +33,15 @@ final class SettingsViewController: UITableViewController {
         case 4: return vrModes.count + 2
         case 5: return jitMethods.count + 1
         case 6, 7, 8, 9, 10, 11, 12: return 1
+#if os(iOS)
+        case 13: return AkatsubakiAppIcon.allCases.count
+#endif
         default: return 0
         }
     }
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        ["Windows Runtime", "VM / Hypervisor", "Resolution", "Display / FPS", "VR / Input", "JIT", "Diagnostics", "Performance", "Android Experiment", "Device Compatibility", "DroidDeck Port", "Entitlements", "Experiments"][section]
+        ["Windows Runtime", "VM / Hypervisor", "Resolution", "Display / FPS", "VR / Input", "JIT", "Diagnostics", "Performance", "Android Experiment", "Device Compatibility", "DroidDeck Port", "Entitlements", "Experiments", "App Icon"][section]
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -127,6 +130,13 @@ final class SettingsViewController: UITableViewController {
             c.text = "Add Anything"
             c.secondaryText = "Request a custom capability for this app's App ID"
             cell.accessoryType = .disclosureIndicator
+#if os(iOS)
+        case 13:
+            let icon = AkatsubakiAppIcon.allCases[indexPath.row]
+            c.text = icon.title
+            c.secondaryText = icon.detail
+            cell.accessoryType = currentAppIconName == icon.rawValue ? .checkmark : .none
+#endif
         default:
             break
         }
@@ -205,10 +215,45 @@ final class SettingsViewController: UITableViewController {
 #if os(iOS)
             navigationController?.pushViewController(UIHostingController(rootView: ExperimentsView()), animated: true)
 #endif
+#if os(iOS)
+        case 13:
+            applyAppIcon(AkatsubakiAppIcon.allCases[indexPath.row])
+#endif
         default:
             break
         }
     }
+
+#if os(iOS)
+    private var currentAppIconName: String {
+        UIApplication.shared.alternateIconName
+            ?? (Bundle.main.object(forInfoDictionaryKey: "AkatsubakiPrimaryIconName") as? String
+                ?? AkatsubakiAppIcon.defaultIcon.rawValue)
+    }
+
+    private func applyAppIcon(_ icon: AkatsubakiAppIcon) {
+        guard UIApplication.shared.supportsAlternateIcons else {
+            let alert = UIAlertController(title: "Alternate icons unavailable", message: "This installation does not support changing its app icon.", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+            return
+        }
+        let primaryName = Bundle.main.object(forInfoDictionaryKey: "AkatsubakiPrimaryIconName") as? String
+            ?? AkatsubakiAppIcon.defaultIcon.rawValue
+        let alternateName = icon.rawValue == primaryName ? nil : icon.rawValue
+        UIApplication.shared.setAlternateIconName(alternateName) { [weak self] error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let error {
+                    let alert = UIAlertController(title: "Couldn't change app icon", message: error.localizedDescription, preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: "OK", style: .default))
+                    self.present(alert, animated: true)
+                }
+                self.tableView.reloadSections(IndexSet(integer: 13), with: .automatic)
+            }
+        }
+    }
+#endif
 
     private func showCustomFPSEditor() {
         let alert = UIAlertController(title: "Custom FPS", message: "Choose a target between 24 and 120 FPS.", preferredStyle: .alert)
@@ -257,3 +302,30 @@ final class SettingsViewController: UITableViewController {
         present(alert, animated: true)
     }
 }
+
+#if os(iOS)
+private enum AkatsubakiAppIcon: String, CaseIterable {
+    case defaultIcon = "AkatsubakiDefault"
+    case haloPetals = "AkatsubakiHaloPetals"
+    case petals = "AkatsubakiPetals"
+    case simple = "AkatsubakiSimple"
+
+    var title: String {
+        switch self {
+        case .defaultIcon: return "Default"
+        case .haloPetals: return "Halo Petals"
+        case .petals: return "Petals"
+        case .simple: return "Simple"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .defaultIcon: return "Original Akatsubaki Emu icon"
+        case .haloPetals: return "Halo and layered petals design"
+        case .petals: return "Petal-accented design"
+        case .simple: return "Minimal Akatsubaki Emu icon"
+        }
+    }
+}
+#endif
