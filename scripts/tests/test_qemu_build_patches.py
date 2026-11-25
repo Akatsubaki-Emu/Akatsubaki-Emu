@@ -194,6 +194,26 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         self.assertNotIn("utm-ios-arm64-deps-v14-", repository)
         self.assertIn('or "utm-ios-arm64-deps-v14-" in repository_validation', validator)
 
+
+    def test_qemu_runtime_build_runs_for_relevant_main_pushes(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        trigger = source.split("permissions:", 1)[0]
+        self.assertIn("  push:\\n    branches: [main]\\n    paths:\\n", trigger)
+        self.assertIn("workflow_dispatch:", trigger)
+        self.assertIn("workflow_call:", trigger)
+        for path in (
+            ".github/workflows/build-qemu-runtime.yml",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+            "scripts/patch_qemu_tci_exports.py",
+            "src/QEMU/**",
+            "src/Display/VMDisplayViewController.swift",
+        ):
+            self.assertIn(f'      - "{path}"', trigger)
+        # The build may validate an internal runtime, but public artifact upload
+        # remains behind the independent licensing approval gate.
+        self.assertIn("vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'", source)
+
     def test_qemu_runtime_pr_workflow_calls_reusable_build(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github/workflows/validate-qemu-runtime-pr.yml").read_text(encoding="utf-8")

@@ -1,6 +1,30 @@
 name: Build UTM iOS QEMU runtime (manual)
 
 on:
+  # Automatically compile and validate the physical iOS JIT + TCI runtime when
+  # QEMU build inputs change on main. Artifact publication remains independently
+  # gated by the qualified QEMU/UTM licensing approval variable below.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-qemu-runtime.yml"
+      - "scripts/check-build-freshness.sh"
+      - "scripts/package-utm-qemu-runtime.sh"
+      - "scripts/package-utm-qemu-tci-runtime.sh"
+      - "scripts/merge-qemu-runtime-variants.sh"
+      - "scripts/patch_qemu_stikjit_ios.py"
+      - "scripts/patch_qemu_tci_exports.py"
+      - "scripts/patch_utm_qemu_ios.py"
+      - "scripts/patch_qemu_meson_ios.py"
+      - "scripts/verify_qemu_meson_link.py"
+      - "scripts/validate-qemu-runtime.sh"
+      - "src/QEMU/**"
+      - "src/Core/VMEngine.swift"
+      - "src/Core/VMConfiguration.swift"
+      - "src/Display/VMDisplayViewController.swift"
+      - "iSteam/JIT26Protocol.c"
+      - "iSteam/JIT26Protocol.h"
+      - "project.yml"
   workflow_dispatch:
     inputs:
       rebuild_dependencies:
