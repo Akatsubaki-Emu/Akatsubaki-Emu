@@ -119,11 +119,12 @@ These items remain outside the first static-ELF milestone and should be implemen
 
 ## Repository/CI coordination and latest validation status
 
-GitLab `main` is `af00bceb1cb96433f87976a2ceec1828f0e7e601`. GitHub `main` is `30a05994eeac607a4a57716f2d384cea6ee57047`; direct comparison confirms GitHub is an ancestor of GitLab. GitLab has three commits after the shared `30a05994` base:
+GitLab `main` is `2876b49d1c332fb3febe235976abef54890d69e9`. GitHub `main` is `30a05994eeac607a4a57716f2d384cea6ee57047`; direct comparison confirms GitHub is an ancestor of GitLab. GitLab has four commits after the shared `30a05994` base:
 
 - `3ca7cd9c` updates the hybrid-runtime architecture documentation for atomic memory-form XCHG.
 - `763b38ab` updates the static-ELF Swift test double with exchange methods so interpreter tests conform to the native GuestMemory API. The mock is single-threaded; native C++ tests prove atomicity.
 - `af00bceb` adds conservative CPUID reporting and a monotonic 1 GHz virtual RDTSC counter, with interpreter regressions and architecture documentation.
+- `2876b49d` refreshes the first-playable acceptance and legacy feature-parity audit against the current implementation.
 
 The configured synchronization direction is GitHub-to-GitLab. Publishing these newer GitLab commits back to GitHub requires the existing owner-gated reconciliation. No force-push, reset, rebase, branch creation, PR merge, or branch deletion has been performed.
 
@@ -136,10 +137,11 @@ The configured synchronization direction is GitHub-to-GitLab. Publishing these n
 - `30a05994` adds mutex-serialized native guest-memory exchange for 1-, 4-, and 8-byte operands, cross-page handling, permission validation, Swift wrappers, and interpreter memory-form `0x86`/`0x87` support. Native tests cover cross-page exchange, read-only rejection without mutation, and concurrent serialization.
 - `763b38ab` aligns the static-ELF Swift test double with the atomic exchange API.
 - `af00bceb` adds conservative CPUID leaves and a monotonic virtual RDTSC counter. SIMD features are deliberately not advertised; these additions do not make the interpreter a general x86-64 implementation.
+- `2876b49d` refreshes this acceptance checklist and the legacy feature-parity audit.
 
 ### Hosted validation evidence
 
-- GitLab pipeline IID 1237 / ID `3112567653` on source SHA `30a05994` failed before runner assignment with `ci_quota_exceeded`. No tests ran. The later `763b38ab` and `af00bceb` changes have not passed an exact-head hosted validation run.
+- GitLab pipeline IID 1237 / ID `3112567653` on source SHA `30a05994` and IID 1240 / ID `3112583329` on `af00bceb` both failed before runner assignment with `ci_quota_exceeded`; no tests ran. Current docs-only head `2876b49d` has not passed an exact-head hosted validation run.
 - GitHub AOT workflow run `45577650906` passed on older source `e2dcb994`, including its tested restricted AOT path, interpreter differential checks, JIT revocation checks, and a static-ELF run reporting `blocks=2`. It predates atomic memory XCHG and CPUID/RDTSC; it is not exact-current-main evidence.
 - Earlier platform workflow run `45576869713` on `4192b5e8` passed tvOS/visionOS simulator builds and an unsigned physical-device iOS ARM64 compile. It is compile-only evidence from an older commit, not a current IPA, signed installation, or guest execution.
 - No current-head IPA artifact, SideStore installation, or physical iPad guest execution is verified.
