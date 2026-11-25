@@ -15,6 +15,7 @@ on:
       - "scripts/patch_qemu_stikjit_ios.py"
       - "scripts/patch_qemu_tci_exports.py"
       - "scripts/patch_utm_qemu_ios.py"
+      - "scripts/prune_utm_missing_qemu_frameworks.py"
       - "scripts/patch_qemu_meson_ios.py"
       - "scripts/verify_qemu_meson_link.py"
       - "scripts/validate-qemu-runtime.sh"
@@ -267,6 +268,14 @@ jobs:
           test -f build-iOS-TCI-arm64/BUILD_SUCCESS
           test -d sysroot-iOS-TCI-arm64
 
+      - name: Prune unavailable QEMU frameworks from the JIT archive project
+        if: steps.freshness.outputs.build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/scripts/prune_utm_missing_qemu_frameworks.py" UTM/UTM.xcodeproj/project.pbxproj UTM/sysroot-iOS-arm64/Frameworks
+          plutil -lint UTM/UTM.xcodeproj/project.pbxproj
+
       - name: Build UTM iOS archive
         if: steps.freshness.outputs.build == 'true'
         shell: bash
@@ -275,6 +284,14 @@ jobs:
           cd UTM
           ./scripts/build_utm.sh -k iphoneos -s iOS -a arm64 -o UTMBuild
           test -d UTMBuild.xcarchive/Products/Applications/UTM.app
+
+      - name: Prune unavailable QEMU frameworks from the TCI archive project
+        if: steps.freshness.outputs.build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/scripts/prune_utm_missing_qemu_frameworks.py" UTM/UTM.xcodeproj/project.pbxproj UTM/sysroot-iOS-TCI-arm64/Frameworks
+          plutil -lint UTM/UTM.xcodeproj/project.pbxproj
 
       - name: Build UTM iOS TCI archive
         if: steps.freshness.outputs.build == 'true'
