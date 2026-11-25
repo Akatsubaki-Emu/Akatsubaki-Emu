@@ -32,6 +32,8 @@ class CoreOnlyIOSWorkflowTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v7", workflow)
         self.assertIn("brew list xcodegen", workflow)
         self.assertIn("xcodegen generate --spec project.yml", workflow)
+        self.assertIn("bash scripts/prepare-app-icons.sh", workflow)
+        self.assertLess(workflow.index("bash scripts/prepare-app-icons.sh"), workflow.index("xcodegen generate --spec project.yml"))
         self.assertLess(
             workflow.index("xcodegen generate --spec project.yml"),
             workflow.index("Build iOS device app without code signing"),
