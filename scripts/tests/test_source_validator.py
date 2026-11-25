@@ -881,10 +881,10 @@ class SourceValidatorTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         freshness = (root / "scripts" / "check-build-freshness.sh").read_text(encoding="utf-8")
-        self.assertIn("  push:\\n    branches: [main]\\n", workflow)
+        self.assertIn("  push:\n    branches: [main]\n", workflow)
         self.assertNotIn("paths-ignore:", workflow)
         self.assertIn(
-            '  workflow_run:\\n    workflows: ["Reconcile GitLab mirror history"]\\n    types: [completed]\\n    branches: [main]\\n',
+            '  workflow_run:\n    workflows: ["Reconcile GitLab mirror history"]\n    types: [completed]\n    branches: [main]\n',
             workflow,
         )
         self.assertIn(".github/workflows/reconcile-gitlab-main.yml", freshness)
