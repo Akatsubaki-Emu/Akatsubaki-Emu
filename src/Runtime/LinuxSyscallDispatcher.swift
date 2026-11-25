@@ -15,6 +15,11 @@ final class LinuxSyscallDispatcher {
     private var stackBase: UInt64 = 0
     private var mappedRanges: [Range<UInt64>] = []
     private var closedStandardDescriptorMask: UInt8 = 0
+    private let standardInputCondition = NSCondition()
+    private var standardInputBuffer = Data()
+    private var standardInputClosed = false
+    private var standardInputInterrupted = false
+    private static let maximumStandardInputBytes = 65_536
 
     init(memory: GuestMemory, log: EmulationLog = .shared) {
         self.memory = memory
@@ -37,6 +42,7 @@ final class LinuxSyscallDispatcher {
         mmapCursor = preferred < stackBase ? preferred : minimumCursor
         mappedRanges.removeAll(keepingCapacity: true)
         closedStandardDescriptorMask = 0
+        resetStandardInputState()
     }
 
     func reset() {
@@ -51,11 +57,84 @@ final class LinuxSyscallDispatcher {
         programBreak = initialProgramBreak
         mappedRanges.removeAll(keepingCapacity: true)
         closedStandardDescriptorMask = 0
+        resetStandardInputState()
         let (rawCursor, overflow) = initialProgramBreak.addingReportingOverflow(0x10000)
         let minimumCursor = overflow ? UInt64.max : Self.alignUp(rawCursor)
         minimumMmapCursor = minimumCursor
         let preferred = max(minimumCursor, 0x10000000)
         mmapCursor = preferred < stackBase ? preferred : minimumCursor
+    }
+
+    private func resetStandardInputState() {
+        standardInputCondition.lock()
+        standardInputBuffer.removeAll(keepingCapacity: true)
+        standardInputClosed = false
+        standardInputInterrupted = false
+        standardInputCondition.broadcast()
+        standardInputCondition.unlock()
+    }
+
+    /// Queue bytes for guest file descriptor 0 without allowing unbounded host memory growth.
+    @discardableResult
+    func enqueueStandardInput(_ data: Data) -> Int {
+        guard !data.isEmpty else { return 0 }
+        standardInputCondition.lock()
+        defer { standardInputCondition.unlock() }
+        guard !standardInputClosed else { return 0 }
+        let remaining = Self.maximumStandardInputBytes - standardInputBuffer.count
+        guard data.count <= remaining else { return 0 }
+        standardInputBuffer.append(data)
+        standardInputCondition.signal()
+        return data.count
+    }
+
+    /// Deliver EOF after any queued bytes have been consumed.
+    func closeStandardInput() {
+        standardInputCondition.lock()
+        standardInputClosed = true
+        standardInputCondition.broadcast()
+        standardInputCondition.unlock()
+    }
+
+    /// Wake a guest blocked in read(0, ...) when the runtime is stopped.
+    func interruptStandardInputRead() {
+        standardInputCondition.lock()
+        standardInputInterrupted = true
+        standardInputCondition.broadcast()
+        standardInputCondition.unlock()
+    }
+
+    func clearStandardInputInterrupt() {
+        standardInputCondition.lock()
+        standardInputInterrupted = false
+        standardInputCondition.unlock()
+    }
+
+    private func readStandardInput(address: UInt64, requested: UInt64) -> UInt64 {
+        guard requested <= UInt64(Int.max) else { return errno(22) }
+        if requested == 0 { return 0 }
+        standardInputCondition.lock()
+        while standardInputBuffer.isEmpty && !standardInputClosed && !standardInputInterrupted {
+            standardInputCondition.wait()
+        }
+        if standardInputInterrupted {
+            standardInputInterrupted = false
+            standardInputCondition.unlock()
+            return errno(4)
+        }
+        guard !standardInputBuffer.isEmpty else {
+            standardInputCondition.unlock()
+            return 0
+        }
+        let count = min(Int(requested), standardInputBuffer.count)
+        let bytes = Data(standardInputBuffer.prefix(count))
+        guard memory.write(bytes, offset: address) else {
+            standardInputCondition.unlock()
+            return errno(14)
+        }
+        standardInputBuffer.removeSubrange(0..<count)
+        standardInputCondition.unlock()
+        return UInt64(count)
     }
 
     func dispatch(number: UInt64, arguments: [UInt64]) -> Outcome? {
@@ -70,7 +149,7 @@ final class LinuxSyscallDispatcher {
         switch number {
         case 0:
             guard arg0 == 0, !isStandardDescriptorClosed(arg0) else { return .returned(errno(9)) }
-            return .returned(0)
+            return .returned(readStandardInput(address: arg1, requested: arg2))
         case 1:
             let descriptor = arg0
             let address = arg1

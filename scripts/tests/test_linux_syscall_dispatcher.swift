@@ -1,4 +1,22 @@
 import Foundation
+import Dispatch
+
+private final class LockedBox<Value> {
+    private let lock = NSLock()
+    private var storedValue: Value?
+
+    func set(_ value: Value) {
+        lock.lock()
+        storedValue = value
+        lock.unlock()
+    }
+
+    func get() -> Value? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedValue
+    }
+}
 
 enum GuestMemoryTransactionResult: Int32 {
     case success = 0
@@ -395,6 +413,79 @@ struct LinuxSyscallDispatcherTests {
         let outputLog = EmulationLog()
         let outputDispatcher = LinuxSyscallDispatcher(memory: memory, log: outputLog)
         try outputDispatcher.configure(programBreak: 0x41000, stackBase: 0x3F0000)
+
+        // stdin is a bounded blocking byte queue; partial reads preserve the remainder.
+        let queuedInput = Data("hello\n".utf8)
+        precondition(outputDispatcher.enqueueStandardInput(queuedInput) == queuedInput.count)
+        let firstInputRead = outputDispatcher.dispatch(number: 0, arg0: 0, arg1: 0x3F3000,
+                                                       arg2: 3, arg3: 0, arg4: 0, arg5: 0)!
+        guard case .returned(let firstInputCount) = firstInputRead else { preconditionFailure() }
+        precondition(firstInputCount == 3)
+        precondition(memory.read(offset: 0x3F3000, length: 3) == Data("hel".utf8))
+        let remainingInputRead = outputDispatcher.dispatch(number: 0, arg0: 0, arg1: 0x3F3003,
+                                                           arg2: 3, arg3: 0, arg4: 0, arg5: 0)!
+        guard case .returned(let remainingInputCount) = remainingInputRead else { preconditionFailure() }
+        precondition(remainingInputCount == 3)
+        precondition(memory.read(offset: 0x3F3003, length: 3) == Data("lo\n".utf8))
+
+        // Invalid guest memory returns EFAULT without consuming queued input.
+        let faultInput = Data("F".utf8)
+        precondition(outputDispatcher.enqueueStandardInput(faultInput) == 1)
+        let faultRead = outputDispatcher.dispatch(number: 0, arg0: 0, arg1: 0xFFFF_FFFF_FFFF_F000,
+                                                  arg2: 1, arg3: 0, arg4: 0, arg5: 0)!
+        guard case .returned(let faultValue) = faultRead else { preconditionFailure() }
+        precondition(faultValue == UInt64(bitPattern: Int64(-14)))
+        let recoveredRead = outputDispatcher.dispatch(number: 0, arg0: 0, arg1: 0x3F3000,
+                                                      arg2: 1, arg3: 0, arg4: 0, arg5: 0)!
+        guard case .returned(let recoveredCount) = recoveredRead else { preconditionFailure() }
+        precondition(recoveredCount == 1)
+        precondition(memory.read(offset: 0x3F3000, length: 1) == faultInput)
+        precondition(outputDispatcher.enqueueStandardInput(Data(repeating: 0x41, count: 65_537)) == 0)
+
+        // Empty reads wait for host input and are interrupted cleanly on guest stop.
+        let blockedReadDone = DispatchSemaphore(value: 0)
+        let blockedReadResult = LockedBox<LinuxSyscallDispatcher.Outcome>()
+        DispatchQueue.global().async {
+            blockedReadResult.set(outputDispatcher.dispatch(number: 0, arg0: 0, arg1: 0x3F3000,
+                                                            arg2: 4, arg3: 0, arg4: 0, arg5: 0)!)
+            blockedReadDone.signal()
+        }
+        precondition(blockedReadDone.wait(timeout: .now() + .milliseconds(25)) == .timedOut)
+        let arrivingInput = Data("wait".utf8)
+        precondition(outputDispatcher.enqueueStandardInput(arrivingInput) == arrivingInput.count)
+        precondition(blockedReadDone.wait(timeout: .now() + .seconds(1)) == .success)
+        guard case .returned(let blockedReadCount)? = blockedReadResult.get() else { preconditionFailure() }
+        precondition(blockedReadCount == 4)
+        precondition(memory.read(offset: 0x3F3000, length: 4) == arrivingInput)
+
+        let interruptedReadDone = DispatchSemaphore(value: 0)
+        let interruptedReadResult = LockedBox<LinuxSyscallDispatcher.Outcome>()
+        DispatchQueue.global().async {
+            interruptedReadResult.set(outputDispatcher.dispatch(number: 0, arg0: 0, arg1: 0x3F3000,
+                                                                arg2: 4, arg3: 0, arg4: 0, arg5: 0)!)
+            interruptedReadDone.signal()
+        }
+        precondition(interruptedReadDone.wait(timeout: .now() + .milliseconds(25)) == .timedOut)
+        outputDispatcher.interruptStandardInputRead()
+        precondition(interruptedReadDone.wait(timeout: .now() + .seconds(1)) == .success)
+        guard case .returned(let interruptedReadValue)? = interruptedReadResult.get() else { preconditionFailure() }
+        precondition(interruptedReadValue == UInt64(bitPattern: Int64(-4)))
+        outputDispatcher.clearStandardInputInterrupt()
+
+        // Closing stdin drains queued bytes before returning EOF.
+        let beforeEOF = Data("end".utf8)
+        precondition(outputDispatcher.enqueueStandardInput(beforeEOF) == beforeEOF.count)
+        outputDispatcher.closeStandardInput()
+        let finalQueuedRead = outputDispatcher.dispatch(number: 0, arg0: 0, arg1: 0x3F3000,
+                                                        arg2: 8, arg3: 0, arg4: 0, arg5: 0)!
+        guard case .returned(let finalQueuedCount) = finalQueuedRead else { preconditionFailure() }
+        precondition(finalQueuedCount == beforeEOF.count)
+        precondition(memory.read(offset: 0x3F3000, length: beforeEOF.count) == beforeEOF)
+        let eofRead = outputDispatcher.dispatch(number: 0, arg0: 0, arg1: 0x3F3000,
+                                                arg2: 4, arg3: 0, arg4: 0, arg5: 0)!
+        guard case .returned(let eofValue) = eofRead else { preconditionFailure() }
+        precondition(eofValue == 0)
+
         let output = String(repeating: "x", count: 12_000)
         precondition(memory.write(Data(output.utf8), offset: 0x3F1000))
         let write = outputDispatcher.dispatch(number: 1, arguments: [1, 0x3F1000, 12_000, 0, 0, 0])!
@@ -583,9 +674,12 @@ struct LinuxSyscallDispatcherTests {
         let resetBreak = dispatcher.dispatch(number: 12, arguments: [0, 0, 0, 0, 0, 0])!
         guard case .returned(let resetValue) = resetBreak else { preconditionFailure() }
         precondition(resetValue == 0x40000)
-        let reopenedStdinRead = dispatcher.dispatch(number: 0, arguments: [0, 0, 0, 0, 0, 0])!
+        let reopenedInput = Data("ok".utf8)
+        precondition(dispatcher.enqueueStandardInput(reopenedInput) == reopenedInput.count)
+        let reopenedStdinRead = dispatcher.dispatch(number: 0, arguments: [0, 0x3F3000, 2, 0, 0, 0])!
         guard case .returned(let reopenedStdinValue) = reopenedStdinRead else { preconditionFailure() }
-        precondition(reopenedStdinValue == 0)
+        precondition(reopenedStdinValue == 2)
+        precondition(memory.read(offset: 0x3F3000, length: 2) == reopenedInput)
 
         print("Linux x86-64 brk/mmap/munmap/mprotect/writev/time/random/uname/identity and reset tests passed")
     }

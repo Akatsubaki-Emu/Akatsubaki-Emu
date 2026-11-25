@@ -64,6 +64,8 @@ final class GuestMachine {
     private let activeCPULock = NSLock()
     private var activeCPU: GuestCPUBackend?
     private var pendingStopRequested = false
+    private let inputBackendLock = NSLock()
+    private var linuxInputBackend: X86_64Interpreter?
 
     private static func alignGuestAddress(_ address: UInt64) throws -> UInt64 {
         let (sum, overflow) = address.addingReportingOverflow(4095)
@@ -123,7 +125,9 @@ final class GuestMachine {
         // Ship the small x86-64 interpreter as the first runnable backend.
         // Other architectures still require a compatible backend integration.
         if configuration.architecture == .x86_64 {
-            self.cpu = X86_64Interpreter(memory: self.memory, aotExecutor: aotExecutor)
+            let interpreter = X86_64Interpreter(memory: self.memory, aotExecutor: aotExecutor)
+            self.cpu = interpreter
+            self.linuxInputBackend = interpreter
             self.state = .configured
         } else {
             let error = GuestEngineError.backendNotInstalled(configuration.architecture)
@@ -144,6 +148,21 @@ final class GuestMachine {
 
     func writeHostSharedFile(_ data: Data, relativePath: String) throws {
         try hostBridge.writeSharedFile(data, relativePath: relativePath)
+    }
+
+    @discardableResult
+    func enqueueStandardInput(_ data: Data) -> Int {
+        inputBackendLock.lock()
+        let backend = linuxInputBackend
+        inputBackendLock.unlock()
+        return backend?.enqueueStandardInput(data) ?? 0
+    }
+
+    func closeStandardInput() {
+        inputBackendLock.lock()
+        let backend = linuxInputBackend
+        inputBackendLock.unlock()
+        backend?.closeStandardInput()
     }
 
     func installCPUBackend(_ backend: GuestCPUBackend) throws {
@@ -167,6 +186,9 @@ final class GuestMachine {
             cpu?.requestStop()
             backend.resume()
             cpu = backend
+            inputBackendLock.lock()
+            linuxInputBackend = backend as? X86_64Interpreter
+            inputBackendLock.unlock()
             state = .configured
             initializationError = nil
             lastExit = nil

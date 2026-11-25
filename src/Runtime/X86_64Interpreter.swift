@@ -85,12 +85,23 @@ final class X86_64Interpreter: GuestCPUBackend {
         stopLock.lock()
         stopRequested = true
         stopLock.unlock()
+        syscallDispatcher.interruptStandardInputRead()
     }
 
     func resume() {
         stopLock.lock()
         stopRequested = false
         stopLock.unlock()
+        syscallDispatcher.clearStandardInputInterrupt()
+    }
+
+    @discardableResult
+    func enqueueStandardInput(_ data: Data) -> Int {
+        syscallDispatcher.enqueueStandardInput(data)
+    }
+
+    func closeStandardInput() {
+        syscallDispatcher.closeStandardInput()
     }
 
     /// Reads the stop flag under the same lock used by requestStop(), resume(), and reset().

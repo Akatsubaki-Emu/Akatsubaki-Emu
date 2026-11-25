@@ -101,6 +101,9 @@ final class LinuxELFRuntime {
     private var pendingCompletion: ((Result<GuestCPUExit, Error>) -> Void)?
     private var generation: UInt64 = 0
     private var isLaunching = false
+    private var isGuestReady = false
+    private var pendingInput = Data()
+    private static let maximumPendingInputBytes = 65_536
 
     private init() {}
 
@@ -118,6 +121,8 @@ final class LinuxELFRuntime {
         generation &+= 1
         let token = generation
         isLaunching = true
+        isGuestReady = false
+        pendingInput.removeAll(keepingCapacity: true)
         pendingCompletion = completion
         lock.unlock()
 
@@ -159,6 +164,22 @@ final class LinuxELFRuntime {
                 EmulationLog.shared.write(
                     "Linux static ELF loaded at 0x" + String(image.entryPoint, radix: 16)
                 )
+                self.lock.lock()
+                guard token == self.generation, self.activeMachine === machine else {
+                    self.lock.unlock()
+                    machine.stop()
+                    return
+                }
+                let queuedInput = self.pendingInput
+                self.pendingInput.removeAll(keepingCapacity: true)
+                if !queuedInput.isEmpty {
+                    let accepted = machine.enqueueStandardInput(queuedInput)
+                    if accepted != queuedInput.count {
+                        EmulationLog.shared.write("Linux guest stdin rejected queued launch input")
+                    }
+                }
+                self.isGuestReady = true
+                self.lock.unlock()
                 self.executeNextBatch(machine: machine, token: token)
             } catch {
                 self.finish(token: token, machine: machine, result: .failure(error))
@@ -167,12 +188,37 @@ final class LinuxELFRuntime {
         return true
     }
 
+    @discardableResult
+    func sendStandardInput(_ data: Data) -> Int {
+        guard !data.isEmpty else { return 0 }
+        lock.lock()
+        if let machine = activeMachine, isGuestReady {
+            let accepted = machine.enqueueStandardInput(data)
+            lock.unlock()
+            return accepted
+        }
+        guard isLaunching || activeMachine != nil else {
+            lock.unlock()
+            return 0
+        }
+        let remaining = Self.maximumPendingInputBytes - pendingInput.count
+        guard data.count <= remaining else {
+            lock.unlock()
+            return 0
+        }
+        pendingInput.append(data)
+        lock.unlock()
+        return data.count
+    }
+
     func stop() {
         lock.lock()
         generation &+= 1
         let machine = activeMachine
         activeMachine = nil
         isLaunching = false
+        isGuestReady = false
+        pendingInput.removeAll(keepingCapacity: true)
         let callback = pendingCompletion
         pendingCompletion = nil
         lock.unlock()
@@ -226,6 +272,8 @@ final class LinuxELFRuntime {
         }
         activeMachine = nil
         isLaunching = false
+        isGuestReady = false
+        pendingInput.removeAll(keepingCapacity: true)
         let callback = pendingCompletion
         pendingCompletion = nil
         lock.unlock()

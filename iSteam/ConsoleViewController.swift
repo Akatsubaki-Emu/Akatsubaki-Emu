@@ -3,6 +3,7 @@ import UIKit
 final class ConsoleViewController: UIViewController {
     private let game: GameEntry
     private let textView = UITextView()
+    private let inputField = UITextField()
     private let fpsLabel = UILabel()
 
     private var displayLink: CADisplayLink?
@@ -39,7 +40,23 @@ final class ConsoleViewController: UIViewController {
         textView.backgroundColor = .clear
         textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
 
+        view.keyboardLayoutGuide.usesBottomSafeArea = true
+        view.keyboardLayoutGuide.followsUndockedKeyboard = true
+        inputField.translatesAutoresizingMaskIntoConstraints = false
+        inputField.borderStyle = .roundedRect
+        inputField.textColor = .white
+        inputField.backgroundColor = UIColor(white: 0.12, alpha: 1)
+        inputField.attributedPlaceholder = NSAttributedString(
+            string: "Type guest input and press Send",
+            attributes: [.foregroundColor: UIColor.lightGray]
+        )
+        inputField.autocapitalizationType = .none
+        inputField.autocorrectionType = .no
+        inputField.returnKeyType = .send
+        inputField.addTarget(self, action: #selector(submitGuestInput), for: .editingDidEndOnExit)
+
         view.addSubview(textView)
+        view.addSubview(inputField)
         view.addSubview(fpsLabel)
 
         NSLayoutConstraint.activate([
@@ -51,7 +68,12 @@ final class ConsoleViewController: UIViewController {
             textView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
             textView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
             textView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
-            textView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -12)
+            textView.bottomAnchor.constraint(equalTo: inputField.topAnchor, constant: -8),
+
+            inputField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+            inputField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+            inputField.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -8),
+            inputField.heightAnchor.constraint(equalToConstant: 42)
         ])
 
         startFrameMonitor()
@@ -150,6 +172,19 @@ final class ConsoleViewController: UIViewController {
         DispatchQueue.main.async { [weak self] in
             self?.textView.text.append(message)
         }
+    }
+
+    @objc private func submitGuestInput() {
+        guard let text = inputField.text, !text.isEmpty else { return }
+        let line = text.hasSuffix("\n") ? text : text + "\n"
+        let bytes = Data(line.utf8)
+        let accepted = LinuxELFRuntime.shared.sendStandardInput(bytes)
+        if accepted == bytes.count {
+            inputField.text = ""
+        } else {
+            appendStatus("\n[console] Guest input is unavailable or the input queue is full.")
+        }
+        inputField.becomeFirstResponder()
     }
 
     @objc private func stopGuest() {
