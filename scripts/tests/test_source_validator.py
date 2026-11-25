@@ -863,7 +863,7 @@ class SourceValidatorTests(unittest.TestCase):
         needs = guard.split("    needs:\n", 1)[1].split("    runs-on:", 1)[0]
         all_jobs = {
             line.strip()[:-1]
-            for line in workflow.split("\\njobs:\\n", 1)[1].splitlines()
+            for line in workflow.split("\njobs:\n", 1)[1].splitlines()
             if line.startswith("  ") and not line.startswith("   ") and line.endswith(":")
         }
         guarded_jobs = {
