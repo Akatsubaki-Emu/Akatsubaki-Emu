@@ -93,6 +93,13 @@ final class X86_64Interpreter: GuestCPUBackend {
         stopLock.unlock()
     }
 
+    /// Reads the stop flag under the same lock used by requestStop(), resume(), and reset().
+    private func shouldStopExecution() -> Bool {
+        stopLock.lock()
+        defer { stopLock.unlock() }
+        return stopRequested
+    }
+
     func run(maxInstructions: UInt64) throws -> GuestCPUExit {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         if halted { return .halted }
@@ -103,11 +110,8 @@ final class X86_64Interpreter: GuestCPUBackend {
         var aotDeclined = false
         let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff
         while executed < maxInstructions {
-            if executed & stopCheckMask == 0 {
-                stopLock.lock()
-                let shouldStop = stopRequested
-                stopLock.unlock()
-                if shouldStop { return .interrupted }
+            if executed & stopCheckMask == 0 && shouldStopExecution() {
+                return .interrupted
             }
 
             let instructionAddress = rip
@@ -158,7 +162,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                               result.guestBytesConsumed > 0 && result.instructionCount > 0 else {
                             return .backendUnavailable("Kenran Butō AOT side exit did not preserve exact guest RIP.")
                         }
-                        if stopRequested { return .interrupted }
+                        if shouldStopExecution() { return .interrupted }
                         continue
                     } else {
                         // A declined native block disables AOT for the rest of this run.
