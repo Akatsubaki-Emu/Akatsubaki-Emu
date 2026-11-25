@@ -35,8 +35,9 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
         once = patch_qemu_meson_ios.patch_source(self.meson_source(), "/toolchain/libclang_rt.ios.a")
         twice = patch_qemu_meson_ios.patch_source(once, "/toolchain/libclang_rt.ios.a")
         self.assertEqual(once, twice)
-        self.assertIn("-fno-objc-msgsend-class-selector-stubs", once)
-        self.assertIn("checked: 'require'", once)
+        self.assertIn("objc.get_supported_arguments(warn_flags, checked: 'off')", once)
+        self.assertIn("objc.get_supported_arguments(['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')", once)
+        self.assertNotIn("warn_flags + ['-fno-objc-msgsend-class-selector-stubs']", once)
 
     def test_meson_patcher_changes_only_the_objc_compiler_block(self):
         source = "objc.get_supported_arguments(warn_flags)\n" + self.meson_source()
@@ -106,8 +107,8 @@ class QEMUObjectiveCCompileFlagTests(unittest.TestCase):
         )
         patched = patch_qemu_meson_ios.patch_source(source, "/toolchain/libclang_rt.ios.a")
         self.assertIn(
-            "objc.get_supported_arguments(qemu_common_flags + warn_flags + "
-            "['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')",
+            "objc.get_supported_arguments(qemu_common_flags + warn_flags, checked: 'off') + "
+            "objc.get_supported_arguments(['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')",
             patched,
         )
 

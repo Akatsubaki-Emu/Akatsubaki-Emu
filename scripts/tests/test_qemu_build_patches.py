@@ -63,7 +63,7 @@ class QEMUBuildPatchTests(unittest.TestCase):
         patched = patch_qemu_meson_ios.patch_source(source, runtime)
         self.assertEqual(patched.count("if 'objc' in all_languages"), 4)
         self.assertIn(
-            "objc.get_supported_arguments(warn_flags + ['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')",
+            "objc.get_supported_arguments(warn_flags, checked: 'off') + objc.get_supported_arguments(['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')",
             patched,
         )
         self.assertIn("summary_info += {'Objective-C compiler': false}", patched)

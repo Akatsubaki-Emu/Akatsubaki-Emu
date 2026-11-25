@@ -9,14 +9,15 @@ MARKER_COMMENT = "# i-Steam iOS: force-load Apple's compiler runtime into the em
 LEGACY_MARKER_COMMENT = "# i-Steam iOS: put compiler-rt on the actual emulator library link edge."
 
 OBJC_BLOCK_MARKER = "if 'objc' in all_languages"
+# Apple Clang rejects some QEMU warning levels; probe warnings optionally but require the iOS stub flag.
 OBJC_ARGUMENTS = {
     "objc.get_supported_arguments(warn_flags)": (
-        "objc.get_supported_arguments(warn_flags + "
-        "['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')"
+        "objc.get_supported_arguments(warn_flags, checked: 'off') + "
+        "objc.get_supported_arguments(['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')"
     ),
     "objc.get_supported_arguments(qemu_common_flags + warn_flags)": (
-        "objc.get_supported_arguments(qemu_common_flags + warn_flags + "
-        "['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')"
+        "objc.get_supported_arguments(qemu_common_flags + warn_flags, checked: 'off') + "
+        "objc.get_supported_arguments(['-fno-objc-msgsend-class-selector-stubs'], checked: 'require')"
     ),
 }
 
