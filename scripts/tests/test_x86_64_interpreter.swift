@@ -392,7 +392,7 @@ struct InterpreterTests {
         let interpreter = X86_64Interpreter(memory: memory)
         try interpreter.reset(entryPoint: 0)
         let interpreterExit = try interpreter.run(maxInstructions: 32)
-        precondition(interpreterExit == .halted)
+        precondition(interpreterExit == .exited(0))
         precondition(interpreter.instructionCount == 9)
         precondition(EmulationLog.shared.messages.contains("[guest stdout] hello world\n"))
 
