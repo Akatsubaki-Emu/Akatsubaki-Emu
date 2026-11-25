@@ -1,6 +1,6 @@
 # FEXCore and Box64 — iOS integration audit
 
-**Checked:** 2026-11-24  
+**Checked:** 2026-11-25 10:53 UTC  
 **Status:** FEXCore is the accepted primary dynamic translator, but is not integrated or built for iOS. Box64 is the secondary fallback candidate, not a concurrent engine. No runtime is promoted to operational by this audit.
 
 ## FEXCore primary
@@ -51,27 +51,34 @@
 - DXVK translates Direct3D 8/9/10/11 to Vulkan for Linux/Wine. It expects Wine and a compatible Vulkan driver/feature set. It cannot be dropped into the iOS app without the Linux user-mode, Wine and Vulkan host layers.
 - Direct3D 12 needs a separate vkd3d-proton path; it is not covered by DXVK's D3D8–11 scope. Validate API coverage, shader features, memory sharing and Metal synchronization on the actual iPad before claiming support.
 
+## Guest input/display integration gap
+
+- The static Linux ELF runtime captures stdout/stderr but currently returns EOF for stdin; it has no interactive guest input adapter or framebuffer.
+- Touch controls, hardware keyboard/function keys, GameController and Metal display updates are wired to the QEMU/VNC path, not directly to GuestMachine.
+- Do not claim that QEMU/VNC input or graphics work for the static ELF interpreter. The two execution/display paths still need a shared guest-device boundary.
+- After the first full-system boot, unify keyboard/controller/touch input, key-up cleanup, Metal frames, audio, disk I/O and lifecycle handling behind guest-device interfaces.
+
 ## First-playable order
 
-1. Run the manual Build Core-Only iOS IPA workflow on GitHub main. Install the unsigned IPA through SideStore, import hybrid_xchg_smoke.elf and hybrid_runtime_smoke.elf, and verify both markers and exit code 0 on the physical iPad.
-2. Verify repeat launch, CPU reset, guest-page cleanup after stop, failed-load cleanup, app relaunch and persistent guest files. The new native GuestMachine test covers reset and page cleanup in CI, but is not a substitute for the physical device.
-3. Update StikDebug to 3.2.2 or newer and import a fresh RPPairing file before testing AOT. Confirm the TXM 32 MiB arena on the iPad and test JIT revocation/fallback.
-4. Complete basic guest display, audio and input against the actual runtime. Keep this ahead of broad OS compatibility or UI polish.
-5. Build and validate FEXCore as the primary dynamic user-mode engine; use Box64 only as a measured fallback.
-6. Build QEMU TCI/JIT only after the licence gate is approved; boot a known-good Linux image before attempting Windows 10 or SteamOS.
-7. Add Wine/Proton, DirectX/Vulkan/Metal and Windows PE execution only after the underlying user-mode engine and syscall/loader layers are operational.
+1. Keep the current core-only IPA as diagnostic coverage only. It is unsigned, ARM64/iPhoneOS and QEMU-free, built from d2d13b3d; it predates the newer sign-extension/operand-size changes on GitLab main. It does not satisfy the full-system first-playable requirement.
+2. Keep QEMU TCI/no-JIT as the P0 full-system route. Complete qualified file-level and combined-work QEMU/UTM licensing review first; keep QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED unset until approval. Do not bypass the release gate.
+3. After licensing approval, manually build the pinned TCI runtime, verify architecture, manifest, exported symbols and checksums, package the QEMU-enabled iOS IPA, sign/install it, and boot a known-good x86-64 Linux image on a physical iPad with JIT disabled.
+4. Verify repeat boot, clean shutdown, stop/relaunch cleanup, persistent writable disk, VNC-to-Metal display, keyboard, controller and touch input. No physical iPad boot or interactive guest test is currently verified.
+5. If QEMU distribution cannot be approved, prototype Bochs 3.1 as a separate LGPL full-system alternative. It is not integrated or tested on iOS; its headless/no-GUI mode does not provide the required Metal display/input path.
+6. Once the no-JIT full-system baseline is stable, validate optional TXM/AOT acceleration on the physical iPad. StikDebug 3.2.2+ is the documented iOS/iPadOS 27+ pairing path; simulator/host AOT results are not physical-device evidence.
+7. Build and validate FEXCore as the primary dynamic x86-64 user-mode translator, with the existing interpreter as a fail-closed fallback. Keep Box64 as a measured secondary option and do not run both engines concurrently for one guest process.
+8. Expand the Linux dynamic loader, PT_INTERP/DT_NEEDED/PT_TLS, symbols/relocations, syscall, signal, thread, futex, filesystem and block-device semantics. Then proceed to Windows PE/DLL, Win32/NT, Wine/Proton, DirectX/Vulkan/Metal and broader Steam/Windows compatibility.
+9. Keep Android, VR, tvOS and visionOS behind platform capability gates until iOS guest execution, display, input, storage and lifecycle are reliable.
 
 **Verification rule:** source code, a build workflow, a loadable dylib, a host smoke test and a simulator run are separate evidence levels. The backend registry must remain fail-closed until a concrete iOS artifact executes a known guest correctly on a physical iPad.
 
 ## Repository synchronization status
 
-The repository documentation still describes GitHub as canonical and GitLab as a downstream mirror, while the active engineering instructions for this work designate GitLab main as the write target. The observed synchronization behaviour is asynchronous:
+- Current write target is the existing GitLab main branch. At this audit GitLab main is c0d333f83237a1a81b6b1ce2ab2a806ebd153230; GitHub main was last observed at f93008dfb5c6143c4e9dc256fca07a363020eccd and remains behind. No force-push, branch creation, merge or manual sync was attempted.
+- GitLab main includes CWDE/CDQE/CDQ/CQO AOT/interpreter support (translator v10), CBW/CWD interpreter support, portable ELF smoke tests, the REX.W-over-0x66 correctness fix, AOT block-entry coverage and dynamic AOT-version source validation.
+- GitLab pipelines #1254, #1257, #1258, #1259, #1261 and #1263 failed before runner assignment with ci_quota_exceeded; no current-head hosted tests ran. The latest source-validator changes have not yet had a successful pipeline.
+- The available unsigned ARM64 diagnostic IPA and its ZIP are built from d2d13b3d, not c0d333f8. They contain no QEMU runtime and must not be described as a current-head build.
+- QEMU TCI runtime/release jobs remain gated by QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED. No TCI runtime artifact, QEMU-enabled IPA, physical SideStore installation or physical iPad guest boot is verified.
+- Keep runtime capability reporting fail-closed until a known guest boots and passes interaction, storage and repeat-launch checks on a physical iPad.
 
-- GitLab project metadata reports an import from GitHub, and the visible GitHub workflows document GitHub-to-GitLab reconciliation.
-- Despite that documentation, GitHub main has now received the GitLab commits `0e3995a3` and `88818734`. The exact reverse-sync mechanism is not visible in the checked-in GitHub workflow files; do not alter it.
-- At this check, GitHub main is `8881873490aece8e62f2620c3aaa8edd50f8e856` and GitLab main is `f1d55957c68a2a0b9eff207623d719dc9494b880`. The remaining GitLab commit is a direct child of GitHub main, so only the legacy feature-parity documentation is still waiting to propagate.
-- The JIT live-session guard, corrected AArch64 detach assembly, explicit prepare API and iOS arm64 compile step are already present on GitHub. However, GitHub Actions has not automatically run them: the AOT workflow still shows run #213 on the older source-contract failure, and the core-only IPA workflow still has zero runs.
-- The QEMU workflow's latest visible run #34 is from an older commit and failed YAML parsing before build execution. Current main includes the YAML correction and the AOT workflow now validates workflow YAML.
-- GitLab CI is documented as retired; the most recent attempted GitLab pipeline also failed before runner assignment with `ci_quota_exceeded`.
-
-**Current action:** keep GitLab main as the write target and allow the existing asynchronous sync to finish. Then manually dispatch the AOT validation workflow and Build Core-Only iOS IPA workflow. Do not force-push, change mirror direction or rewrite sync workflows. The remaining blocker is the absence of a new GitHub Actions run and physical iPad evidence, not a need for a reverse push authorization.
+No FEXCore/Box64 iOS backend, full-system guest boot, physical-device graphics/input, or QEMU distribution approval is claimed.
