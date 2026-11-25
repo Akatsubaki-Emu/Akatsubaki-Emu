@@ -600,6 +600,59 @@ struct StaticELFExecutionTests {
         print("MOV r8, imm8 register selection, AOT execution and RFLAGS tests passed")
     }
 
+    static func testByteSwapInstructions() throws {
+        func run(_ code: [UInt8], register: Int, expectedValue: UInt64,
+                 sideExitAddress: UInt64) throws {
+            let memory = GuestMemory(size: 4096)
+            precondition(memory.write(Data(code), offset: 0))
+#if KENRAN_BUTO_AOT_TESTS
+            let aotExecutor = KenranButoAOTExecutor()
+            precondition(aotExecutor.refreshAvailability(),
+                         "ARM64 AOT test host must provide executable memory")
+            let interpreter = X86_64Interpreter(memory: memory, aotExecutor: aotExecutor)
+#else
+            let interpreter = X86_64Interpreter(memory: memory)
+#endif
+            try interpreter.reset(entryPoint: 0)
+            let exit = try interpreter.run(maxInstructions: 4)
+            precondition(exit == .unsupportedInstruction(address: sideExitAddress),
+                         "BSWAP must side-exit at the following UD2")
+            precondition(interpreter.registerValue(register) == expectedValue,
+                         "BSWAP produced the wrong register value")
+            precondition(interpreter.conditionFlags == 0x2,
+                         "BSWAP must preserve RFLAGS")
+#if KENRAN_BUTO_AOT_TESTS
+            precondition(aotExecutor.blocksExecuted > 0,
+                         "BSWAP sequence did not execute through AOT")
+#endif
+        }
+
+        let baseRAX: [UInt8] = [
+            0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11
+        ]
+        let baseR9: [UInt8] = [
+            0x49, 0xB9, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11
+        ]
+        let baseR8: [UInt8] = [
+            0x49, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11
+        ]
+
+        // BSWAP EAX reverses the low 32 bits and zero-extends RAX.
+        try run(baseRAX + [0x0F, 0xC8, 0x0F, 0x0B],
+                register: 0, expectedValue: 0x88776655, sideExitAddress: 12)
+        // REX.W+B selects the full 64-bit R9 register.
+        try run(baseR9 + [0x49, 0x0F, 0xC9, 0x0F, 0x0B],
+                register: 9, expectedValue: 0x8877665544332211, sideExitAddress: 13)
+        // REX.B without REX.W selects R8D and must zero-extend.
+        try run(baseR8 + [0x41, 0x0F, 0xC8, 0x0F, 0x0B],
+                register: 8, expectedValue: 0x88776655, sideExitAddress: 13)
+        // REX.R alone does not extend the opcode-embedded register number.
+        try run(baseRAX + [0x44, 0x0F, 0xC8, 0x0F, 0x0B],
+                register: 0, expectedValue: 0x88776655, sideExitAddress: 13)
+
+        print("BSWAP EAX/R8D/R9 AOT execution, side-exit and RFLAGS tests passed")
+    }
+
     static func testDescriptorBoundELFSnapshot() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -847,6 +900,7 @@ struct StaticELFExecutionTests {
         testExecutePrefixPermissionBoundary()
         try testSignExtensionInstructions()
         try testByteImmediateInstructions()
+        try testByteSwapInstructions()
         try testDescriptorBoundELFSnapshot()
         try testRejectsNonRegularELFSnapshot()
         try testFailedPIERelocationClearsGuestMemory()
