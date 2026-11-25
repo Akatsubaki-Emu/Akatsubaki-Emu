@@ -47,5 +47,24 @@ class TCIGuestTargetListTests(unittest.TestCase):
         self.assertIn("Invalid ISTEAM_QEMU_TCI_TARGET_LIST", result.stderr)
 
 
+
+    def test_target_list_patch_is_idempotent_and_preserves_other_flags(self) -> None:
+        source = (
+            'TCI_BUILD_FLAGS="--enable-tcg-threaded-interpreter --target-list='
+            + patch_utm_qemu_ios.TCI_TARGET_LIST_UPSTREAM
+            + ' --enable-debug"'
+            + chr(10)
+        )
+        once = patch_utm_qemu_ios.patch_tci_target_list(source)
+        twice = patch_utm_qemu_ios.patch_tci_target_list(once)
+        self.assertEqual(once, twice)
+        self.assertIn('TCI_GUEST_TARGETS="${ISTEAM_QEMU_TCI_TARGET_LIST:-x86_64-softmmu}"', once)
+        self.assertIn("--target-list=$TCI_GUEST_TARGETS --enable-debug", once)
+        self.assertNotIn(patch_utm_qemu_ios.TCI_TARGET_LIST_UPSTREAM, once)
+
+    def test_incomplete_existing_target_override_fails_closed(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "incomplete"):
+            patch_utm_qemu_ios.patch_tci_target_list('TCI_GUEST_TARGETS="incomplete"')
+
 if __name__ == "__main__":
     unittest.main()
