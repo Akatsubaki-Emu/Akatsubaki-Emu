@@ -262,12 +262,14 @@ jobs:
             cd "$STAGE"
             /usr/bin/zip -qry "$DIST/Akatsubaki-Emu-CoreOnly-iOS.ipa" Payload
           )
+          shasum -a 256 "$DIST/Akatsubaki-Emu-CoreOnly-iOS.ipa" > "$DIST/Akatsubaki-Emu-CoreOnly-iOS.ipa.sha256"
           cp docs/CORE_ONLY_IOS_TEST_BUILD.md "$DIST/README.md"
           {
             echo "Commit: $GITHUB_SHA"
             echo "Xcode: $(xcodebuild -version | tr '\n' ' ')"
             echo "QEMU runtime embedded: no"
             echo "Signing: unsigned; install with SideStore or another permitted signer"
+            echo "IPA SHA-256: $(cut -d' ' -f1 "$DIST/Akatsubaki-Emu-CoreOnly-iOS.ipa.sha256")"
           } > "$DIST/build-info.txt"
           cp "$RUNNER_TEMP/akatsubaki-core-only-logs/xcodebuild.log" "$DIST/xcodebuild.log"
           cp "$RUNNER_TEMP/hybrid_xchg_smoke.elf" "$DIST/hybrid_xchg_smoke.elf"

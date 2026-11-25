@@ -16,6 +16,10 @@ class CoreOnlyIOSWorkflowTests(unittest.TestCase):
         self.assertIn("Xcode 27.1 or newer is required", workflow)
         self.assertIn("CODE_SIGNING_ALLOWED=NO", workflow)
         self.assertIn("scripts/validate-core-only-ipa.sh", workflow)
+        ipa_checksum = 'shasum -a 256 "$DIST/Akatsubaki-Emu-CoreOnly-iOS.ipa" > "$DIST/Akatsubaki-Emu-CoreOnly-iOS.ipa.sha256"'
+        self.assertIn(ipa_checksum, workflow)
+        self.assertLess(workflow.index(ipa_checksum), workflow.index("Validate core-only IPA"))
+        self.assertIn("IPA SHA-256:", workflow)
         self.assertIn("test_localdevvpn_callback.swift", workflow)
         self.assertIn("test_translation_cache.swift", workflow)
         self.assertIn("test_kenran_buto_aot_cache.swift", workflow)
@@ -53,3 +57,4 @@ class CoreOnlyIOSWorkflowTests(unittest.TestCase):
         self.assertIn("no QEMU runtime", doc)
         self.assertIn("SideStore", doc)
         self.assertIn("full-system VM", doc)
+        self.assertIn("Akatsubaki-Emu-CoreOnly-iOS.ipa.sha256", doc)
