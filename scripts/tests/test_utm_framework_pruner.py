@@ -49,17 +49,24 @@ CCCCCCCCCCCCCCCCCCCCCCCC /* qemu-xtensa-softmmu.framework in Embed Libraries */,
             with self.assertRaisesRegex(ValueError, "required x86_64"):
                 patch_project(self.project_fixture(), Path(temporary))
 
-    def test_qemu_workflow_prunes_each_sysroot_before_archive(self):
+    def test_qemu_workflow_prunes_each_sysroot_from_a_fresh_project_before_archive(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / ".github" / "workflows" / "build-qemu-runtime.yml")
         if not workflow.exists():
             workflow = root / ".github" / "workflows" / "build-qemu-runtime.yml"
         source = workflow.read_text(encoding="utf-8")
         self.assertIn('"scripts/prune_utm_missing_qemu_frameworks.py"', source)
-        self.assertIn("UTM/sysroot-iOS-arm64/Frameworks", source)
-        self.assertIn("UTM/sysroot-iOS-TCI-arm64/Frameworks", source)
-        self.assertLess(source.index("UTM/sysroot-iOS-arm64/Frameworks"), source.index("- name: Build UTM iOS archive"))
-        self.assertLess(source.index("UTM/sysroot-iOS-TCI-arm64/Frameworks"), source.index("- name: Build UTM iOS TCI archive"))
+        original = source.index('cp -p UTM/UTM.xcodeproj/project.pbxproj "$RUNNER_TEMP/UTM-project.pbxproj.original"')
+        jit_prune = source.index("UTM/sysroot-iOS-arm64/Frameworks")
+        jit_archive = source.index("- name: Build UTM iOS archive")
+        restore = source.index('cp -p "$RUNNER_TEMP/UTM-project.pbxproj.original" UTM/UTM.xcodeproj/project.pbxproj')
+        tci_prune = source.index("UTM/sysroot-iOS-TCI-arm64/Frameworks")
+        tci_archive = source.index("- name: Build UTM iOS TCI archive")
+        self.assertLess(original, jit_prune)
+        self.assertLess(jit_prune, jit_archive)
+        self.assertLess(jit_archive, restore)
+        self.assertLess(restore, tci_prune)
+        self.assertLess(tci_prune, tci_archive)
 
 
 if __name__ == "__main__":
