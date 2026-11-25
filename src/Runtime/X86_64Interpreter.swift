@@ -1204,9 +1204,32 @@ final class X86_64Interpreter: GuestCPUBackend {
             return canTranslateRegisterImmediateMOVAtCurrentWindow(opcodeOffset: cursor, rex: rex)
         case 0x8D:
             return canTranslateLEAAtCurrentWindow(opcodeOffset: cursor, rex: rex)
+        case 0x63:
+            // MOVSXD is translated only for REX.W register-to-register forms.
+            guard rex & 0x08 != 0,
+                  cursor + 2 <= 15,
+                  cursor + 2 <= instructionWindowLength,
+                  cursor + 2 <= pageRemaining else { return false }
+            return canTranslateRegisterExtensionAtCurrentWindow(modRMOffset: cursor + 1)
+        case 0x0F:
+            // MOVZX/MOVSX byte/word forms are translated only for register operands.
+            guard cursor + 3 <= 15,
+                  cursor + 3 <= instructionWindowLength,
+                  cursor + 3 <= pageRemaining else { return false }
+            switch instructionWindow[cursor + 1] {
+            case 0xB6, 0xB7, 0xBE, 0xBF:
+                return canTranslateRegisterExtensionAtCurrentWindow(modRMOffset: cursor + 2)
+            default:
+                return false
+            }
         default:
             return false
         }
+    }
+
+    private func canTranslateRegisterExtensionAtCurrentWindow(modRMOffset: Int) -> Bool {
+        guard modRMOffset < instructionWindowLength else { return false }
+        return instructionWindow[modRMOffset] >> 6 == 0b11
     }
 
     private func canTranslateRegisterXCHGAtCurrentWindow(opcodeOffset: Int) -> Bool {

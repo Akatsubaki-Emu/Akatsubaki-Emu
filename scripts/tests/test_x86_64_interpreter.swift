@@ -353,6 +353,47 @@ struct InterpreterTests {
         precondition(xchgStartAOT.lastGuestCodeWindowLength == 30)
         precondition(xchgStartAOT.lastGuestCodeWindowLength <= xchgStartAOT.lastInstructionBudget * 15)
 
+        // These instructions are already implemented by the translator. They must
+        // also be eligible when they are the first instruction in an AOT block.
+        let extensionStartPrograms: [([UInt8], UInt64)] = [
+            ([0x48, 0x63, 0xC0, 0x0F, 0x0B], 3), // MOVSXD RAX, EAX
+            ([0x48, 0x0F, 0xB6, 0xC0, 0x0F, 0x0B], 4), // MOVZX RAX, AL
+            ([0x48, 0x0F, 0xB7, 0xC0, 0x0F, 0x0B], 4), // MOVZX RAX, AX
+            ([0x48, 0x0F, 0xBE, 0xC0, 0x0F, 0x0B], 4), // MOVSX RAX, AL
+            ([0x48, 0x0F, 0xBF, 0xC0, 0x0F, 0x0B], 4)  // MOVSX RAX, AX
+        ]
+        for (program, sideExitAddress) in extensionStartPrograms {
+            let extensionMemory = GuestMemory(size: 64)
+            precondition(extensionMemory.write(Data(program), offset: 0))
+            let extensionAOT = TestAOTExecutor(isAvailable: true)
+            let extensionInterpreter = X86_64Interpreter(memory: extensionMemory, aotExecutor: extensionAOT)
+            try extensionInterpreter.reset(entryPoint: 0)
+            let extensionExit = try extensionInterpreter.run(maxInstructions: 2)
+            precondition(extensionExit == .unsupportedInstruction(address: sideExitAddress))
+            precondition(extensionAOT.executeCalls == 1)
+            precondition(extensionAOT.refreshCalls == 1)
+            precondition(extensionAOT.lastGuestCodeWindowLength == program.count)
+            precondition(extensionInterpreter.instructionCount == 1)
+        }
+
+        // Unsupported translator forms must stay on the architectural interpreter.
+        let interpreterOnlyStartPrograms: [([UInt8], UInt64)] = [
+            ([0x63, 0xC0, 0x0F, 0x0B], 2), // MOVSXD without REX.W
+            ([0x48, 0x63, 0x00, 0x0F, 0x0B], 3), // MOVSXD memory source
+            ([0x0F, 0xB6, 0x00, 0x0F, 0x0B], 3) // MOVZX memory source
+        ]
+        for (program, sideExitAddress) in interpreterOnlyStartPrograms {
+            let interpreterOnlyMemory = GuestMemory(size: 64)
+            precondition(interpreterOnlyMemory.write(Data(program), offset: 0))
+            let interpreterOnlyAOT = TestAOTExecutor(isAvailable: true)
+            let interpreterOnly = X86_64Interpreter(memory: interpreterOnlyMemory, aotExecutor: interpreterOnlyAOT)
+            try interpreterOnly.reset(entryPoint: 0)
+            let interpreterOnlyExit = try interpreterOnly.run(maxInstructions: 2)
+            precondition(interpreterOnlyExit == .unsupportedInstruction(address: sideExitAddress))
+            precondition(interpreterOnlyAOT.executeCalls == 0)
+            precondition(interpreterOnly.instructionCount == 1)
+        }
+
         // A translated block must also stop its input window at a guest-page boundary.
         let pageBoundaryAOTMemory = GuestMemory(size: 8192)
         precondition(pageBoundaryAOTMemory.write(Data([0x49, 0x90, 0xCC]), offset: 0xFF0))
