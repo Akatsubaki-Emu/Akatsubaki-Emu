@@ -119,13 +119,16 @@ These items remain outside the first static-ELF milestone and should be implemen
 
 ## Repository/CI coordination and latest validation status
 
-GitLab `main` is `21a312a28ab0586307d4f4d112ece1c04ccecad2`. GitHub `main` is `30a05994eeac607a4a57716f2d384cea6ee57047`; direct comparison confirms GitHub is an ancestor of GitLab. GitLab has five commits after the shared `30a05994` base:
+GitLab `main` is `afda2d49ded6ddbbdb55bf9fd3bee834fda7b846`. GitHub `main` is `30a05994eeac607a4a57716f2d384cea6ee57047`; direct comparison confirms GitHub is an ancestor of GitLab. GitLab has eight commits after the shared `30a05994` base:
 
 - `3ca7cd9c` updates the hybrid-runtime architecture documentation for atomic memory-form XCHG.
 - `763b38ab` updates the static-ELF Swift test double with exchange methods so interpreter tests conform to the native GuestMemory API. The mock is single-threaded; native C++ tests prove atomicity.
 - `af00bceb` adds conservative CPUID reporting and a monotonic 1 GHz virtual RDTSC counter, with interpreter regressions and architecture documentation.
 - `2876b49d` refreshes the first-playable acceptance and legacy feature-parity audit against the current implementation.
 - `21a312a2` fixes a malformed literal newline in the Linux console input/display parity row and refreshes the current-main status.
+- `8ba65bca` refreshes the acceptance/parity documents after the current-main change.
+- `adf6a271` implements the F3 90 PAUSE spin-wait hint as a no-op with a regression.
+- `afda2d49` makes core-only IPA validation accept textual and numeric Mach-O iOS device platform values and checks `CFBundleSupportedPlatforms`.
 
 The configured synchronization direction is GitHub-to-GitLab. Publishing these newer GitLab commits back to GitHub requires the existing owner-gated reconciliation. No force-push, reset, rebase, branch creation, PR merge, or branch deletion has been performed.
 
