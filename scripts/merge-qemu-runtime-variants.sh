@@ -30,6 +30,7 @@ TCI_DIR="$(cd "$TCI_REQUEST" && pwd -P)"
 
 path_is_within() {
   local candidate="$1" parent="$2"
+  [[ "$candidate" == "$parent" ]] && return 0
   case "$candidate/" in "$parent/"*) return 0 ;; esac
   return 1
 }
@@ -116,9 +117,10 @@ merge_framework_tree() {
         cp -a "$entry" "$target"
       fi
     elif [[ -d "$entry" ]]; then
-      [[ ! -e "$target" || -d "$target" ]] || fail "framework file/directory collision: $relative"
+      [[ ! -L "$target" && ( ! -e "$target" || -d "$target" ) ]] || fail "framework file/directory or symlink collision: $relative"
       mkdir -p "$target"
     elif [[ -f "$entry" ]]; then
+      [[ ! -L "$target" ]] || fail "refusing symlinked framework destination: $relative"
       if [[ -e "$target" ]]; then
         [[ -f "$target" ]] && cmp -s "$entry" "$target" || fail "different JIT/TCI dependency bytes: $relative"
       else
@@ -138,6 +140,7 @@ mkdir -p "$TEMP_OUT/Frameworks/TCI"
 tci_component_source="$TCI_DIR/Frameworks/$tci_framework_component"
 tci_component_destination="$TEMP_OUT/Frameworks/TCI/$tci_framework_component"
 [[ ! -L "$tci_component_source" ]] || fail "TCI runtime library component must not be a symlink"
+[[ ! -L "$tci_component_destination" ]] || fail "TCI runtime destination must not be a symlink"
 if [[ -d "$tci_component_source" ]]; then
   mkdir -p "$tci_component_destination"
   merge_framework_tree "$tci_component_source" "$tci_component_destination"
@@ -167,7 +170,11 @@ cp "$TCI_DIR/UTM-archive-Info.plist" "$TEMP_OUT/UTM-TCI-archive-Info.plist" 2>/d
 } > "$TEMP_OUT/QEMU/runtime-mode-manifest.txt"
 {
   echo "=== JIT runtime ==="
-  cat "$JIT_DIR/BUILD-INFO.txt" 2>/dev/null || true
+  if [[ -f "$JIT_DIR/BUILD-INFO-jit.txt" ]]; then
+    cat "$JIT_DIR/BUILD-INFO-jit.txt"
+  else
+    cat "$JIT_DIR/BUILD-INFO.txt" 2>/dev/null || true
+  fi
   echo "=== TCI runtime ==="
   cat "$TCI_DIR/BUILD-INFO.txt" 2>/dev/null || true
 } > "$TEMP_OUT/BUILD-INFO.txt"
@@ -180,9 +187,13 @@ cp "$TCI_DIR/UTM-archive-Info.plist" "$TEMP_OUT/UTM-TCI-archive-Info.plist" 2>/d
 for report in runtime-file-inventory.txt dependency-report.txt; do
   : > "$TEMP_OUT/$report"
   for package in "$JIT_DIR" "$TCI_DIR"; do
-    if [[ -f "$package/$report" ]]; then
+    report_path="$package/$report"
+    if [[ "$package" == "$JIT_DIR" && "$report" == "dependency-report.txt" && -f "$package/dependency-report-jit.txt" ]]; then
+      report_path="$package/dependency-report-jit.txt"
+    fi
+    if [[ -f "$report_path" ]]; then
       echo "=== $package ===" >> "$TEMP_OUT/$report"
-      cat "$package/$report" >> "$TEMP_OUT/$report"
+      cat "$report_path" >> "$TEMP_OUT/$report"
     fi
   done
 done
