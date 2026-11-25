@@ -1,5 +1,4 @@
 import json
-import subprocess
 import unittest
 import zipfile
 from pathlib import Path
@@ -49,8 +48,8 @@ class AppIconIntegrationTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
         self.assertIn("bash scripts/prepare-app-icons.sh", workflow)
         self.assertLess(workflow.index("bash scripts/prepare-app-icons.sh"), workflow.index("xcodegen generate --spec project.yml"))
-        self.assertIn("EXPECTED_PRIMARY_ICON=AkatsubakiDefault", workflow)
-        self.assertIn("EXPECTED_PRIMARY_ICON=AkatsubakiSimple", workflow)
+        self.assertIn('EXPECTED_PRIMARY_ICON="AkatsubakiDefault"', workflow)
+        self.assertIn('EXPECTED_PRIMARY_ICON="AkatsubakiSimple"', workflow)
 
     def test_extraction_script_uses_expected_archive_names(self):
         script = (ROOT / "scripts/prepare-app-icons.sh").read_text(encoding="utf-8")
