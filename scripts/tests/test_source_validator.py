@@ -858,9 +858,8 @@ class SourceValidatorTests(unittest.TestCase):
         workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         self.assertIn("\n  enforce-no-skipped-jobs:\n", workflow)
         guard = workflow.split("\n  enforce-no-skipped-jobs:\n", 1)[1]
-        expected_guard = "if: always() && needs.validate-release-channel.result != 'skipped' && needs.check-push-freshness.result == 'success' && needs.check-push-freshness.outputs.build == 'true'"
-        self.assertIn(f"    {expected_guard}\n", guard)
-        self.assertNotIn("    if: always()\n", guard)
+        self.assertIn("    if: always()\n", guard)
+        self.assertNotIn("if: always() &&", guard)
         needs = guard.split("    needs:\n", 1)[1].split("    runs-on:", 1)[0]
         for job in (
             "validate-release-channel",

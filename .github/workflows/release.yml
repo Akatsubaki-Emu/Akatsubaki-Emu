@@ -460,11 +460,10 @@ jobs:
       # Official AltStore/PAL feeds are refreshed from published GitHub releases
       # by the website repository's update-xthrx-alt-source.yml workflow.
 
-  # Fail eligible build attempts when required work is skipped, but preserve
-  # intentional no-op reconciliation and superseded-push skips as successful.
+  # Never let GitHub report a green release run when any job was skipped.
   enforce-no-skipped-jobs:
     name: Require every workflow job to complete
-    if: always() && needs.validate-release-channel.result != 'skipped' && needs.check-push-freshness.result == 'success' && needs.check-push-freshness.outputs.build == 'true'
+    if: always()
     needs:
       - validate-release-channel
       - check-push-freshness
