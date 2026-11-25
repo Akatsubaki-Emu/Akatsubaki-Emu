@@ -115,11 +115,29 @@ These items remain outside the first static-ELF milestone and should be implemen
 | UTM/QEMU | Full-system emulation backend | Requires license gate, reproducible iOS ARM64 build, and physical-device boot evidence |
 | Vapour Emu | Evaluate after its expected release | Date and availability are unverified; development must not wait for it |
 
-## Repository/CI coordination blocker
+## Repository/CI coordination and latest validation status
 
-At this audit, GitLab \`main\` contains newer work than GitHub \`main\`. The repository's historical synchronization workflow is GitHub-to-GitLab and includes an ancestry guard; it does not safely publish GitLab-only commits back to GitHub. Current project engineering instructions designate GitLab \`main\` as the write target, while the repository README and existing GitHub workflows still describe GitHub as canonical.
+At this audit, GitLab `main` and GitHub `main` both point to `c25947b03e48fd1157d21f20e895ca726c831599`. The previous 08:25 handoff recorded temporary divergence; subsequent synchronization has brought both refs to the same commit. No force-push, reset, rebase, merge, or branch creation was performed in this session.
 
-Do not force-push or run a mirror operation that could discard either side. Resolve the canonical direction or configure a safe GitLab-to-GitHub mirror before using GitHub Actions to validate the latest GitLab source. GitLab's manual/API validation pipeline has also encountered shared-runner quota exhaustion; a quota failure means no tests ran.
+The repository documentation still describes GitHub as canonical and GitLab as a downstream mirror, while the active project engineering instructions designate GitLab `main` as the write target. That policy mismatch remains unresolved. Do not change mirror direction or run history reconciliation without explicit owner approval.
+
+### Hosted validation evidence
+
+- **Core-only iOS workflow #8** (run `45572464006`) checked out the older commit `440f288b5b42728b4c16283f50c4eabf84e9d507`, not current `main`. Xcode 27.1 selection, XcodeGen installation/project generation, QEMU-free source checks, and the executable-arena tests passed (5 suites, 20,000 stress operations). The Python suite ran 415 tests and had two harness failures: `test_smoke_artifact_packaging.py` raised `NameError: workflow is not defined`, and `test_elf_sparse_memory_reset.py` asserted an obsolete source pattern. Both test files have subsequent corrections on current `main` (verified by comparing `440f288` to `c25947b`). The job stopped before the Swift runtime tests, native GuestMachine test, device build, IPA packaging, or artifact upload.
+- **Kenran Butō AOT workflow #222** (run `45572463949`) also checked out `440f288`. Workflow YAML, iOS arm64 JIT source compilation, fixed-buffer allocation checks, guest-RAM budget checks, executable-arena tests, backend-routing checks, and repository source-contract tests passed. The decoder test then failed in the old XCHG high-register test: it treated word indices as byte offsets (0, 4, 8). Current `main` corrects the test to assert a 12-byte result and inspect word indices 0, 1, and 2. No AOT execution or static-ELF guest test ran in that workflow.
+- **GitLab pipeline #1222** on `c25947b` is marked failed, with `core-source-and-elf-validation` as its job. Its trace was not available during this audit because of GitLab API rate limiting; its failure cause is therefore unclassified. The preceding pipeline #1221 was separately recorded as failing before runner assignment due to shared CI quota exhaustion.
+
+These are stale-run results, not current-head validation. The current `c25947b` source has not yet been validated by a completed AOT run or core-only IPA run. No current IPA artifact, signing/install evidence, or physical-iPad guest execution is verified.
+
+### Required next actions
+
+1. Run the AOT validation workflow and core-only iOS IPA workflow against current `main` (`c25947b`); resolve any remaining failures on that exact commit.
+2. Build and checksum the unsigned physical-device ARM64 IPA; record its bundle identifier and effective entitlements.
+3. Sign and install through SideStore on a physical iPad.
+4. Import and run both diagnostic ELF guests, verify their success markers and exit status 0, then repeat launches and verify cleanup.
+5. Validate TXM/AOT separately. The no-JIT interpreter smoke path must remain functional without StikDebug. For iPadOS 27+ AOT pairing, use StikDebug 3.2.2 or newer.
+
+A simulator build, host-side ELF run, source-level JIT implementation, or IPA archive alone does not satisfy the physical-device acceptance gates.
 
 ## Definition of done
 
