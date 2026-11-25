@@ -72,12 +72,19 @@ class GitHubActionsOwnershipTests(unittest.TestCase):
         self.assertIn("  pull_request:", workflow)
         self.assertIn("  workflow_dispatch:", workflow)
 
-    def test_metrics_bot_dispatches_mirror_sync_after_both_jobs(self):
+    def test_metrics_workflow_uploads_artifacts_without_repository_writes(self):
         workflow = (self.ROOT / ".github" / "workflows" / "Update stats.yml").read_text(encoding="utf-8")
-        self.assertIn("needs: [overview, team]", workflow)
+        self.assertIn("needs: cancel-stale", workflow)
+        self.assertEqual(workflow.count("output_action: none"), 2)
+        self.assertEqual(workflow.count("uses: actions/upload-artifact@v4"), 2)
+        self.assertEqual(workflow.count("retention-days: 30"), 2)
+        self.assertIn("name: repository-metrics-overview", workflow)
+        self.assertIn("name: repository-metrics-team", workflow)
+        self.assertIn("contents: read", workflow)
         self.assertIn("actions: write", workflow)
-        self.assertIn("GH_TOKEN: ${{ github.token }}", workflow)
-        self.assertIn('gh workflow run blank.yml --repo "${GITHUB_REPOSITORY}" --ref main', workflow)
+        self.assertNotIn("contents: write", workflow)
+        self.assertNotIn("gh workflow run blank.yml", workflow)
+        self.assertNotIn("git push", workflow)
 
 
 if __name__ == "__main__":
