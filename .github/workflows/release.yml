@@ -41,8 +41,7 @@ jobs:
           echo "Nightly and Main releases can only be dispatched from refs/heads/main (got $GITHUB_REF)." >&2
           exit 1
 
-  # Skip commits that were already superseded before a runner is allocated
-  # for the expensive QEMU build. This does not serialize current builds.
+  # Record staleness for diagnostics; never use it to suppress required jobs.
   check-push-freshness:
     name: Check whether this push is still current
     runs-on: ubuntu-latest
@@ -52,7 +51,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
-      - name: Skip superseded push commits
+      - name: Report whether this push is current
         id: freshness
         shell: bash
         run: |
@@ -60,7 +59,7 @@ jobs:
           build_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
           echo "build=$build_current" >> "$GITHUB_OUTPUT"
           if [ "$build_current" != "true" ]; then
-            echo "Skipping this build because a newer build-relevant main commit exists."
+            echo "A newer build-relevant commit exists; required build jobs will still execute."
           fi
 
   # This reusable workflow runs inside this run and uploads the artifact here.
@@ -74,8 +73,8 @@ jobs:
     with:
       rebuild_dependencies: false
 
-  # QEMU can take hours to compile. Re-check after it finishes so platform
-  # builds are not spent on a commit that became stale while QEMU was building.
+  # QEMU can take hours to compile. Report freshness after it finishes, but
+  # always execute the platform matrix regardless of the result.
   check-platform-build-freshness:
     name: Check freshness before platform builds
     needs: qemu-runtime
@@ -87,7 +86,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 1
-      - name: Skip platform builds for superseded pushes
+      - name: Report freshness before platform builds
         id: freshness
         shell: bash
         run: |
@@ -95,7 +94,7 @@ jobs:
           build_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
           echo "build=$build_current" >> "$GITHUB_OUTPUT"
           if [ "$build_current" != "true" ]; then
-            echo "Skipping platform builds because a newer build-relevant main commit exists."
+            echo "A newer build-relevant commit exists; the platform matrix will still execute."
           fi
 
   build:
@@ -321,7 +320,7 @@ jobs:
     name: Publish combined ${{ matrix.channel }} release
     permissions:
       contents: write
-    needs: [validate-release-channel, qemu-runtime, check-platform-build-freshness, build]
+    needs: [validate-release-channel, check-push-freshness, qemu-runtime, check-platform-build-freshness, build]
     # Run the publisher job on every workflow invocation, but fail closed before publishing.
     if: ${{ always() }}
     concurrency:
@@ -344,6 +343,7 @@ jobs:
       - name: Require successful build prerequisites and QEMU GPL compatibility approval
         env:
           CHANNEL_VALIDATION_RESULT: ${{ needs.validate-release-channel.result }}
+          PUSH_FRESHNESS_RESULT: ${{ needs.check-push-freshness.result }}
           QEMU_RUNTIME_RESULT: ${{ needs.qemu-runtime.result }}
           PLATFORM_CHECK_RESULT: ${{ needs.check-platform-build-freshness.result }}
           PLATFORM_BUILD_RESULT: ${{ needs.build.result }}
@@ -351,7 +351,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for result in "$CHANNEL_VALIDATION_RESULT" "$QEMU_RUNTIME_RESULT" "$PLATFORM_CHECK_RESULT" "$PLATFORM_BUILD_RESULT"; do
+          for result in "$CHANNEL_VALIDATION_RESULT" "$PUSH_FRESHNESS_RESULT" "$QEMU_RUNTIME_RESULT" "$PLATFORM_CHECK_RESULT" "$PLATFORM_BUILD_RESULT"; do
             if [ "$result" != "success" ]; then
               echo "::error::A required build prerequisite did not succeed (result: $result)." >&2
               exit 1

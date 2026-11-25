@@ -212,7 +212,7 @@ jobs:
               raise SystemExit("Publisher must read the QEMU GPL compatibility approval.")
           if 'if [ "$QEMU_GPL_APPROVED" != "true" ]; then' not in release:
               raise SystemExit("Publisher must fail closed when QEMU GPL approval is absent.")
-          for required in ("needs.validate-release-channel.result", "needs.qemu-runtime.result", "needs.build.result"):
+          for required in ("needs.validate-release-channel.result", "needs.check-push-freshness.result", "needs.qemu-runtime.result", "needs.build.result"):
               if required not in release:
                   raise SystemExit("Publisher preflight must verify prerequisite result: " + required)
           for obsolete in ("PAGES_TOKEN", "I-Steam/I-steam.github.io", "i-steam.github.io"):
