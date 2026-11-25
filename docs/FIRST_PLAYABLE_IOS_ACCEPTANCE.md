@@ -117,24 +117,35 @@ These items remain outside the first static-ELF milestone and should be implemen
 
 ## Repository/CI coordination and latest validation status
 
-At this audit, GitLab `main` is `fae7c262dcb5bc9238790f6317f360d125d23a7a` and GitHub `main` is `c25947b03e48fd1157d21f20e895ca726c831599`. GitLab is a direct descendant of GitHub and is four commits ahead: `4192b5e8` (metrics contract test), `9025ccaf` (first-playable status documentation), `3026c1bf` (interpreter stop-state synchronization), and `fae7c262` (register-only XCHG interpreter fallback, dispatcher test mapping, and Node 24 artifact action versions). The histories are not divergent. The configured automatic sync only pushes GitHub to GitLab, so it cannot publish these GitLab-only commits back to GitHub. No force-push, reset, rebase, merge, or branch creation has been performed. A non-forced fast-forward of GitHub main to GitLab main requires explicit owner authorization.
+GitLab `main` is `345b1bba392f8aff0e28085e57473a7166ff55ae`; GitHub `main` is `4192b5e8f5fd0758f508b00a4511bc9554a64d5d`. GitLab is a direct fast-forward descendant of GitHub through five commits: `9025ccaf` (acceptance documentation), `3026c1bf` (interpreter stop-state locking), `fae7c262` (register-only XCHG fallback, syscall test mapping and action-version correction), `e2dcb994` (feature-parity/acceptance status refresh), and `345b1bba` (memory-form XCHG fail-closed regression). No histories have been rewritten.
+
+The configured automatic synchronization pushes GitHub to GitLab and refuses to overwrite a newer GitLab head. The existing GitLab-to-GitHub reconciliation workflow requires explicit owner authorization. No reconciliation, force-push, reset, rebase, PR merge or branch creation has been performed.
+
+### Current source changes
+
+- `3026c1bf` adds a lock-protected interpreter stop-state read helper, removing the unsynchronized AOT-side stop-flag read, and adds a source-contract regression.
+- `fae7c262` implements register-only x86 `XCHG 0x87` in the interpreter, including REX.R/REX.B extension and 32-bit zero-extension; explicitly maps the syscall-test output buffers; and updates the metrics workflow artifact actions to Node.js 24-compatible `actions/upload-artifact@v7`.
+- `345b1bba` adds a regression proving memory-form XCHG remains unsupported until guest-memory atomics exist, preserves the instruction RIP, and does not modify guest memory.
 
 ### Hosted validation evidence
 
-- **Core-only iOS workflow #8** (run `45575957355`) checked out `c25947b0`. Xcode 27.1 selection, XcodeGen generation, QEMU-free checks and executable-arena tests passed. The Python suite passed 414/415 tests; the only failure was the obsolete metrics-workflow assertion that expected the removed GitHub mirror dispatch. Commit `4192b5e8` updates that test to the artifact-only contract. Commit `fae7c262` also upgrades both metrics artifact uploads from `actions/upload-artifact@v4` to `@v7`, matching the repository's Node.js 24 action-version validator. No Swift runtime tests, device build, IPA packaging, or artifact upload ran in that workflow.
-- **Kenran Butō AOT workflow** (run `45575131823`) checked out older commit `55996e0c`. Decoder, cache, executable-memory, iOS TXM source compile and source-contract steps passed; the page-crossing interpreter harness failed at line 1769. The correction `e97b25e1` is in current main's ancestry, but no successful exact-head AOT rerun is recorded.
-- GitLab pipeline IID 1224 / ID `3112464887` on `4192b5e8` and IID 1225 / ID `3112471173` on `3026c1bf` both failed before runner assignment with `ci_quota_exceeded`. Retry job `18350225415` also failed before runner assignment. No hosted tests ran in those pipelines.
-- Commit `3026c1bf` fixes an interpreter stop-state data race by routing stop-flag reads through a lock-protected helper and adds a source-contract regression. Commit `fae7c262` adds the register-only `XCHG 0x87` interpreter fallback required when AOT is unavailable; existing interpreter regressions compare baseline and hybrid execution for extended registers and 32-bit zero-extension. The commits have not yet been validated by hosted CI.
-- The same `fae7c262` change maps the Linux syscall test's output buffer before its mprotect assertions. This is test setup, not a runtime behavior change.
-- Earlier iOS device ARM64 compilation and tvOS/visionOS simulator builds passed on an older common ancestor, not on current main. No current-main IPA, SideStore installation, or physical iPad guest execution is verified.
+- **Core-only iOS workflow** run `45576869550` checked out GitHub `4192b5e8`. It passed the Python validation stage, then stopped in the Swift syscall test at `test_linux_syscall_dispatcher.swift:391` because its output-buffer pages were not mapped. The fix is on GitLab `main` but has not been tested by GitHub Actions.
+- **GitHub Actions validation** run `45576869650` on `4192b5e8` found the two metrics uploads still used `actions/upload-artifact@v4` while the repository validator requires `@v7`; its Swift runtime job also stopped at the syscall-test buffer assertion. Both corrections are on GitLab `main`, not yet visible to GitHub.
+- **Platform validation** run `45576869713` on `4192b5e8`: tvOS and visionOS simulator builds passed; the iOS simulator job stopped at the same syscall test; the unsigned physical iOS ARM64 target compiled successfully with `CODE_SIGNING_ALLOWED=NO`. This is a compile result, not an IPA, signed installation or device execution.
+- **Kenran Butō AOT validation** run `45575957157` on `c25947b0` failed in the extended-register XCHG interpreter comparison at `test_x86_64_interpreter.swift:1863`. The register-only interpreter implementation is now on GitLab `main`, with an additional memory-form fail-closed test, but no exact-head AOT run has passed.
+- GitLab pipeline IID 1226 / ID `3112479648` on `fae7c262` and IID 1229 / ID `3112488468` on `345b1bba` both failed before runner assignment with `ci_quota_exceeded`. Their validation jobs had no runner and no duration; no tests ran.
+
+### Current acceptance state
+
+The source changes have been read back and checked, but the latest GitLab pipelines did not execute tests. GitHub Actions is still on the older `4192b5e8` head. No current-head IPA artifact, SideStore installation, or physical iPad guest execution is verified.
 
 ### Required next actions
 
-1. Obtain explicit owner authorization for a non-forced fast-forward of GitHub main to the existing GitLab main; do not create a branch or force-push.
-2. Run AOT validation, full repository validation and the QEMU-free core-only iOS IPA workflow against the exact current commit. Resolve any newly exposed test or compile failures.
-3. Produce and checksum the unsigned physical-device ARM64 IPA; record bundle ID and effective entitlements.
-4. Sign/install through SideStore and execute both diagnostic static ELF guests through the app's actual import-to-runtime path on the physical iPad. Record stdout, exit codes, cleanup and repeat-launch evidence.
-5. Validate TXM/AOT separately. The no-JIT interpreter smoke path must remain functional without StikDebug; iOS/iPadOS 27+ AOT pairing requires StikDebug 3.2.2 or newer.
+1. Obtain explicit owner authorization for the existing safe GitLab-main-to-GitHub-main reconciliation so GitHub Actions can validate `345b1bba`. Do not force-push or merge any PR branches.
+2. Run AOT validation, repository validation, platform compilation and the QEMU-free core-only iOS IPA workflow against the exact reconciled commit; fix any newly exposed failures.
+3. Produce and checksum the unsigned physical-device ARM64 IPA, then sign/install it through SideStore.
+4. Import both diagnostic ELF guests through the app's real UI and verify their success markers, exit status 0, repeat launches, stop/reset and guest-page cleanup on the physical iPad.
+5. Validate TXM/AOT separately. The no-JIT interpreter smoke path must remain usable without StikDebug; iOS/iPadOS 27+ AOT pairing requires StikDebug 3.2.2 or newer.
 
 A simulator build, host-side ELF run, source-level JIT implementation, or IPA archive alone does not satisfy the physical-device acceptance gates.
 
