@@ -9,6 +9,14 @@ Changes to this acceptance checklist trigger both the QEMU-free core-only iOS bu
 
 These hosted checks validate source contracts, native/Swift execution harnesses, and the unsigned physical-device ARM64 build. They do **not** prove signing, installation, JIT activation, or guest execution on a physical iPad; those remain explicit device acceptance gates below.
 
+## Selected first-playable route: QEMU TCI (no JIT)
+
+The first playable physical-iOS guest is a known-good x86-64 Linux image booted through the full-system QEMU TCI interpreter. TCI is the selected no-JIT route: it does not require StikDebug, TXM, executable-memory entitlements, or a JIT pairing. The app's automatic acceleration mode may use JIT when available and fall back to TCI; the explicit QEMU interpreter mode selects TCI directly.
+
+The custom `LinuxELFRuntime` and its two static ELF guests are diagnostic user-mode tests for Kenran Butō's interpreter/GuestMachine path. They are valuable regression tests, but they are **not** a bootable Linux OS and do not satisfy the first-playable emulator milestone. The separate core-only IPA workflow intentionally excludes QEMU and is diagnostic only.
+
+The repository has a manual QEMU runtime build workflow for JIT and TCI variants and a release workflow that embeds the combined runtime. The release workflow is gated by `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true`; do not set this variable until qualified file-level and combined-work licensing review is complete. Without approval, the workflow may compile/validate but does not publish the QEMU runtime artifact or QEMU-enabled IPA.
+
 ## Current implementation boundary
 
 The repository now contains:
@@ -26,7 +34,7 @@ This is a real, bounded execution path, not a complete PC emulator. It does not 
 
 ## Acceptance gates
 
-### Gate 1 — Reproducible core-only iOS build
+### Gate 1 — Reproducible QEMU-free core-only diagnostic iOS build
 
 - [ ] Run the core-only iOS workflow against the current GitLab \`main\` source.
 - [ ] Confirm the workflow compiles the physical-device ARM64 target and produces the expected unsigned IPA.
@@ -34,9 +42,9 @@ This is a real, bounded execution path, not a complete PC emulator. It does not 
 - [ ] Sign and install the IPA on a physical iPad using a supported signing path.
 - [ ] Confirm the app launches repeatedly without a simulator-only dependency.
 
-The core-only workflow intentionally excludes QEMU so the first interpreter milestone is not blocked by the separate full-system licensing gate.
+This QEMU-free IPA validates the custom ELF/interpreter path only. It is a diagnostic build, not the first playable VM or a full-system guest.
 
-### Gate 2 — Physical static-ELF execution
+### Gate 2 — Physical static-ELF diagnostic (not first playable)
 
 Use the two diagnostic guests produced by \`scripts/build_hybrid_xchg_smoke_elf.py\` and \`scripts/build_hybrid_runtime_smoke_elf.py\`.
 
@@ -59,35 +67,38 @@ Host-side ELF execution, Swift regression tests, and IPA packaging are not subst
 - [ ] Revoke JIT readiness during execution and confirm AOT fails closed and interpreter fallback continues safely.
 - [ ] Verify repeated arena allocation, eviction, and reuse without stale executable mappings.
 
-The AOT path is optional for the first no-JIT interpreter smoke guest. StikDebug pairing and JIT are required to validate acceleration, not to prove that the diagnostic interpreter can execute.
+The AOT path is optional for the first QEMU TCI guest. TCI does not require StikDebug or JIT. StikDebug pairing and JIT are required only to validate the optional accelerated user-mode path.
 
-### Gate 4 — First playable interaction
+### Gate 4 — QEMU TCI display and input validation
 
 - [ ] Connect the guest execution path to a guest framebuffer and a Metal-backed display.
 - [ ] Route touch, hardware keyboard, and controller input into guest input events.
 - [ ] Verify pause/resume, focus changes, orientation, and clean shutdown.
 - [ ] Apply guest resolution and frame-rate settings to the actual renderer rather than only storing UI preferences.
 
-The current console is text-oriented. Existing VNC, display, Metal, controller, and frame-pacing experiments do not yet constitute a complete Kenran Butō graphics/input pipeline.
+For QEMU TCI, validate the existing VNC-to-Metal display and keyboard/controller event path on the physical device. The separate static ELF console remains text-only and has no independent framebuffer or guest-stdin contract.
 
-### Gate 5 — Persistent guest state
+### Gate 5 — Persistent QEMU guest disk state
 
 - [ ] Implement a guest disk/block-device path with documented image formats.
 - [ ] Persist guest writes across app restarts.
 - [ ] Add save slots/snapshots with corruption-safe writes and recovery.
 - [ ] Verify cleanup and repeat launches do not erase persistent guest data.
 
-The current shared-file/host-device bridge is not equivalent to a complete virtual disk, USB, or external-drive controller.
+QEMU has a disk-image path, but write persistence across physical-device restarts, crash-safe snapshots, USB passthrough, and external-drive controller semantics still require device validation.
 
-### Gate 6 — Full-system operating-system boot
+### Gate 6 — First playable: QEMU TCI full-system Linux boot (P0)
 
-- [ ] Complete the selected full-system backend and its iOS ARM64 build.
-- [ ] Complete the licensing review and required notices before packaging third-party code.
-- [ ] Boot a known-good Linux image on a physical iPad.
-- [ ] Verify basic display, keyboard/touch input, storage, and repeat boots.
-- [ ] Only then expand to Windows and broader compatibility targets.
+- [ ] Complete the qualified file-level and combined-work QEMU/UTM licensing review.
+- [ ] Run the manual QEMU runtime build workflow and verify the `ios-tci` / `iOS-SE` TCI variant and its runtime manifest.
+- [ ] Only after the licensing review, set `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true` and run the release workflow that embeds the QEMU TCI runtime into the iOS app.
+- [ ] Confirm the resulting device IPA contains the TCI runtime, passes the runtime manifest and IPA validators, and has a recorded SHA-256.
+- [ ] Sign/install the IPA on a physical iPad through SideStore or another supported path.
+- [ ] Boot a known-good x86-64 Linux image through QEMU TCI with JIT disabled.
+- [ ] Verify VNC-to-Metal display, keyboard/controller input, virtual-disk writes, clean shutdown, and repeat boots.
+- [ ] Record device model, iPadOS version, app/TCI runtime versions, image checksums, logs, and a short screen recording.
 
-QEMU/UTM is the existing full-system direction but is subject to its separate licensing/build gate. Bochs is a possible GPL-compatible research candidate, not an integrated or verified iOS backend. Do not claim full-system support from a successful build alone.
+QEMU TCI is the selected first playable no-JIT route. The manual build workflow can compile and validate TCI/JIT variants, but the release workflow intentionally withholds QEMU runtime artifacts and QEMU-enabled IPA packaging until the licensing approval variable is set after review. Bochs remains a research alternative, not an integrated or verified replacement.
 
 ## iOS signing and JIT prerequisites
 
@@ -98,7 +109,7 @@ QEMU/UTM is the existing full-system direction but is subject to its separate li
 
 ## Remaining features from older project requests
 
-These items remain outside the first static-ELF milestone and should be implemented only after the physical guest path is stable.
+These items remain outside the first QEMU TCI Linux-boot milestone and should be implemented only after the physical guest path is stable.
 
 | Area | Requested capability | Current boundary / missing work |
 |---|---|---|
@@ -114,62 +125,55 @@ These items remain outside the first static-ELF milestone and should be implemen
 | VR / visionOS | VR mode, motion input, visionOS support | Prototype/build-target work; no verified guest VR rendering or interaction |
 | tvOS | Apple TV guest launch and controller support | Interface prototype; no verified OS boot or game launch |
 | Dynamic translation | FEXCore/Box64 or another general x86-64 dynamic backend | No integrated, benchmarked iOS backend; interpreter remains correctness fallback |
-| UTM/QEMU | Full-system emulation backend | Requires license gate, reproducible iOS ARM64 build, and physical-device boot evidence |
+| UTM/QEMU | Full-system emulation backend | QEMU TCI is the selected no-JIT first-playable route; the build/release workflows exist, but the GPL compatibility gate, TCI artifact, iOS IPA, and physical Linux boot remain unverified |
 | Vapour Emu | Evaluate after its expected release | Date and availability are unverified; development must not wait for it |
 
 ## Repository/CI coordination and latest validation status
 
-GitLab `main` is `ad65030d252df581504b5d6918fbe3a193e423bc`. GitHub `main` is `21a312a28ab0586307d4f4d112ece1c04ccecad2`; direct comparison confirms GitHub is an ancestor of GitLab. GitLab has five commits after the shared `21a312a2` base:
-
-- `8ba65bca` refreshes acceptance/parity status after the shared GitHub main `21a312a2`.
-- `adf6a271` implements the F3 90 PAUSE spin-wait hint as a no-op with a regression.
-- `afda2d49` makes core-only IPA validation accept textual and numeric Mach-O iOS device platform values and checks `CFBundleSupportedPlatforms`.
-- `1fc1e129` records the latest core-only iOS build evidence and owner-gated synchronization requirement.
-- `ad65030d` adds a source-validator regression for the numeric/textual Mach-O iOS platform handling.
-
-The configured synchronization direction is GitHub-to-GitLab. Publishing these newer GitLab commits back to GitHub requires the existing owner-gated reconciliation. No force-push, reset, rebase, branch creation, PR merge, or branch deletion has been performed.
+GitLab `main` and GitHub `main` are both at `1678a2d5245bdaa1cad75b4a94c1eaef61e1f27a`; direct commit comparison confirms exact parity. No branch reconciliation, merge, force-push, reset, rebase, branch creation, or deletion is needed for the current source.
 
 ### Current source changes
 
-- `3026c1bf` adds a lock-protected interpreter stop-state read helper, removing the unsynchronized AOT-side stop-flag read.
-- `fae7c262` adds register-only x86 `XCHG 0x87`, maps syscall-test output buffers, and updates metrics artifact actions to `actions/upload-artifact@v7`.
-- `345b1bba` adds the memory-form XCHG fail-closed regression that was appropriate before guest-memory atomic operations existed.
-- `8f2dd2f5` adds register-only byte `XCHG 0x86`, including REX.B/REX.R register selection.
-- `30a05994` adds mutex-serialized native guest-memory exchange for 1-, 4-, and 8-byte operands, cross-page handling, permission validation, Swift wrappers, and interpreter memory-form `0x86`/`0x87` support. Native tests cover cross-page exchange, read-only rejection without mutation, and concurrent serialization.
-- `763b38ab` aligns the static-ELF Swift test double with the atomic exchange API.
-- `af00bceb` adds conservative CPUID leaves and a monotonic virtual RDTSC counter. SIMD features are deliberately not advertised; these additions do not make the interpreter a general x86-64 implementation.
-- `2876b49d` refreshes this acceptance checklist and the legacy feature-parity audit.
+- `30a05994` adds mutex-serialized native guest-memory exchange for 1-, 4-, and 8-byte operands, cross-page handling, permission validation, Swift wrappers, and interpreter memory-form `0x86`/`0x87` support.
+- `af00bceb` adds conservative CPUID reporting and a monotonic 1 GHz virtual RDTSC counter without advertising unsupported SIMD.
+- `adf6a271` handles F3 90 PAUSE as a no-op.
+- `afda2d49` hardens the core-only IPA validator for textual/numeric iOS Mach-O platform values and checks `CFBundleSupportedPlatforms`.
+- `8c5d6f94` repairs the static smoke ELF program-header mapping, adds the NativeEmulation C object and bridging header to the native GuestMachine smoke compile, and includes GuestProcess in the PE test compile.
+- `1678a2d5` expands IPA-validator regressions to reject simulator Mach-O and iPhoneSimulator bundle platforms.
+- The QEMU runtime and release workflows already define JIT and TCI variants, runtime manifests, and the QEMU licensing gate. The TCI path is the intended no-JIT full-system route; it has not yet booted a guest on a physical iPad.
 
-### Hosted validation evidence
+### Hosted and local validation evidence
 
-- GitLab pipelines IID 1237 (`30a05994`), 1240 (`af00bceb`), 1241 (`2876b49d`), 1242 (`adf6a271`) and 1243 (`1fc1e129`) failed before runner assignment with `ci_quota_exceeded`; no tests ran. The current `ad65030d` source-validator test has no hosted result.
-- GitHub AOT workflow run `45577650906` passed on older source `e2dcb994`, including its tested restricted AOT path, interpreter differential checks, JIT revocation checks, and a static-ELF run reporting `blocks=2`. It predates atomic memory XCHG and CPUID/RDTSC; it is not exact-current-main evidence.
-- GitHub core-only IPA run `45580260610` on older source `2f082fae` passed interpreter, AOT translator/cache, syscall, static ELF, native GuestMachine, cleanup, backend-routing and LocalDevVPN test stages; it built the unsigned iOS device app and packaged the QEMU-free IPA, but the old IPA validator rejected the Mach-O platform representation and skipped artifact upload. GitHub AOT run `45580260753` passed on the same older source. Commit `afda2d49` fixes the validator and `ad65030d` tests the parser; the fixed workflow has not yet been run.
-- Earlier platform workflow run `45576869713` on `4192b5e8` passed tvOS/visionOS simulator builds and an unsigned physical-device iOS ARM64 compile. It is compile-only evidence from an older commit, not a current IPA, signed installation, or guest execution.
-- No current-head IPA artifact, SideStore installation, or physical iPad guest execution is verified.
+- GitLab pipeline IID 1245 / ID `3112635187` on exact source SHA `1678a2d5` failed before runner assignment with `ci_quota_exceeded`; job `18351469324` had no runner, start time, or duration. No tests ran. Pipeline IID 1244 / ID `3112630205` on `8c5d6f94` was blocked the same way.
+- GitHub core-only IPA run `45582606913` on older source `ad65030d` failed at static ELF loading because the diagnostic ELF did not map its program-header table. Commit `8c5d6f94` fixes that defect; the fix is now on current main.
+- Earlier GitHub core-only IPA run `45580260610` on `2f082fae` passed its older runtime tests and packaged a QEMU-free unsigned IPA, but the old Mach-O validator rejected the device platform and skipped artifact upload. The validator fix and its regression tests are now on current main.
+- Local validator checks passed: Bash syntax, source-contract checks, 4/4 platform regression cases, numeric/text device platform acceptance, simulator platform rejection, and QEMU payload rejection.
+- Both static ELF diagnostic builders/tests passed on Linux x86-64; the guests printed `Linuxx86_64KENRAN_BUTO_RUNTIME_OK` and `KENRAN_BUTO_XCHG_OK`. A separate reconstructed AOT encoding smoke also passed MOV/LEA/XCHG/MOVZX and bounded-fallback checks. These are host tests, not iOS emulator execution.
+- No current-head QEMU TCI runtime artifact, QEMU-enabled IPA, SideStore installation, or physical iPad Linux boot is verified.
 
 ### Runtime and older-feature boundary
 
-The static ELF path remains a bounded diagnostic user-mode runtime, not a complete PC emulator. Linux `read(0, ...)` returns EOF; the console has no guest stdin adapter. Existing keyboard, F1–F12, touch, controller, and motion controls route to QEMU/VNC rather than `GuestMachine`. The Metal framebuffer is fed by VNC; the static ELF runtime has no independent guest-frame submission contract.
+The custom `LinuxELFRuntime` is a bounded diagnostic user-mode path. It is not a full-system OS emulator: `read(0, ...)` returns EOF and it has no independent framebuffer contract. The first playable route is the separate QEMU full-system TCI backend, which uses the VNC-to-Metal display/input path and a QEMU disk image. That route still needs a distributable TCI runtime, physical boot, display/input verification, and disk-persistence evidence.
 
-FEXCore and Box64 are not operational iOS backends. Dynamic ELF loading, PT_TLS initialization, broad Linux syscall/thread/signal support, Windows PE execution, Wine/Proton, full-system OS boot, persistent block storage, and game-ready graphics/audio remain separate milestones. The existing UI/configuration options do not prove those guest capabilities.
+FEXCore and Box64 are not operational iOS dynamic backends. Dynamic ELF/PT_TLS, broad Linux syscall/thread/signal support, Windows PE/EXE execution, Wine/Proton, full-system graphics/audio beyond the QEMU display path, save snapshots, USB passthrough, and Android/VR/tvOS/visionOS guest execution remain separate milestones.
 
 ### Required next actions
 
-1. Retry native-memory, interpreter, AOT, and full repository validation against exact GitLab `main` when runner quota recovers.
-2. Obtain explicit owner authorization before using the existing GitLab-main-to-GitHub-main reconciliation; do not force-push or merge PR branches.
-3. Produce and checksum the current unsigned physical-device ARM64 IPA, sign/install it through SideStore, and run both static ELF diagnostic guests through the app's real import-to-runtime path on the physical iPad.
-4. Record output markers, exit status 0, repeat launches, stop/reset behavior, and guest-memory cleanup.
-5. After physical guest execution is proven, implement a bounded stdin queue with stop/reset wakeup, a shared keyboard/touch/controller event sink, and a GuestMachine framebuffer contract feeding Metal.
-6. Validate TXM/AOT separately. The no-JIT interpreter path must remain usable without StikDebug; iOS/iPadOS 27+ TXM/AOT pairing requires StikDebug 3.2.2 or newer.
+1. Run the manual QEMU runtime build workflow and validate the no-JIT TCI variant. It can compile/validate without publishing the runtime artifact.
+2. Complete a qualified file-level and combined-work QEMU/UTM licensing review. Do not set `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true` before that review.
+3. After approval, run the release workflow to embed the TCI runtime and produce a current physical-device iOS IPA.
+4. Sign/install on a physical iPad and boot a known-good x86-64 Linux image through QEMU TCI with JIT disabled.
+5. Verify VNC-to-Metal display, keyboard/controller input, disk persistence, clean stop, repeat boot, and cleanup; record logs and checksums.
+6. Keep the QEMU-free core-only IPA and static ELF guests as separate diagnostic coverage for Kenran Butō's interpreter, guest memory, syscall and AOT paths.
+7. After the first physical TCI boot, continue broader dynamic translation, Windows, Steam, snapshots, audio, and additional platform work.
 
-A simulator build, host-side ELF execution, source-level JIT implementation, or IPA archive alone does not satisfy the physical-device acceptance gates.
+A core-only IPA, static ELF host execution, simulator build, or QEMU compile alone does not satisfy the first-playable physical-device acceptance gate.
 
 ## Definition of done
 
-The first playable physical iOS milestone is complete only when a reproducible current-source IPA is installed on a physical iPad, a known-good guest executes through the app's real import-to-runtime path, basic guest display and input work, repeat launches and cleanup are reliable, persistent guest state survives restarts, and the build/test/device evidence is recorded. A simulator run, host-side ELF execution, or successful IPA packaging alone is insufficient.
+The first playable physical iOS milestone is complete only when a reproducible current-source IPA containing the approved QEMU TCI runtime is installed on a physical iPad, a known-good x86-64 Linux image boots through TCI with JIT disabled, guest display and keyboard/controller input work, guest disk state survives restarts, repeat boots and cleanup are reliable, and build/test/device evidence is recorded. A QEMU-free core-only IPA, static ELF diagnostic, host execution, simulator run, or successful QEMU compilation alone is insufficient.
 
+## Latest JIT source status (2026-11-25)
 
-## Latest JIT source status (2026-11-24)
+QEMU TCI is the selected first-playable no-JIT full-system route. It does not require StikDebug or TXM. The custom interpreter/static-ELF path is diagnostic coverage and remains useful as a correctness fallback. The 32 MiB TXM/SPTM arena and JIT path are optional acceleration work after TCI boot is proven; StikDebug 3.2.2+ is required for the iOS/iPadOS 27+ TXM/AOT pairing tests. No physical TCI boot or physical JIT/AOT execution is verified.
 
-The Kenran Butō iOS AOT allocator now has a separate preallocated-arena detach path: one 32 MiB TXM/SPTM executable region, one writable alias, then `iSteamJITDetachPreparedArena`; its arena-ready state is independent of QEMU’s attached-session callback. Hardware detection recognizes both TXM and SPTM. QEMU retains its no-op detach for lazy regions. This remains **UNTESTED on a physical iPad**; interpreter execution is the first-playable fallback and does not require JIT.

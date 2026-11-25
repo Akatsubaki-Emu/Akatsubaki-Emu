@@ -7,27 +7,23 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 
 ## Verified core progress since the previous audit
 
-- The x86-64 interpreter implements Linux syscall 158 operations `ARCH_SET_FS`, `ARCH_SET_GS`, `ARCH_GET_FS` and `ARCH_GET_GS`, with FS/GS-based memory operands and regression coverage. This is segment-base support, not a complete PT_TLS/dynamic-linker implementation.
-- Native C-backed guest-memory tests cover 256 MiB and the 384 MiB `brk`/mmap-hint regression. Existing tests cover page permissions, execute reads, mapping boundaries and cleanup.
+- The x86-64 interpreter implements Linux syscall 158 operations `ARCH_SET_FS`, `ARCH_SET_GS`, `ARCH_GET_FS` and `ARCH_GET_GS`, with FS/GS-based memory operands. This is segment-base support, not a complete PT_TLS/dynamic-linker implementation.
+- Native C-backed guest memory covers 256 MiB and the 384 MiB `brk`/mmap-hint regression. `brk` growth is bounded by the stack guard, not by the mmap allocation hint. `MAP_FIXED` uses replacement semantics; `MAP_FIXED_NOREPLACE` relies on the native transactional mapper to reject any already-mapped pages.
 - AOT availability is a pure readiness query; first TXM arena preparation is explicit. The 32 MiB TXM executable arena tracks exact allocations and supports coalescing and concurrency tests.
-- The interpreter has register-form x86 `XCHG 0x86/0x87` support and, in commit `30a05994`, atomic memory-form 1/4/8-byte XCHG through a mutex-serialized native guest-memory API. Cross-page exchange, read-only rejection without mutation, LOCK-prefix handling and concurrent serialization have regression coverage. General atomic read-modify-write instructions remain unsupported.
-- Commit `763b38ab` aligns the static-ELF Swift test double with the atomic exchange API; the mock is single-threaded and does not replace native atomicity tests.
-- Commit `af00bceb` adds conservative CPUID reporting and a monotonic 1 GHz virtual RDTSC counter. Unsupported SIMD is not advertised; these instructions currently use interpreter fallback rather than AOT translation.
-- Commit `adf6a271` implements the F3 90 PAUSE spin-wait hint as a no-op; AOT remains conservative and falls back to the interpreter.
-- Commit `afda2d49` hardens the core-only IPA validator to accept Mach-O iOS platform `IOS` or `2` and cross-checks `CFBundleSupportedPlatforms`.
-- Commit `adf6a271` implements the F3 90 PAUSE spin-wait hint as a no-op; AOT remains conservative and falls back to the interpreter.
-- Commit `afda2d49` hardens the core-only IPA validator to accept textual/numeric Mach-O iOS platform values and verify `CFBundleSupportedPlatforms`.
-- The host smoke kit has two static ELF guests and passing host builder/execution tests. This proves payload validity on Linux x86-64, not that Akatsubaki Emu has executed them on an iPad.
-- GitHub AOT run `45577650906` passed the restricted AOT suite on older source `e2dcb994`, including two translated static-ELF blocks. It is not validation of the current atomic-XCHG or CPUID/RDTSC changes.
-- GitLab pipelines IID 1237 (`30a05994`), 1240 (`af00bceb`), 1241 (`2876b49d`), 1242 (`adf6a271`) and 1243 (`1fc1e129`) failed before runner assignment with `ci_quota_exceeded`; no tests ran. The current `ad65030d` validator regression has no hosted result.
-- GitHub core-only IPA run `45580260610` on older source `2f082fae` passed the runtime test stages and built/packaged the unsigned device IPA, but the old Mach-O validator failed and artifact upload was skipped. GitHub AOT run `45580260753` passed on that same older source. The `afda2d49` validator correction and `ad65030d` parser regression have not been run in a hosted iOS workflow.
+- The interpreter has register-form x86 `XCHG 0x86/0x87` and, in `30a05994`, atomic memory-form 1/4/8-byte XCHG through mutex-serialized native guest memory, including cross-page operations and permission checks.
+- `af00bceb` adds conservative CPUID and monotonic virtual RDTSC; `adf6a271` handles PAUSE as a no-op.
+- `afda2d49` and `1678a2d5` harden and test the core-only IPA validator for iOS device platform values and reject simulator bundles/platforms.
+- `8c5d6f94` fixes the static ELF program-header mapping and the native GuestMachine smoke build's C bridge; `1678a2d5` adds simulator bundle validation.
+- Both static ELF diagnostic guests execute successfully on Linux x86-64 and produce their expected markers. This validates payload construction, not execution in Akatsubaki Emu on iOS.
+- GitLab exact-head pipeline IID 1245 on `1678a2d5` failed before runner assignment with `ci_quota_exceeded`; no tests ran. GitHub run `45582606913` on older `ad65030d` failed at the now-fixed ELF program-header mapping.
+- GitLab and GitHub `main` are now both `1678a2d5`; direct comparison confirms parity.
 
 ## Feature parity
 
 | Earlier request | Current source state | Remaining work / limitation | Priority |
 |---|---|---|---|
-| Launch into VM, Hypervisor, VR or OS modes | Launch setup and VM configuration expose OS profiles, Full VM and executable-library paths, and a Cardboard/VR display option | Most selections are configuration/UI paths. The first playable guest still uses the bounded ELF runtime; full OS boot is not verified | P0 |
-| Default Ubuntu and import a custom OS | Ubuntu profile and custom image/file import route exist | Importing an image is not booting it. UEFI, block devices, full-system QEMU and a physical boot test remain | P0/P1 |
+| Launch into VM, Hypervisor, VR or OS modes | Launch setup and VM configuration expose OS profiles, a QEMU full-system backend, TCI/JIT acceleration selection and a Cardboard/VR display option | QEMU TCI is the selected no-JIT first-playable route, but its distributable runtime, physical Linux boot, display/input and persistent-disk behavior are not yet verified | P0 |
+| Default Ubuntu and import a custom OS | Ubuntu profile, custom image import, QEMU disk-image path and full-system runtime selection exist | The QEMU TCI runtime still needs its licensing approval/package and a physical Linux boot; importing an image is not booting it | P0 |
 | Full Windows 10, not just PE inspection | Windows 10 profile and QEMU full-system build workflow exist | No QEMU runtime artifact or physical Windows boot is verified. The current PE loader is read-only and WindowsRuntime refuses launch | P1 |
 | Install and launch EXE files | Library can import PE files and inspect their headers/sections | No complete PE mapping, imports/DLL loader, Win32/NT services, Wine/Proton or runnable Windows process path | P1 |
 | SteamOS support | SteamOS Gaming Mode profile exists | This is a configuration profile, not proof that Valve's SteamOS image boots or that the Steam desktop client works | P1 |
@@ -37,7 +33,7 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 | VM/config save slots | VMSaveSlotStore persists named configuration and session metadata | It does not snapshot guest RAM, device state or arbitrary game-save contents. Add a real disk/snapshot contract and crash-safe restore | P1 |
 | External drives and storage access | ExternalDriveStore uses security-scoped file URLs/bookmarks and file-level access | This is not raw USB/block-device passthrough. Validate bookmark renewal, app relaunch, disk image access and guest filesystem persistence | P1 |
 | Custom resolution and FPS, including 60/120 Hz | Settings and VMConfiguration expose resolution/frame-rate preferences | End-to-end application to the active renderer/display backend and frame pacing on the physical iPad are not verified | P2 |
-| Linux ELF console input/display | ConsoleViewController captures stdout/stderr; Linux syscall `read(0, ...)` currently returns EOF | No guest stdin queue or keyboard adapter; touch/controller/hardware-keyboard controls target QEMU/VNC, not GuestMachine; the static ELF runtime has no framebuffer contract feeding Metal | P0 after physical smoke |
+| Static ELF diagnostic input/display | ConsoleViewController captures stdout/stderr; Linux syscall `read(0, ...)` currently returns EOF | This bounded user-mode diagnostic path has no guest stdin queue or framebuffer. QEMU's separate VNC-to-Metal and keyboard/controller path is the first-playable route and still needs physical validation | P1 diagnostic |
 | Touch gamepad with movable/resizable controls | TouchGamepadView has edit-mode movement and pinch-based sizing; ControllerInputManager maps controller events | Complete guest-side input delivery, focus/lifecycle handling and real game tests remain; existing controls are not wired to the static ELF runtime | P1 |
 | Physical controllers | GameController input mapping and controller profiles exist | A complete HID/gamepad device presented to every guest backend is not verified | P1 |
 | Touch keyboard | KeyboardOverlayView provides an on-screen keyboard | There is no dedicated F1–F12 touch bar in the current overlay. The VNC client has F-key keysyms, but the UI path is missing | P2 |
@@ -49,33 +45,32 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 | visionOS | visionOS target is declared in project configuration | No reproducible visionOS build or guest runtime test is recorded | P3 |
 | ARM64e support | Legacy Xcode project settings mention arm64 and arm64e, but current project.yml build generation targets arm64 | The active generated build path has no verified arm64e slice. Keep arm64 as the supported iOS ABI unless a specific arm64e-only requirement is demonstrated | P2 |
 | GetMoreRam / extended memory | StosSign entitlement workflow and memory-budget logic exist; VMConfiguration reads available process memory and caps guest RAM conservatively | Entitlements are Apple-signing/team dependent. Free-team SideStore signing may not preserve increased-memory capability. This cannot be bypassed by the emulator | P0 |
-| UTM backend | QEMU/UTM full-system packaging workflow exists | The QEMU JIT/TCI artifact has not been produced and booted; its GPLv2/UTM Apache-2.0 notices require the existing compatibility review gate | P1 |
+| UTM/QEMU TCI backend | QEMU runtime build/release workflows define both JIT and TCI variants; automatic acceleration can fall back to TCI when JIT is unavailable | TCI is the selected no-JIT first-playable route, but no distributable TCI runtime, QEMU-enabled IPA, or physical Linux boot is verified. GPL compatibility review must be completed before setting `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true` | P0 |
 | FEXCore primary, Box64 fallback | RuntimeBackendRouter now tests FEXCore-first selection and Box64-only fallback; no concurrent translator is selected for one process | Neither dynamic translator is integrated as an operational iOS backend. FEXCore needs a Darwin core port; the BoxiOS snapshot is no-JIT and game-specific | P1 after first playable |
 | MeloNX and SharpEmu references | Names appear in project documentation/reference material, not as integrated x86 runtime dependencies | They are separate console-emulation codebases; do not add them to Kenran Butō's x86 path without a distinct supported guest architecture and licence/architecture audit | P3/separate scope |
 | Vapor and StikStore | No current source integration was found by repository search | Do not add speculative dependencies. StosSign and StikDebug are the current relevant signing/JIT integrations | P3/separate scope |
-| Main/nightly iOS, tvOS and visionOS channels | Main/nightly release tags, iOS/tvOS/visionOS targets and a release workflow are declared | GitLab main `ad65030d` is five commits ahead of GitHub main `21a312a2` (`8ba65bca` status refresh, `adf6a271` PAUSE support, `afda2d49` IPA validator fix, `1fc1e129` core-only IPA evidence/status refresh, `ad65030d` validator regression test). The configured sync is GitHub-to-GitLab; reverse reconciliation remains owner-gated. No current-main IPA artifact is verified | P1 |
+| Main/nightly iOS, tvOS and visionOS channels | Main/nightly release tags, iOS/tvOS/visionOS targets and a release workflow are declared | GitLab and GitHub `main` are both `1678a2d5` (directly compared). No current-head QEMU TCI IPA or physical boot is verified; the QEMU release workflow remains gated by the licensing approval variable | P1 |
 | AltStore source and xthrx's repo feeds | Separate website/AltStore-source repository and generation workflow | This is release/distribution infrastructure, not part of the guest execution core; keep its source catalogue and Docusaurus docs separate from runtime code | P2 |
 
 ## Correct implementation order
 
-1. **First playable iOS:** retry exact-current-main validation when GitLab runner quota recovers; produce the unsigned physical-device ARM64 IPA; install through SideStore; run both static ELF diagnostic guests on the physical iPad; record output, exit status, cleanup and repeat launches.
-2. **Stabilise the guest lifecycle:** verify memory reset, failed-load cleanup, process stop, relaunch, persistent guest files, and the TXM/SPTM first-prepare/live-session/detach sequence with the correct StikDebug version.
-3. **Complete basic interaction:** add bounded guest stdin with stop/reset wakeup, route keyboard/F1–F12/touch/controller events into GuestMachine, and add a guest framebuffer contract feeding the existing Metal backend. Test backpressure, event ordering, key-up cleanup, stop-while-blocked and repeat launches.
-4. **Finish the user-mode engine:** complete AOT correctness and interpreter fallbacks, Linux syscall/loader/thread/signal support, then integrate FEXCore as primary and Box64 as a measured fallback.
-5. **Full-system support:** clear the QEMU licence gate, build JIT and TCI, boot a known-good Linux image, then test Windows 10 and SteamOS separately.
-6. **Windows compatibility:** only after the x86 engine and Linux/Windows ABI layers work, integrate PE loading, Wine/Proton, DirectX/Vulkan/Metal and anti-cheat publisher-supported paths.
-7. **Additional platforms and polish:** finish F-key/hardware-keyboard UI, pointer lock, 60/120 Hz pacing, Android, true VR, tvOS and visionOS after the physical iOS guest path is stable.
+1. **QEMU TCI runtime:** run the manual dual-mode QEMU build workflow and validate the no-JIT TCI variant. Complete qualified file-level and combined-work licensing review before enabling distribution.
+2. **First playable iOS:** after approval, package the TCI runtime into the current iOS IPA, sign/install through SideStore, and boot a known-good x86-64 Linux image on the physical iPad with JIT disabled.
+3. **Physical interaction and state:** verify VNC-to-Metal display, keyboard/controller input, virtual-disk persistence, clean stop, repeat boots and recovery after app restart.
+4. **Kenran Butō user-mode path:** keep the static ELF diagnostic guests as interpreter/GuestMemory/syscall tests; complete AOT correctness and fallback coverage independently of the QEMU TCI path.
+5. **Dynamic user-mode engines:** integrate FEXCore as primary and Box64 as a measured fallback only after a reproducible physical guest path exists.
+6. **Windows compatibility:** add PE loading, Win32/NT services, Wine/Proton and DirectX/Vulkan/Metal only after the x86 engine and ABI layers work.
+7. **Additional platforms and polish:** finish F-key/hardware-keyboard UI, pointer lock, 60/120 Hz pacing, Android, true VR, tvOS and visionOS after iOS guest execution is stable.
 
 ## Current hard blockers
 
-- GitLab main is `af00bceb1cb96433f87976a2ceec1828f0e7e601`; GitHub main is `30a05994eeac607a4a57716f2d384cea6ee57047`. GitLab is three commits ahead after the shared `30a05994` base: `3ca7cd9c` (architecture documentation), `763b38ab` (static-ELF test-double update), and `af00bceb` (CPUID/RDTSC). No force-push, reset, rebase, branch creation, PR merge or branch deletion is permitted without the separate required authorization.
-- GitLab pipeline IID 1237 / ID `3112567653` on `30a05994` failed before runner assignment with `ci_quota_exceeded`; no tests ran. The later `763b38ab` and `af00bceb` changes have not been hosted-validated.
-- GitHub AOT run `45577650906` passed on older source `e2dcb994` with two translated static-ELF blocks and its tested AOT/interpreter/JIT-revocation checks. It is not exact-current-main evidence.
-- Earlier platform run `45576869713` on `4192b5e8` passed tvOS/visionOS simulator builds and unsigned physical iOS ARM64 compilation. It did not produce a current IPA or prove signing, installation or physical guest execution.
-- Commit `30a05994` implements atomic memory-form XCHG and adds native cross-page, permission-failure and concurrent-exchange tests. Pipeline 1237 did not execute them because no runner was assigned.
-- Commit `af00bceb` adds conservative CPUID and monotonic virtual RDTSC support, but these additions have no exact-head hosted test result.
-- The static ELF runtime is still console-only: stdin returns EOF, input events are not connected to GuestMachine, and Metal frames are sourced from QEMU/VNC rather than the ELF runtime.
-- FEXCore/Box64 are not operational iOS backends; dynamic ELF, broad Linux ABI, Windows/PE execution, Wine/Proton, full-system boot, persistent block storage, and game-ready graphics/audio remain incomplete.
-- No current-head IPA artifact, SideStore installation, or physical iPad guest execution is verified. The no-JIT interpreter smoke path does not require JIT; iOS/iPadOS 27+ TXM/AOT pairing requires StikDebug 3.2.2 or newer.
+- QEMU TCI is the selected first-playable no-JIT route, but the QEMU/UTM distribution gate remains closed. The release workflow requires `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true` only after qualified file-level and combined-work licensing review. Do not set it before that review.
+- The manual QEMU runtime build workflow can compile/validate JIT and TCI variants, but no TCI runtime artifact, QEMU-enabled iOS IPA, or physical Linux boot is verified.
+- GitLab pipeline IID 1245 / ID `3112635187` on exact main `1678a2d5` failed before runner assignment with `ci_quota_exceeded`; job `18351469324` had no runner and no tests ran.
+- GitLab and GitHub main are both `1678a2d5`; source parity is verified. The core-only iOS workflow is QEMU-free diagnostic coverage, not the first playable VM release.
+- GitHub core-only IPA run `45582606913` on older `ad65030d` failed because the diagnostic ELF did not map its program-header table; `8c5d6f94` fixes that issue. No current-head hosted result or IPA artifact is verified.
+- The static ELF runtime is a bounded user-mode diagnostic. It is not a full-system Linux/Windows emulator. Its stdin returns EOF and it has no independent framebuffer; QEMU's separate VNC-to-Metal path is intended for the first playable guest.
+- FEXCore/Box64 are not operational iOS dynamic backends; dynamic ELF, broad Linux ABI, Windows/PE, Wine/Proton, full-system graphics/audio beyond the QEMU display path, snapshots, USB passthrough, and Android/VR/tvOS/visionOS guest execution remain incomplete.
+- No current QEMU TCI IPA, SideStore installation, or physical iPad Linux boot is verified. TCI does not require JIT/StikDebug; StikDebug 3.2.2+ is only required for optional TXM/AOT/JIT validation.
 
 **Status rule:** an option in a menu, a parser, a build workflow or a host smoke test is not equivalent to a running guest feature. Mark each item operational only after its complete path is tested on the target device.
