@@ -268,6 +268,13 @@ jobs:
           test -f build-iOS-TCI-arm64/BUILD_SUCCESS
           test -d sysroot-iOS-TCI-arm64
 
+      - name: Save original UTM Xcode project for independent runtime variants
+        if: steps.freshness.outputs.build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -p UTM/UTM.xcodeproj/project.pbxproj "$RUNNER_TEMP/UTM-project.pbxproj.original"
+
       - name: Prune unavailable QEMU frameworks from the JIT archive project
         if: steps.freshness.outputs.build == 'true'
         shell: bash
@@ -284,6 +291,13 @@ jobs:
           cd UTM
           ./scripts/build_utm.sh -k iphoneos -s iOS -a arm64 -o UTMBuild
           test -d UTMBuild.xcarchive/Products/Applications/UTM.app
+
+      - name: Restore original UTM Xcode project before TCI pruning
+        if: steps.freshness.outputs.build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -p "$RUNNER_TEMP/UTM-project.pbxproj.original" UTM/UTM.xcodeproj/project.pbxproj
 
       - name: Prune unavailable QEMU frameworks from the TCI archive project
         if: steps.freshness.outputs.build == 'true'
