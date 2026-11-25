@@ -9,6 +9,8 @@ on:
       - '.github/workflows/build-core-only-ios.yml'
       - 'docs/FIRST_PLAYABLE_IOS_ACCEPTANCE.md'
       - 'project.yml'
+      - 'Icons/**'
+      - 'scripts/prepare-app-icons.sh'
       - 'iSteam/**'
       - 'src/Core/**'
       - 'src/Runtime/**'
