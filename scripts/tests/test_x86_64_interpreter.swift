@@ -766,7 +766,7 @@ struct InterpreterTests {
         try bswap32.reset(entryPoint: 0)
         let bswap32Exit = try bswap32.run(maxInstructions: 4)
         precondition(bswap32Exit == .unsupportedInstruction(address: 12))
-        precondition(bswap32.registerValue(0) == 0x44332211)
+        precondition(bswap32.registerValue(0) == 0x88776655) // BSWAP EAX reverses only low 32 bits, then zero-extends
         precondition(bswap32.conditionFlags == 0x02)
 
         let bswap64Memory = GuestMemory(size: 32)
