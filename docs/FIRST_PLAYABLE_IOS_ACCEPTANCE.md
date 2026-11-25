@@ -119,16 +119,13 @@ These items remain outside the first static-ELF milestone and should be implemen
 
 ## Repository/CI coordination and latest validation status
 
-GitLab `main` is `afda2d49ded6ddbbdb55bf9fd3bee834fda7b846`. GitHub `main` is `30a05994eeac607a4a57716f2d384cea6ee57047`; direct comparison confirms GitHub is an ancestor of GitLab. GitLab has eight commits after the shared `30a05994` base:
+GitLab `main` is `ad65030d252df581504b5d6918fbe3a193e423bc`. GitHub `main` is `21a312a28ab0586307d4f4d112ece1c04ccecad2`; direct comparison confirms GitHub is an ancestor of GitLab. GitLab has five commits after the shared `21a312a2` base:
 
-- `3ca7cd9c` updates the hybrid-runtime architecture documentation for atomic memory-form XCHG.
-- `763b38ab` updates the static-ELF Swift test double with exchange methods so interpreter tests conform to the native GuestMemory API. The mock is single-threaded; native C++ tests prove atomicity.
-- `af00bceb` adds conservative CPUID reporting and a monotonic 1 GHz virtual RDTSC counter, with interpreter regressions and architecture documentation.
-- `2876b49d` refreshes the first-playable acceptance and legacy feature-parity audit against the current implementation.
-- `21a312a2` fixes a malformed literal newline in the Linux console input/display parity row and refreshes the current-main status.
-- `8ba65bca` refreshes the acceptance/parity documents after the current-main change.
+- `8ba65bca` refreshes acceptance/parity status after the shared GitHub main `21a312a2`.
 - `adf6a271` implements the F3 90 PAUSE spin-wait hint as a no-op with a regression.
 - `afda2d49` makes core-only IPA validation accept textual and numeric Mach-O iOS device platform values and checks `CFBundleSupportedPlatforms`.
+- `1fc1e129` records the latest core-only iOS build evidence and owner-gated synchronization requirement.
+- `ad65030d` adds a source-validator regression for the numeric/textual Mach-O iOS platform handling.
 
 The configured synchronization direction is GitHub-to-GitLab. Publishing these newer GitLab commits back to GitHub requires the existing owner-gated reconciliation. No force-push, reset, rebase, branch creation, PR merge, or branch deletion has been performed.
 
@@ -145,8 +142,9 @@ The configured synchronization direction is GitHub-to-GitLab. Publishing these n
 
 ### Hosted validation evidence
 
-- GitLab pipeline IID 1237 / ID `3112567653` on source SHA `30a05994` and IID 1240 / ID `3112583329` on `af00bceb` both failed before runner assignment with `ci_quota_exceeded`; no tests ran. Docs-only heads `2876b49d` and `21a312a2` have not passed an exact-head hosted validation run.
+- GitLab pipelines IID 1237 (`30a05994`), 1240 (`af00bceb`), 1241 (`2876b49d`), 1242 (`adf6a271`) and 1243 (`1fc1e129`) failed before runner assignment with `ci_quota_exceeded`; no tests ran. The current `ad65030d` source-validator test has no hosted result.
 - GitHub AOT workflow run `45577650906` passed on older source `e2dcb994`, including its tested restricted AOT path, interpreter differential checks, JIT revocation checks, and a static-ELF run reporting `blocks=2`. It predates atomic memory XCHG and CPUID/RDTSC; it is not exact-current-main evidence.
+- GitHub core-only IPA run `45580260610` on older source `2f082fae` passed interpreter, AOT translator/cache, syscall, static ELF, native GuestMachine, cleanup, backend-routing and LocalDevVPN test stages; it built the unsigned iOS device app and packaged the QEMU-free IPA, but the old IPA validator rejected the Mach-O platform representation and skipped artifact upload. GitHub AOT run `45580260753` passed on the same older source. Commit `afda2d49` fixes the validator and `ad65030d` tests the parser; the fixed workflow has not yet been run.
 - Earlier platform workflow run `45576869713` on `4192b5e8` passed tvOS/visionOS simulator builds and an unsigned physical-device iOS ARM64 compile. It is compile-only evidence from an older commit, not a current IPA, signed installation, or guest execution.
 - No current-head IPA artifact, SideStore installation, or physical iPad guest execution is verified.
 
