@@ -62,8 +62,8 @@ jobs:
             echo "A newer build-relevant commit exists; required build jobs will still execute."
           fi
 
-  # This reusable workflow runs inside this run and uploads the artifact here.
-  # App jobs cannot start until the runtime is successfully compiled and packaged.
+  # This reusable workflow builds the runtime and uploads its artifact only when
+  # the compatibility review allows it; platform jobs still execute on failure.
   qemu-runtime:
     needs: [validate-release-channel, check-push-freshness]
     # QEMU is GPL-2.0-only; gate public runtime artifacts pending compatibility review.
@@ -344,8 +344,10 @@ jobs:
         env:
           CHANNEL_VALIDATION_RESULT: ${{ needs.validate-release-channel.result }}
           PUSH_FRESHNESS_RESULT: ${{ needs.check-push-freshness.result }}
+          PUSH_FRESHNESS_OUTPUT: ${{ needs.check-push-freshness.outputs.build }}
           QEMU_RUNTIME_RESULT: ${{ needs.qemu-runtime.result }}
           PLATFORM_CHECK_RESULT: ${{ needs.check-platform-build-freshness.result }}
+          PLATFORM_FRESHNESS_OUTPUT: ${{ needs.check-platform-build-freshness.outputs.build }}
           PLATFORM_BUILD_RESULT: ${{ needs.build.result }}
           QEMU_GPL_APPROVED: ${{ vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED }}
         shell: bash
@@ -354,6 +356,12 @@ jobs:
           for result in "$CHANNEL_VALIDATION_RESULT" "$PUSH_FRESHNESS_RESULT" "$QEMU_RUNTIME_RESULT" "$PLATFORM_CHECK_RESULT" "$PLATFORM_BUILD_RESULT"; do
             if [ "$result" != "success" ]; then
               echo "::error::A required build prerequisite did not succeed (result: $result)." >&2
+              exit 1
+            fi
+          done
+          for freshness in "$PUSH_FRESHNESS_OUTPUT" "$PLATFORM_FRESHNESS_OUTPUT"; do
+            if [ "$freshness" != "true" ]; then
+              echo "::error::A required freshness check did not approve this source revision (output: $freshness)." >&2
               exit 1
             fi
           done

@@ -212,9 +212,24 @@ jobs:
               raise SystemExit("Publisher must read the QEMU GPL compatibility approval.")
           if 'if [ "$QEMU_GPL_APPROVED" != "true" ]; then' not in release:
               raise SystemExit("Publisher must fail closed when QEMU GPL approval is absent.")
-          for required in ("needs.validate-release-channel.result", "needs.check-push-freshness.result", "needs.qemu-runtime.result", "needs.build.result"):
+          for required in (
+              "needs.validate-release-channel.result",
+              "needs.check-push-freshness.result",
+              "needs.check-push-freshness.outputs.build",
+              "needs.qemu-runtime.result",
+              "needs.check-platform-build-freshness.result",
+              "needs.check-platform-build-freshness.outputs.build",
+              "needs.build.result",
+          ):
               if required not in release:
-                  raise SystemExit("Publisher preflight must verify prerequisite result: " + required)
+                  raise SystemExit("Publisher preflight must verify prerequisite: " + required)
+          for required in (
+              'if [ "$freshness" != "true" ]; then',
+              'PUSH_FRESHNESS_OUTPUT: ' + chr(36) + "{{ needs.check-push-freshness.outputs.build }}",
+              'PLATFORM_FRESHNESS_OUTPUT: ' + chr(36) + "{{ needs.check-platform-build-freshness.outputs.build }}",
+          ):
+              if required not in release:
+                  raise SystemExit("Publisher must fail closed on freshness output: " + required)
           for obsolete in ("PAGES_TOKEN", "I-Steam/I-steam.github.io", "i-steam.github.io"):
               if obsolete in release:
                   raise SystemExit("Legacy website publishing must be handled by the website repository updater: " + obsolete)
