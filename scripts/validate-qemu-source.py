@@ -1696,7 +1696,7 @@ for token in ("aotExecutor.execute(", "rip = result.exitRip", "aotExecutor?.inva
               "budget * Self.maximumX86InstructionLength",
               "let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff",
               "aotExecutor?.refreshAvailability() == true",
-              "if stopRequested { return .interrupted }"):
+              "if shouldStopExecution() { return .interrupted }"):
     if token not in aot_interpreter:
         print(f"AOT interpreter integration missing {token!r}", file=sys.stderr)
         failed = True

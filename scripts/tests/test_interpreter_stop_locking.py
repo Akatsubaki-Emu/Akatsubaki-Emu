@@ -25,5 +25,12 @@ class InterpreterStopLockingTests(unittest.TestCase):
         self.assertGreaterEqual(source.count("shouldStopExecution()"), 3)
 
 
+    def test_source_validator_tracks_locked_stop_state_helper(self):
+        validator = (ROOT / "scripts" / "validate-qemu-source.py").read_text(encoding="utf-8")
+        self.assertIn('"if shouldStopExecution() { return .interrupted }"', validator)
+        self.assertNotIn('"if stopRequested { return .interrupted }"', validator)
+
+
+
 if __name__ == "__main__":
     unittest.main()
