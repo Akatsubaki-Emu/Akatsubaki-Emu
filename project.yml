@@ -2,6 +2,9 @@ name: iSteam
 options:
   bundleIdPrefix: com.Xthrx
   xcodeVersion: "26.0"
+  fileTypes:
+    icon:
+      file: true
   deploymentTarget:
     iOS: "16.0"
     tvOS: "17.0"
@@ -43,6 +46,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam
         PRODUCT_NAME: iSteam
+        ASSETCATALOG_COMPILER_APPICON_NAME: AkatsubakiDefault
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AkatsubakiHaloPetals AkatsubakiPetals AkatsubakiSimple"
+        INFOPLIST_KEY_AkatsubakiPrimaryIconName: AkatsubakiDefault
         INFOPLIST_KEY_CFBundleDisplayName: Akatsubaki Emu
         INFOPLIST_FILE: iSteam/Info.plist
         CODE_SIGN_ENTITLEMENTS: iSteam/iSteam.entitlements
@@ -74,6 +80,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.xthrx.isteam.nightly
         PRODUCT_NAME: iSteam
+        ASSETCATALOG_COMPILER_APPICON_NAME: AkatsubakiSimple
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AkatsubakiDefault AkatsubakiHaloPetals AkatsubakiPetals"
+        INFOPLIST_KEY_AkatsubakiPrimaryIconName: AkatsubakiSimple
         INFOPLIST_KEY_CFBundleDisplayName: Akatsubaki Emu Nightly
         INFOPLIST_FILE: iSteam/Info.plist
         CODE_SIGN_ENTITLEMENTS: iSteam/iSteam.entitlements
