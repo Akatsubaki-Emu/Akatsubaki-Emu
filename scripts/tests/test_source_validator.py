@@ -877,14 +877,17 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn('if job.get("result") != "success"', guard)
         self.assertIn("raise SystemExit(1)", guard)
 
-    def test_mirror_reconciliation_only_changes_do_not_trigger_release_builds(self):
+    def test_release_workflow_runs_for_main_push_and_reconciliation_completion(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
         freshness = (root / "scripts" / "check-build-freshness.sh").read_text(encoding="utf-8")
-        ignored_path = ".github/workflows/reconcile-gitlab-main.yml"
-        paths_ignore = workflow.split("paths-ignore:", 1)[1].split("schedule:", 1)[0]
-        self.assertIn(ignored_path, paths_ignore)
-        self.assertIn(ignored_path, freshness)
+        self.assertIn("  push:\\n    branches: [main]\\n", workflow)
+        self.assertNotIn("paths-ignore:", workflow)
+        self.assertIn(
+            '  workflow_run:\\n    workflows: ["Reconcile GitLab mirror history"]\\n    types: [completed]\\n    branches: [main]\\n',
+            workflow,
+        )
+        self.assertIn(".github/workflows/reconcile-gitlab-main.yml", freshness)
 
     def test_aot_c7_entry_guard_respects_guest_page_boundary(self):
         root = Path(__file__).resolve().parents[2]
