@@ -925,6 +925,15 @@ final class X86_64Interpreter: GuestCPUBackend {
                     registers[3] = UInt64(ebx)
                     registers[1] = UInt64(ecx)
                     registers[2] = UInt64(edx)
+                } else if second >= 0xC8 && second <= 0xCF {
+                    // BSWAP is flag-neutral; REX.B selects r8-r15 and REX.W selects 64-bit width.
+                    let register = Int(second - 0xC8) | ((rex & 0x01) != 0 ? 8 : 0)
+                    if rex & 0x08 != 0 {
+                        registers[register] = registers[register].byteSwapped
+                    } else {
+                        let value = UInt32(truncatingIfNeeded: registers[register]).byteSwapped
+                        registers[register] = UInt64(value)
+                    }
                 } else if second == 0xB6 || second == 0xBE {
                     guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
                         return instructionFetchFailure(at: instructionAddress)
@@ -1218,12 +1227,16 @@ final class X86_64Interpreter: GuestCPUBackend {
                   cursor + 2 <= pageRemaining else { return false }
             return canTranslateRegisterExtensionAtCurrentWindow(modRMOffset: cursor + 1)
         case 0x0F:
-            // MOVZX/MOVSX byte/word forms are translated only for register operands.
-            guard cursor + 3 <= 15,
-                  cursor + 3 <= instructionWindowLength,
-                  cursor + 3 <= pageRemaining else { return false }
+            guard cursor + 2 <= 15,
+                  cursor + 2 <= instructionWindowLength,
+                  cursor + 2 <= pageRemaining else { return false }
             switch instructionWindow[cursor + 1] {
+            case 0xC8...0xCF:
+                return true
             case 0xB6, 0xB7, 0xBE, 0xBF:
+                guard cursor + 3 <= 15,
+                      cursor + 3 <= instructionWindowLength,
+                      cursor + 3 <= pageRemaining else { return false }
                 return canTranslateRegisterExtensionAtCurrentWindow(modRMOffset: cursor + 2)
             default:
                 return false

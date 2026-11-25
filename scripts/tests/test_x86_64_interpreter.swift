@@ -411,7 +411,9 @@ struct InterpreterTests {
             ([0x48, 0x0F, 0xB6, 0xC0, 0x0F, 0x0B], 4), // MOVZX RAX, AL
             ([0x48, 0x0F, 0xB7, 0xC0, 0x0F, 0x0B], 4), // MOVZX RAX, AX
             ([0x48, 0x0F, 0xBE, 0xC0, 0x0F, 0x0B], 4), // MOVSX RAX, AL
-            ([0x48, 0x0F, 0xBF, 0xC0, 0x0F, 0x0B], 4)  // MOVSX RAX, AX
+            ([0x48, 0x0F, 0xBF, 0xC0, 0x0F, 0x0B], 4), // MOVSX RAX, AX
+            ([0x0F, 0xC8, 0x0F, 0x0B], 2), // BSWAP EAX
+            ([0x49, 0x0F, 0xC9, 0x0F, 0x0B], 3) // BSWAP R9
         ]
         for (program, sideExitAddress) in extensionStartPrograms {
             let extensionMemory = GuestMemory(size: 64)
@@ -754,6 +756,30 @@ struct InterpreterTests {
         let movsxdExit = try movsxd.run(maxInstructions: 4)
         precondition(movsxdExit == .unsupportedInstruction(address: 8))
         precondition(movsxd.registerValue(0) == UInt64.max)
+
+        let bswap32Memory = GuestMemory(size: 32)
+        precondition(bswap32Memory.write(Data([
+            0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+            0x0F, 0xC8, 0x0F, 0x0B
+        ]), offset: 0))
+        let bswap32 = X86_64Interpreter(memory: bswap32Memory)
+        try bswap32.reset(entryPoint: 0)
+        let bswap32Exit = try bswap32.run(maxInstructions: 4)
+        precondition(bswap32Exit == .unsupportedInstruction(address: 12))
+        precondition(bswap32.registerValue(0) == 0x44332211)
+        precondition(bswap32.conditionFlags == 0x02)
+
+        let bswap64Memory = GuestMemory(size: 32)
+        precondition(bswap64Memory.write(Data([
+            0x49, 0xB9, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+            0x49, 0x0F, 0xC9, 0x0F, 0x0B
+        ]), offset: 0))
+        let bswap64 = X86_64Interpreter(memory: bswap64Memory)
+        try bswap64.reset(entryPoint: 0)
+        let bswap64Exit = try bswap64.run(maxInstructions: 4)
+        precondition(bswap64Exit == .unsupportedInstruction(address: 13))
+        precondition(bswap64.registerValue(9) == 0x8877665544332211)
+        precondition(bswap64.conditionFlags == 0x02)
 
         let imulMemory = GuestMemory(size: 64)
         precondition(imulMemory.write(Data([0x48, 0xC7, 0xC0, 0xFE, 0xFF, 0xFF, 0xFF,

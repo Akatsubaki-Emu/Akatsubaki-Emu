@@ -299,6 +299,20 @@ struct KenranButoAOTTranslatorTests {
         let movsxdWithoutREXW = translator.translate(Data([0x63, 0xC3]))
         precondition(movsxdWithoutREXW.stopReason == .unsupportedInstruction && movsxdWithoutREXW.guestBytesConsumed == 0)
 
+        // BSWAP is flag-neutral and maps to REV W/X, including REX.B registers.
+        let bswap32 = translator.translate(Data([0x0F, 0xC8]))
+        precondition(bswap32.isComplete && bswap32.guestBytesConsumed == 2 && bswap32.instructionCount == 1)
+        precondition(word(bswap32.machineCode, 0) == 0x5AC00800)
+        let bswap64 = translator.translate(Data([0x48, 0x0F, 0xC8]))
+        precondition(bswap64.isComplete && bswap64.guestBytesConsumed == 3 && bswap64.instructionCount == 1)
+        precondition(word(bswap64.machineCode, 0) == 0xDAC00C00)
+        let bswapR9 = translator.translate(Data([0x49, 0x0F, 0xC9]))
+        precondition(bswapR9.isComplete && word(bswapR9.machineCode, 0) == 0xDAC00D29)
+        let bswapR8D = translator.translate(Data([0x41, 0x0F, 0xC8]))
+        precondition(bswapR8D.isComplete && word(bswapR8D.machineCode, 0) == 0x5AC00908)
+        let bswapTruncated = translator.translate(Data([0x0F]))
+        precondition(bswapTruncated.stopReason == .truncatedInstruction && bswapTruncated.guestBytesConsumed == 0)
+
         // MOVZX/SX can follow an eligible block-start MOV in one translated block.
         let movThenExtend = translator.translate(Data([0xB8, 1, 0, 0, 0, 0x0F, 0xB6, 0xC0, 0x0F, 0x0B]))
         precondition(movThenExtend.stopReason == .unsupportedInstruction)
@@ -389,7 +403,7 @@ struct KenranButoAOTTranslatorTests {
         precondition(multiInstructionBlock.guestBytesConsumed == 20)
         precondition(multiInstructionBlock.instructionCount == 4)
         precondition(multiInstructionBlock.fallbackOpcode == 0x0F)
-        precondition(X86_64AOTTranslator.translatorVersion == "11")
+        precondition(X86_64AOTTranslator.translatorVersion == "12")
         let oversizedBudgets = translator.translate(
             guest, maximumInstructions: Int.max,
             maximumOutputBytes: Int.max & ~3,

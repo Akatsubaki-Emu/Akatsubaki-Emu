@@ -50,7 +50,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
 struct X86_64AOTTranslator {
     static let translatorIdentifier = "kenran-buto-aot-arm64"
     // Bump whenever emitted code or decoding semantics change.
-    static let translatorVersion = "11"
+    static let translatorVersion = "12"
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
@@ -463,8 +463,8 @@ struct X86_64AOTTranslator {
                                                  sourceLSB: 0, is64Bit: true, signExtend: true))
 
             case 0x0F:
-                // Register-only MOVZX/MOVSX byte/word forms. Memory operands
-                // and unrelated 0F opcodes remain interpreter side exits.
+                // BSWAP and register-only MOVZX/MOVSX forms preserve x86 flags.
+                // Memory operands and unrelated 0F opcodes remain interpreter side exits.
                 guard cursor < bytes.count else {
                     if bytes.count < guestCodeCount {
                         return result(output, consumed: start, instructions: instructions,
@@ -475,42 +475,47 @@ struct X86_64AOTTranslator {
                 }
                 let secondOpcode = bytes[cursor]
                 cursor += 1
-                let sourceBits: Int
-                let signExtend: Bool
-                switch secondOpcode {
-                case 0xB6: sourceBits = 8; signExtend = false
-                case 0xB7: sourceBits = 16; signExtend = false
-                case 0xBE: sourceBits = 8; signExtend = true
-                case 0xBF: sourceBits = 16; signExtend = true
-                default:
-                    return fallback(output, consumed: start, instructions: instructions,
-                                    reason: .unsupportedInstruction, opcode: bytes[start])
-                }
-                guard cursor < bytes.count else {
-                    if bytes.count < guestCodeCount {
-                        return result(output, consumed: start, instructions: instructions,
-                                      reason: .inputLimit, fallbackOffset: start)
+                if (0xC8...0xCF).contains(secondOpcode) {
+                    let register = Int(secondOpcode - 0xC8) | ((rex & 0x01) != 0 ? 8 : 0)
+                    words.append(Self.reverseBytes(register, is64Bit: (rex & 0x08) != 0))
+                } else {
+                    let sourceBits: Int
+                    let signExtend: Bool
+                    switch secondOpcode {
+                    case 0xB6: sourceBits = 8; signExtend = false
+                    case 0xB7: sourceBits = 16; signExtend = false
+                    case 0xBE: sourceBits = 8; signExtend = true
+                    case 0xBF: sourceBits = 16; signExtend = true
+                    default:
+                        return fallback(output, consumed: start, instructions: instructions,
+                                        reason: .unsupportedInstruction, opcode: bytes[start])
                     }
-                    return fallback(output, consumed: start, instructions: instructions,
-                                    reason: .truncatedInstruction, opcode: bytes[start])
+                    guard cursor < bytes.count else {
+                        if bytes.count < guestCodeCount {
+                            return result(output, consumed: start, instructions: instructions,
+                                          reason: .inputLimit, fallbackOffset: start)
+                        }
+                        return fallback(output, consumed: start, instructions: instructions,
+                                        reason: .truncatedInstruction, opcode: bytes[start])
+                    }
+                    let modRM = bytes[cursor]
+                    cursor += 1
+                    guard modRM >> 6 == 0b11 else {
+                        return fallback(output, consumed: start, instructions: instructions,
+                                        reason: .unsupportedInstruction, opcode: bytes[start])
+                    }
+                    let destination = Int((modRM >> 3) & 0x07) | ((rex & 0x04) != 0 ? 8 : 0)
+                    let sourceField = Int(modRM & 0x07)
+                    let highByteRegister = rex == 0 && (4...7).contains(sourceField)
+                    let source = highByteRegister
+                        ? sourceField - 4
+                        : sourceField | ((rex & 0x01) != 0 ? 8 : 0)
+                    let sourceLSB = highByteRegister ? 8 : 0
+                    words.append(Self.extendRegister(source, to: destination,
+                                                     sourceBits: sourceBits, sourceLSB: sourceLSB,
+                                                     is64Bit: (rex & 0x08) != 0,
+                                                     signExtend: signExtend))
                 }
-                let modRM = bytes[cursor]
-                cursor += 1
-                guard modRM >> 6 == 0b11 else {
-                    return fallback(output, consumed: start, instructions: instructions,
-                                    reason: .unsupportedInstruction, opcode: bytes[start])
-                }
-                let destination = Int((modRM >> 3) & 0x07) | ((rex & 0x04) != 0 ? 8 : 0)
-                let sourceField = Int(modRM & 0x07)
-                let highByteRegister = rex == 0 && (4...7).contains(sourceField)
-                let source = highByteRegister
-                    ? sourceField - 4
-                    : sourceField | ((rex & 0x01) != 0 ? 8 : 0)
-                let sourceLSB = highByteRegister ? 8 : 0
-                words.append(Self.extendRegister(source, to: destination,
-                                                 sourceBits: sourceBits, sourceLSB: sourceLSB,
-                                                 is64Bit: (rex & 0x08) != 0,
-                                                 signExtend: signExtend))
 
             case 0xF3:
                 // ENDBR64 is not assumed to be a NOP: guest CET policy is not
@@ -662,6 +667,12 @@ struct X86_64AOTTranslator {
         let imms = UInt32(sourceLSB + sourceBits - 1)
         return opcode | (immr << 16) | (imms << 10)
             | (UInt32(source) << 5) | UInt32(destination)
+    }
+
+    /// BSWAP is flag-neutral and maps directly to AArch64 REV.
+    private static func reverseBytes(_ register: Int, is64Bit: Bool) -> UInt32 {
+        let opcode: UInt32 = is64Bit ? 0xDAC00C00 : 0x5AC00800
+        return opcode | (UInt32(register) << 5) | UInt32(register)
     }
 
     /// XCHG preserves guest flags. Three flag-neutral EOR operations swap
