@@ -1818,7 +1818,7 @@ struct InterpreterTests {
             // A C7 instruction crossing the guest-page boundary must not start
             // an AOT block because the translator receives only the current page.
             let pageCrossingProgram = Data([0x48, 0xC7, 0xC0, 0x2A, 0x00, 0x00, 0x00, 0x0F, 0x0B])
-            let pageCrossingMemory = GuestMemory(size: 8192)
+            let pageCrossingMemory = GuestMemory(size: 0x3000)
             precondition(pageCrossingMemory.write(pageCrossingProgram, offset: 0x1FFB))
             let pageCrossingBaseline = X86_64Interpreter(memory: pageCrossingMemory)
             let pageCrossingHybrid = X86_64Interpreter(memory: pageCrossingMemory, aotExecutor: executor)
