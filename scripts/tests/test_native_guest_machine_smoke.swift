@@ -125,7 +125,8 @@ struct NativeGuestMachineSmoke {
 
         machine.stop()
         precondition(machine.memory.allocatedPageCount == 0, "GuestMachine stop did not release native guest pages")
-        precondition(machine.memory.readByte(offset: 0x402000) == nil, "Guest memory remained readable after stop")
+        precondition(machine.memory.readByte(offset: 0x402000) == 0, "Guest data memory was not zeroed after stop")
+        precondition(machine.memory.readByte(offset: 0x401000) == 0, "Guest executable memory was not zeroed after stop")
         print("C-backed GuestMachine loaded, ran twice, captured stdout and released guest pages")
     }
 }

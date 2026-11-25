@@ -197,6 +197,7 @@ jobs:
         run: |
           set -euo pipefail
           swiftc -parse-as-library -swift-version 5 \
+            src/Runtime/GuestProcess.swift \
             src/Runtime/WindowsPEImage.swift \
             scripts/tests/test_windows_pe_image.swift \
             -o "$RUNNER_TEMP/test-windows-pe-image"

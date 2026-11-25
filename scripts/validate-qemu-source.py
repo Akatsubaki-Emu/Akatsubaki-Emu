@@ -517,6 +517,10 @@ required = {
         "KENRAN_BUTO_RUNTIME_OK",
         "subprocess.run",
     ],
+    "scripts/tests/NativeGuestMachine-Bridging-Header.h": [
+        '#include "iSteam/NativeEmulation.h"',
+        '#include "iSteam/NativeGuestMemory.h"',
+    ],
     "scripts/tests/test_native_guest_machine_smoke.swift": [
         "struct VMConfiguration",
         "final class HostDeviceBridge",
@@ -527,6 +531,8 @@ required = {
         "KENRAN_BUTO_RUNTIME_OK",
         "machine.stop()",
         "allocatedPageCount == 0",
+        "readByte(offset: 0x402000) == 0",
+        "readByte(offset: 0x401000) == 0",
     ],
     "scripts/tests/test_static_elf_execution.swift": [
         "KENRAN_BUTO_AOT_TESTS",
@@ -543,6 +549,11 @@ required = {
         "func mapTransaction(offset: UInt64, length: UInt64, permissions: UInt8,",
         "func resizeBreak(from oldBreak: UInt64, to newBreak: UInt64) -> GuestMemoryTransactionResult",
         "static func testGeneratedRuntimeSmokeELF(at url: URL) throws",
+        "programHeaderAddress == 0x400040",
+        "programHeaderCount == 2",
+        "func exchangeByte(_ value: UInt8, offset: UInt64) -> UInt8?",
+        "func exchangeUInt32(_ value: UInt32, offset: UInt64) -> UInt32?",
+        "func exchangeUInt64(_ value: UInt64, offset: UInt64) -> UInt64?",
         "KENRAN_BUTO_RUNTIME_OK",
         "Runtime smoke guest did not exit with status 0",
         "memory.readByte(offset: 0x402104)",
@@ -1185,8 +1196,14 @@ required = {
         "test_windows_pe_image.swift",
         "python -m unittest discover -s scripts/tests -p 'test_*.py'",
     ],
+    ".github/workflows/build-core-only-ios.yml": [
+        "scripts/tests/NativeGuestMachine-Bridging-Header.h",
+        "iSteam/NativeEmulation.c",
+        "native-emulation.o",
+    ],
     ".github/workflows/validate-ios-build.yml": [
         "src/Runtime/LinuxSyscallDispatcher.swift",
+        "src/Runtime/GuestProcess.swift",
         "      - src/**",
         "      - iSteam/**",
         "      - project.yml",

@@ -670,6 +670,8 @@ struct StaticELFExecutionTests {
         let memory = GuestMemory(size: 16 * 1024 * 1024)
         let image = try ELF64Loader().load(url, into: memory, expectedArchitecture: .x86_64)
         precondition(image.entryPoint == 0x401000, "Runtime smoke ELF entry point changed")
+        precondition(image.programHeaderAddress == 0x400040, "Runtime smoke ELF program headers must be mapped in PT_LOAD")
+        precondition(image.programHeaderCount == 2, "Runtime smoke ELF program-header count changed")
 
         let stack = try LinuxProcessStackBuilder().build(
             executablePath: url.path,

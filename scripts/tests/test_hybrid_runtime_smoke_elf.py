@@ -34,8 +34,9 @@ class HybridRuntimeSmokeELFTests(unittest.TestCase):
 
             rx = struct.unpack_from("<IIQQQQQQ", image, 64)
             rw = struct.unpack_from("<IIQQQQQQ", image, 120)
+            self.assertLessEqual(fields[5] + fields[9] * fields[10], rx[2] + rx[5])
             self.assertEqual((rx[0], rx[1], rx[2], rx[3], rx[5], rx[6]),
-                             (1, 5, 0x1000, 0x401000, 0x1000, 0x1000))
+                             (1, 5, 0, 0x400000, 0x2000, 0x2000))
             self.assertEqual((rw[0], rw[1], rw[2], rw[3], rw[5], rw[6]),
                              (1, 6, 0x2000, 0x402000, 1, 0x1000))
             self.assertEqual(len(image), 0x2001)

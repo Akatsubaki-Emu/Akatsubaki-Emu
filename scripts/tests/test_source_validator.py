@@ -641,6 +641,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertNotIn("let relaFileOffset = fileOffset(", relocation)
 
 
+    def test_windows_pe_import_validation_compiles_guest_process_manager(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github" / "workflows" / "validate-ios-build.yml").read_text(encoding="utf-8")
+        step = workflow.split("- name: Test bounded Windows PE import directory parsing", 1)[1].split("\n      - name:", 1)[0]
+        self.assertIn("src/Runtime/GuestProcess.swift", step)
+        self.assertIn("src/Runtime/WindowsPEImage.swift", step)
+        self.assertIn("scripts/tests/test_windows_pe_image.swift", step)
+
     def test_platform_validation_compiles_physical_ios_arm64(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github" / "workflows" / "validate-ios-build.yml").read_text(encoding="utf-8")

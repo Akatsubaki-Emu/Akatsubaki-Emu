@@ -60,7 +60,7 @@ def build_elf() -> bytes:
         b"\x7fELF" + bytes((2, 1, 1, 0, 0)) + bytes(7),
         2, 62, 1, BASE, 64, 0, 0, 64, 56, 2, 64, 0, 0,
     )
-    phdr_rx = struct.pack("<IIQQQQQQ", 1, 5, PAGE, BASE, BASE, PAGE, PAGE, PAGE)
+    phdr_rx = struct.pack("<IIQQQQQQ", 1, 5, 0, 0x400000, 0x400000, 2 * PAGE, 2 * PAGE, PAGE)
     phdr_rw = struct.pack("<IIQQQQQQ", 1, 6, 2 * PAGE, DATA, DATA, 1, PAGE, PAGE)
     header = ehdr + phdr_rx + phdr_rw
     if len(header) > PAGE:
