@@ -17,6 +17,8 @@ The repository now contains:
 - A Linux syscall subset including \`uname\`, \`write\`, and \`exit\`.
 - \`GuestMachine\` orchestration with the x86-64 interpreter and native C-backed guest memory.
 - A partial x86-64-to-ARM64 AOT translator, translated-code cache, backend routing, and interpreter fallback.
+- Atomic memory-form XCHG for 1-, 4-, and 8-byte operands through a mutex-serialized native guest-memory API, including cross-page accesses and permission checks.
+- Conservative CPUID feature reporting and a monotonic 1 GHz virtual RDTSC counter; unsupported instructions still fall back to the interpreter.
 - A 32 MiB TXM executable arena for StikDebug-backed AOT memory, with exact-allocation tracking, coalescing, and concurrency regression tests.
 - An application import-to-launch route through \`LibraryViewController\`, \`ConsoleViewController\`, \`GameLauncher\`, \`LinuxELFRuntime\`, and \`GuestMachine\`.
 
@@ -117,37 +119,47 @@ These items remain outside the first static-ELF milestone and should be implemen
 
 ## Repository/CI coordination and latest validation status
 
-GitLab `main` is `345b1bba392f8aff0e28085e57473a7166ff55ae`; GitHub `main` is `4192b5e8f5fd0758f508b00a4511bc9554a64d5d`. GitLab is a direct fast-forward descendant of GitHub through five commits: `9025ccaf` (acceptance documentation), `3026c1bf` (interpreter stop-state locking), `fae7c262` (register-only XCHG fallback, syscall test mapping and action-version correction), `e2dcb994` (feature-parity/acceptance status refresh), and `345b1bba` (memory-form XCHG fail-closed regression). No histories have been rewritten.
+GitLab `main` is `af00bceb1cb96433f87976a2ceec1828f0e7e601`. GitHub `main` is `30a05994eeac607a4a57716f2d384cea6ee57047`; direct comparison confirms GitHub is an ancestor of GitLab. GitLab has three commits after the shared `30a05994` base:
 
-The configured automatic synchronization pushes GitHub to GitLab and refuses to overwrite a newer GitLab head. The existing GitLab-to-GitHub reconciliation workflow requires explicit owner authorization. No reconciliation, force-push, reset, rebase, PR merge or branch creation has been performed.
+- `3ca7cd9c` updates the hybrid-runtime architecture documentation for atomic memory-form XCHG.
+- `763b38ab` updates the static-ELF Swift test double with exchange methods so interpreter tests conform to the native GuestMemory API. The mock is single-threaded; native C++ tests prove atomicity.
+- `af00bceb` adds conservative CPUID reporting and a monotonic 1 GHz virtual RDTSC counter, with interpreter regressions and architecture documentation.
+
+The configured synchronization direction is GitHub-to-GitLab. Publishing these newer GitLab commits back to GitHub requires the existing owner-gated reconciliation. No force-push, reset, rebase, branch creation, PR merge, or branch deletion has been performed.
 
 ### Current source changes
 
-- `3026c1bf` adds a lock-protected interpreter stop-state read helper, removing the unsynchronized AOT-side stop-flag read, and adds a source-contract regression.
-- `fae7c262` implements register-only x86 `XCHG 0x87` in the interpreter, including REX.R/REX.B extension and 32-bit zero-extension; explicitly maps the syscall-test output buffers; and updates the metrics workflow artifact actions to Node.js 24-compatible `actions/upload-artifact@v7`.
-- `345b1bba` adds a regression proving memory-form XCHG remains unsupported until guest-memory atomics exist, preserves the instruction RIP, and does not modify guest memory.
+- `3026c1bf` adds a lock-protected interpreter stop-state read helper, removing the unsynchronized AOT-side stop-flag read.
+- `fae7c262` adds register-only x86 `XCHG 0x87`, maps syscall-test output buffers, and updates metrics artifact actions to `actions/upload-artifact@v7`.
+- `345b1bba` adds the memory-form XCHG fail-closed regression that was appropriate before guest-memory atomic operations existed.
+- `8f2dd2f5` adds register-only byte `XCHG 0x86`, including REX.B/REX.R register selection.
+- `30a05994` adds mutex-serialized native guest-memory exchange for 1-, 4-, and 8-byte operands, cross-page handling, permission validation, Swift wrappers, and interpreter memory-form `0x86`/`0x87` support. Native tests cover cross-page exchange, read-only rejection without mutation, and concurrent serialization.
+- `763b38ab` aligns the static-ELF Swift test double with the atomic exchange API.
+- `af00bceb` adds conservative CPUID leaves and a monotonic virtual RDTSC counter. SIMD features are deliberately not advertised; these additions do not make the interpreter a general x86-64 implementation.
 
 ### Hosted validation evidence
 
-- **Core-only iOS workflow** run `45576869550` checked out GitHub `4192b5e8`. It passed the Python validation stage, then stopped in the Swift syscall test at `test_linux_syscall_dispatcher.swift:391` because its output-buffer pages were not mapped. The fix is on GitLab `main` but has not been tested by GitHub Actions.
-- **GitHub Actions validation** run `45576869650` on `4192b5e8` found the two metrics uploads still used `actions/upload-artifact@v4` while the repository validator requires `@v7`; its Swift runtime job also stopped at the syscall-test buffer assertion. Both corrections are on GitLab `main`, not yet visible to GitHub.
-- **Platform validation** run `45576869713` on `4192b5e8`: tvOS and visionOS simulator builds passed; the iOS simulator job stopped at the same syscall test; the unsigned physical iOS ARM64 target compiled successfully with `CODE_SIGNING_ALLOWED=NO`. This is a compile result, not an IPA, signed installation or device execution.
-- **Kenran Butō AOT validation** run `45575957157` on `c25947b0` failed in the extended-register XCHG interpreter comparison at `test_x86_64_interpreter.swift:1863`. The register-only interpreter implementation is now on GitLab `main`, with an additional memory-form fail-closed test, but no exact-head AOT run has passed.
-- GitLab pipeline IID 1226 / ID `3112479648` on `fae7c262` and IID 1229 / ID `3112488468` on `345b1bba` both failed before runner assignment with `ci_quota_exceeded`. Their validation jobs had no runner and no duration; no tests ran.
+- GitLab pipeline IID 1237 / ID `3112567653` on source SHA `30a05994` failed before runner assignment with `ci_quota_exceeded`. No tests ran. The later `763b38ab` and `af00bceb` changes have not passed an exact-head hosted validation run.
+- GitHub AOT workflow run `45577650906` passed on older source `e2dcb994`, including its tested restricted AOT path, interpreter differential checks, JIT revocation checks, and a static-ELF run reporting `blocks=2`. It predates atomic memory XCHG and CPUID/RDTSC; it is not exact-current-main evidence.
+- Earlier platform workflow run `45576869713` on `4192b5e8` passed tvOS/visionOS simulator builds and an unsigned physical-device iOS ARM64 compile. It is compile-only evidence from an older commit, not a current IPA, signed installation, or guest execution.
+- No current-head IPA artifact, SideStore installation, or physical iPad guest execution is verified.
 
-### Current acceptance state
+### Runtime and older-feature boundary
 
-The source changes have been read back and checked, but the latest GitLab pipelines did not execute tests. GitHub Actions is still on the older `4192b5e8` head. No current-head IPA artifact, SideStore installation, or physical iPad guest execution is verified.
+The static ELF path remains a bounded diagnostic user-mode runtime, not a complete PC emulator. Linux `read(0, ...)` returns EOF; the console has no guest stdin adapter. Existing keyboard, F1–F12, touch, controller, and motion controls route to QEMU/VNC rather than `GuestMachine`. The Metal framebuffer is fed by VNC; the static ELF runtime has no independent guest-frame submission contract.
+
+FEXCore and Box64 are not operational iOS backends. Dynamic ELF loading, PT_TLS initialization, broad Linux syscall/thread/signal support, Windows PE execution, Wine/Proton, full-system OS boot, persistent block storage, and game-ready graphics/audio remain separate milestones. The existing UI/configuration options do not prove those guest capabilities.
 
 ### Required next actions
 
-1. Obtain explicit owner authorization for the existing safe GitLab-main-to-GitHub-main reconciliation so GitHub Actions can validate `345b1bba`. Do not force-push or merge any PR branches.
-2. Run AOT validation, repository validation, platform compilation and the QEMU-free core-only iOS IPA workflow against the exact reconciled commit; fix any newly exposed failures.
-3. Produce and checksum the unsigned physical-device ARM64 IPA, then sign/install it through SideStore.
-4. Import both diagnostic ELF guests through the app's real UI and verify their success markers, exit status 0, repeat launches, stop/reset and guest-page cleanup on the physical iPad.
-5. Validate TXM/AOT separately. The no-JIT interpreter smoke path must remain usable without StikDebug; iOS/iPadOS 27+ AOT pairing requires StikDebug 3.2.2 or newer.
+1. Retry native-memory, interpreter, AOT, and full repository validation against exact GitLab `main` when runner quota recovers.
+2. Obtain explicit owner authorization before using the existing GitLab-main-to-GitHub-main reconciliation; do not force-push or merge PR branches.
+3. Produce and checksum the current unsigned physical-device ARM64 IPA, sign/install it through SideStore, and run both static ELF diagnostic guests through the app's real import-to-runtime path on the physical iPad.
+4. Record output markers, exit status 0, repeat launches, stop/reset behavior, and guest-memory cleanup.
+5. After physical guest execution is proven, implement a bounded stdin queue with stop/reset wakeup, a shared keyboard/touch/controller event sink, and a GuestMachine framebuffer contract feeding Metal.
+6. Validate TXM/AOT separately. The no-JIT interpreter path must remain usable without StikDebug; iOS/iPadOS 27+ TXM/AOT pairing requires StikDebug 3.2.2 or newer.
 
-A simulator build, host-side ELF run, source-level JIT implementation, or IPA archive alone does not satisfy the physical-device acceptance gates.
+A simulator build, host-side ELF execution, source-level JIT implementation, or IPA archive alone does not satisfy the physical-device acceptance gates.
 
 ## Definition of done
 
