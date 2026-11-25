@@ -859,6 +859,14 @@ class SourceValidatorTests(unittest.TestCase):
         publish = workflow.index("- name: Publish combined release")
         self.assertLess(verify, final_check)
         self.assertLess(final_check, metadata)
+        initial_check = workflow.index("- name: Check that this run still targets the latest main commit")
+        initial_download = workflow.index("- name: Download iOS build")
+        initial_block = workflow[initial_check:initial_download]
+        final_block = workflow[final_check:metadata]
+        for block in (initial_block, final_block):
+            with self.subTest(freshness_check=block.splitlines()[0]):
+                self.assertIn('if [ "$publish_current" != "true" ]; then', block)
+                self.assertIn("exit 1", block)
         self.assertLess(metadata, publish)
         metadata_step = workflow[metadata:publish]
         publish_step = workflow[publish:]
