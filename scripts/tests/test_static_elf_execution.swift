@@ -739,7 +739,27 @@ struct StaticELFExecutionTests {
         try run(Data([0xB8, 0x00, 0x00, 0x00, 0x80, 0x48, 0x98, 0x48, 0x99, 0xF4]),
                 expectedRAX: 0xFFFFFFFF80000000,
                 expectedRDX: UInt64.max)
-        print("CWDE/CDQE/CDQ/CQO interpreter and AOT side-exit tests passed")
+        // CBW writes only AX: upper RAX bits must survive the 8-to-16-bit extension.
+        try run(Data([0xB8, 0x80, 0x00, 0xAD, 0xDE, 0x66, 0x98, 0xF4]),
+                expectedRAX: 0x00000000DEADFF80, expectedRDX: 0)
+        // CWD writes only DX: upper RDX bits must survive the 16-to-32-bit extension.
+        try run(Data([0xB8, 0x00, 0x80, 0x34, 0x12, 0xBA, 0x34, 0x12, 0xCD, 0xAB, 0x66, 0x99, 0xF4]),
+                expectedRAX: 0x0000000012348000, expectedRDX: 0x00000000ABCDFFFF)
+        // REX.W overrides 0x66 and retains the 64-bit CDQE/CQO forms.
+        try run(Data([0xB8, 0x00, 0x00, 0x00, 0x80, 0x66, 0x48, 0x98, 0x66, 0x48, 0x99, 0xF4]),
+                expectedRAX: 0xFFFFFFFF80000000, expectedRDX: UInt64.max)
+
+        // A 16-bit prefix on an unimplemented arithmetic instruction must fail closed.
+        let unsupportedMemory = GuestMemory(size: 4096)
+        precondition(unsupportedMemory.write(Data([0x66, 0x01, 0xC8]), offset: 0))
+        let unsupportedInterpreter = X86_64Interpreter(memory: unsupportedMemory)
+        try unsupportedInterpreter.reset(entryPoint: 0)
+        let unsupportedExit = try unsupportedInterpreter.run(maxInstructions: 1)
+        guard case .unsupportedInstruction(address: let unsupportedAddress) = unsupportedExit else {
+            preconditionFailure("Unsupported 16-bit arithmetic did not side-exit")
+        }
+        precondition(unsupportedAddress == 0 && unsupportedInterpreter.instructionPointer == 0)
+        print("CBW/CWD/CWDE/CDQE/CDQ/CQO interpreter and AOT side-exit tests passed")
     }
 
     static func main() throws {

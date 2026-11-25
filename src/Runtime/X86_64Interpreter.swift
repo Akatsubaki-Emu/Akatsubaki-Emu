@@ -173,6 +173,7 @@ final class X86_64Interpreter: GuestCPUBackend {
             guard var opcode = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
             var rex: UInt8 = 0
             var lockPrefix = false
+            var operandSizeOverride = false
             activeSegmentBase = 0
             var endbrPrefix = false
             var prefixCount = 0
@@ -189,6 +190,9 @@ final class X86_64Interpreter: GuestCPUBackend {
                 } else if opcode == 0xF3 {
                     endbrPrefix = true
                     rex = 0
+                } else if opcode == 0x66 {
+                    operandSizeOverride = true
+                    rex = 0
                 } else if opcode >= 0x40 && opcode <= 0x4F {
                     rex = opcode
                 } else {
@@ -201,6 +205,20 @@ final class X86_64Interpreter: GuestCPUBackend {
                 }
                 guard let next = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
                 opcode = next
+            }
+
+            // This interpreter only implements 0x66 for CBW/CWD, and the
+            // accumulator-self XCHG/NOP forms whose semantics are unchanged.
+            // All other 16-bit operand forms remain an explicit fallback.
+            if operandSizeOverride {
+                let accumulatorXchg = (0x90...0x97).contains(opcode)
+                let rexW = rex & 0x08 != 0
+                let rexB = rex & 0x01 != 0
+                let supportedXchg = accumulatorXchg && (rexW || (opcode == 0x90 && !rexB))
+                guard opcode == 0x98 || opcode == 0x99 || supportedXchg else {
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
             }
 
             // F3 90 is PAUSE, a spin-wait hint with NOP architectural effects.
@@ -342,18 +360,26 @@ final class X86_64Interpreter: GuestCPUBackend {
                     guard let immediate = fetchUInt32() else { return instructionFetchFailure(at: instructionAddress) }
                     registers[index] = UInt64(immediate)
                 }
-            case 0x98: // CWDE or CDQE
+            case 0x98: // CBW, CWDE or CDQE
                 if rex & 0x08 != 0 {
                     let eax = UInt32(truncatingIfNeeded: registers[0])
                     registers[0] = UInt64(bitPattern: Int64(Int32(bitPattern: eax)))
+                } else if operandSizeOverride {
+                    let al = UInt8(truncatingIfNeeded: registers[0])
+                    let ax = UInt16(truncatingIfNeeded: Int16(Int8(bitPattern: al)))
+                    registers[0] = (registers[0] & ~UInt64(0xFFFF)) | UInt64(ax)
                 } else {
                     let ax = UInt16(truncatingIfNeeded: registers[0])
                     let signExtended = Int32(Int16(bitPattern: ax))
                     registers[0] = UInt64(UInt32(bitPattern: signExtended))
                 }
-            case 0x99: // CDQ or CQO
+            case 0x99: // CWD, CDQ or CQO
                 if rex & 0x08 != 0 {
                     registers[2] = (registers[0] & (UInt64(1) << 63)) == 0 ? 0 : UInt64.max
+                } else if operandSizeOverride {
+                    let ax = UInt16(truncatingIfNeeded: registers[0])
+                    let dx: UInt16 = ax & 0x8000 == 0 ? 0 : UInt16.max
+                    registers[2] = (registers[2] & ~UInt64(0xFFFF)) | UInt64(dx)
                 } else {
                     registers[2] = (registers[0] & (UInt64(1) << 31)) == 0 ? 0 : UInt64(UInt32.max)
                 }

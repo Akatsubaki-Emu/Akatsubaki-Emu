@@ -146,6 +146,13 @@ struct KenranButoAOTTranslatorTests {
         let cqo = translator.translate(Data([0x48, 0x99]))
         precondition(cqo.isComplete && cqo.instructionCount == 1)
         precondition(word(cqo.machineCode, 0) == 0x937FFC02) // ASR X2, X0, #63
+        // 16-bit CBW/CWD are deliberately left to the interpreter, not miscompiled as 32-bit forms.
+        let cbwSideExit = translator.translate(Data([0x66, 0x98]))
+        precondition(cbwSideExit.stopReason == .unsupportedInstruction)
+        precondition(cbwSideExit.guestBytesConsumed == 0 && cbwSideExit.fallbackOpcode == 0x66)
+        let cwdSideExit = translator.translate(Data([0x66, 0x99]))
+        precondition(cwdSideExit.stopReason == .unsupportedInstruction)
+        precondition(cwdSideExit.guestBytesConsumed == 0 && cwdSideExit.fallbackOpcode == 0x66)
 
         // Register-only accumulator XCHG forms preserve 32/64-bit semantics.
         let exchanges = translator.translate(Data([0x91, 0x49, 0x90]))
