@@ -4,19 +4,6 @@ on:
   # Build the runtime in this workflow before any platform app builds.
   push:
     branches: [main]
-    paths-ignore:
-      - .github/workflows/blank.yml
-      - .github/workflows/reconcile-gitlab-main.yml
-      - .github/workflows/validate-ios-build.yml
-      - .github/workflows/validate-repository.yml
-      - ".github/workflows/Update stats.yml"
-      - scripts/tests/**
-      - README.md
-      - CONTRIBUTING.md
-      - INSTALL.md
-      - LICENSE
-      - docs/**
-      - scripts/validate-qemu-source.py
   schedule:
     - cron: "0 2 * * *"
   # Reconciliation may push a merge commit with GITHUB_TOKEN, which does not
@@ -45,9 +32,6 @@ permissions:
 jobs:
   validate-release-channel:
     name: Validate release channel
-    # For workflow_run, only build when reconciliation succeeded and created a
-    # newer main commit; this avoids duplicate QEMU builds on no-op reconciliations.
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_sha != github.sha)
     runs-on: ubuntu-latest
     steps:
       - name: Require main ref for Main channel
@@ -84,7 +68,8 @@ jobs:
   qemu-runtime:
     needs: [validate-release-channel, check-push-freshness]
     # QEMU is GPL-2.0-only; gate public runtime artifacts pending compatibility review.
-    if: needs.check-push-freshness.outputs.build == 'true' && vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'
+    # Always invoke the reusable build; licensing controls artifact publication, not execution.
+    if: ${{ always() }}
     uses: ./.github/workflows/build-qemu-runtime.yml
     with:
       rebuild_dependencies: false
@@ -94,6 +79,7 @@ jobs:
   check-platform-build-freshness:
     name: Check freshness before platform builds
     needs: qemu-runtime
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.freshness.outputs.build }}
@@ -114,8 +100,8 @@ jobs:
 
   build:
     needs: [qemu-runtime, check-platform-build-freshness]
-    # The combined GPL-3.0 IPA is gated pending QEMU compatibility review.
-    if: needs.check-platform-build-freshness.outputs.build == 'true' && vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'
+    # Execute the platform matrix even when an upstream job fails; report failures explicitly.
+    if: ${{ always() }}
     name: Build ${{ matrix.platform }} (${{ matrix.channel }})
     runs-on: xcode-27
     timeout-minutes: 45
@@ -335,8 +321,9 @@ jobs:
     name: Publish combined ${{ matrix.channel }} release
     permissions:
       contents: write
-    needs: build
-    if: vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true' && needs.build.result == 'success'
+    needs: [validate-release-channel, qemu-runtime, check-platform-build-freshness, build]
+    # Run the publisher job on every workflow invocation, but fail closed before publishing.
+    if: ${{ always() }}
     concurrency:
       # Keep QEMU and platform builds parallel; serialize only updates to a shared release tag.
       group: isteam-release-publish-${{ matrix.channel }}
@@ -354,6 +341,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Require successful build prerequisites and QEMU GPL compatibility approval
+        env:
+          CHANNEL_VALIDATION_RESULT: ${{ needs.validate-release-channel.result }}
+          QEMU_RUNTIME_RESULT: ${{ needs.qemu-runtime.result }}
+          PLATFORM_CHECK_RESULT: ${{ needs.check-platform-build-freshness.result }}
+          PLATFORM_BUILD_RESULT: ${{ needs.build.result }}
+          QEMU_GPL_APPROVED: ${{ vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for result in "$CHANNEL_VALIDATION_RESULT" "$QEMU_RUNTIME_RESULT" "$PLATFORM_CHECK_RESULT" "$PLATFORM_BUILD_RESULT"; do
+            if [ "$result" != "success" ]; then
+              echo "::error::A required build prerequisite did not succeed (result: $result)." >&2
+              exit 1
+            fi
+          done
+          if [ "$QEMU_GPL_APPROVED" != "true" ]; then
+            echo "::error::QEMU GPL compatibility review is not approved; refusing to publish combined binaries." >&2
+            exit 1
+          fi
+
       - name: Check that this run still targets the latest main commit
         id: freshness
         shell: bash
@@ -362,7 +370,8 @@ jobs:
           publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
           echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
           if [ "$publish_current" != "true" ]; then
-            echo "Skipping release publication because a newer build-relevant main commit exists."
+            echo "::error::This run is stale; refusing to report a successful no-op release." >&2
+            exit 1
           fi
 
       - name: Download iOS build
@@ -408,7 +417,8 @@ jobs:
           publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"
           echo "publish=$publish_current" >> "$GITHUB_OUTPUT"
           if [ "$publish_current" != "true" ]; then
-            echo "Skipping release publication because a newer build-relevant main commit exists."
+            echo "::error::The source became stale before publishing; refusing to report success." >&2
+            exit 1
           fi
 
       - name: Set release metadata
