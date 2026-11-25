@@ -8,6 +8,8 @@ on:
       - src/**
       - iSteam/**
       - project.yml
+      - Icons/**
+      - scripts/prepare-app-icons.sh
       - scripts/tests/**
       - scripts/validate-qemu-source.py
       - scripts/check-validation-freshness.sh
