@@ -24,6 +24,7 @@ class InterpreterExecuteFetchTests(unittest.TestCase):
         )[0]
         self.assertIn("let pageRemaining = 4096 - Int(rip & 0xFFF)", eligibility)
         self.assertIn("cursor < min(instructionWindowLength, pageRemaining)", eligibility)
+        self.assertIn("case 0x98, 0x99:", eligibility)
         self.assertIn("cursor + 2 <= pageRemaining", eligibility)
         self.assertIn("let immediateBytes = rex & 0x08 != 0 ? 8 : 4", eligibility)
         self.assertIn("instructionEnd <= pageRemaining", eligibility)

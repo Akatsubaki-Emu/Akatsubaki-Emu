@@ -759,7 +759,22 @@ struct StaticELFExecutionTests {
             preconditionFailure("Unsupported 16-bit arithmetic did not side-exit")
         }
         precondition(unsupportedAddress == 0 && unsupportedInterpreter.instructionPointer == 0)
-        print("CBW/CWD/CWDE/CDQE/CDQ/CQO interpreter and AOT side-exit tests passed")
+
+        // REX.W overrides 0x66, so this remains a 64-bit ADD rather than a 16-bit fallback.
+        let rexOverrideMemory = GuestMemory(size: 4096)
+        let rexOverrideCode = Data([
+            0x48, 0xB8, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x48, 0xB9, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x66, 0x48, 0x01, 0xC8, 0xF4
+        ])
+        precondition(rexOverrideMemory.write(rexOverrideCode, offset: 0))
+        let rexOverrideInterpreter = X86_64Interpreter(memory: rexOverrideMemory)
+        try rexOverrideInterpreter.reset(entryPoint: 0)
+        let rexOverrideExit = try rexOverrideInterpreter.run(maxInstructions: 4)
+        precondition(rexOverrideExit == .halted, "REX.W must override 0x66 for 64-bit ADD")
+        precondition(rexOverrideInterpreter.registerValue(0) == 3, "REX.W-prefixed ADD produced the wrong result")
+
+        print("CBW/CWD/CWDE/CDQE/CDQ/CQO and REX.W override interpreter tests passed")
     }
 
     static func main() throws {

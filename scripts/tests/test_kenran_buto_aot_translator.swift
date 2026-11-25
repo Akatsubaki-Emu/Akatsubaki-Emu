@@ -146,6 +146,8 @@ struct KenranButoAOTTranslatorTests {
         let cqo = translator.translate(Data([0x48, 0x99]))
         precondition(cqo.isComplete && cqo.instructionCount == 1)
         precondition(word(cqo.machineCode, 0) == 0x937FFC02) // ASR X2, X0, #63
+        let signExtensionBlock = translator.translate(Data([0xB8, 0x00, 0x80, 0x00, 0x00, 0x98, 0x99]))
+        precondition(signExtensionBlock.isComplete && signExtensionBlock.instructionCount == 3)
         // 16-bit CBW/CWD are deliberately left to the interpreter, not miscompiled as 32-bit forms.
         let cbwSideExit = translator.translate(Data([0x66, 0x98]))
         precondition(cbwSideExit.stopReason == .unsupportedInstruction)

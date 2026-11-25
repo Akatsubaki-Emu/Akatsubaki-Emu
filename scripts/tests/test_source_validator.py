@@ -872,8 +872,9 @@ class SourceValidatorTests(unittest.TestCase):
     def test_aot_architecture_docs_match_translator_version(self):
         root = Path(__file__).resolve().parents[2]
         docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
-        self.assertIn("Translator version 9 emits", docs)
-        self.assertIn("Translator version 9 enforces", docs)
+        self.assertIn("Translator version 10 emits", docs)
+        self.assertIn("Translator version 10 enforces", docs)
+        self.assertIn("CWDE/CDQE and CDQ/CQO", docs)
         self.assertIn("register-only MOVZX/MOVSX", docs)
         self.assertIn("MOVSXD", docs)
         self.assertIn("accumulator/register XCHG", docs)
@@ -891,7 +892,14 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("func refreshAvailability() -> Bool", executor)
         self.assertIn("func refreshAvailability() -> Bool", interpreter)
         self.assertIn("aotExecutor?.refreshAvailability() == true", interpreter)
-        self.assertRegex(translator, r'static let translatorVersion = "\d+"')
+        self.assertIn("static let translatorVersion = \"10\"", translator)
+        self.assertIn("case 0x98:", translator)
+        self.assertIn("case 0x99:", translator)
+        self.assertIn("arithmeticShiftRight", translator)
+        eligibility = interpreter.split("private func canStartAOTBlock() -> Bool {", 1)[1].split(
+            "private func canTranslateRegisterXCHGAtCurrentWindow", 1
+        )[0]
+        self.assertIn("case 0x98, 0x99:", eligibility)
         self.assertIn("case 0x0F:", translator)
         self.assertIn("case 0x63:", translator)
         self.assertIn("extendRegister", translator)

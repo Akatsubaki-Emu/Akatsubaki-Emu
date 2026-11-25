@@ -32,6 +32,7 @@ class AOTWindowBudgetTests(unittest.TestCase):
         )[0]
         self.assertIn("let pageRemaining = 4096 - Int(rip & 0xFFF)", eligibility)
         self.assertIn("cursor < min(instructionWindowLength, pageRemaining)", eligibility)
+        self.assertIn("case 0x98, 0x99:", eligibility)
         self.assertIn("cursor + 2 <= pageRemaining", eligibility)
         self.assertIn("instructionEnd <= pageRemaining", eligibility)
         self.assertIn("let aotPageRemaining = 4096 - Int(instructionAddress & 0xFFF)", source)

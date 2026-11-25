@@ -210,12 +210,11 @@ final class X86_64Interpreter: GuestCPUBackend {
             // This interpreter only implements 0x66 for CBW/CWD, and the
             // accumulator-self XCHG/NOP forms whose semantics are unchanged.
             // All other 16-bit operand forms remain an explicit fallback.
-            if operandSizeOverride {
-                let accumulatorXchg = (0x90...0x97).contains(opcode)
-                let rexW = rex & 0x08 != 0
-                let rexB = rex & 0x01 != 0
-                let supportedXchg = accumulatorXchg && (rexW || (opcode == 0x90 && !rexB))
-                guard opcode == 0x98 || opcode == 0x99 || supportedXchg else {
+            // REX.W overrides 0x66. Only enforce the narrow 16-bit subset
+            // when the effective operand size is actually 16 bits.
+            if operandSizeOverride && (rex & 0x08) == 0 {
+                let accumulatorNop = opcode == 0x90 && (rex & 0x01) == 0
+                guard opcode == 0x98 || opcode == 0x99 || accumulatorNop else {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)
                 }
@@ -1184,6 +1183,8 @@ final class X86_64Interpreter: GuestCPUBackend {
         guard cursor < instructionWindowLength, cursor < pageRemaining else { return false }
         switch instructionWindow[cursor] {
         case 0x90...0x97:
+            return true
+        case 0x98, 0x99:
             return true
         case 0x87:
             guard cursor + 2 <= instructionWindowLength,

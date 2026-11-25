@@ -16,6 +16,7 @@ The current translator emits only operations whose semantics are fully modelled:
 - accumulator/register XCHG forms (0x90–0x97), 32/64-bit including REX.B register extension
 - Register-only MOVZX/MOVSX r32/r64, r/m8/r/m16 (0F B6/B7/BE/BF with ModRM mod=3), including legacy high-byte selection without REX
 - Register-only MOVSXD r64,r/m32 (0x63 with REX.W and ModRM mod=3)
+- CWDE/CDQE and CDQ/CQO (0x98/0x99), including 16→32, 32→64 and sign-derived EDX/RDX results
 - Register-only XCHG r/m32,r/m64 (0x87 with ModRM mod=3), including REX.R/REX.B extensions
 
 The translator stops before the first unsupported instruction and reports the exact guest-byte offset. It does not currently emit guest memory accesses, arithmetic, branches, syscalls, privileged instructions, or SIMD. RIP-relative LEA uses the guest block RIP and signed disp32; address-size/segment overrides, memory-form XCHG, and base/index LEA displacements outside the bounded immediate subset still side-exit to the interpreter. Arithmetic flags therefore remain unchanged by translated blocks. ENDBR64 remains an interpreter side-exit until guest CET policy is explicitly implemented.
