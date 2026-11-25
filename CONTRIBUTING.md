@@ -40,6 +40,7 @@ Building the Apple targets requires a Mac with a compatible version of Xcode and
 brew install xcodegen
 git clone https://github.com/Akatsubaki-Emu/Akatsubaki-Emu.git
 cd Akatsubaki-Emu
+bash scripts/prepare-app-icons.sh
 xcodegen generate --spec project.yml
 ```
 
