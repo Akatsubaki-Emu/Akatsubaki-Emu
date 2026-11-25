@@ -50,7 +50,7 @@ struct X86_64AOTTranslation: Codable, Equatable {
 struct X86_64AOTTranslator {
     static let translatorIdentifier = "kenran-buto-aot-arm64"
     // Bump whenever emitted code or decoding semantics change.
-    static let translatorVersion = "10"
+    static let translatorVersion = "11"
     static let hostArchitecture = "arm64"
     static let cpuFeatures = ["armv8-a-baseline"]
     static let maximumX86InstructionLength = 15
@@ -137,6 +137,27 @@ struct X86_64AOTTranslator {
                     words = Self.exchangeRegisters(0, register, is64Bit: (rex & 0x08) != 0)
                 }
 
+            case 0xB0...0xB7:
+                let registerField = Int(opcode - 0xB0)
+                let usesHighByte = rex == 0 && registerField >= 4
+                let register = usesHighByte
+                    ? registerField - 4
+                    : registerField | ((rex & 0x01) != 0 ? 8 : 0)
+                let bitOffset = usesHighByte ? 8 : 0
+                guard cursor - start <= Self.maximumX86InstructionLength - 1 else {
+                    return fallback(.unsupportedInstruction, start: start, consumed: start)
+                }
+                guard cursor < bytes.count else {
+                    if bytes.count < guestCodeCount {
+                        return fallback(.inputLimit, start: start, consumed: start)
+                    }
+                    return fallback(.truncatedInstruction, start: start, consumed: start)
+                }
+                let immediate = bytes[cursor]
+                cursor += 1
+                words.append(Self.moveWide(UInt16(immediate), register: 16, half: 0,
+                                            is64Bit: true, keep: false))
+                words.append(Self.insertByte(from: 16, into: register, bitOffset: bitOffset))
             case 0xB8...0xBF:
                 let register = Int(opcode - 0xB8) | ((rex & 0x01) != 0 ? 8 : 0)
                 let is64Bit = (rex & 0x08) != 0
@@ -593,6 +614,13 @@ struct X86_64AOTTranslator {
             ? (keep ? 0xF2800000 : 0xD2800000)
             : (keep ? 0x72800000 : 0x52800000)
         return base | (UInt32(half) << 21) | (UInt32(immediate) << 5) | UInt32(register)
+    }
+
+    /// BFI Xd, Xn, #lsb, #8 preserves every guest register bit outside the byte.
+    private static func insertByte(from source: Int, into destination: Int, bitOffset: Int) -> UInt32 {
+        let immr = UInt32((64 - bitOffset) & 0x3F)
+        return 0xB3400000 | (immr << 16) | (UInt32(7) << 10)
+            | (UInt32(source) << 5) | UInt32(destination)
     }
 
     private static func addShiftedRegister(_ base: Int, _ index: Int, scale: Int,

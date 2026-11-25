@@ -39,6 +39,54 @@ struct KenranButoAOTTranslatorTests {
         precondition(word(registerMoves.machineCode, 0) == 0x2A0303E0) // ORR W0, WZR, W3
         precondition(word(registerMoves.machineCode, 1) == 0xAA0003E3) // ORR X3, XZR, X0
 
+        // MOV r8, imm8 preserves the other 56 guest-register bits.
+        let movALImmediate = translator.translate(Data([0xB0, 0x7F]))
+        precondition(movALImmediate.isComplete && movALImmediate.guestBytesConsumed == 2
+                     && movALImmediate.instructionCount == 1)
+        precondition(word(movALImmediate.machineCode, 0) == 0xD2800FF0)
+        precondition(word(movALImmediate.machineCode, 1) == 0xB3401E00)
+
+        // Without REX, B4-B7 address AH/CH/DH/BH rather than SPL/BPL/SIL/DIL.
+        let movAHImmediate = translator.translate(Data([0xB4, 0x80]))
+        precondition(movAHImmediate.isComplete && movAHImmediate.guestBytesConsumed == 2)
+        precondition(word(movAHImmediate.machineCode, 0) == 0xD2801010)
+        precondition(word(movAHImmediate.machineCode, 1) == 0xB3781E00)
+        let movBHImmediate = translator.translate(Data([0xB7, 0xFF]))
+        precondition(movBHImmediate.isComplete && movBHImmediate.guestBytesConsumed == 2)
+        precondition(word(movBHImmediate.machineCode, 0) == 0xD2801FF0)
+        precondition(word(movBHImmediate.machineCode, 1) == 0xB3781E03)
+
+        // Any REX prefix disables high-byte registers; REX.B extends the low-byte register.
+        let movSPLImmediate = translator.translate(Data([0x40, 0xB4, 0x42]))
+        precondition(movSPLImmediate.isComplete && movSPLImmediate.guestBytesConsumed == 3)
+        precondition(word(movSPLImmediate.machineCode, 0) == 0xD2800850)
+        precondition(word(movSPLImmediate.machineCode, 1) == 0xB3401E04)
+        let movR12BImmediate = translator.translate(Data([0x41, 0xB4, 0x42]))
+        precondition(movR12BImmediate.isComplete && movR12BImmediate.guestBytesConsumed == 3)
+        precondition(word(movR12BImmediate.machineCode, 1) == 0xB3401E0C)
+        let movR15BImmediate = translator.translate(Data([0x41, 0xB7, 0xAB]))
+        precondition(movR15BImmediate.isComplete && movR15BImmediate.guestBytesConsumed == 3)
+        precondition(word(movR15BImmediate.machineCode, 0) == 0xD2801570)
+        precondition(word(movR15BImmediate.machineCode, 1) == 0xB3401E0F)
+        let movREXRImmediate = translator.translate(Data([0x44, 0xB4, 0x42]))
+        precondition(movREXRImmediate.isComplete && movREXRImmediate.guestBytesConsumed == 3)
+        precondition(word(movREXRImmediate.machineCode, 1) == 0xB3401E04)
+
+        let movByteTruncated = translator.translate(Data([0xB0]))
+        precondition(movByteTruncated.stopReason == .truncatedInstruction)
+        precondition(movByteTruncated.guestBytesConsumed == 0)
+        let movByteInputLimited = translator.translate(Data([0xB0, 0x7F]), maximumGuestBytes: 1)
+        precondition(movByteInputLimited.stopReason == .inputLimit)
+        precondition(movByteInputLimited.guestBytesConsumed == 0)
+        let movByteOutputLimited = translator.translate(Data([0xB0, 0x7F]), maximumOutputBytes: 4)
+        precondition(movByteOutputLimited.stopReason == .outputLimit)
+        precondition(movByteOutputLimited.guestBytesConsumed == 0)
+        let movByteThenUnsupported = translator.translate(Data([0xB0, 0x7F, 0x0F, 0x0B]))
+        precondition(movByteThenUnsupported.stopReason == .unsupportedInstruction)
+        precondition(movByteThenUnsupported.guestBytesConsumed == 2)
+        precondition(movByteThenUnsupported.instructionCount == 1)
+        precondition(movByteThenUnsupported.fallbackOpcode == 0x0F)
+
         // C7 /0 register-only immediates preserve x86 MOV width semantics.
         let movImmediate32 = translator.translate(Data([0xC7, 0xC0, 0x78, 0x56, 0x34, 0x12]))
         precondition(movImmediate32.isComplete && movImmediate32.guestBytesConsumed == 6)
@@ -341,7 +389,7 @@ struct KenranButoAOTTranslatorTests {
         precondition(multiInstructionBlock.guestBytesConsumed == 20)
         precondition(multiInstructionBlock.instructionCount == 4)
         precondition(multiInstructionBlock.fallbackOpcode == 0x0F)
-        precondition(X86_64AOTTranslator.translatorVersion == "10")
+        precondition(X86_64AOTTranslator.translatorVersion == "11")
         let oversizedBudgets = translator.translate(
             guest, maximumInstructions: Int.max,
             maximumOutputBytes: Int.max & ~3,

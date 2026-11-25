@@ -543,6 +543,63 @@ struct StaticELFExecutionTests {
         print("Guest execute-prefix permission boundary contract passed")
     }
 
+    static func testByteImmediateInstructions() throws {
+        func run(_ code: [UInt8], register: Int, expectedValue: UInt64) throws {
+            let memory = GuestMemory(size: 4096)
+            precondition(memory.write(Data(code), offset: 0))
+#if KENRAN_BUTO_AOT_TESTS
+            let aotExecutor = KenranButoAOTExecutor()
+            precondition(aotExecutor.refreshAvailability(),
+                         "ARM64 AOT test host must provide executable memory")
+            let interpreter = X86_64Interpreter(memory: memory, aotExecutor: aotExecutor)
+#else
+            let interpreter = X86_64Interpreter(memory: memory)
+#endif
+            try interpreter.reset(entryPoint: 0)
+            let exit = try interpreter.run(maxInstructions: 8)
+            precondition(exit == .halted, "MOV r8, imm8 sequence did not halt")
+            precondition(interpreter.registerValue(register) == expectedValue,
+                         "MOV r8, imm8 produced the wrong register value")
+            precondition(interpreter.conditionFlags == 0x2,
+                         "MOV r8, imm8 must preserve RFLAGS")
+#if KENRAN_BUTO_AOT_TESTS
+            precondition(aotExecutor.blocksExecuted > 0,
+                         "MOV r8, imm8 sequence did not execute through AOT")
+#endif
+        }
+
+        let baseRAX: [UInt8] = [
+            0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11
+        ]
+        let baseRSP: [UInt8] = [
+            0x48, 0xBC, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ]
+        let baseR12: [UInt8] = [
+            0x49, 0xBC, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88
+        ]
+        let baseR15: [UInt8] = [
+            0x49, 0xBF, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88
+        ]
+
+        // Start directly at B0 to verify AOT block-entry eligibility.
+        try run([0xB0, 0x7F, 0xF4], register: 0, expectedValue: 0x7F)
+        // AH is selected only without REX and changes bits 8...15 of RAX.
+        try run(baseRAX + [0xB4, 0xAA, 0xF4],
+                register: 0, expectedValue: 0x112233445566AA88)
+        // REX.B selects R12B/R15B; all upper bits remain unchanged.
+        try run(baseR12 + [0x41, 0xB4, 0x5A, 0xF4],
+                register: 12, expectedValue: 0x887766554433225A)
+        try run(baseR15 + [0x41, 0xB7, 0xAB, 0xF4],
+                register: 15, expectedValue: 0x88776655443322AB)
+        // Any REX prefix disables AH; B4 becomes SPL, including REX.R-only.
+        try run(baseRSP + [0x40, 0xB4, 0x42, 0xF4],
+                register: 4, expectedValue: 0x842)
+        try run(baseRSP + [0x44, 0xB4, 0x42, 0xF4],
+                register: 4, expectedValue: 0x842)
+
+        print("MOV r8, imm8 register selection, AOT execution and RFLAGS tests passed")
+    }
+
     static func testDescriptorBoundELFSnapshot() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -789,6 +846,7 @@ struct StaticELFExecutionTests {
 
         testExecutePrefixPermissionBoundary()
         try testSignExtensionInstructions()
+        try testByteImmediateInstructions()
         try testDescriptorBoundELFSnapshot()
         try testRejectsNonRegularELFSnapshot()
         try testFailedPIERelocationClearsGuestMemory()

@@ -340,6 +340,57 @@ struct InterpreterTests {
         precondition(unsupportedStartMemory.readPrefixCalls == 1)
 
 
+        // Byte-immediate MOV forms are eligible at AOT block entry, including
+        // legacy high-byte registers and REX-selected low-byte registers.
+        let byteImmediateStartPrograms: [([UInt8], Int, UInt64)] = [
+            ([0xB0, 0x7F, 0xCC], 0, 0x7F),
+            ([0xB4, 0x80, 0xCC], 0, 0x8000),
+            ([0x40, 0xB4, 0x42, 0xCC], 4, 0x42),
+            ([0x41, 0xB4, 0x42, 0xCC], 12, 0x42),
+            ([0x44, 0xB4, 0x42, 0xCC], 4, 0x42)
+        ]
+        for (program, register, expectedValue) in byteImmediateStartPrograms {
+            let memory = GuestMemory(size: 64)
+            precondition(memory.write(Data(program), offset: 0))
+            let aot = TestAOTExecutor(isAvailable: true)
+            let interpreter = X86_64Interpreter(memory: memory, aotExecutor: aot)
+            try interpreter.reset(entryPoint: 0)
+            let exit = try interpreter.run(maxInstructions: 2)
+            precondition(exit == .unsupportedInstruction(address: UInt64(program.count - 1)))
+            precondition(aot.executeCalls == 1)
+            precondition(aot.lastGuestCodeWindowLength == 30)
+            precondition(interpreter.registerValue(register) == expectedValue)
+            precondition(interpreter.instructionCount == 1)
+        }
+
+        // A byte-immediate instruction crossing a guest page must stay interpreted.
+        let bytePageBoundaryMemory = GuestMemory(size: 8192)
+        precondition(bytePageBoundaryMemory.write(Data([0xB0, 0x7F, 0xCC]), offset: 0xFFF))
+        let bytePageBoundaryAOT = TestAOTExecutor(isAvailable: true)
+        let bytePageBoundaryInterpreter = X86_64Interpreter(
+            memory: bytePageBoundaryMemory,
+            aotExecutor: bytePageBoundaryAOT
+        )
+        try bytePageBoundaryInterpreter.reset(entryPoint: 0xFFF)
+        let bytePageBoundaryExit = try bytePageBoundaryInterpreter.run(maxInstructions: 2)
+        precondition(bytePageBoundaryExit == .unsupportedInstruction(address: 0x1001))
+        precondition(bytePageBoundaryAOT.executeCalls == 0)
+        precondition(bytePageBoundaryInterpreter.registerValue(0) == 0x7F)
+        precondition(bytePageBoundaryInterpreter.instructionCount == 1)
+
+        // A truncated immediate must not be offered to the AOT executor.
+        let byteTruncatedMemory = GuestMemory(size: 1)
+        precondition(byteTruncatedMemory.write(Data([0xB0]), offset: 0))
+        let byteTruncatedAOT = TestAOTExecutor(isAvailable: true)
+        let byteTruncatedInterpreter = X86_64Interpreter(
+            memory: byteTruncatedMemory,
+            aotExecutor: byteTruncatedAOT
+        )
+        try byteTruncatedInterpreter.reset(entryPoint: 0)
+        let byteTruncatedExit = try byteTruncatedInterpreter.run(maxInstructions: 1)
+        precondition(byteTruncatedExit == .memoryFault(address: 1))
+        precondition(byteTruncatedAOT.executeCalls == 0)
+
         // REX.B accumulator XCHG must be offered to the AOT executor at block entry.
         let xchgStartMemory = GuestMemory(size: 64)
         precondition(xchgStartMemory.write(Data([0x49, 0x90, 0xCC]), offset: 0))

@@ -1190,6 +1190,12 @@ final class X86_64Interpreter: GuestCPUBackend {
             guard cursor + 2 <= instructionWindowLength,
                   cursor + 2 <= pageRemaining else { return false }
             return canTranslateRegisterXCHGAtCurrentWindow(opcodeOffset: cursor)
+        case 0xB0...0xB7:
+            // MOV r8, imm8 is exactly opcode plus one immediate byte.
+            let instructionEnd = cursor + 2
+            return instructionEnd <= 15
+                && instructionEnd <= instructionWindowLength
+                && instructionEnd <= pageRemaining
         case 0xB8...0xBF:
             let immediateBytes = rex & 0x08 != 0 ? 8 : 4
             let instructionEnd = cursor + 1 + immediateBytes
