@@ -301,6 +301,25 @@ final class GuestMemory {
         return true
     }
 
+    // This single-threaded test double mirrors exchange semantics; native C++ tests verify atomicity.
+    func exchangeByte(_ value: UInt8, offset: UInt64) -> UInt8? {
+        guard let previous = readByte(offset: offset),
+              writeByte(value, offset: offset) else { return nil }
+        return previous
+    }
+
+    func exchangeUInt32(_ value: UInt32, offset: UInt64) -> UInt32? {
+        guard let previous = readUInt32(offset: offset),
+              writeUInt32(value, offset: offset) else { return nil }
+        return previous
+    }
+
+    func exchangeUInt64(_ value: UInt64, offset: UInt64) -> UInt64? {
+        guard let previous = readUInt64(offset: offset),
+              writeUInt64(value, offset: offset) else { return nil }
+        return previous
+    }
+
     func read(offset: UInt64, length: Int) -> Data? {
         guard length >= 0, offset <= size, UInt64(length) <= size - offset,
               hasPermission(offset: offset, length: UInt64(length), required: 1) else { return nil }
