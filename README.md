@@ -116,6 +116,7 @@ Generate the Xcode project:
 
 ```sh
 brew install xcodegen
+bash scripts/prepare-app-icons.sh
 xcodegen generate --spec project.yml
 ```
 
