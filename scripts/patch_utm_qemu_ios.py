@@ -10,9 +10,8 @@ TCI_TARGET_LIST_UPSTREAM = "aarch64-softmmu,i386-softmmu,ppc-softmmu,ppc64-softm
 TCI_TARGET_LIST_PATTERN = r"^[a-z0-9_]+-softmmu(,[a-z0-9_]+-softmmu)*$"
 TCI_FLAGS_PREFIX = 'TCI_BUILD_FLAGS="--enable-tcg-threaded-interpreter --target-list='
 
-
 def tci_target_list_shell_block() -> str:
-    """Return the validated Bash block used by UTM's iOS TCI build."""
+    """Return the validated Bash block for UTM iOS TCI builds."""
     default = TCI_TARGET_LIST_DEFAULT
     return (
         'TCI_GUEST_TARGETS="
@@ -141,7 +140,6 @@ if __name__ == "__main__":
         '    exit 1\n'
         'fi'
     )
-
 
 def patch_tci_target_list(source: str) -> str:
     """Default the first-playable TCI runtime to x86_64, preserving explicit multi-arch builds."""
@@ -296,7 +294,6 @@ if __name__ == "__main__":
         + flags_tail + '"' + suffix
     )
     return source[:line_start] + "\n".join(new_lines) + source[line_end:]
-
 
 
 

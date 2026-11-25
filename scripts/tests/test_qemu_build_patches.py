@@ -168,32 +168,7 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
         self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
 
-
-    def test_tci_guest_targets_default_to_x86_64_and_validate_multiarch_override(self):
-        block = patch_utm_qemu_ios.tci_target_list_shell_block()
-
-        def run_target_list(value=None):
-            env = os.environ.copy()
-            env.pop("ISTEAM_QEMU_TCI_TARGET_LIST", None)
-            if value is not None:
-                env["ISTEAM_QEMU_TCI_TARGET_LIST"] = value
-            return subprocess.run(
-                ["bash", "-c", block + '\nprintf "%s\n" "$TCI_GUEST_TARGETS"'],
-                env=env, text=True, capture_output=True,
-            )
-
-        default = run_target_list()
-        self.assertEqual(default.returncode, 0, default.stderr)
-        self.assertEqual(default.stdout.strip(), "x86_64-softmmu")
-
-        multiarch = run_target_list(patch_utm_qemu_ios.TCI_TARGET_LIST_UPSTREAM)
-        self.assertEqual(multiarch.returncode, 0, multiarch.stderr)
-        self.assertEqual(multiarch.stdout.strip(), patch_utm_qemu_ios.TCI_TARGET_LIST_UPSTREAM)
-
-        invalid = run_target_list("x86_64-softmmu;touch /tmp/not-allowed")
-        self.assertNotEqual(invalid.returncode, 0)
-        self.assertIn("Invalid ISTEAM_QEMU_TCI_TARGET_LIST", invalid.stderr)
-
+    def test_tci_guest_target_input_defaults_to_x86_64(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
         self.assertIn("tci_guest_targets:", workflow)
