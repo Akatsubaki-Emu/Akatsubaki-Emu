@@ -814,7 +814,7 @@ required = {
         "grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks$' \"$JIT_DIR/exports.txt\"",
         "if grep -Eq '[[:space:]]_?isteam_qemu_set_jit_callbacks$' \"$TCI_DIR/exports.txt\"; then",
         'mkdir -p "$TEMP_OUT/Frameworks" "$TEMP_OUT/QEMU/JIT" "$TEMP_OUT/QEMU/TCI"',
-        'cp -a "$JIT_DIR/QEMU/." "$TEMP_OUT/QEMU/JIT/"',
+        'cp -a "$JIT_DIR/QEMU/JIT/." "$TEMP_OUT/QEMU/JIT/"',
         'cp -a "$TCI_DIR/QEMU/." "$TEMP_OUT/QEMU/TCI/"',
     ],
     "scripts/validate-qemu-runtime.sh": [
