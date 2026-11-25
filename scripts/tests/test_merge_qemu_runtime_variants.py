@@ -14,14 +14,17 @@ def make_package(root: Path, mode: str, *, revision: str = "utm-revision-1", cal
     root.mkdir(parents=True, exist_ok=True)
     (root / "Frameworks" / "QEMU.framework").mkdir(parents=True)
     (root / "Frameworks" / "Shared.framework").mkdir(parents=True)
-    (root / "QEMU").mkdir()
+    qemu_root = root / "QEMU"
+    qemu_root.mkdir()
+    mode_qemu = qemu_root / "JIT" if mode == "jit" else qemu_root
+    mode_qemu.mkdir(parents=True, exist_ok=True)
     (root / "UTM-SOURCE-REVISION.txt").write_text(revision + "\n", encoding="utf-8")
     (root / "QEMU-SOURCE-URL.txt").write_text("https://github.com/utmapp/qemu.git\n", encoding="utf-8")
     (root / "Frameworks" / "QEMU.framework" / "QEMU").write_text(
         qemu_bytes if qemu_bytes is not None else mode + " qemu binary", encoding="utf-8"
     )
     (root / "Frameworks" / "Shared.framework" / "Shared").write_text(shared_bytes, encoding="utf-8")
-    (root / "QEMU" / "runtime-library-path.txt").write_text(
+    (qemu_root / "runtime-library-path.txt").write_text(
         "Frameworks/QEMU.framework/QEMU\n", encoding="utf-8"
     )
     symbols = [f"00000000 T _{symbol}" for symbol in LIFECYCLE if symbol != missing_symbol]
@@ -30,8 +33,16 @@ def make_package(root: Path, mode: str, *, revision: str = "utm-revision-1", cal
         symbols.append("00000000 T _isteam_qemu_set_jit_callbacks")
     symbols.extend(extra_symbols or [])
     (root / "exports.txt").write_text("\n".join(symbols) + "\n", encoding="utf-8")
+    if mode == "jit":
+        (mode_qemu / "runtime-library-path.txt").write_text(
+            "Frameworks/QEMU.framework/QEMU\n", encoding="utf-8"
+        )
+        (mode_qemu / "exports.txt").write_text("\n".join(symbols) + "\n", encoding="utf-8")
     (root / "BUILD-INFO.txt").write_text(mode + " build\n", encoding="utf-8")
-    (root / "QEMU" / "bios.bin").write_text(mode + " bios\n", encoding="utf-8")
+    (mode_qemu / "bios.bin").write_text(mode + " bios\n", encoding="utf-8")
+    firmware = mode_qemu / "firmware" / "uefi"
+    firmware.mkdir(parents=True)
+    (firmware / "OVMF_CODE.fd").write_text(mode + " firmware\n", encoding="utf-8")
     return root
 
 
@@ -66,6 +77,16 @@ class MergeQEMURuntimeVariantsTests(unittest.TestCase):
                          "Frameworks/TCI/QEMU.framework/QEMU")
         self.assertTrue((output / "QEMU/JIT/bios.bin").is_file())
         self.assertTrue((output / "QEMU/TCI/bios.bin").is_file())
+        self.assertFalse((output / "QEMU/JIT/JIT").exists())
+        self.assertEqual((output / "QEMU/JIT/firmware/uefi/OVMF_CODE.fd").read_text(), "jit firmware\n")
+        self.assertEqual((output / "QEMU/TCI/firmware/uefi/OVMF_CODE.fd").read_text(), "tci firmware\n")
+
+    def test_rejects_missing_jit_mode_data_directory(self):
+        import shutil
+        shutil.rmtree(self.jit / "QEMU" / "JIT")
+        result = self.run_merge()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("missing JIT runtime data directory", result.stderr)
 
     def test_rejects_path_traversal_without_deleting_outside_sentinel(self):
         outside = self.root / "outside"

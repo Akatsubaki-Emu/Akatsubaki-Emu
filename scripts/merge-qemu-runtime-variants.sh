@@ -40,6 +40,11 @@ fi
 
 for package in "$JIT_DIR" "$TCI_DIR"; do
   [[ -d "$package/Frameworks" && ! -L "$package/Frameworks" && -d "$package/QEMU" && ! -L "$package/QEMU" ]] || fail "incomplete or symlinked package: $package"
+  if [[ "$package" == "$JIT_DIR" ]]; then
+    [[ -d "$package/QEMU/JIT" && ! -L "$package/QEMU/JIT" ]] || fail "missing JIT runtime data directory: $package/QEMU/JIT"
+    [[ -s "$package/QEMU/JIT/runtime-library-path.txt" ]] || fail "missing JIT runtime manifest: $package/QEMU/JIT/runtime-library-path.txt"
+    [[ -s "$package/QEMU/JIT/exports.txt" ]] || fail "missing JIT mode export report: $package/QEMU/JIT/exports.txt"
+  fi
   [[ -s "$package/UTM-SOURCE-REVISION.txt" ]] || fail "missing UTM source revision: $package"
   [[ -s "$package/QEMU-SOURCE-URL.txt" ]] || fail "missing QEMU source URL: $package"
   [[ -s "$package/QEMU/runtime-library-path.txt" ]] || fail "missing runtime library manifest: $package"
@@ -148,7 +153,7 @@ else
 fi
 
 tci_library_merged="Frameworks/TCI/$tci_framework_relative"
-cp -a "$JIT_DIR/QEMU/." "$TEMP_OUT/QEMU/JIT/"
+cp -a "$JIT_DIR/QEMU/JIT/." "$TEMP_OUT/QEMU/JIT/"
 cp -a "$TCI_DIR/QEMU/." "$TEMP_OUT/QEMU/TCI/"
 printf '%s\n' "$jit_library" > "$TEMP_OUT/QEMU/JIT/runtime-library-path.txt"
 printf '%s\n' "$tci_library_merged" > "$TEMP_OUT/QEMU/TCI/runtime-library-path.txt"
