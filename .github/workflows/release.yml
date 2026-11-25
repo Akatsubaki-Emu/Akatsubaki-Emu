@@ -188,6 +188,38 @@ jobs:
           test -d "$APP"
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
           /usr/libexec/PlistBuddy -c "Print :AkatsubakiPrimaryIconName" "$APP/Info.plist" | grep -Fx "$EXPECTED_PRIMARY_ICON"
+          python3 - "$APP/Info.plist" "$EXPECTED_PRIMARY_ICON" <<'PY'
+          import plistlib
+          import sys
+
+          with open(sys.argv[1], "rb") as stream:
+              info = plistlib.load(stream)
+          icon_dictionaries = [
+              info.get("CFBundleIcons", {}),
+              info.get("CFBundleIcons~ipad", {}),
+          ]
+          primary_names = {
+              item.get("CFBundlePrimaryIcon", {}).get("CFBundleIconName")
+              for item in icon_dictionaries
+              if isinstance(item, dict)
+          }
+          alternate_names = set()
+          for item in icon_dictionaries:
+              if isinstance(item, dict):
+                  alternate_names.update(item.get("CFBundleAlternateIcons", {}).keys())
+          expected_primary = sys.argv[2]
+          required_alternates = {
+              "AkatsubakiDefault",
+              "AkatsubakiHaloPetals",
+              "AkatsubakiPetals",
+              "AkatsubakiSimple",
+          } - {expected_primary}
+          if expected_primary not in primary_names:
+              raise SystemExit(f"Primary app icon {expected_primary} is missing: {primary_names}")
+          if not required_alternates.issubset(alternate_names):
+              raise SystemExit(f"Alternate app icons are missing: {required_alternates - alternate_names}")
+          print(f"Verified primary {expected_primary} and alternate icons: {sorted(alternate_names)}")
+          PY
           RUNTIME_DIR="build/qemu-runtime"
           test -d "$RUNTIME_DIR/Frameworks" || { echo "Required QEMU Frameworks directory is missing." >&2; exit 1; }
           test -d "$RUNTIME_DIR/QEMU/JIT" || { echo "Required QEMU JIT data directory is missing." >&2; exit 1; }
