@@ -162,6 +162,9 @@ jobs:
       - name: Install XcodeGen
         run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
 
+      - name: Prepare Icon Composer app icons
+        run: bash scripts/prepare-app-icons.sh
+
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
 
@@ -173,15 +176,18 @@ jobs:
           if [ "$RELEASE_CHANNEL" = "main" ]; then
             SCHEME="iSteam"
             EXPECTED_BUNDLE="com.xthrx.isteam"
+            EXPECTED_PRIMARY_ICON="AkatsubakiDefault"
           else
             SCHEME="iSteamNightly"
             EXPECTED_BUNDLE="com.xthrx.isteam.nightly"
+            EXPECTED_PRIMARY_ICON="AkatsubakiSimple"
           fi
           VERSION="0.1.$(printf '%03d' "$GITHUB_RUN_NUMBER")"
           xcodebuild -project iSteam.xcodeproj -scheme "$SCHEME" -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -archivePath "$PWD/build/iSteam.xcarchive" MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" ARCHS=arm64 archive
           APP="build/iSteam.xcarchive/Products/Applications/iSteam.app"
           test -d "$APP"
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist" | grep -Fx "$EXPECTED_BUNDLE"
+          /usr/libexec/PlistBuddy -c "Print :AkatsubakiPrimaryIconName" "$APP/Info.plist" | grep -Fx "$EXPECTED_PRIMARY_ICON"
           RUNTIME_DIR="build/qemu-runtime"
           test -d "$RUNTIME_DIR/Frameworks" || { echo "Required QEMU Frameworks directory is missing." >&2; exit 1; }
           test -d "$RUNTIME_DIR/QEMU/JIT" || { echo "Required QEMU JIT data directory is missing." >&2; exit 1; }
