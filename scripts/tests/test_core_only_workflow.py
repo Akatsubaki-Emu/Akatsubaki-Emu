@@ -46,7 +46,11 @@ class CoreOnlyIOSWorkflowTests(unittest.TestCase):
     def test_core_only_validator_rejects_embedded_qemu_runtime(self):
         validator = VALIDATOR.read_text()
         self.assertIn("lipo -verify_arch arm64", validator)
-        self.assertIn("platform IOS", validator)
+        self.assertIn("CFBundleSupportedPlatforms", validator)
+        self.assertIn("BUILD_PLATFORM", validator)
+        self.assertIn('"IOS"', validator)
+        self.assertIn('"2"', validator)
+        self.assertNotIn("grep -A5 'LC_BUILD_VERSION'", validator)
         self.assertIn("QEMU runtime content found", validator)
         self.assertIn("QEMU_EFI", validator)
         self.assertIn("otool -L", validator)
