@@ -76,7 +76,7 @@ class GitHubActionsOwnershipTests(unittest.TestCase):
         workflow = (self.ROOT / ".github" / "workflows" / "Update stats.yml").read_text(encoding="utf-8")
         self.assertIn("needs: cancel-stale", workflow)
         self.assertEqual(workflow.count("output_action: none"), 2)
-        self.assertEqual(workflow.count("uses: actions/upload-artifact@v4"), 2)
+        self.assertEqual(workflow.count("uses: actions/upload-artifact@v7"), 2)
         self.assertEqual(workflow.count("retention-days: 30"), 2)
         self.assertIn("name: repository-metrics-overview", workflow)
         self.assertIn("name: repository-metrics-team", workflow)

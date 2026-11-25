@@ -256,6 +256,22 @@ final class X86_64Interpreter: GuestCPUBackend {
                         registers[index] = UInt64(accumulator)
                     }
                 }
+            case 0x87: // XCHG r/m32,r32 or r/m64,r64 (register-only subset)
+                guard let modRM = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
+                guard modRM >> 6 == 0b11 else {
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                let rmIndex = Int(modRM & 0x07) | (rex & 0x01 != 0 ? 8 : 0)
+                let regIndex = Int((modRM >> 3) & 0x07) | (rex & 0x04 != 0 ? 8 : 0)
+                if rex & 0x08 != 0 {
+                    registers.swapAt(rmIndex, regIndex)
+                } else {
+                    let rmValue = UInt32(truncatingIfNeeded: registers[rmIndex])
+                    let regValue = UInt32(truncatingIfNeeded: registers[regIndex])
+                    registers[rmIndex] = UInt64(regValue)
+                    registers[regIndex] = UInt64(rmValue)
+                }
             case 0xF4: // HLT
                 halted = true
                 instructionCount &+= 1

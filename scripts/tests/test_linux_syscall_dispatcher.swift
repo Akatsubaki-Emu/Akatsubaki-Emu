@@ -202,6 +202,10 @@ struct LinuxSyscallDispatcherTests {
         let dispatcher = LinuxSyscallDispatcher(memory: memory)
         try dispatcher.configure(programBreak: 0x40000, stackBase: 0x3F0000)
 
+        // Output buffers are guest allocations; process setup clears stale page mappings.
+        precondition(memory.mapTransaction(offset: 0x3F1000, length: 0x4000,
+                                            permissions: 0x3, replaceExisting: false) == .success)
+
         // Fixed mappings and madvise must operate on mapped ELF/stack regions too.
         precondition(memory.mapTransaction(offset: 0x20000, length: 4096,
                                             permissions: 0x7, replaceExisting: false) == .success)
