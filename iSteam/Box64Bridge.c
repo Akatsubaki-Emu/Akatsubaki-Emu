@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <pthread.h>
+#include <string.h>
 
 extern char **environ;
 
@@ -15,6 +16,7 @@ typedef int (*box64_library_main_fn)(int, const char **, char **);
 
 #if defined(ISTEAM_BOX64_STATIC)
 extern int box64_library_main(int argc, const char **argv, char **environment);
+extern void box64_ios_force_link_wrappers(void);
 #else
 #include <dlfcn.h>
 #endif
@@ -38,7 +40,8 @@ bool box64IsAvailable(void) {
 
 int box64Run(const char *executable, const char *workingDirectory,
              int argc, const char *argv[]) {
-    if (!executable || !executable[0] || argc < 1 || !argv || !argv[0]) {
+    if (!executable || !executable[0] || argc < 2 || !argv || !argv[0] ||
+        !argv[0][0] || !argv[1] || strcmp(argv[1], executable) != 0) {
         return -EINVAL;
     }
 
@@ -67,6 +70,10 @@ int box64Run(const char *executable, const char *workingDirectory,
         return -error;
     }
 
+#if defined(ISTEAM_BOX64_STATIC)
+    // Retain the iOS compatibility wrappers from the static archive.
+    box64_ios_force_link_wrappers();
+#endif
     int result = fn(argc, argv, environment);
     int executionErrno = errno;
     if (fchdir(originalDirectory) != 0) {
