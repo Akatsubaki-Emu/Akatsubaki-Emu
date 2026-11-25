@@ -609,6 +609,36 @@ struct StaticELFExecutionTests {
             let aotExecutor = KenranButoAOTExecutor()
             precondition(aotExecutor.refreshAvailability(),
                          "ARM64 AOT test host must provide executable memory")
+
+            // Prove BSWAP is in the translated block. A nonzero block count alone
+            // is insufficient because the leading MOV could be translated while
+            // the interpreter handles BSWAP after an AOT side-exit.
+            var directRegisters = [UInt64](repeating: 0, count: 16)
+            let directResult = aotExecutor.execute(
+                guestCode: Data(code),
+                registers: &directRegisters,
+                rip: 0,
+                rflags: 0x202,
+                fsBase: 0,
+                gsBase: 0,
+                memory: memory,
+                maximumInstructions: 4
+            )
+            precondition(directResult != nil, "AOT BSWAP block must compile and execute")
+            let aotResult = directResult!
+            precondition(aotResult.guestBytesConsumed == Int(sideExitAddress),
+                         "AOT must consume MOV plus BSWAP before the UD2")
+            precondition(aotResult.instructionCount == 2,
+                         "AOT must execute exactly MOV plus BSWAP")
+            precondition(aotResult.exitRip == sideExitAddress,
+                         "AOT must side-exit at the UD2 address")
+            precondition(aotResult.exitReason == .unsupportedInstruction,
+                         "AOT must report the UD2 side-exit")
+            precondition(directRegisters[register] == expectedValue,
+                         "AOT BSWAP register result mismatch")
+            // The executor rejects any block that changes RFLAGS from 0x202.
+            precondition(aotExecutor.blocksExecuted == 1,
+                         "Direct BSWAP execution must account for one AOT block")
             let interpreter = X86_64Interpreter(memory: memory, aotExecutor: aotExecutor)
 #else
             let interpreter = X86_64Interpreter(memory: memory)
@@ -621,9 +651,11 @@ struct StaticELFExecutionTests {
                          "BSWAP produced the wrong register value")
             precondition(interpreter.conditionFlags == 0x2,
                          "BSWAP must preserve RFLAGS")
+            precondition(interpreter.instructionCount == 2,
+                         "MOV and BSWAP must be the only guest instructions executed")
 #if KENRAN_BUTO_AOT_TESTS
-            precondition(aotExecutor.blocksExecuted > 0,
-                         "BSWAP sequence did not execute through AOT")
+            precondition(aotExecutor.blocksExecuted == 2,
+                         "Hybrid interpreter must execute the BSWAP block through AOT")
 #endif
         }
 
