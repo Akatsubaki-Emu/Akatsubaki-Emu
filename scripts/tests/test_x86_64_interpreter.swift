@@ -1896,6 +1896,33 @@ struct InterpreterTests {
             precondition(xchgSame32Hybrid.registerValue(0) == 0x55667788)
             precondition(executor.blocksExecuted == blocksBeforeXCHGSame32 + 1)
 
+            // Byte XCHG supports REX.B and REX.R register extensions in the interpreter fallback.
+            let xchgByteProgram = Data([
+                0xB0, 0x12,
+                0x41, 0xB0, 0x34,
+                0x41, 0x86, 0xC0,
+                0x44, 0x86, 0xC0,
+                0x0F, 0x0B
+            ])
+            let xchgByteBaselineMemory = GuestMemory(size: 0x5000)
+            let xchgByteHybridMemory = GuestMemory(size: 0x5000)
+            precondition(xchgByteBaselineMemory.write(xchgByteProgram, offset: 0x4000))
+            precondition(xchgByteHybridMemory.write(xchgByteProgram, offset: 0x4000))
+            let xchgByteBaseline = X86_64Interpreter(memory: xchgByteBaselineMemory)
+            let xchgByteHybrid = X86_64Interpreter(memory: xchgByteHybridMemory, aotExecutor: executor)
+            try xchgByteBaseline.reset(entryPoint: 0x4000)
+            try xchgByteHybrid.reset(entryPoint: 0x4000)
+            let blocksBeforeByteXCHG = executor.blocksExecuted
+            let xchgByteBaselineExit = try xchgByteBaseline.run(maxInstructions: 8)
+            let xchgByteHybridExit = try xchgByteHybrid.run(maxInstructions: 8)
+            precondition(xchgByteBaselineExit == .unsupportedInstruction(address: 0x400B))
+            precondition(xchgByteHybridExit == xchgByteBaselineExit)
+            precondition(xchgByteHybrid.instructionCount == xchgByteBaseline.instructionCount)
+            precondition(xchgByteHybrid.conditionFlags == xchgByteBaseline.conditionFlags)
+            precondition(xchgByteHybrid.registerValue(0)! & 0xFF == 0x12)
+            precondition(xchgByteHybrid.registerValue(8)! & 0xFF == 0x34)
+            precondition(executor.blocksExecuted == blocksBeforeByteXCHG)
+
             let xchgBaselineMemory = GuestMemory(size: 8192)
             let xchgHybridMemory = GuestMemory(size: 8192)
             precondition(xchgBaselineMemory.write(xchgProgram, offset: 0x1000))

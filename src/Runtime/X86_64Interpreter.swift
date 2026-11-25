@@ -256,6 +256,18 @@ final class X86_64Interpreter: GuestCPUBackend {
                         registers[index] = UInt64(accumulator)
                     }
                 }
+            case 0x86: // XCHG r/m8,r8 (register-only; memory form is implicitly locked)
+                guard let modRM = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
+                guard modRM >> 6 == 0b11 else {
+                    rip = instructionAddress
+                    return .unsupportedInstruction(address: instructionAddress)
+                }
+                let rmIndex = Int(modRM & 0x07) | (rex & 0x01 != 0 ? 8 : 0)
+                let regIndex = Int((modRM >> 3) & 0x07) | (rex & 0x04 != 0 ? 8 : 0)
+                let rmValue = readByteRegister(rmIndex, rex: rex)
+                let regValue = readByteRegister(regIndex, rex: rex)
+                writeByteRegister(regValue, encodedIndex: rmIndex, rex: rex)
+                writeByteRegister(rmValue, encodedIndex: regIndex, rex: rex)
             case 0x87: // XCHG r/m32,r32 or r/m64,r64 (register-only subset)
                 guard let modRM = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
                 guard modRM >> 6 == 0b11 else {
