@@ -9,7 +9,10 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "scripts" / "build_hybrid_runtime_smoke_elf.py"
+REPOSITORY_SCRIPT = ROOT / "scripts" / "build_hybrid_runtime_smoke_elf.py"
+# The repository CI runs this under scripts/tests; the downloadable smoke kit
+# flattens the builder and test into one directory. Support both layouts.
+SCRIPT = REPOSITORY_SCRIPT if REPOSITORY_SCRIPT.is_file() else Path(__file__).resolve().with_name("build_hybrid_runtime_smoke_elf.py")
 EXPECTED = b"Linuxx86_64KENRAN_BUTO_RUNTIME_OK\n"
 
 

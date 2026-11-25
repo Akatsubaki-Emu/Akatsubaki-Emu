@@ -8,7 +8,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[1] / "build_hybrid_xchg_smoke_elf.py"
+REPOSITORY_SCRIPT = Path(__file__).resolve().parents[1] / "build_hybrid_xchg_smoke_elf.py"
+# The repository CI runs this under scripts/tests; the downloadable smoke kit
+# flattens the builder and test into one directory. Support both layouts.
+SCRIPT = REPOSITORY_SCRIPT if REPOSITORY_SCRIPT.is_file() else Path(__file__).resolve().with_name("build_hybrid_xchg_smoke_elf.py")
 
 
 class HybridXCHGSmokeELFTests(unittest.TestCase):
