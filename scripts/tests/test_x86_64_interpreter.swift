@@ -2002,6 +2002,51 @@ struct InterpreterTests {
             precondition(xchgMemory32.readUInt32(offset: 0x2000) == 0x55667788)
             precondition(xchgMemory32Interpreter.conditionFlags == 0x2)
 
+            // CPUID exposes a conservative x86-64 feature set and a stable vendor identity.
+            let cpuidLeafZeroProgram = Data([
+                0xB8, 0x00, 0x00, 0x00, 0x00,
+                0xB9, 0x00, 0x00, 0x00, 0x00,
+                0x0F, 0xA2,
+                0x0F, 0x0B
+            ])
+            let cpuidLeafZeroMemory = GuestMemory(size: 0x2000)
+            precondition(cpuidLeafZeroMemory.write(cpuidLeafZeroProgram, offset: 0x0800))
+            let cpuidLeafZero = X86_64Interpreter(memory: cpuidLeafZeroMemory)
+            try cpuidLeafZero.reset(entryPoint: 0x0800)
+            let cpuidLeafZeroExit = try cpuidLeafZero.run(maxInstructions: 8)
+            precondition(cpuidLeafZeroExit == .unsupportedInstruction(address: 0x080C))
+            precondition(cpuidLeafZero.registerValue(0) == 0x16)
+            precondition(cpuidLeafZero.registerValue(3) == 0x756E6547)
+            precondition(cpuidLeafZero.registerValue(2) == 0x49656E69)
+            precondition(cpuidLeafZero.registerValue(1) == 0x6C65746E)
+            precondition(cpuidLeafZero.conditionFlags == 0x2)
+
+            // Extended CPUID reports long mode, NX and SYSCALL, but never claims SSE/SSE2.
+            let cpuidExtendedProgram = Data([
+                0xB8, 0x01, 0x00, 0x00, 0x80,
+                0x0F, 0xA2,
+                0x0F, 0x0B
+            ])
+            let cpuidExtendedMemory = GuestMemory(size: 0x2000)
+            precondition(cpuidExtendedMemory.write(cpuidExtendedProgram, offset: 0x0900))
+            let cpuidExtended = X86_64Interpreter(memory: cpuidExtendedMemory)
+            try cpuidExtended.reset(entryPoint: 0x0900)
+            let cpuidExtendedExit = try cpuidExtended.run(maxInstructions: 8)
+            precondition(cpuidExtendedExit == .unsupportedInstruction(address: 0x0907))
+            precondition(cpuidExtended.registerValue(2)! & ((1 << 11) | (1 << 20) | (1 << 29)) == ((1 << 11) | (1 << 20) | (1 << 29)))
+            precondition(cpuidExtended.registerValue(2)! & (1 << 26) == 0)
+
+            // RDTSC returns the monotonic virtual nanosecond counter in EDX:EAX.
+            let rdtscProgram = Data([0x0F, 0x31, 0x0F, 0x0B])
+            let rdtscMemory = GuestMemory(size: 0x2000)
+            precondition(rdtscMemory.write(rdtscProgram, offset: 0x0A00))
+            let rdtsc = X86_64Interpreter(memory: rdtscMemory)
+            try rdtsc.reset(entryPoint: 0x0A00)
+            let rdtscExit = try rdtsc.run(maxInstructions: 8)
+            precondition(rdtscExit == .unsupportedInstruction(address: 0x0A02))
+            let virtualTSC = (rdtsc.registerValue(2)! << 32) | (rdtsc.registerValue(0)! & 0xFFFF_FFFF)
+            precondition(virtualTSC > 0)
+
             // Byte memory XCHG uses the same atomic path and preserves the other RCX bits.
             let xchgMemory8Program = Data([
                 0x48, 0xB8, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,

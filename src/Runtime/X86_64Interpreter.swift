@@ -845,6 +845,44 @@ final class X86_64Interpreter: GuestCPUBackend {
                             return .exited(status)
                         }
                     }
+                } else if second == 0x31 { // RDTSC: expose a monotonic 1 GHz virtual counter.
+                    let ticks = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
+                    registers[0] = UInt64(UInt32(truncatingIfNeeded: ticks))
+                    registers[2] = UInt64(UInt32(truncatingIfNeeded: ticks >> 32))
+                } else if second == 0xA2 { // CPUID: expose only features implemented by this interpreter.
+                    let leaf = UInt32(truncatingIfNeeded: registers[0])
+                    var eax: UInt32 = 0
+                    var ebx: UInt32 = 0
+                    var ecx: UInt32 = 0
+                    var edx: UInt32 = 0
+                    switch leaf {
+                    case 0:
+                        eax = 0x16
+                        ebx = 0x756E6547 // "Genu"
+                        edx = 0x49656E69 // "ineI"
+                        ecx = 0x6C65746E // "ntel"
+                    case 1:
+                        eax = 0x00000663
+                        edx = (1 << 4) | (1 << 15) // TSC and CMOV; no SIMD is advertised.
+                    case 0x15:
+                        eax = 1
+                        ebx = 1
+                        ecx = 1_000_000_000 // 1 GHz virtual TSC frequency.
+                    case 0x16:
+                        eax = 1_000
+                        ebx = 1_000
+                        ecx = 1_000
+                    case 0x80000000:
+                        eax = 0x80000001
+                    case 0x80000001:
+                        edx = (1 << 11) | (1 << 20) | (1 << 29) // SYSCALL, NX and long mode.
+                    default:
+                        break
+                    }
+                    registers[0] = UInt64(eax)
+                    registers[3] = UInt64(ebx)
+                    registers[1] = UInt64(ecx)
+                    registers[2] = UInt64(edx)
                 } else if second == 0xB6 || second == 0xBE {
                     guard let modrm = fetchByte(), let decoded = decodeRM(modrm, rex: rex) else {
                         return instructionFetchFailure(at: instructionAddress)
