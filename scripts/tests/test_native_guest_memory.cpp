@@ -167,6 +167,68 @@ int main() {
     assert(isteam_guest_memory_write(protectedMemory, 0, instruction.data(), instruction.size()));
     isteam_guest_memory_destroy(protectedMemory);
 
+    // Atomic exchange spans page boundaries without exposing a torn value.
+    ISteamGuestMemory *exchangeMemory = isteam_guest_memory_create(pageSize * 2);
+    assert(exchangeMemory != nullptr);
+    assert(isteam_guest_memory_begin_mapping(exchangeMemory));
+    assert(isteam_guest_memory_map(exchangeMemory, 0, pageSize * 2, 3, false));
+    const std::array<uint8_t, 8> exchangeInitial{0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE};
+    const std::array<uint8_t, 8> exchangeReplacement{0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01};
+    assert(isteam_guest_memory_write(exchangeMemory, pageSize - 4,
+                                    exchangeInitial.data(), exchangeInitial.size()));
+    auto replacement = exchangeReplacement;
+    assert(isteam_guest_memory_exchange(exchangeMemory, pageSize - 4,
+                                        replacement.data(), replacement.size()));
+    assert(replacement == exchangeInitial);
+    std::array<uint8_t, 8> exchangedBytes{};
+    assert(isteam_guest_memory_read(exchangeMemory, pageSize - 4,
+                                    exchangedBytes.data(), exchangedBytes.size()));
+    assert(exchangedBytes == exchangeReplacement);
+    assert(isteam_guest_memory_protect(exchangeMemory, 0, pageSize * 2, 1));
+    auto rejectedReplacement = exchangeInitial;
+    assert(!isteam_guest_memory_exchange(exchangeMemory, pageSize - 4,
+                                         rejectedReplacement.data(), rejectedReplacement.size()));
+    assert(rejectedReplacement == exchangeInitial);
+    assert(isteam_guest_memory_read(exchangeMemory, pageSize - 4,
+                                    exchangedBytes.data(), exchangedBytes.size()));
+    assert(exchangedBytes == exchangeReplacement);
+    isteam_guest_memory_destroy(exchangeMemory);
+
+    // Concurrent exchanges must always observe one complete previously-written token.
+    ISteamGuestMemory *concurrentExchangeMemory = isteam_guest_memory_create(pageSize);
+    assert(concurrentExchangeMemory != nullptr);
+    const uint64_t initialToken = 0x0102030405060708ULL;
+    assert(isteam_guest_memory_write(concurrentExchangeMemory, 0,
+                                    reinterpret_cast<const uint8_t *>(&initialToken), sizeof(initialToken)));
+    const std::array<uint64_t, 4> exchangeTokens{
+        0x1111111122222222ULL, 0x3333333344444444ULL,
+        0x5555555566666666ULL, 0x7777777788888888ULL
+    };
+    std::atomic<bool> exchangesValid{true};
+    std::vector<std::thread> exchangeWorkers;
+    for (uint64_t token : exchangeTokens) {
+        exchangeWorkers.emplace_back([&, token] {
+            for (int iteration = 0; iteration < 1000; ++iteration) {
+                uint64_t value = token;
+                if (!isteam_guest_memory_exchange(
+                        concurrentExchangeMemory, 0,
+                        reinterpret_cast<uint8_t *>(&value), sizeof(value))) {
+                    exchangesValid.store(false, std::memory_order_release);
+                    return;
+                }
+                const bool known = value == initialToken
+                    || std::find(exchangeTokens.begin(), exchangeTokens.end(), value) != exchangeTokens.end();
+                if (!known) {
+                    exchangesValid.store(false, std::memory_order_release);
+                    return;
+                }
+            }
+        });
+    }
+    for (auto &worker : exchangeWorkers) worker.join();
+    assert(exchangesValid.load(std::memory_order_acquire));
+    isteam_guest_memory_destroy(concurrentExchangeMemory);
+
 #ifdef ISTEAM_GUEST_MEMORY_TESTING
     // Hold read_execute after permission validation. protect() must not be able
     // to revoke execute permission until the bytes have been copied.

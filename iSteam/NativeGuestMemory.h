@@ -27,6 +27,7 @@ bool isteam_guest_memory_read_execute(ISteamGuestMemory *memory, uint64_t offset
 size_t isteam_guest_memory_read_execute_prefix(ISteamGuestMemory *memory, uint64_t offset, uint8_t *destination, size_t maximumLength);
 bool isteam_guest_memory_read(ISteamGuestMemory *memory, uint64_t offset, uint8_t *destination, size_t length);
 bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset, const uint8_t *source, size_t length);
+bool isteam_guest_memory_exchange(ISteamGuestMemory *memory, uint64_t offset, uint8_t *value, size_t length);
 bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset, uint64_t length);
 void isteam_guest_memory_clear(ISteamGuestMemory *memory);
 size_t isteam_guest_memory_allocated_pages(ISteamGuestMemory *memory);

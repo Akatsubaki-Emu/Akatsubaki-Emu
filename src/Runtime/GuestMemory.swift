@@ -78,6 +78,36 @@ final class GuestMemory {
         }
     }
 
+    /// Atomically exchanges a 1-, 4-, or 8-byte guest value and returns its previous value.
+    func exchangeByte(_ value: UInt8, offset: UInt64) -> UInt8? {
+        guard let native, offset < size else { return nil }
+        var exchanged = value
+        let success = withUnsafeMutablePointer(to: &exchanged) { pointer in
+            isteam_guest_memory_exchange(native, offset, pointer, 1)
+        }
+        return success ? exchanged : nil
+    }
+
+    func exchangeUInt32(_ value: UInt32, offset: UInt64) -> UInt32? {
+        guard let native, offset <= size, 4 <= size - offset else { return nil }
+        var exchanged = value.littleEndian
+        let success = withUnsafeMutableBytes(of: &exchanged) { bytes -> Bool in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_exchange(native, offset, base, 4)
+        }
+        return success ? UInt32(littleEndian: exchanged) : nil
+    }
+
+    func exchangeUInt64(_ value: UInt64, offset: UInt64) -> UInt64? {
+        guard let native, offset <= size, 8 <= size - offset else { return nil }
+        var exchanged = value.littleEndian
+        let success = withUnsafeMutableBytes(of: &exchanged) { bytes -> Bool in
+            guard let base = bytes.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return false }
+            return isteam_guest_memory_exchange(native, offset, base, 8)
+        }
+        return success ? UInt64(littleEndian: exchanged) : nil
+    }
+
     func readPrefix(offset: UInt64, maximumLength: Int? = nil, into buffer: inout [UInt8]) -> Int? {
         readExecutePrefix(offset: offset, maximumLength: maximumLength ?? buffer.count, into: &buffer)
     }

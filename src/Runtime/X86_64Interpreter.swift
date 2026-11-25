@@ -172,11 +172,15 @@ final class X86_64Interpreter: GuestCPUBackend {
             }
             guard var opcode = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
             var rex: UInt8 = 0
+            var lockPrefix = false
             activeSegmentBase = 0
             var endbrPrefix = false
             var prefixCount = 0
             while true {
-                if opcode == 0x64 {
+                if opcode == 0xF0 {
+                    lockPrefix = true
+                    rex = 0
+                } else if opcode == 0x64 {
                     activeSegmentBase = fsBase
                     rex = 0
                 } else if opcode == 0x65 {
@@ -200,6 +204,11 @@ final class X86_64Interpreter: GuestCPUBackend {
             }
 
             if endbrPrefix && opcode != 0x0F {
+                rip = instructionAddress
+                return .unsupportedInstruction(address: instructionAddress)
+            }
+
+            if lockPrefix && opcode != 0x86 && opcode != 0x87 {
                 rip = instructionAddress
                 return .unsupportedInstruction(address: instructionAddress)
             }
@@ -256,33 +265,60 @@ final class X86_64Interpreter: GuestCPUBackend {
                         registers[index] = UInt64(accumulator)
                     }
                 }
-            case 0x86: // XCHG r/m8,r8 (register-only; memory form is implicitly locked)
+            case 0x86: // XCHG r/m8,r8; memory form is implicitly atomic.
                 guard let modRM = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
-                guard modRM >> 6 == 0b11 else {
+                guard let decoded = decodeRM(modRM, rex: rex) else {
+                    return instructionFetchFailure(at: instructionAddress)
+                }
+                if lockPrefix, case .register = decoded.operand {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)
                 }
-                let rmIndex = Int(modRM & 0x07) | (rex & 0x01 != 0 ? 8 : 0)
-                let regIndex = Int((modRM >> 3) & 0x07) | (rex & 0x04 != 0 ? 8 : 0)
-                let rmValue = readByteRegister(rmIndex, rex: rex)
-                let regValue = readByteRegister(regIndex, rex: rex)
-                writeByteRegister(regValue, encodedIndex: rmIndex, rex: rex)
-                writeByteRegister(rmValue, encodedIndex: regIndex, rex: rex)
-            case 0x87: // XCHG r/m32,r32 or r/m64,r64 (register-only subset)
+                let source = readByteRegister(decoded.reg, rex: rex)
+                switch decoded.operand {
+                case .register(let index):
+                    let previous = readByteRegister(index, rex: rex)
+                    writeByteRegister(source, encodedIndex: index, rex: rex)
+                    writeByteRegister(previous, encodedIndex: decoded.reg, rex: rex)
+                case .memory(let address):
+                    guard let previous = memory.exchangeByte(source, offset: address) else {
+                        return .memoryFault(address: address)
+                    }
+                    writeByteRegister(previous, encodedIndex: decoded.reg, rex: rex)
+                }
+            case 0x87: // XCHG r/m32,r32 or r/m64,r64; memory form is implicitly atomic.
                 guard let modRM = fetchByte() else { return instructionFetchFailure(at: instructionAddress) }
-                guard modRM >> 6 == 0b11 else {
+                guard let decoded = decodeRM(modRM, rex: rex) else {
+                    return instructionFetchFailure(at: instructionAddress)
+                }
+                if lockPrefix, case .register = decoded.operand {
                     rip = instructionAddress
                     return .unsupportedInstruction(address: instructionAddress)
                 }
-                let rmIndex = Int(modRM & 0x07) | (rex & 0x01 != 0 ? 8 : 0)
-                let regIndex = Int((modRM >> 3) & 0x07) | (rex & 0x04 != 0 ? 8 : 0)
-                if rex & 0x08 != 0 {
-                    registers.swapAt(rmIndex, regIndex)
-                } else {
-                    let rmValue = UInt32(truncatingIfNeeded: registers[rmIndex])
-                    let regValue = UInt32(truncatingIfNeeded: registers[regIndex])
-                    registers[rmIndex] = UInt64(regValue)
-                    registers[regIndex] = UInt64(rmValue)
+                let width64 = rex & 0x08 != 0
+                let source = width64 ? registers[decoded.reg]
+                    : UInt64(UInt32(truncatingIfNeeded: registers[decoded.reg]))
+                switch decoded.operand {
+                case .register(let index):
+                    if width64 {
+                        registers.swapAt(index, decoded.reg)
+                    } else {
+                        let previous = UInt32(truncatingIfNeeded: registers[index])
+                        registers[index] = source
+                        registers[decoded.reg] = UInt64(previous)
+                    }
+                case .memory(let address):
+                    if width64 {
+                        guard let previous = memory.exchangeUInt64(source, offset: address) else {
+                            return .memoryFault(address: address)
+                        }
+                        registers[decoded.reg] = previous
+                    } else {
+                        guard let previous = memory.exchangeUInt32(UInt32(truncatingIfNeeded: source), offset: address) else {
+                            return .memoryFault(address: address)
+                        }
+                        registers[decoded.reg] = UInt64(previous)
+                    }
                 }
             case 0xF4: // HLT
                 halted = true

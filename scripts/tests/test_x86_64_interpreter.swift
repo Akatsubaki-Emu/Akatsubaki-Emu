@@ -159,6 +159,21 @@ final class GuestMemory {
         return true
     }
 
+    func exchangeByte(_ value: UInt8, offset: UInt64) -> UInt8? {
+        guard let previous = readByte(offset: offset), writeByte(value, offset: offset) else { return nil }
+        return previous
+    }
+
+    func exchangeUInt32(_ value: UInt32, offset: UInt64) -> UInt32? {
+        guard let previous = readUInt32(offset: offset), writeUInt32(value, offset: offset) else { return nil }
+        return previous
+    }
+
+    func exchangeUInt64(_ value: UInt64, offset: UInt64) -> UInt64? {
+        guard let previous = readUInt64(offset: offset), writeUInt64(value, offset: offset) else { return nil }
+        return previous
+    }
+
     func readPrefix(offset: UInt64, maximumLength: Int? = nil, into buffer: inout [UInt8]) -> Int? {
         readPrefixCalls += 1
         guard offset <= size else { return nil }
@@ -1949,7 +1964,7 @@ struct InterpreterTests {
             precondition(xchgBaselineMemory.readUInt64(offset: xchgBaselineStack) == 1)
             precondition(executor.blocksExecuted == blocksBeforeXCHG + 2)
 
-            // Memory-form XCHG is implicitly atomic; keep it unsupported until guest-memory atomics exist.
+            // 64-bit memory XCHG is implicitly atomic and returns the previous memory value.
             let xchgMemoryProgram = Data([
                 0x48, 0xB8, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x48, 0xB9, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
@@ -1962,11 +1977,48 @@ struct InterpreterTests {
             let xchgMemoryInterpreter = X86_64Interpreter(memory: xchgMemory)
             try xchgMemoryInterpreter.reset(entryPoint: 0x1000)
             let xchgMemoryExit = try xchgMemoryInterpreter.run(maxInstructions: 8)
-            precondition(xchgMemoryExit == .unsupportedInstruction(address: 0x1014))
-            precondition(xchgMemoryInterpreter.instructionCount == 2)
+            precondition(xchgMemoryExit == .unsupportedInstruction(address: 0x1017))
+            precondition(xchgMemoryInterpreter.instructionCount == 3)
             precondition(xchgMemoryInterpreter.registerValue(0) == 0x2000)
-            precondition(xchgMemoryInterpreter.registerValue(1) == 0x1122334455667788)
-            precondition(xchgMemory.readUInt64(offset: 0x2000) == 0x0123456789ABCDEF)
+            precondition(xchgMemoryInterpreter.registerValue(1) == 0x0123456789ABCDEF)
+            precondition(xchgMemory.readUInt64(offset: 0x2000) == 0x1122334455667788)
+
+            // LOCK-prefixed 32-bit memory XCHG preserves zero-extension and the old value.
+            let xchgMemory32Program = Data([
+                0xB8, 0x00, 0x20, 0x00, 0x00,
+                0xB9, 0x88, 0x77, 0x66, 0x55,
+                0xF0, 0x87, 0x08,
+                0x0F, 0x0B
+            ])
+            let xchgMemory32 = GuestMemory(size: 0x4000)
+            precondition(xchgMemory32.write(xchgMemory32Program, offset: 0x1200))
+            precondition(xchgMemory32.writeUInt32(0x01234567, offset: 0x2000))
+            let xchgMemory32Interpreter = X86_64Interpreter(memory: xchgMemory32)
+            try xchgMemory32Interpreter.reset(entryPoint: 0x1200)
+            let xchgMemory32Exit = try xchgMemory32Interpreter.run(maxInstructions: 8)
+            precondition(xchgMemory32Exit == .unsupportedInstruction(address: 0x120D))
+            precondition(xchgMemory32Interpreter.instructionCount == 3)
+            precondition(xchgMemory32Interpreter.registerValue(1) == 0x01234567)
+            precondition(xchgMemory32.readUInt32(offset: 0x2000) == 0x55667788)
+            precondition(xchgMemory32Interpreter.conditionFlags == 0x2)
+
+            // Byte memory XCHG uses the same atomic path and preserves the other RCX bits.
+            let xchgMemory8Program = Data([
+                0x48, 0xB8, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0xB1, 0x5A,
+                0x86, 0x08,
+                0x0F, 0x0B
+            ])
+            let xchgMemory8 = GuestMemory(size: 0x4000)
+            precondition(xchgMemory8.write(xchgMemory8Program, offset: 0x1400))
+            precondition(xchgMemory8.writeByte(0xA5, offset: 0x2000))
+            let xchgMemory8Interpreter = X86_64Interpreter(memory: xchgMemory8)
+            try xchgMemory8Interpreter.reset(entryPoint: 0x1400)
+            let xchgMemory8Exit = try xchgMemory8Interpreter.run(maxInstructions: 8)
+            precondition(xchgMemory8Exit == .unsupportedInstruction(address: 0x140E))
+            precondition(xchgMemory8Interpreter.instructionCount == 3)
+            precondition(xchgMemory8Interpreter.registerValue(1)! & 0xFF == 0xA5)
+            precondition(xchgMemory8.readByte(offset: 0x2000) == 0x5A)
 
             // Register-only 0x87 XCHG must start a native block after interpreter PUSH.
             let xchgRegisterProgram = Data([

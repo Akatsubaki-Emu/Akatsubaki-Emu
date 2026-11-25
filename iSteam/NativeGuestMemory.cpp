@@ -432,6 +432,45 @@ bool isteam_guest_memory_write(ISteamGuestMemory *memory, uint64_t offset,
     } catch (...) { return false; }
 }
 
+bool isteam_guest_memory_exchange(ISteamGuestMemory *memory, uint64_t offset,
+                                   uint8_t *value, size_t length) {
+    if (!memory || !value || (length != 1 && length != 4 && length != 8)
+        || !validRange(memory, offset, static_cast<uint64_t>(length))) return false;
+
+    std::array<uint8_t, 8> replacement{};
+    std::memcpy(replacement.data(), value, length);
+    try {
+        std::lock_guard<std::mutex> guard(memory->mutex);
+        if (!hasPermissionLocked(memory, offset, length, permissionRead)
+            || !hasPermissionLocked(memory, offset, length, permissionWrite)) return false;
+
+        // Allocate every backing page before exposing the previous value or mutating bytes.
+        size_t completed = 0;
+        while (completed < length) {
+            const uint64_t address = offset + static_cast<uint64_t>(completed);
+            Page *page = getOrAllocatePageLocked(memory, address / pageSize);
+            if (!page) return false;
+            const size_t pageOffset = static_cast<size_t>(address % pageSize);
+            completed += std::min(length - completed,
+                                  static_cast<size_t>(pageSize) - pageOffset);
+        }
+
+        if (!copyReadLocked(memory, offset, value, length)) return false;
+        completed = 0;
+        while (completed < length) {
+            const uint64_t address = offset + static_cast<uint64_t>(completed);
+            Page *page = getOrAllocatePageLocked(memory, address / pageSize);
+            if (!page) return false; // All pages were allocated above while holding the same lock.
+            const size_t pageOffset = static_cast<size_t>(address % pageSize);
+            const size_t amount = std::min(length - completed,
+                                           static_cast<size_t>(pageSize) - pageOffset);
+            std::memcpy(page->bytes.data() + pageOffset, replacement.data() + completed, amount);
+            completed += amount;
+        }
+        return true;
+    } catch (...) { return false; }
+}
+
 bool isteam_guest_memory_zero(ISteamGuestMemory *memory, uint64_t offset, uint64_t length) {
     if (!validRange(memory, offset, length)) return false;
     if (length == 0) return true;
