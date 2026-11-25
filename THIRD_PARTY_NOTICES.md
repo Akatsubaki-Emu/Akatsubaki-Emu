@@ -9,7 +9,9 @@ Akatsubaki Emu's QEMU integration references and adapts lifecycle and launcher p
 - License for those UTM source files: Apache License 2.0
 - Copyright notice: Copyright © 2020–2022 osy and UTM contributors.
 
-The Apache License 2.0 text is available at https://www.apache.org/licenses/LICENSE-2.0. Adapted source retains an attribution comment in `iSteam/QEMUNativeBridge.c`.
+The pinned UTM build input is commit `3d4b8d8cb1ce93a8b1a9610695c12487685f0c15` (UTM 5.0.9); its repository-level `LICENSE` is Apache License 2.0. This top-level notice applies to UTM-authored material covered by it, not to QEMU or every third-party dependency in the UTM archive. The Apache License 2.0 text is available at https://www.apache.org/licenses/LICENSE-2.0. Adapted source retains an attribution comment in `iSteam/QEMUNativeBridge.c`.
+
+The UTM iOS archives are intermediate build inputs. Akatsubaki's packagers extract the QEMU dynamic library/framework, required dependency frameworks, and firmware/data; they do not bundle UTM's Swift UI wrapper. The extracted QEMU runtime is loaded in-process by Akatsubaki Emu. This packaging description is factual provenance, not a legal conclusion about whether a combined work is formed.
 
 ## QEMU
 
