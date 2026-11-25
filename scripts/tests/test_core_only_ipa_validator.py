@@ -17,7 +17,9 @@ class CoreOnlyIPAValidatorTests(unittest.TestCase):
         path.write_text(contents)
         path.chmod(0o755)
 
-    def _run_validator(self, platform: str) -> subprocess.CompletedProcess[str]:
+    def _run_validator(
+        self, platform: str, supported_platform: str = "iPhoneOS"
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             app = root / "Payload" / "iSteam.app"
@@ -28,7 +30,7 @@ class CoreOnlyIPAValidatorTests(unittest.TestCase):
                     "CFBundleExecutable": "iSteam",
                     "CFBundleIdentifier": "com.xthrx.isteam",
                     "MinimumOSVersion": "16.0",
-                    "CFBundleSupportedPlatforms": ["iPhoneOS"],
+                    "CFBundleSupportedPlatforms": [supported_platform],
                 }, handle)
             ipa = root / "test.ipa"
             with zipfile.ZipFile(ipa, "w") as archive:
@@ -44,7 +46,7 @@ case "$2" in
   *CFBundleExecutable*) echo iSteam ;;
   *CFBundleIdentifier*) echo com.xthrx.isteam ;;
   *MinimumOSVersion*) echo 16.0 ;;
-  *CFBundleSupportedPlatforms*) echo iPhoneOS ;;
+  *CFBundleSupportedPlatforms*) echo "$SUPPORTED_PLATFORM" ;;
   *) exit 2 ;;
 esac
 """)
@@ -67,6 +69,7 @@ fi
             env = os.environ.copy()
             env["PATH"] = f"{tools}:{env.get('PATH', '')}"
             env["PLIST_BUDDY"] = str(tools / "PlistBuddy")
+            env["SUPPORTED_PLATFORM"] = supported_platform
             return subprocess.run(
                 ["bash", str(VALIDATOR), str(ipa)],
                 env=env, capture_output=True, text=True, check=False,
@@ -79,7 +82,7 @@ fi
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn("Core-only IPA validation: PASS", result.stdout)
 
-    def test_rejects_ios_simulator_platform(self) -> None:
+    def test_rejects_ios_simulator_macho_platform(self) -> None:
         result = self._run_validator("7")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("platform (IOS/2)", result.stderr)
@@ -88,6 +91,11 @@ fi
         result = self._run_validator("UNKNOWN")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("platform (IOS/2)", result.stderr)
+
+    def test_rejects_simulator_bundle_platform(self) -> None:
+        result = self._run_validator("2", supported_platform="iPhoneSimulator")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Expected iPhoneOS", result.stderr)
 
 
 if __name__ == "__main__":
