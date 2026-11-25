@@ -861,16 +861,18 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("    if: always()\n", guard)
         self.assertNotIn("if: always() &&", guard)
         needs = guard.split("    needs:\n", 1)[1].split("    runs-on:", 1)[0]
-        for job in (
-            "validate-release-channel",
-            "check-push-freshness",
-            "qemu-runtime",
-            "check-platform-build-freshness",
-            "build",
-            "release",
-        ):
-            with self.subTest(job=job):
-                self.assertIn(f"      - {job}\n", needs)
+        all_jobs = {
+            line.strip()[:-1]
+            for line in workflow.split("\\njobs:\\n", 1)[1].splitlines()
+            if line.startswith("  ") and not line.startswith("   ") and line.endswith(":")
+        }
+        guarded_jobs = {
+            line.strip()[2:]
+            for line in needs.splitlines()
+            if line.strip().startswith("- ")
+        }
+        all_jobs.discard("enforce-no-skipped-jobs")
+        self.assertEqual(guarded_jobs, all_jobs, "The final guard must depend on every other top-level job.")
         self.assertIn("JOB_RESULTS: ${{ toJSON(needs) }}", guard)
         self.assertIn('if job.get("result") != "success"', guard)
         self.assertIn("raise SystemExit(1)", guard)
