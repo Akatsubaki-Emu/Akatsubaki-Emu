@@ -21,8 +21,9 @@ class TCIGuestTargetListTests(unittest.TestCase):
         if value is not None:
             env["ISTEAM_QEMU_TCI_TARGET_LIST"] = value
         block = patch_utm_qemu_ios.tci_target_list_shell_block()
+        command = block + chr(10) + 'printf "%s" "$TCI_GUEST_TARGETS"'
         return subprocess.run(
-            ["bash", "-c", block + '\\nprintf \"%s\\n\" \"$TCI_GUEST_TARGETS\"'],
+            ["bash", "-c", command],
             env=env,
             text=True,
             capture_output=True,
@@ -32,13 +33,13 @@ class TCIGuestTargetListTests(unittest.TestCase):
     def test_default_target_is_x86_64_softmmu(self) -> None:
         result = self.run_target_list()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "x86_64-softmmu")
+        self.assertEqual(result.stdout, "x86_64-softmmu")
 
     def test_explicit_supported_multiarch_target_list_is_preserved(self) -> None:
         expected = patch_utm_qemu_ios.TCI_TARGET_LIST_UPSTREAM
         result = self.run_target_list(expected)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), expected)
+        self.assertEqual(result.stdout, expected)
 
     def test_shell_metacharacters_are_rejected(self) -> None:
         result = self.run_target_list("x86_64-softmmu;touch /tmp/not-allowed")
