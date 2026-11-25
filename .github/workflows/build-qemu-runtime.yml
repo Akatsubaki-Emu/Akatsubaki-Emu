@@ -32,6 +32,11 @@ on:
         type: boolean
         required: true
         default: true
+      tci_guest_targets:
+        description: Comma-separated QEMU TCI guest targets; defaults to x86_64 for the first playable build
+        type: string
+        required: true
+        default: x86_64-softmmu
   workflow_call:
     inputs:
       rebuild_dependencies:
@@ -39,6 +44,11 @@ on:
         type: boolean
         required: false
         default: false
+      tci_guest_targets:
+        description: Comma-separated QEMU TCI guest targets; defaults to x86_64 for the first playable build
+        type: string
+        required: false
+        default: x86_64-softmmu
 
 permissions:
   contents: read
@@ -239,6 +249,7 @@ jobs:
         shell: bash
         env:
           NCPU: "2"
+          ISTEAM_QEMU_TCI_TARGET_LIST: ${{ inputs.tci_guest_targets }}
           ISTEAM_QEMU_TCI_EXPORT_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_tci_exports.py
           ISTEAM_QEMU_MESON_PATCHER: ${{ github.workspace }}/scripts/patch_qemu_meson_ios.py
           ISTEAM_QEMU_LINK_VERIFIER: ${{ github.workspace }}/scripts/verify_qemu_meson_link.py

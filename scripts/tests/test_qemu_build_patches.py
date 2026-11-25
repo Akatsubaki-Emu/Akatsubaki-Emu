@@ -130,6 +130,7 @@ class QEMUBuildPatchTests(unittest.TestCase):
 generate_meson_cross() {
     echo "has_function_dup3 = false" >> $cross
 }
+TCI_BUILD_FLAGS="--enable-tcg-threaded-interpreter --target-list=aarch64-softmmu,i386-softmmu,ppc-softmmu,ppc64-softmmu,riscv64-softmmu,x86_64-softmmu,m68k-softmmu --extra-cflags=-Wno-unused-command-line-argument --extra-ldflags=-Wl,-no_deduplicate --extra-ldflags=-Wl,-random_uuid --extra-ldflags=-Wl,-no_compact_unwind"
 QEMU_PLATFORM_BUILD_FLAGS="--enable-shared-lib --disable-cocoa --disable-sdl --disable-coreaudio --disable-slirp-smbd --enable-ucontext --with-coroutine=libucontext $HVF_FLAGS $TCI_BUILD_FLAGS"
 download () {
     URL=$1
@@ -149,6 +150,672 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         twice = patch_utm_qemu_ios.patch_script(once)
         self.assertEqual(once, twice)
         self.assertIn("--target-list=x86_64-softmmu", twice)
+        self.assertIn('TCI_GUEST_TARGETS="        self.assertIn('python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"', twice)
+        self.assertIn('python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"', twice)
+        self.assertLess(twice.index("ISTEAM_QEMU_JIT_PATCHER"), twice.index("ISTEAM_QEMU_MESON_PATCHER"))
+        self.assertIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$PWD/build/build.ninja" "$IOS_COMPILER_RT"', twice)
+        self.assertNotIn('python3 "$ISTEAM_QEMU_LINK_VERIFIER" "$DIR/build/build.ninja"', twice)
+        self.assertIn("http://ftp.gnu.org/gnu/libiconv/*", twice)
+        self.assertIn("https://ftp.gnu.org/pub/gnu/libiconv/${URL##*/}", twice)
+        self.assertIn('case "$PLATFORM" in', twice)
+        self.assertIn('*-tci) ;; # TCI_BUILD_FLAGS already selects the threaded interpreter and guest targets.', twice)
+        patcher_case = twice.split('case "$PLATFORM" in')[-1].split("esac", 1)[0]
+        tci_branch = patcher_case.split("    *)", 1)[0]
+        self.assertIn("ISTEAM_QEMU_TCI_EXPORT_PATCHER", tci_branch)
+        self.assertIn('python3 "$ISTEAM_QEMU_TCI_EXPORT_PATCHER" "$QEMU_DIR/system/qemu.symbols"', tci_branch)
+        self.assertNotIn("ISTEAM_QEMU_JIT_PATCHER", tci_branch)
+        self.assertIn("$TCI_BUILD_FLAGS", twice)
+        shell_check = subprocess.run(["bash", "-n"], input=twice, text=True, capture_output=True)
+        self.assertEqual(shell_check.returncode, 0, shell_check.stderr)
+
+
+    def test_tci_guest_targets_default_to_x86_64_and_validate_multiarch_override(self):
+        block = patch_utm_qemu_ios.tci_target_list_shell_block()
+
+        def run_target_list(value=None):
+            env = os.environ.copy()
+            env.pop("ISTEAM_QEMU_TCI_TARGET_LIST", None)
+            if value is not None:
+                env["ISTEAM_QEMU_TCI_TARGET_LIST"] = value
+            return subprocess.run(
+                ["bash", "-c", block + '\nprintf "%s\n" "$TCI_GUEST_TARGETS"'],
+                env=env, text=True, capture_output=True,
+            )
+
+        default = run_target_list()
+        self.assertEqual(default.returncode, 0, default.stderr)
+        self.assertEqual(default.stdout.strip(), "x86_64-softmmu")
+
+        multiarch = run_target_list(patch_utm_qemu_ios.TCI_TARGET_LIST_UPSTREAM)
+        self.assertEqual(multiarch.returncode, 0, multiarch.stderr)
+        self.assertEqual(multiarch.stdout.strip(), patch_utm_qemu_ios.TCI_TARGET_LIST_UPSTREAM)
+
+        invalid = run_target_list("x86_64-softmmu;touch /tmp/not-allowed")
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn("Invalid ISTEAM_QEMU_TCI_TARGET_LIST", invalid.stderr)
+
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        self.assertIn("tci_guest_targets:", workflow)
+        self.assertIn("default: x86_64-softmmu", workflow)
+        self.assertIn("ISTEAM_QEMU_TCI_TARGET_LIST: $" + "{{ inputs.tci_guest_targets }}", workflow)
+
+    def test_fresh_launch_defaults_to_ubuntu(self):
+        root = Path(__file__).resolve().parents[2]
+        settings = (root / "src/Core/RuntimeSettings.swift").read_text(encoding="utf-8")
+        launch = (root / "iSteam/LaunchSetupViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("?? .linuxVM", settings)
+        self.assertIn('string(forKey: "iSteam.lastGuest") ?? "Ubuntu"', launch)
+        self.assertIn("case .linuxVM:", launch)
+
+    def test_qemu_jit_uses_split_wx_and_tci_does_not(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "src/QEMU/QEMUCommandBuilder.swift").read_text(encoding="utf-8")
+        self.assertIn('"tcg,tb-size=128,split-wx=on"', source)
+        self.assertIn('"tcg",', source)
+        self.assertNotIn('"tcg,tb-size=64,split-wx=on"', source)
+
+
+    def test_qemu_dependency_cache_version_matches_validation_contracts(self):
+        root = Path(__file__).resolve().parents[2]
+        qemu = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        repository = (root / ".github/workflows/validate-repository.yml").read_text(encoding="utf-8")
+        validator = (root / "scripts/validate-qemu-source.py").read_text(encoding="utf-8")
+        self.assertIn("utm-ios-arm64-deps-v15-", qemu)
+        self.assertIn("utm-ios-arm64-deps-v15-", repository)
+        self.assertIn("utm-ios-arm64-deps-v15-", validator)
+        self.assertNotIn("utm-ios-arm64-deps-v14-", repository)
+        self.assertIn('or "utm-ios-arm64-deps-v14-" in repository_validation', validator)
+
+
+    def test_qemu_runtime_build_runs_for_relevant_main_pushes(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        trigger = source.split("permissions:", 1)[0]
+        self.assertIn("  push:\\n    branches: [main]\\n    paths:\\n", trigger)
+        self.assertIn("workflow_dispatch:", trigger)
+        self.assertIn("workflow_call:", trigger)
+        for path in (
+            ".github/workflows/build-qemu-runtime.yml",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+            "scripts/patch_qemu_tci_exports.py",
+            "src/QEMU/**",
+            "src/Display/VMDisplayViewController.swift",
+        ):
+            self.assertIn(f'      - "{path}"', trigger)
+        # The build may validate an internal runtime, but public artifact upload
+        # remains behind the independent licensing approval gate.
+        self.assertIn("vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'", source)
+
+    def test_qemu_runtime_pr_workflow_calls_reusable_build(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github/workflows/validate-qemu-runtime-pr.yml").read_text(encoding="utf-8")
+        self.assertIn("pull_request:", workflow)
+        self.assertIn("uses: ./.github/workflows/build-qemu-runtime.yml", workflow)
+        self.assertIn("src/QEMU/**", workflow)
+        self.assertIn("iSteam/JIT26Protocol.c", workflow)
+
+    def test_launch_setup_uses_jit_callbacks_before_presenting_vm(self):
+        root = Path(__file__).resolve().parents[2]
+        launch = (root / "iSteam/LaunchSetupViewController.swift").read_text(encoding="utf-8")
+        native = (root / "src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        launch_method = launch.split("@objc private func launchSession()", 1)[1].split("@objc private func chooseGuestImage()", 1)[0]
+        complete_method = launch.split("private func completeLaunch", 1)[1].split("@objc private func chooseGuestImage()", 1)[0]
+        self.assertIn("guard !launchInProgress", launch_method)
+        self.assertIn("JITCoordinator.shared.requestJIT(from: self, onFailure:", launch_method)
+        self.assertIn("let writableDiskURL = selectedWritableDiskURL", launch_method)
+        self.assertIn("self?.completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)", launch_method)
+        self.assertIn("completeLaunch(configuration: config, diskURL: diskURL, writableDiskURL: writableDiskURL)", launch_method)
+        self.assertLess(launch_method.index("JITCoordinator.shared.requestJIT"), launch_method.index("completeLaunch"))
+        self.assertIn("self.launchInProgress = false", launch_method)
+        self.assertNotIn("waitForJIT", launch)
+        self.assertIn("VMDisplayViewController(configuration: configuration", complete_method)
+        self.assertIn("if requiresJIT && !JITCoordinator.shared.isQEMUJITReady", native)
+
+    def test_qemu_runtime_packaging_scripts_have_valid_shell_syntax(self):
+        root = Path(__file__).resolve().parents[2]
+        for relative in (
+            "scripts/package-utm-qemu-runtime.sh",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+            "scripts/merge-qemu-runtime-variants.sh",
+            "scripts/validate-qemu-runtime.sh",
+        ):
+            result = subprocess.run(["bash", "-n", str(root / relative)], text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, f"{relative}: {result.stderr}")
+
+        jit_packager = (root / "scripts/package-utm-qemu-runtime.sh").read_text(encoding="utf-8")
+        self.assertIn('bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" "$MODE"', jit_packager)
+        tci_packager = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
+        self.assertIn('[ "$has_jit_callbacks" = false ]', tci_packager)
+        self.assertIn("QEMU-TCI.framework", tci_packager)
+        self.assertIn('bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" tci', tci_packager)
+
+    def test_qemu_packagers_reject_output_paths_that_overlap_the_archive(self):
+        root = Path(__file__).resolve().parents[2]
+        for relative in (
+            "scripts/package-utm-qemu-runtime.sh",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+        ):
+            source = (root / relative).read_text(encoding="utf-8")
+            self.assertIn('ARCHIVE_ROOT="$(cd "$ARCHIVE" && pwd -P)"', source)
+            self.assertIn('[[ "$candidate" == "$parent" ]] && return 0', source)
+            self.assertIn('path_is_within "$OUT" "$ARCHIVE_ROOT"', source)
+            self.assertIn('path_is_within "$ARCHIVE_ROOT" "$OUT"', source)
+            self.assertLess(
+                source.index('path_is_within "$OUT" "$ARCHIVE_ROOT"'),
+                source.index('rm -rf "$OUT"'),
+            )
+
+    def test_qemu_packagers_preserve_archive_when_output_is_same_path(self):
+        root = Path(__file__).resolve().parents[2]
+        build_root = root / "build"
+        build_root.mkdir(exist_ok=True)
+        for relative in (
+            "scripts/package-utm-qemu-runtime.sh",
+            "scripts/package-utm-qemu-tci-runtime.sh",
+        ):
+            with TemporaryDirectory(prefix="qemu-output-overlap-", dir=build_root) as temporary:
+                archive = Path(temporary)
+                marker = archive / "keep.txt"
+                marker.write_text("keep", encoding="utf-8")
+                result = subprocess.run(
+                    ["bash", str(root / relative), str(archive), f"build/{archive.name}"],
+                    cwd=root,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertNotEqual(result.returncode, 0, relative)
+                self.assertIn("overlaps the input UTM archive", result.stderr, relative)
+                self.assertEqual(marker.read_text(encoding="utf-8"), "keep", relative)
+
+    def test_tci_packager_has_one_data_and_report_pass(self):
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
+        self.assertEqual(source.count('data_dir=""'), 1)
+        self.assertEqual(source.count('cat > "$OUT/BUILD-INFO.txt"'), 1)
+        self.assertEqual(source.count('REPORT="$OUT/dependency-report.txt"'), 1)
+        self.assertNotIn('\n > "$OUT/exports.txt" || true\n', source)
+
+    def test_qemu_stikjit_allocator_patch_is_idempotent_and_fails_closed(self):
+        source = """#ifdef CONFIG_DARWIN
+#include <mach/mach.h>
+static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
+{
+    return 0;
+}
+#endif
+"""
+        once = patch_qemu_stikjit_ios.patch_source(source)
+        twice = patch_qemu_stikjit_ios.patch_source(once)
+        self.assertEqual(once, twice)
+        self.assertNotIn(r'\\n', once)
+        self.assertNotIn(r'\\\"', once)
+        self.assertIn("#include <mach/mach_vm.h>", once)
+        self.assertIn("#if TARGET_OS_IPHONE\n#include <mach/mach_init.h>\n#include <mach/vm_map.h>", once)
+        self.assertIn("#elif TARGET_OS_IOS\n#include <mach/mach_init.h>\n#include <mach/vm_map.h>", once)
+        self.assertIn("#define mach_vm_address_t vm_address_t", once)
+        self.assertIn("#define mach_vm_offset_t vm_offset_t", once)
+        self.assertIn("#define mach_vm_size_t vm_size_t", once)
+        self.assertIn("#define mach_vm_remap vm_remap", once)
+        self.assertIn("#define mach_vm_protect vm_protect", once)
+        self.assertIn("#define mach_vm_deallocate vm_deallocate", once)
+        self.assertIn("#else\n#include <mach/mach.h>\n#include <mach/mach_vm.h>\n#endif", once)
+        self.assertIn('dlsym(RTLD_DEFAULT, "iSteamJITGetProtocolMode")', once)
+        self.assertIn("jit_protocol_mode < 0", once)
+        self.assertIn("jit_protocol_mode > 0", once)
+        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITIsReady")', once)
+        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion")', once)
+        self.assertNotIn('dlsym(RTLD_DEFAULT, "iSteamJITDetach")', once)
+        self.assertIn('__attribute__((visibility("default")))', once)
+        self.assertIn("void isteam_qemu_set_jit_callbacks(", once)
+        self.assertIn("void isteam_qemu_set_jit_callbacks(ISTEAMJITReadyFunction ready,", once)
+        self.assertIn("isteam_jit_ready_callback = ready", once)
+        self.assertIn("ISTEAMJITPrepareFunction prepare_region = isteam_jit_prepare_callback", once)
+        self.assertIn("__builtin_available(iOS 26.0, *)", once)
+        bridge = (Path(__file__).resolve().parents[2] / "iSteam/QEMUNativeBridge.c").read_text(encoding="utf-8")
+        self.assertIn(
+            "set_jit_callbacks(iSteamJITIsReady, iSteamJITPrepareRegion, iSteamJITDetach);",
+            bridge,
+        )
+        self.assertIn(
+            "typedef void (*qemu_set_jit_callbacks_fn)(bool (*)(void), void *(*)(void *, size_t), void (*)(void));",
+            bridge,
+        )
+        with self.assertRaisesRegex(SystemExit, "unexpected host-symbol lookup"):
+            patch_qemu_stikjit_ios.patch_source(
+                once + '\\nvoid *invalid_callback = dlsym(RTLD_DEFAULT, "iSteamJITPrepareRegion");'
+            )
+        self.assertIn("mach_vm_remap(mach_task_self(), &buf_rw", once)
+        self.assertIn("mach_vm_protect(mach_task_self(), buf_rw", once)
+        with self.assertRaisesRegex(SystemExit, r"split-W\^X Darwin allocator not found"):
+            patch_qemu_stikjit_ios.patch_source("#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n#endif\n")
+
+    def test_qemu_stikjit_patcher_exports_required_runtime_symbols(self):
+        symbols = """{
+  qemu_init;
+  qemu_main_loop;
+  qemu_cleanup;
+  bql_lock_impl;
+  bql_unlock;
+  g_assertion_message_expr;
+  qemu_thread_create;
+  replay_mutex_lock;
+  replay_mutex_unlock;
+};
+"""
+        once = patch_qemu_stikjit_ios.patch_exported_symbols(symbols)
+        self.assertEqual(once, patch_qemu_stikjit_ios.patch_exported_symbols(once))
+        generated = [
+            "_" + line.strip()[:-1]
+            for line in once.splitlines()
+            if line.strip().endswith(";")
+        ]
+        self.assertIn("_qemu_system_shutdown_request", generated)
+        self.assertIn("_isteam_qemu_set_jit_callbacks", generated)
+        self.assertEqual(once.count("qemu_system_shutdown_request;"), 1)
+        self.assertEqual(once.count("isteam_qemu_set_jit_callbacks;"), 1)
+        with self.assertRaisesRegex(SystemExit, "expected exactly one closing"):
+            patch_qemu_stikjit_ios.patch_exported_symbols("{\n  qemu_init;\n  qemu_main_loop;\n  qemu_cleanup;\n")
+
+
+    def test_qemu_stikjit_patcher_updates_region_and_export_list_together(self):
+        with TemporaryDirectory() as temporary:
+            qemu_root = Path(temporary)
+            region = qemu_root / "tcg" / "region.c"
+            symbols = qemu_root / "system" / "qemu.symbols"
+            region.parent.mkdir()
+            symbols.parent.mkdir()
+            region.write_text(
+                "#ifdef CONFIG_DARWIN\n#include <mach/mach.h>\n"
+                "static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)\n"
+                "{\n    return 0;\n}\n#endif\n",
+                encoding="utf-8",
+            )
+            symbols.write_text(
+                "{\n  qemu_init;\n  qemu_main_loop;\n  qemu_cleanup;\n};\n",
+                encoding="utf-8",
+            )
+            patch_qemu_stikjit_ios.patch_qemu_sources(region)
+            first_region = region.read_text(encoding="utf-8")
+            first_symbols = symbols.read_text(encoding="utf-8")
+            self.assertIn("isteam_qemu_set_jit_callbacks", first_region)
+            self.assertIn("qemu_system_shutdown_request;", first_symbols)
+            self.assertIn("isteam_qemu_set_jit_callbacks;", first_symbols)
+            patch_qemu_stikjit_ios.patch_qemu_sources(region)
+            self.assertEqual(region.read_text(encoding="utf-8"), first_region)
+            self.assertEqual(symbols.read_text(encoding="utf-8"), first_symbols)
+
+
+    def test_qemu_workflow_probe_shell_syntax_and_steps_are_unique(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        probe = source.split("      - name: Verify Objective-C class-selector stub compatibility", 1)[1]
+        probe = probe.split("      - name: Install UTM build dependencies", 1)[0]
+        script = textwrap.dedent(probe.split("        run: |\n", 1)[1])
+        result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        package = source.split("      - name: Package and verify in-process QEMU runtime", 1)[1]
+        package = package.split("      - name: Upload verified QEMU runtime artifact", 1)[0]
+        package_script = textwrap.dedent(package.split("        run: |" + chr(10), 1)[1])
+        package_result = subprocess.run(
+            ["bash", "-n"], input=package_script, text=True, capture_output=True
+        )
+        self.assertEqual(package_result.returncode, 0, package_result.stderr)
+        for name in (
+            "Verify Objective-C class-selector stub compatibility",
+            "Verify iOS vm_map compatibility",
+            "Install UTM build dependencies",
+            "Cache UTM dependency build and sysroot",
+            "Build UTM dependencies for physical iOS arm64",
+            "Build UTM TCI dependencies for physical iOS arm64",
+            "Build UTM iOS archive",
+            "Build UTM iOS TCI archive",
+            "Package and verify in-process QEMU runtime",
+            "Upload verified QEMU runtime artifact",
+        ):
+            self.assertEqual(source.count("      - name: " + name), 1)
+
+
+    def test_windows_and_steamos_profiles_select_uefi_firmware(self):
+        root = Path(__file__).resolve().parents[2]
+        configuration = (root / "src/Core/VMConfiguration.swift").read_text(encoding="utf-8")
+        runtime = (root / "src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        self.assertIn("var bootUEFI: Bool? = nil", configuration)
+        self.assertIn("var requiresUEFI: Bool", configuration)
+        self.assertIn("bootWindows: true, bootUEFI: true", configuration)
+        self.assertIn("bootWindows: false, bootUEFI: false", configuration)
+        self.assertIn("bootWindows: false, bootUEFI: true", configuration)
+        self.assertIn("configuration.requiresUEFI", runtime)
+
+    def test_build_workflows_do_not_serialize_or_cancel_builds(self):
+        root = Path(__file__).resolve().parents[2]
+        qemu_source = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        release_source = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        self.assertNotIn("\nconcurrency:\n", qemu_source)
+        release_prefix, release_job = release_source.split("\n  release:\n", 1)
+        self.assertNotIn("\nconcurrency:\n", release_prefix)
+        self.assertIn("group: isteam-release-publish-", release_job)
+        self.assertIn("cancel-in-progress: false", release_job)
+
+        metrics_source = (root / ".github/workflows/Update stats.yml").read_text(encoding="utf-8")
+        self.assertIn("group: update-repository-metrics-${{ github.ref }}", metrics_source)
+        self.assertIn("cancel-in-progress: false", metrics_source)
+        self.assertIn("  cancel-stale:", metrics_source)
+        self.assertEqual(metrics_source.count("    needs: cancel-stale"), 2)
+        self.assertIn("actions: write", metrics_source)
+        self.assertIn('select(.path == ".github/workflows/Update stats.yml"', metrics_source)
+        cancel_script = textwrap.dedent(
+            metrics_source.split("        run: |" + chr(10), 1)[1].split(chr(10) + "  overview:", 1)[0]
+        )
+        cancel_result = subprocess.run(
+            ["bash", "-n"], input=cancel_script, text=True, capture_output=True
+        )
+        self.assertEqual(cancel_result.returncode, 0, cancel_result.stderr)
+
+    def test_qemu_runtime_exports_are_matched_exactly(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn('grep -Eq "[[:space:]]_?${symbol}$" "$exports"', source)
+        self.assertNotIn('grep -Fq "$symbol" "$exports"', source)
+        self.assertIn('manifest_lines="$(awk \'END { print NR }\' "$manifest")"', source)
+        self.assertIn('test "$manifest_lines" -eq 1', source)
+
+        with TemporaryDirectory() as temporary:
+            exports = Path(temporary) / "exports.txt"
+            pattern = r"[[:space:]]_?qemu_init$"
+            exports.write_text("00000000 T _qemu_init_extra\n", encoding="utf-8")
+            result = subprocess.run(["grep", "-Eq", pattern, str(exports)], capture_output=True)
+            self.assertNotEqual(result.returncode, 0, "a similarly named export must not satisfy qemu_init")
+
+            exports.write_text("00000000 T _qemu_init\n", encoding="utf-8")
+            result = subprocess.run(["grep", "-Eq", pattern, str(exports)], capture_output=True)
+            self.assertEqual(result.returncode, 0, "the exact underscored nm symbol must be accepted")
+
+            exports.write_text("00000000 T qemu_init\n", encoding="utf-8")
+            result = subprocess.run(["grep", "-Eq", pattern, str(exports)], capture_output=True)
+            self.assertEqual(result.returncode, 0, "the exact non-underscored symbol must also be accepted")
+
+    def test_qemu_workflow_ios_vm_map_probe_shell_syntax(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        probe = source.split("      - name: Verify iOS vm_map compatibility", 1)[1]
+        probe = probe.split("      - name: Install UTM build dependencies", 1)[0]
+        script = textwrap.dedent(probe.split("        run: |\n", 1)[1])
+        result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for token in ("<mach/vm_map.h>", "mach_vm_remap", "mach_vm_protect", "mach_vm_deallocate"):
+            self.assertIn(token, script)
+
+    def test_qemu_workflow_installs_both_spirv_dependencies(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/build-qemu-runtime.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("spirv-tools", source)
+        self.assertIn("spirv-llvm-translator", source)
+
+    def test_qemu_workflow_uses_supported_xcode_for_objc_class_selector_stubs(self):
+        root = Path(__file__).resolve().parents[2]
+        for relative in (
+            ".github/workflows/build-qemu-runtime.yml",
+            ".github/workflows/release.yml",
+        ):
+            source = (root / relative).read_text(encoding="utf-8")
+            self.assertIn("runs-on: xcode-27", source)
+            self.assertIn('XCODE_DEVELOPER_DIR="$(xcode-select -p)"', source)
+            self.assertIn('awk -v version="$XCODE_VERSION"', source)
+            self.assertIn('split(version, p, "[.]")', source)
+            self.assertIn("major > 27 || (major == 27 && minor >= 1)", source)
+            self.assertNotIn('case "$XCODE_VERSION" in', source)
+            self.assertIn("Expected Xcode 27.1 or later", source)
+        source = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        self.assertNotIn("Xcode_27.1.app", source)
+        self.assertNotIn('if [ "$XCODE_VERSION" != "27.1" ]; then', source)
+        self.assertIn("utm-ios-arm64-deps-v15-", source)
+        self.assertIn("PROBE_BINARY=", source)
+        self.assertIn("-Wl,-objc_stubs_fast", source)
+        self.assertIn("-lobjc -framework Metal", source)
+        self.assertIn("-fno-objc-msgsend-class-selector-stubs", source)
+        self.assertIn("export OBJCFLAGS=", source)
+        self.assertIn("grep -Fq", source)
+        self.assertIn('SYMBOLS="$(xcrun --sdk iphoneos nm -u "$PROBE_OBJECT")"', source)
+        self.assertIn('if grep -Fq \'_objc_msgSendClass\' <<<"$SYMBOLS"; then', source)
+        self.assertNotIn('nm -u "$PROBE_OBJECT" | grep', source)
+        self.assertNotIn("\n; then\n", source)
+
+    def test_qemu_xcode_minimum_accepts_later_major_versions(self):
+        awk_program = 'BEGIN { split(version, p, "[.]"); major = p[1] + 0; minor = p[2] + 0; exit !(major > 27 || (major == 27 && minor >= 1)) }'
+        cases = {
+            "26.9": False,
+            "27.0": False,
+            "27.0.9": False,
+            "27.1": True,
+            "27.9": True,
+            "28.0": True,
+            "29.1": True,
+        }
+        for version, accepted in cases.items():
+            result = subprocess.run(
+                ["awk", "-v", f"version={version}", awk_program],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0 if accepted else 1, version)
+
+
+    def test_build_freshness_script_ignores_only_non_build_paths(self):
+        root = Path(__file__).resolve().parents[2]
+        script_source = root / "scripts/check-build-freshness.sh"
+        with TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            origin = workspace / "origin.git"
+            repository = workspace / "repo"
+            subprocess.run(["git", "init", "--bare", str(origin)], check=True, capture_output=True, text=True)
+            subprocess.run(["git", "init", str(repository)], check=True, capture_output=True, text=True)
+
+            def git(*args):
+                return subprocess.run(
+                    ["git", "-C", str(repository), *args],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+
+            git("config", "user.name", "Build freshness test")
+            git("config", "user.email", "build-freshness@example.invalid")
+            (repository / "src").mkdir()
+            (repository / "scripts").mkdir()
+            (repository / "src/Runtime.swift").write_text("let runtime = 1\\n", encoding="utf-8")
+            (repository / "scripts/check-build-freshness.sh").write_text(
+                script_source.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            git("add", ".")
+            git("commit", "-m", "base build revision")
+            git("branch", "-M", "main")
+            git("remote", "add", "origin", str(origin))
+            git("push", "-u", "origin", "main")
+            base_sha = git("rev-parse", "HEAD")
+
+            (repository / "scripts/tests").mkdir()
+            (repository / "scripts/tests/test_only.py").write_text("value = 2\\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-m", "test-only change")
+            git("push", "origin", "main")
+            environment = os.environ.copy()
+            environment["GITHUB_REF"] = "refs/heads/main"
+            environment["GITHUB_SHA"] = base_sha
+            result = subprocess.run(
+                ["bash", str(repository / "scripts/check-build-freshness.sh"), base_sha],
+                cwd=repository,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.stdout.strip(), "true", result.stderr)
+
+            (repository / ".github/workflows").mkdir(parents=True)
+            (repository / ".github/workflows/Update stats.yml").write_text(
+                "name: Update Repository Metrics" + chr(10), encoding="utf-8"
+            )
+            git("add", ".")
+            git("commit", "-m", "metrics-only workflow change")
+            git("push", "origin", "main")
+            result = subprocess.run(
+                ["bash", str(repository / "scripts/check-build-freshness.sh"), base_sha],
+                cwd=repository,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.stdout.strip(), "true", result.stderr)
+
+            (repository / "src/Runtime.swift").write_text("let runtime = 3\\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-m", "build-relevant source change")
+            git("push", "origin", "main")
+            result = subprocess.run(
+                ["bash", str(repository / "scripts/check-build-freshness.sh"), base_sha],
+                cwd=repository,
+                env=environment,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.stdout.strip(), "false", result.stderr)
+
+
+    def test_qemu_runtime_packager_preserves_firmware_bundle_directories(self):
+        script = (Path(__file__).resolve().parents[2] / "scripts/package-utm-qemu-runtime.sh").read_text()
+        self.assertIn('source_dir="$(dirname "$firmware_file")"', script)
+        self.assertIn('[ "$source_dir" = "$data_dir" ] && continue', script)
+        self.assertIn('target_dir="$OUT/QEMU/firmware/$relative_dir"', script)
+        self.assertIn('cp "$firmware_file" "$target_dir/"', script)
+        self.assertNotIn('cp "$firmware_file" "$OUT/QEMU/$(basename "$firmware_file")"', script)
+
+
+    def test_release_publication_is_serialized_and_skips_stale_main_builds(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertEqual(source.count("\n  release:\n"), 1, "release.yml must define exactly one release job")
+        release_job = source.split("\n  release:\n", 1)[1]
+        self.assertIn("group: isteam-release-publish-${{ matrix.channel }}", release_job)
+        self.assertIn("cancel-in-progress: false", release_job)
+        self.assertIn("id: freshness", release_job)
+        self.assertIn('publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"', release_job)
+        self.assertIn('echo "publish=$publish_current" >> "$GITHUB_OUTPUT"', release_job)
+        self.assertIn("id: final-freshness", release_job)
+        self.assertIn('publish_current="$(bash scripts/check-build-freshness.sh "$GITHUB_SHA")"', release_job)
+        for name in (
+            "Download iOS build",
+            "Download tvOS build",
+            "Download visionOS build",
+            "Verify combined release assets",
+        ):
+            step = release_job.split("- name: " + name, 1)[1].split("\n      - name:", 1)[0]
+            self.assertIn("if: steps.freshness.outputs.publish == 'true'", step)
+        for name in (
+            "Set release metadata",
+            "Publish combined release",
+        ):
+            step = release_job.split("- name: " + name, 1)[1].split("\n      - name:", 1)[0]
+            self.assertIn("if: steps.final-freshness.outputs.publish == 'true'", step)
+        metadata = release_job.split("- name: Set release metadata", 1)[1].split("\n      - name:", 1)[0]
+        publish = release_job.split("- name: Publish combined release", 1)[1]
+        self.assertIn('echo "tag=$RELEASE_CHANNEL" >> "$GITHUB_OUTPUT"', metadata)
+        self.assertIn("tag_name: ${{ steps.meta.outputs.tag }}", publish)
+        self.assertIn("target_commitish: ${{ github.sha }}", publish)
+        self.assertNotIn("git tag --force", release_job)
+        self.assertNotIn("git push --force", release_job)
+
+        ios_package = source.split("- name: Build and package iOS IPA", 1)[1].split(
+            "- name: Build and package tvOS IPA", 1
+        )[0]
+        run_marker = "        run: |\n"
+        self.assertEqual(ios_package.count(run_marker), 1)
+        ios_script = textwrap.dedent(ios_package.split(run_marker, 1)[1])
+        syntax = subprocess.run(["bash", "-n"], input=ios_script, text=True, capture_output=True)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+
+
+    def test_release_tag_is_created_from_the_workflow_commit(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("tag_name: ${{ steps.meta.outputs.tag }}", source)
+        self.assertIn("target_commitish: ${{ github.sha }}", source)
+
+
+    def test_main_release_dispatch_is_limited_to_main_branch(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        self.assertIn("validate-release-channel:", source)
+        self.assertRegex(source, r"needs:\s*(?:validate-release-channel|\[[^\]]*validate-release-channel[^\]]*\])")
+        self.assertIn("inputs.channel == 'Main'", source)
+        self.assertIn("github.ref != 'refs/heads/main'", source)
+        self.assertIn("The Main release channel can only be dispatched from refs/heads/main", source)
+
+
+    def test_visionos_release_channel_uses_distinct_bundle_identifiers(self):
+        workflow = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+        source = workflow.read_text(encoding="utf-8")
+        step = source.split("- name: Build and package visionOS app", 1)[1].split("- name: Upload build artifact", 1)[0]
+        self.assertIn('if [ "$RELEASE_CHANNEL" = "main" ]; then', step)
+        self.assertIn('EXPECTED_BUNDLE="com.xthrx.isteam.visionos"', step)
+        self.assertIn('EXPECTED_BUNDLE="com.xthrx.isteam.visionos.nightly"', step)
+        self.assertIn('PRODUCT_BUNDLE_IDENTIFIER="$EXPECTED_BUNDLE"', step)
+        self.assertIn('grep -Fx "$EXPECTED_BUNDLE"', step)
+        self.assertIn('bash scripts/validate-apple-package.sh build/iSteam-visionOS.ipa iSteamVision.app "$EXPECTED_BUNDLE"', step)
+
+
+    def test_link_verifier_requires_runtime_on_qemu_target_edge(self):
+        ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
+  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a
+build unrelated.dylib: c_LINKER other
+  LINK_ARGS = -lm
+'''
+        verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
+
+    def test_link_verifier_rejects_runtime_missing_from_qemu_target_edge(self):
+        ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
+  LINK_ARGS = -Wl,-objc_stubs_fast -lobjc -lm
+'''
+        with self.assertRaisesRegex(SystemExit, "emulator-specific link arguments"):
+            verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
+
+    def test_link_verifier_rejects_missing_objc_stub_generation(self):
+        ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
+  LINK_ARGS = -lobjc -Wl,-force_load,/toolchain/libclang_rt.ios.a
+'''
+        with self.assertRaisesRegex(SystemExit, "Objective-C message-stub generation"):
+            verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
+
+    def test_link_verifier_rejects_missing_libobjc(self):
+        ninja = '''build libqemu-x86_64-softmmu.dylib: c_LINKER objects
+  LINK_ARGS = -Wl,-objc_stubs_fast -Wl,-force_load,/toolchain/libclang_rt.ios.a
+'''
+        with self.assertRaisesRegex(SystemExit, "Objective-C runtime"):
+            verify_qemu_meson_link.verify_link(ninja, "/toolchain/libclang_rt.ios.a")
+
+
+    def test_tci_build_uses_upstream_ios_se_scheme_and_product(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / ".github/workflows/build-qemu-runtime.yml").read_text(encoding="utf-8")
+        packager = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
+        validator = (root / "scripts/validate-qemu-source.py").read_text(encoding="utf-8")
+        self.assertIn("./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI", workflow)
+        self.assertIn("UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app", workflow)
+        self.assertNotIn("-s iOS-TCI", workflow)
+        self.assertIn('APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"', packager)
+        self.assertIn("./scripts/build_utm.sh -k iphoneos -s iOS-SE -a arm64 -o UTMBuildTCI", validator)
+        self.assertIn("test -d 'UTMBuildTCI.xcarchive/Products/Applications/UTM SE.app'", validator)
+        self.assertIn('APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"', validator)
+        self.assertNotIn("-s iOS-TCI", validator)
+
+
+if __name__ == "__main__":
+    unittest.main()
+ + '{ISTEAM_QEMU_TCI_TARGET_LIST:-x86_64-softmmu}"', twice)
+        self.assertIn("--target-list=$TCI_GUEST_TARGETS", twice)
         self.assertIn('python3 "$ISTEAM_QEMU_MESON_PATCHER" "$QEMU_DIR/meson.build"', twice)
         self.assertIn('python3 "$ISTEAM_QEMU_JIT_PATCHER" "$QEMU_DIR/tcg/region.c"', twice)
         self.assertLess(twice.index("ISTEAM_QEMU_JIT_PATCHER"), twice.index("ISTEAM_QEMU_MESON_PATCHER"))
