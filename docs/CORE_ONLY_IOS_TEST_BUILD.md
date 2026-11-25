@@ -4,7 +4,7 @@ This manual workflow produces an unsigned iOS arm64 IPA containing the Akatsubak
 
 It exists to validate the iOS app shell and the bounded static x86-64 ELF execution path while the separate QEMU combined-work licensing review remains open. It is not a full-system VM build and does not enable Windows 10, QEMU TCI/JIT, or guest graphics through QEMU.
 
-The workflow installs XcodeGen and regenerates iSteam.xcodeproj from project.yml before building, ensuring the device project receives the configured GNU C++17 language standard.
+The workflow extracts the four checked-in Icon Composer archives with `scripts/prepare-app-icons.sh`, then installs XcodeGen and regenerates iSteam.xcodeproj from project.yml before building. This ensures the main/nightly icon sets are present and the device project receives the configured GNU C++17 language standard.
 
 ## Run
 
