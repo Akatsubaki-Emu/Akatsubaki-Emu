@@ -20,7 +20,7 @@ final class GameLauncher {
         }
 
         if format == .linuxELF {
-// The bounded register-only AOT path covers NOP/XCHG, immediate and register MOV,
+            // The bounded register-only AOT path covers NOP/XCHG, immediate and register MOV,
             // C7 /0, LEA, sign-extension, MOVSXD, MOVZX/MOVSX and BSWAP.
             // Unsupported or memory-form instructions side-exit to the interpreter.
             // The interpreter remains the correctness fallback; this is not a full Linux ABI.
