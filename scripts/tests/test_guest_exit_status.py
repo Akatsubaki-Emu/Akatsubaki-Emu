@@ -32,6 +32,7 @@ class GuestExitStatusTests(unittest.TestCase):
         self.assertIn("(60, 7, 7)", tests)
         self.assertIn("(60, 256, 0)", tests)
         self.assertIn("(231, UInt32.max, 255)", tests)
+        self.assertIn("precondition(unameInterpreterExit == .exited(0))", tests)
 
 
 if __name__ == "__main__":

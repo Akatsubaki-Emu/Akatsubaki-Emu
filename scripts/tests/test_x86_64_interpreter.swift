@@ -1075,7 +1075,7 @@ struct InterpreterTests {
         let unameInterpreter = X86_64Interpreter(memory: unameInterpreterMemory)
         try unameInterpreter.reset(entryPoint: 0)
         let unameInterpreterExit = try unameInterpreter.run(maxInstructions: 6)
-        precondition(unameInterpreterExit == .halted)
+        precondition(unameInterpreterExit == .exited(0))
         let unameInterpreterBytes = [UInt8](unameInterpreterMemory.read(offset: 0x1000, length: 390)!)
         let unameInterpreterFields = stride(from: 0, to: 390, by: 65).map { offset -> String in
             let field = unameInterpreterBytes[offset..<(offset + 65)]

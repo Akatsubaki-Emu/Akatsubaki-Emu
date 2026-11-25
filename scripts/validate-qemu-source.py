@@ -567,7 +567,7 @@ required = {
         "retMemory.write(Data([0x0F, 0x0B]), offset: 8)",
         "syscallInterpreter.configureLinuxProcess(programBreak: 0x1000, stackBase: 0x3F0000)",
         "let unameInterpreterMemory = GuestMemory(size: 0x2000)",
-        "precondition(unameInterpreterExit == .halted)",
+        "precondition(unameInterpreterExit == .exited(0))",
         "unameInterpreterMemory.read(offset: 0x1000, length: 390)",
         "precondition(orInterpreter.registerValue(0) == 3)",
         "precondition(c7.registerValue(0) == 0x12345678)",
