@@ -459,3 +459,51 @@ jobs:
       # Record the exact source commit rather than force-pushing a tag reference.
       # Official AltStore/PAL feeds are refreshed from published GitHub releases
       # by the website repository's update-xthrx-alt-source.yml workflow.
+
+  # GitHub can mark a workflow successful when every downstream job is skipped.
+  # Make the run fail unless every required job above completed successfully.
+  enforce-no-skipped-jobs:
+    name: Require every workflow job to complete
+    if: always()
+    needs:
+      - validate-release-channel
+      - check-push-freshness
+      - qemu-runtime
+      - check-platform-build-freshness
+      - build
+      - release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job was skipped or did not succeed
+        env:
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          jobs = json.loads(os.environ["JOB_RESULTS"])
+          non_success = {
+              name: job.get("result", "missing")
+              for name, job in jobs.items()
+              if job.get("result") != "success"
+          }
+          if non_success:
+              for name, result in sorted(non_success.items()):
+                  print(
+                      f"ERROR: required workflow job '{name}' finished with '{result}'.",
+                      file=sys.stderr,
+                  )
+              print(
+                  "The workflow cannot report success unless every required job succeeds and none are skipped.",
+                  file=sys.stderr,
+              )
+              raise SystemExit(1)
+
+          print(
+              f"Verified {len(jobs)} required jobs: all succeeded; no jobs were skipped."
+          )
+          PY
