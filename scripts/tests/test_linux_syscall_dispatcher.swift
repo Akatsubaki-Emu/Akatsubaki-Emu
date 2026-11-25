@@ -355,7 +355,7 @@ struct LinuxSyscallDispatcherTests {
         precondition(memory.read(offset: mapped, length: 3) == Data([0, 0, 0]))
         precondition(memory.read(offset: mapped + 4096, length: 3) == Data([4, 5, 6]))
 
-        let protectionAfterUnmap = dispatcher.dispatch(number: 10, arguments: [mapped, 4096, 1, 0, 0, 0])!
+        let protectionAfterUnmap = dispatcher.dispatch(number: 10, arguments: [unmapMappingAddress, 4096, 1, 0, 0, 0])!
         guard case .returned(let protectionAfterUnmapValue) = protectionAfterUnmap else { preconditionFailure() }
         precondition(protectionAfterUnmapValue == UInt64(bitPattern: Int64(-12)))
 
