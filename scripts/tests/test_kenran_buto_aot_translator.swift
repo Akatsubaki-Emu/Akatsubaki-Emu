@@ -152,9 +152,10 @@ struct KenranButoAOTTranslatorTests {
         let exchange32HighWithIgnoredIndex = translator.translate(Data([0x43, 0x87, 0xC0]))
         precondition(exchange32HighWithIgnoredIndex.isComplete && exchange32HighWithIgnoredIndex.instructionCount == 1)
         precondition(exchange32HighWithIgnoredIndex.guestBytesConsumed == 3)
+        precondition(exchange32HighWithIgnoredIndex.machineCode.count == 12)
         precondition(word(exchange32HighWithIgnoredIndex.machineCode, 0) == 0x4A000108)
-        precondition(word(exchange32HighWithIgnoredIndex.machineCode, 4) == 0x4A000100)
-        precondition(word(exchange32HighWithIgnoredIndex.machineCode, 8) == 0x4A000108)
+        precondition(word(exchange32HighWithIgnoredIndex.machineCode, 1) == 0x4A000100)
+        precondition(word(exchange32HighWithIgnoredIndex.machineCode, 2) == 0x4A000108)
 
         let extendedAccumulatorExchange = translator.translate(Data([0x4D, 0x97]))
         precondition(extendedAccumulatorExchange.isComplete && extendedAccumulatorExchange.instructionCount == 1)
