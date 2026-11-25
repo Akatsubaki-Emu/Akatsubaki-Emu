@@ -28,8 +28,23 @@ MINIMUM_OS="$("$PLIST_BUDDY" -c 'Print :MinimumOSVersion' "$INFO")"
 BINARY="$APP/$EXECUTABLE"
 [[ -n "$BUNDLE_ID" && -f "$BINARY" ]] || { echo 'App identity or executable missing.' >&2; exit 1; }
 lipo -verify_arch arm64 "$BINARY"
-if ! otool -l "$BINARY" | grep -A5 'LC_BUILD_VERSION' | grep -q 'platform IOS'; then
-  echo 'App executable is not built for the iOS device platform.' >&2
+SUPPORTED_PLATFORM="$("$PLIST_BUDDY" -c 'Print :CFBundleSupportedPlatforms:0' "$INFO" 2>/dev/null || true)"
+if [[ "$SUPPORTED_PLATFORM" != "iPhoneOS" ]]; then
+  echo "Expected iPhoneOS in CFBundleSupportedPlatforms; found '${SUPPORTED_PLATFORM:-missing}'." >&2
+  exit 1
+fi
+BUILD_PLATFORM="$(otool -l "$BINARY" | awk '
+  $1 == "cmd" && $2 == "LC_BUILD_VERSION" { in_build = 1; next }
+  in_build && $1 == "platform" { print $2; exit }
+  in_build && $1 == "Load" && $2 == "command" { exit }
+')"
+if [[ "$BUILD_PLATFORM" != "IOS" && "$BUILD_PLATFORM" != "2" ]]; then
+  echo "Expected Mach-O iOS device platform (IOS/2); found '${BUILD_PLATFORM:-missing}'." >&2
+  otool -l "$BINARY" | awk '
+    $1 == "cmd" && $2 == "LC_BUILD_VERSION" { show = 1 }
+    show { print }
+    show && $1 == "ntools" { exit }
+  ' >&2
   exit 1
 fi
 
@@ -52,5 +67,6 @@ printf 'Core-only IPA validation: PASS\n'
 printf 'Bundle ID: %s\n' "$BUNDLE_ID"
 printf 'Minimum iOS: %s\n' "$MINIMUM_OS"
 printf 'Architecture: arm64\n'
+printf 'Device platform: %s (Mach-O %s)\n' "$SUPPORTED_PLATFORM" "$BUILD_PLATFORM"
 printf 'QEMU runtime: absent (expected)\n'
 printf 'Provisioning profile: absent (unsigned; sign with SideStore)\n'

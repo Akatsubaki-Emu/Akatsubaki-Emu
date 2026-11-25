@@ -897,6 +897,15 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("budget * Self.maximumX86InstructionLength", interpreter)
         self.assertIn("let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff", interpreter)
 
+    def test_core_only_ipa_validator_accepts_numeric_ios_device_platform(self):
+        root = Path(__file__).resolve().parents[2]
+        validator = (root / "scripts" / "validate-core-only-ipa.sh").read_text(encoding="utf-8")
+        self.assertIn("CFBundleSupportedPlatforms", validator)
+        self.assertIn("BUILD_PLATFORM", validator)
+        self.assertIn('"IOS"', validator)
+        self.assertIn('"2"', validator)
+        self.assertNotIn("grep -A5 'LC_BUILD_VERSION'", validator)
+
     def test_vnc_frames_are_rejected_after_session_replacement(self):
         root = Path(__file__).resolve().parents[2]
         vnc = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
