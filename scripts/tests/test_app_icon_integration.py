@@ -50,6 +50,21 @@ class AppIconIntegrationTests(unittest.TestCase):
         self.assertLess(workflow.index("bash scripts/prepare-app-icons.sh"), workflow.index("xcodegen generate --spec project.yml"))
         self.assertIn('EXPECTED_PRIMARY_ICON="AkatsubakiDefault"', workflow)
         self.assertIn('EXPECTED_PRIMARY_ICON="AkatsubakiSimple"', workflow)
+        self.assertIn("CFBundleAlternateIcons", workflow)
+
+    def test_all_xcodegen_build_paths_prepare_icon_composer_files(self):
+        for workflow_path in (
+            ".github/workflows/validate-ios-build.yml",
+            ".github/workflows/build-core-only-ios.yml",
+            "scripts.sh",
+        ):
+            with self.subTest(path=workflow_path):
+                build_workflow = (ROOT / workflow_path).read_text(encoding="utf-8")
+                self.assertIn("bash scripts/prepare-app-icons.sh", build_workflow)
+                self.assertLess(
+                    build_workflow.index("bash scripts/prepare-app-icons.sh"),
+                    build_workflow.index("xcodegen generate"),
+                )
 
     def test_extraction_script_uses_expected_archive_names(self):
         script = (ROOT / "scripts/prepare-app-icons.sh").read_text(encoding="utf-8")
