@@ -1746,7 +1746,7 @@ for token in ("maximumInstructions", "maximumOutputBytes", "maximumGuestBytes",
     if token not in aot_translator:
         print(f"AOT translator missing bounded/fixed-buffer contract {token!r}", file=sys.stderr)
         failed = True
-for token in ("case 0x63:", "case 0x98:", "case 0x99:", "arithmeticShiftRight", "case 0x0F:", "extendRegister", "case 0x8D:", "addShiftedRegister", "addImmediate", "ripRelative", "guestRIP", 'translator_version_declaration'):
+for token in ("case 0x63:", "case 0x98:", "case 0x99:", "arithmeticShiftRight", "case 0x0F:", "extendRegister", "case 0x8D:", "addShiftedRegister", "addImmediate", "ripRelative", "guestRIP", translator_version_declaration):
     if token not in aot_translator:
         print(f"AOT LEA translator contract missing {token!r}", file=sys.stderr)
         failed = True
@@ -1755,7 +1755,7 @@ for token in ("0x8B010802", "0x91004042", "0x0B010402",
               "leaRipRelative", "guestRIP", "leaLargeDisplacement", "movzxHighByte",
               "movsxHighByte", "movsxd64", "0x53083C00", "0x93407C60",
               "0x13003C00", "0x131F7C02", "0x93407C00", "0x937FFC02",
-              "signExtensionBlock", 'translator_version_test'):
+              "signExtensionBlock", translator_version_test):
     if token not in aot_translator_tests:
         print(f"AOT LEA regression missing {token!r}", file=sys.stderr)
         failed = True
@@ -1812,7 +1812,7 @@ for token in ("hasBase = false", "AOT execution passes the guest block RIP to th
         failed = True
 
 xchg_register_translator = Path("src/Runtime/X86_64AOTTranslator.swift").read_text(encoding="utf-8")
-for token in ('translator_version_declaration', "case 0x87:", "case 0x90...0x97:", "exchangeRegisters", "0xCA000000", "0x4A000000"):
+for token in (translator_version_declaration, "case 0x87:", "case 0x90...0x97:", "exchangeRegisters", "0xCA000000", "0x4A000000"):
     if token not in xchg_register_translator:
         print(f"XCHG register translator contract missing {token!r}", file=sys.stderr)
         failed = True
@@ -2032,7 +2032,7 @@ for token in ("operandSizeOverride && (rex & 0x08) == 0", "case 0x98:", "case 0x
 xchg_translator_tests = Path("scripts/tests/test_kenran_buto_aot_translator.swift").read_text(encoding="utf-8")
 xchg_interpreter_tests = Path("scripts/tests/test_x86_64_interpreter.swift").read_text(encoding="utf-8")
 xchg_allocation_tests = Path("scripts/tests/test_aot_translator_allocation_hot_path.py").read_text(encoding="utf-8")
-for token in ('translator_version_declaration', "case 0x90...0x97:",
+for token in (translator_version_declaration, "case 0x90...0x97:",
               "private static func exchangeRegisters", "0xCA000000", "0x4A000000"):
     if token not in xchg_translator_source:
         print(f"AOT XCHG translator contract missing {token!r}", file=sys.stderr)
