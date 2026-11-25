@@ -264,6 +264,10 @@ build $QEMU_DIR --cross-prefix="" $QEMU_PLATFORM_BUILD_FLAGS $QEMU_DEBUG_FLAGS
         tci_packager = (root / "scripts/package-utm-qemu-tci-runtime.sh").read_text(encoding="utf-8")
         self.assertIn('[ "$has_jit_callbacks" = false ]', tci_packager)
         self.assertIn("QEMU-TCI.framework", tci_packager)
+        softmmu_framework_branch = 'elif [[ "$relative" == qemu-*-softmmu.framework/* || "$relative" == */qemu-*-softmmu.framework/* ]]; then'
+        self.assertIn(softmmu_framework_branch, jit_packager)
+        self.assertIn(softmmu_framework_branch, tci_packager)
+        self.assertIn('runtime_relative="Frameworks/$relative"', tci_packager)
         self.assertIn('bash "$SCRIPT_DIR/validate-qemu-runtime.sh" "$OUT/$runtime_relative" tci', tci_packager)
 
     def test_qemu_packagers_reject_output_paths_that_overlap_the_archive(self):

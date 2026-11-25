@@ -131,6 +131,10 @@ case "$candidate" in
         cp -R "$source_framework" "$target_framework"
         rm -rf "$OUT/Frameworks/${framework_prefix}QEMU.framework"
         runtime_relative="Frameworks/${framework_prefix}QEMU-TCI.framework/$(basename "$candidate")"
+      elif [[ "$relative" == qemu-*-softmmu.framework/* || "$relative" == */qemu-*-softmmu.framework/* ]]; then
+        # UTM embeds the selected QEMU target as a per-architecture framework.
+        # The variant merger relocates this framework beneath Frameworks/TCI.
+        runtime_relative="Frameworks/$relative"
       elif [[ "$relative" == *.dylib ]]; then
         target_relative="${relative%.dylib}-tci.dylib"
         mkdir -p "$(dirname "$OUT/Frameworks/$target_relative")"
