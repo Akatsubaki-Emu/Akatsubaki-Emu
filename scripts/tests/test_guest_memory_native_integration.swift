@@ -140,6 +140,56 @@ struct GuestMemoryNativeIntegrationTests {
         precondition(clampedAddress >= cursorBreak)
         cursorMemory.clear()
 
+        // Exercise the actual 256 MiB mmap-placement threshold. A 384 MiB
+        // guest has its initial mmap hint at 256 MiB; brk must still grow
+        // beyond that hint when no mapping is live, then move mmap above heap.
+        let hintMemory = GuestMemory(size: 384 * 1024 * 1024)
+        precondition(hintMemory.isAvailable && hintMemory.beginMapping())
+        let hintDispatcher = LinuxSyscallDispatcher(memory: hintMemory)
+        let initialHintBreak: UInt64 = 240 * 1024 * 1024
+        let expandedHintBreak: UInt64 = 272 * 1024 * 1024
+        let shrunkHintBreak: UInt64 = 244 * 1024 * 1024
+        try hintDispatcher.configure(programBreak: initialHintBreak, stackBase: hintMemory.size)
+
+        let crossHintGrow = hintDispatcher.dispatch(
+            number: 12, arguments: [expandedHintBreak, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let crossHintBreak) = crossHintGrow else { preconditionFailure() }
+        precondition(crossHintBreak == expandedHintBreak)
+        precondition(hintMemory.hasMappedPages(
+            offset: initialHintBreak, length: expandedHintBreak - initialHintBreak
+        ))
+
+        let highMapping = hintDispatcher.dispatch(
+            number: 9, arguments: [0, 4096, 3, 0x22, UInt64.max, 0]
+        )!
+        guard case .returned(let highMappingAddress) = highMapping else { preconditionFailure() }
+        precondition(highMappingAddress == expandedHintBreak)
+
+        let shrinkPastHint = hintDispatcher.dispatch(
+            number: 12, arguments: [shrunkHintBreak, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let shrunkPastHint) = shrinkPastHint else { preconditionFailure() }
+        precondition(shrunkPastHint == shrunkHintBreak)
+        precondition(!hintMemory.hasMappedPages(
+            offset: shrunkHintBreak, length: expandedHintBreak - shrunkHintBreak
+        ))
+
+        let rewoundPastHint = hintDispatcher.dispatch(
+            number: 9, arguments: [0, 4096, 3, 0x22, UInt64.max, 0]
+        )!
+        guard case .returned(let rewoundPastHintAddress) = rewoundPastHint else { preconditionFailure() }
+        precondition(rewoundPastHintAddress == shrunkHintBreak)
+
+        // The new live mapping is now the heap ceiling.
+        let blockedTarget: UInt64 = 280 * 1024 * 1024
+        let blockedPastHint = hintDispatcher.dispatch(
+            number: 12, arguments: [blockedTarget, 0, 0, 0, 0, 0]
+        )!
+        guard case .returned(let blockedPastHintBreak) = blockedPastHint else { preconditionFailure() }
+        precondition(blockedPastHintBreak == shrunkHintBreak)
+        hintMemory.clear()
+
         memory.clear()
         print("Production GuestMemory C ABI, execute permissions and Linux brk/mmap/mprotect/munmap integration passed")
     }
