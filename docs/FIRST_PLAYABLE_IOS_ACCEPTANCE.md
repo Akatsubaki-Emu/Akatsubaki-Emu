@@ -117,25 +117,24 @@ These items remain outside the first static-ELF milestone and should be implemen
 
 ## Repository/CI coordination and latest validation status
 
-At this audit, GitLab `main` and GitHub `main` both point to `c25947b03e48fd1157d21f20e895ca726c831599`. The previous 08:25 handoff recorded temporary divergence; subsequent synchronization has brought both refs to the same commit. No force-push, reset, rebase, merge, or branch creation was performed in this session.
-
-The repository documentation still describes GitHub as canonical and GitLab as a downstream mirror, while the active project engineering instructions designate GitLab `main` as the write target. That policy mismatch remains unresolved. Do not change mirror direction or run history reconciliation without explicit owner approval.
+At this audit, GitLab `main` is `fae7c262dcb5bc9238790f6317f360d125d23a7a` and GitHub `main` is `c25947b03e48fd1157d21f20e895ca726c831599`. GitLab is a direct descendant of GitHub and is four commits ahead: `4192b5e8` (metrics contract test), `9025ccaf` (first-playable status documentation), `3026c1bf` (interpreter stop-state synchronization), and `fae7c262` (register-only XCHG interpreter fallback, dispatcher test mapping, and Node 24 artifact action versions). The histories are not divergent. The configured automatic sync only pushes GitHub to GitLab, so it cannot publish these GitLab-only commits back to GitHub. No force-push, reset, rebase, merge, or branch creation has been performed. A non-forced fast-forward of GitHub main to GitLab main requires explicit owner authorization.
 
 ### Hosted validation evidence
 
-- **Core-only iOS workflow #8** (run `45572464006`) checked out the older commit `440f288b5b42728b4c16283f50c4eabf84e9d507`, not current `main`. Xcode 27.1 selection, XcodeGen installation/project generation, QEMU-free source checks, and the executable-arena tests passed (5 suites, 20,000 stress operations). The Python suite ran 415 tests and had two harness failures: `test_smoke_artifact_packaging.py` raised `NameError: workflow is not defined`, and `test_elf_sparse_memory_reset.py` asserted an obsolete source pattern. Both test files have subsequent corrections on current `main` (verified by comparing `440f288` to `c25947b`). The job stopped before the Swift runtime tests, native GuestMachine test, device build, IPA packaging, or artifact upload.
-- **Kenran Butō AOT workflow #222** (run `45572463949`) also checked out `440f288`. Workflow YAML, iOS arm64 JIT source compilation, fixed-buffer allocation checks, guest-RAM budget checks, executable-arena tests, backend-routing checks, and repository source-contract tests passed. The decoder test then failed in the old XCHG high-register test: it treated word indices as byte offsets (0, 4, 8). Current `main` corrects the test to assert a 12-byte result and inspect word indices 0, 1, and 2. No AOT execution or static-ELF guest test ran in that workflow.
-- **GitLab pipeline #1222** on `c25947b` is marked failed, with `core-source-and-elf-validation` as its job. Its trace was not available during this audit because of GitLab API rate limiting; its failure cause is therefore unclassified. The preceding pipeline #1221 was separately recorded as failing before runner assignment due to shared CI quota exhaustion.
-
-These are stale-run results, not current-head validation. The current `c25947b` source has not yet been validated by a completed AOT run or core-only IPA run. No current IPA artifact, signing/install evidence, or physical-iPad guest execution is verified.
+- **Core-only iOS workflow #8** (run `45575957355`) checked out `c25947b0`. Xcode 27.1 selection, XcodeGen generation, QEMU-free checks and executable-arena tests passed. The Python suite passed 414/415 tests; the only failure was the obsolete metrics-workflow assertion that expected the removed GitHub mirror dispatch. Commit `4192b5e8` updates that test to the artifact-only contract. Commit `fae7c262` also upgrades both metrics artifact uploads from `actions/upload-artifact@v4` to `@v7`, matching the repository's Node.js 24 action-version validator. No Swift runtime tests, device build, IPA packaging, or artifact upload ran in that workflow.
+- **Kenran Butō AOT workflow** (run `45575131823`) checked out older commit `55996e0c`. Decoder, cache, executable-memory, iOS TXM source compile and source-contract steps passed; the page-crossing interpreter harness failed at line 1769. The correction `e97b25e1` is in current main's ancestry, but no successful exact-head AOT rerun is recorded.
+- GitLab pipeline IID 1224 / ID `3112464887` on `4192b5e8` and IID 1225 / ID `3112471173` on `3026c1bf` both failed before runner assignment with `ci_quota_exceeded`. Retry job `18350225415` also failed before runner assignment. No hosted tests ran in those pipelines.
+- Commit `3026c1bf` fixes an interpreter stop-state data race by routing stop-flag reads through a lock-protected helper and adds a source-contract regression. Commit `fae7c262` adds the register-only `XCHG 0x87` interpreter fallback required when AOT is unavailable; existing interpreter regressions compare baseline and hybrid execution for extended registers and 32-bit zero-extension. The commits have not yet been validated by hosted CI.
+- The same `fae7c262` change maps the Linux syscall test's output buffer before its mprotect assertions. This is test setup, not a runtime behavior change.
+- Earlier iOS device ARM64 compilation and tvOS/visionOS simulator builds passed on an older common ancestor, not on current main. No current-main IPA, SideStore installation, or physical iPad guest execution is verified.
 
 ### Required next actions
 
-1. Run the AOT validation workflow and core-only iOS IPA workflow against current `main` (`c25947b`); resolve any remaining failures on that exact commit.
-2. Build and checksum the unsigned physical-device ARM64 IPA; record its bundle identifier and effective entitlements.
-3. Sign and install through SideStore on a physical iPad.
-4. Import and run both diagnostic ELF guests, verify their success markers and exit status 0, then repeat launches and verify cleanup.
-5. Validate TXM/AOT separately. The no-JIT interpreter smoke path must remain functional without StikDebug. For iPadOS 27+ AOT pairing, use StikDebug 3.2.2 or newer.
+1. Obtain explicit owner authorization for a non-forced fast-forward of GitHub main to the existing GitLab main; do not create a branch or force-push.
+2. Run AOT validation, full repository validation and the QEMU-free core-only iOS IPA workflow against the exact current commit. Resolve any newly exposed test or compile failures.
+3. Produce and checksum the unsigned physical-device ARM64 IPA; record bundle ID and effective entitlements.
+4. Sign/install through SideStore and execute both diagnostic static ELF guests through the app's actual import-to-runtime path on the physical iPad. Record stdout, exit codes, cleanup and repeat-launch evidence.
+5. Validate TXM/AOT separately. The no-JIT interpreter smoke path must remain functional without StikDebug; iOS/iPadOS 27+ AOT pairing requires StikDebug 3.2.2 or newer.
 
 A simulator build, host-side ELF run, source-level JIT implementation, or IPA archive alone does not satisfy the physical-device acceptance gates.
 
