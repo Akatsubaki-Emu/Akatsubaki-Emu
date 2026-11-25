@@ -15,7 +15,7 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 - Commit `af00bceb` adds conservative CPUID reporting and a monotonic 1 GHz virtual RDTSC counter. Unsupported SIMD is not advertised; these instructions currently use interpreter fallback rather than AOT translation.
 - The host smoke kit has two static ELF guests and passing host builder/execution tests. This proves payload validity on Linux x86-64, not that Akatsubaki Emu has executed them on an iPad.
 - GitHub AOT run `45577650906` passed the restricted AOT suite on older source `e2dcb994`, including two translated static-ELF blocks. It is not validation of the current atomic-XCHG or CPUID/RDTSC changes.
-- GitLab pipeline IID 1237 on `30a05994` and IID 1240 on `af00bceb` failed before runner assignment with `ci_quota_exceeded`; no tests ran. The docs-only `2876b49d` head also has no exact-head hosted result.
+- GitLab pipeline IID 1237 on `30a05994` and IID 1240 on `af00bceb` failed before runner assignment with `ci_quota_exceeded`; no tests ran. The docs-only `2876b49d` and `21a312a2` heads also have no exact-head hosted result.
 
 ## Feature parity
 
@@ -48,7 +48,7 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 | FEXCore primary, Box64 fallback | RuntimeBackendRouter now tests FEXCore-first selection and Box64-only fallback; no concurrent translator is selected for one process | Neither dynamic translator is integrated as an operational iOS backend. FEXCore needs a Darwin core port; the BoxiOS snapshot is no-JIT and game-specific | P1 after first playable |
 | MeloNX and SharpEmu references | Names appear in project documentation/reference material, not as integrated x86 runtime dependencies | They are separate console-emulation codebases; do not add them to Kenran Butō's x86 path without a distinct supported guest architecture and licence/architecture audit | P3/separate scope |
 | Vapor and StikStore | No current source integration was found by repository search | Do not add speculative dependencies. StosSign and StikDebug are the current relevant signing/JIT integrations | P3/separate scope |
-| Main/nightly iOS, tvOS and visionOS channels | Main/nightly release tags, iOS/tvOS/visionOS targets and a release workflow are declared | GitLab main `2876b49d` is four commits ahead of GitHub main `30a05994` (`3ca7cd9c` architecture docs, `763b38ab` test-double update, `af00bceb` CPUID/RDTSC, `2876b49d` acceptance/parity audit). The configured sync is GitHub-to-GitLab; reverse reconciliation remains owner-gated. No current-main IPA artifact is verified | P1 |
+| Main/nightly iOS, tvOS and visionOS channels | Main/nightly release tags, iOS/tvOS/visionOS targets and a release workflow are declared | GitLab main `21a312a2` is five commits ahead of GitHub main `30a05994` (`3ca7cd9c` architecture docs, `763b38ab` test-double update, `af00bceb` CPUID/RDTSC, `2876b49d` acceptance/parity audit, `21a312a2` table/status correction). The configured sync is GitHub-to-GitLab; reverse reconciliation remains owner-gated. No current-main IPA artifact is verified | P1 |
 | AltStore source and xthrx's repo feeds | Separate website/AltStore-source repository and generation workflow | This is release/distribution infrastructure, not part of the guest execution core; keep its source catalogue and Docusaurus docs separate from runtime code | P2 |
 
 ## Correct implementation order
