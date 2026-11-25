@@ -16,9 +16,19 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
     var cachedBlockCount:Int{lock.lock();defer{lock.unlock()};return blocks.count}
     var cachedExecutableBytes:UInt64{lock.lock();defer{lock.unlock()};return cachedExecutableBytesStorage}
     func refreshAvailability() -> Bool {
-        let available = isAvailable
-        if !available { invalidateAll() }
-        return available
+        if isAvailable { return true }
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        let coordinator=JITCoordinator.shared
+        if iSteamJITGetProtocolMode() == ISTEAM_JIT_PROTOCOL_STIKDEBUG,
+           coordinator.hasGetTaskAllow,
+           coordinator.isStikDebugJITSessionReady,
+           iSteamAOTExecutableMemoryPrepare(),
+           iSteamAOTExecutableMemoryIsPrepared() {
+            return true
+        }
+        #endif
+        invalidateAll()
+        return false
     }
     var isAvailable: Bool {
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
@@ -27,8 +37,7 @@ final class KenranButoAOTExecutor: KenranButoAOTExecuting {
         guard mode == ISTEAM_JIT_PROTOCOL_STANDARD || mode == ISTEAM_JIT_PROTOCOL_STIKDEBUG,
               coordinator.hasGetTaskAllow else { return false }
         if mode == ISTEAM_JIT_PROTOCOL_STIKDEBUG {
-            if iSteamAOTExecutableMemoryIsPrepared() { return true }
-            return coordinator.isStikDebugJITSessionReady && iSteamAOTExecutableMemoryPrepare()
+            return iSteamAOTExecutableMemoryIsPrepared()
         }
         return coordinator.isJITReady && iSteamAOTExecutableMemoryIsAvailable()
         #else

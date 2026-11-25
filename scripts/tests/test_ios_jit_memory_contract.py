@@ -94,7 +94,13 @@ class IOSJITMemoryContractTests(unittest.TestCase):
         self.assertIn("return iSteamAOTExecutableMemoryIsPrepared();", available)
         self.assertNotIn("ensure_txm_arena", available)
         self.assertIn("iSteamAOTExecutableMemoryIsPrepared()", execution)
-        self.assertIn("coordinator.isStikDebugJITSessionReady && iSteamAOTExecutableMemoryPrepare()", execution)
+        refresh = execution.split("func refreshAvailability() -> Bool", 1)[1].split("var isAvailable: Bool", 1)[0]
+        availability = execution.split("var isAvailable: Bool", 1)[1].split("func invalidateAll()", 1)[0]
+        self.assertIn("coordinator.isStikDebugJITSessionReady", refresh)
+        self.assertIn("iSteamAOTExecutableMemoryPrepare()", refresh)
+        self.assertIn("iSteamAOTExecutableMemoryIsPrepared()", refresh)
+        self.assertIn("return iSteamAOTExecutableMemoryIsPrepared()", availability)
+        self.assertNotIn("iSteamAOTExecutableMemoryPrepare()", availability)
 
 if __name__ == "__main__":
     unittest.main()
