@@ -15,8 +15,9 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 - `afda2d49` and `1678a2d5` harden and test the core-only IPA validator for iOS device platform values and reject simulator bundles/platforms.
 - `8c5d6f94` fixes the static ELF program-header mapping and the native GuestMachine smoke build's C bridge; `1678a2d5` adds simulator bundle validation.
 - Both static ELF diagnostic guests execute successfully on Linux x86-64 and produce their expected markers. This validates payload construction, not execution in Akatsubaki Emu on iOS.
+- `6803ae1b` repairs the malformed TCI target-list patcher; `1c9e6cfe` and `37011be3` restore the regression assertions. The isolated helper harness passed 5/5 and the patch-script integration harness passed locally; GitLab exact-main pipeline 1273 remains blocked before runner allocation by `ci_quota_exceeded`.
 - GitLab exact-head pipeline IID 1245 on `1678a2d5` failed before runner assignment with `ci_quota_exceeded`; no tests ran. GitHub run `45582606913` on older `ad65030d` failed at the now-fixed ELF program-header mapping.
-- GitLab and GitHub `main` are now both `1678a2d5`; direct comparison confirms parity.
+- GitLab `main` currently points to `37011be3e6b610317f9c2b14ab15a91ce98dc806`; GitHub `main` remains at `f93008dfb5c6143c4e9dc256fca07a363020eccd` and is behind. No source mirror reconciliation or force-push has been attempted.
 
 ## Feature parity
 
@@ -66,7 +67,7 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 
 - QEMU TCI is the selected first-playable no-JIT route, but the QEMU/UTM distribution gate remains closed. The release workflow requires `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true` only after qualified file-level and combined-work licensing review. Do not set it before that review.
 - The manual QEMU runtime build workflow can compile/validate JIT and TCI variants, but no TCI runtime artifact, QEMU-enabled iOS IPA, or physical Linux boot is verified.
-- GitLab pipeline IID 1245 / ID `3112635187` on exact main `1678a2d5` failed before runner assignment with `ci_quota_exceeded`; job `18351469324` had no runner and no tests ran.
+- GitLab pipeline IID 1273 / ID `3113203703` on exact main `37011be3` failed before runner assignment with `ci_quota_exceeded`; job `18355803586` had no runner and no tests ran. Earlier 1267–1272 attempts were also blocked by the shared quota.
 - GitLab and GitHub main are both `1678a2d5`; source parity is verified. The core-only iOS workflow is QEMU-free diagnostic coverage, not the first playable VM release.
 - GitHub core-only IPA run `45582606913` on older `ad65030d` failed because the diagnostic ELF did not map its program-header table; `8c5d6f94` fixes that issue. No current-head hosted result or IPA artifact is verified.
 - The static ELF runtime is a bounded user-mode diagnostic. It is not a full-system Linux/Windows emulator. Its stdin returns EOF and it has no independent framebuffer; QEMU's separate VNC-to-Metal path is intended for the first playable guest.

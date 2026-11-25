@@ -1,12 +1,12 @@
 # GitHub Actions CI/CD and GitLab mirror synchronization
 
-## Repositories
+## Current development destination (2026-11-25)
 
-- **Canonical source:** https://github.com/Akatsubaki-Emu/Akatsubaki-Emu
-- **Downstream mirror:** https://gitlab.com/chantinlongxthrx/I-steam
-- **Canonical branch:** `main`
+- **Required write destination:** https://gitlab.com/chantinlongxthrx/I-steam, existing branch `main`.
+- **GitHub repository:** https://github.com/Akatsubaki-Emu/Akatsubaki-Emu, whose `main` is behind the current GitLab `main`.
+- **No safe automatic reconciliation:** do not push the stale GitHub head back to GitLab, force-push either host, or merge/rebase divergent histories without explicit owner authorization.
 
-GitHub is the source of truth. All repository CI, regression tests, Apple-platform builds, QEMU/UTM runtime builds, and release publication execute through GitHub Actions. GitLab is retained as a downstream mirror and is not a CI runner.
+The current project-level development instruction requires GitLab `main` as the commit destination. GitHub Actions still hosts the Apple-platform and QEMU build workflows, but those workflows cannot validate GitLab-only commits while GitHub `main` remains behind. The retained `.github/workflows/blank.yml` is a GitHub-to-GitLab sync workflow; it does not propagate GitLab commits upstream. Do not modify it without explicit owner approval. The manual GitLab `.gitlab-ci.yml` validation pipeline is restricted to `main` and `web`/`api` triggers; its latest run is blocked by shared runner quota. This direction mismatch is a release/build blocker, not a reason to write source changes to GitHub.
 
 ## GitHub Actions workflows
 
@@ -37,12 +37,13 @@ Keep the workflow unchanged unless the owner explicitly approves a modification.
 
 ## Development rules
 
-1. Make ordinary source, workflow, and documentation changes on canonical GitHub `main` or through reviewed GitHub pull requests.
-2. Let the retained GitHub Actions sync workflow propagate accepted commits to GitLab.
-3. Compare commit SHAs on both hosts before assuming synchronization completed.
-4. Never force-push either host or auto-merge divergent histories to make the refs appear synchronized.
-5. A GitHub workflow run is evidence only for the jobs that actually ran. A queued, skipped, cancelled, or failed run is not a passing test.
-6. Simulator compilation, an IPA archive, or a QEMU runtime artifact does not prove physical-device installation or successful guest execution.
+1. Make ordinary source, workflow, and documentation changes on existing GitLab `main`.
+2. Do not write to GitHub while its `main` is behind unless a specific safe fallback is verified and authorized.
+3. Keep the GitHub-to-GitLab sync workflow unchanged; it cannot currently reconcile GitLab-ahead history.
+4. Compare commit SHAs on both hosts before assuming synchronization completed.
+5. Never force-push either host or auto-merge divergent histories to make the refs appear synchronized.
+6. A GitHub workflow run is evidence only for the jobs that actually ran. A queued, skipped, cancelled, or failed run is not a passing test.
+7. Simulator compilation, an IPA archive, or a QEMU runtime artifact does not prove physical-device installation or successful guest execution.
 
 ## Required secrets
 

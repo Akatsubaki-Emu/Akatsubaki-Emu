@@ -130,7 +130,7 @@ These items remain outside the first QEMU TCI Linux-boot milestone and should be
 
 ## Repository/CI coordination and latest validation status
 
-GitLab `main` is the canonical development destination and contains the latest code-bearing commit `f85b9d55d016120e27177b7aab1bf0f04d03001a`, followed by documentation-only acceptance-record commits. GitHub `main` remains at `f93008dfb5c6143c4e9dc256fca07a363020eccd` and is behind the current GitLab main. Do not push the stale GitHub head back to GitLab or force-sync divergent history. No branch reconciliation, merge, force-push, reset, rebase, branch creation, or deletion has been performed.
+GitLab `main` is the required development destination and currently points to `37011be3e6b610317f9c2b14ab15a91ce98dc806`. The TCI target-list patcher repair is `6803ae1baeaee2fec51cc2c2fd2f6ed8504498f8`; test corrections follow in `1c9e6cfe816fda307d131aa6c632f13a2e2990be` and `37011be3e6b610317f9c2b14ab15a91ce98dc806`. GitHub `main` remains at `f93008dfb5c6143c4e9dc256fca07a363020eccd` and is behind. Do not push the stale GitHub head back to GitLab or force-sync divergent history. No branch reconciliation, merge, force-push, reset, rebase, branch creation, or deletion has been performed.
 
 ### Current source changes
 
@@ -146,10 +146,13 @@ GitLab `main` is the canonical development destination and contains the latest c
 - `34491c5c`, `bc445ef5`, `b88e5029` and `f85b9d55` repair and harden the AOT translator-version source-contract validator; the final validator derives its expected version from the translator source.
 - `5a6b5f9d` refreshes this acceptance record with the verified IPA, current CI and mirror status; it is documentation-only.
 - The QEMU runtime and release workflows already define JIT and TCI variants, runtime manifests, and the QEMU licensing gate. The TCI path is the intended no-JIT full-system route; it has not yet booted a guest on a physical iPad.
+- `77ab9207`, `3f11307b`, `6803ae1b`, `1c9e6cfe` and `37011be3` restore the QEMU TCI target-list behavior and regression coverage after a malformed patcher insertion: x86-64 is the default, explicit comma-separated `*-softmmu` targets are validated, shell metacharacters and incomplete overrides fail closed, and patching is idempotent.
 
 ### Hosted and local validation evidence
 
 - GitLab pipeline IID 1262 / ID `3113074471` on exact source SHA `f85b9d55` failed before runner assignment with `ci_quota_exceeded`; job `18354837439` had no runner, start time or duration. No tests ran.
+- GitLab's manual main-only validation pipeline IID 1273 / ID `3113203703` on exact main `37011be3e6b610317f9c2b14ab15a91ce98dc806` failed before runner allocation with `ci_quota_exceeded`; job `18355803586` had no runner, start time or duration. Earlier pipelines 1267–1272 were blocked by the same quota; retries did not start a runner.
+- Local isolated Python/Bash TCI target-list harness: 5/5 passed. A separate local patch-script integration harness passed idempotence, TCI flag preservation, and `bash -n` shell validation. These reconstructed local harnesses do not replace the full repository test suite.
 - Earlier exact-head pipelines 1261 (`b88e5029`), 1259 (`bc445ef5`), 1258 (`a23d99ba`) and 1254 (`2766b3a9`) were also blocked before runner allocation by the same shared quota. Hosted validation has not executed on the current GitLab main.
 - GitHub main remains at `f93008df`; its workflows have not run against the five newer GitLab commits.
 - GitHub core-only IPA run `45582606913` on older source `ad65030d` failed at static ELF loading because the diagnostic ELF did not map its program-header table. Commit `8c5d6f94` fixes that defect; the fix is now on current main.
@@ -159,7 +162,7 @@ GitLab `main` is the canonical development destination and contains the latest c
 - The available core-only diagnostic IPA was built from older source head `d2d13b3d`, before the sign-extension changes. Its SHA-256 is `218865070ce3ed0daca3abae194ca4c763eccd30b1ab3631dec760efed3bf40c`; it is unsigned, ARM64/iPhoneOS, bundle ID `com.xthrx.isteam`, and contains no QEMU. It is not a current-head build or a full-system VM.
 - The two bundled static x86-64 ELF guests execute natively on an x86-64 Linux host and print `Linuxx86_64KENRAN_BUTO_RUNTIME_OK` and `KENRAN_BUTO_XCHG_OK`, each with exit status 0. This does not prove execution through the iOS app's interpreter.
 - GitHub validation at `f93008df` ran the Swift guest-runtime regression job successfully, but the AOT source-contract, packaging-validation and core-only IPA jobs failed because the validator still expected translator version 9. The subsequent GitLab commits updated the validator to derive version 10 dynamically, but have not yet been hosted-validated. At last check, tvOS and visionOS simulator builds passed, the iOS simulator job failed at the same validator step, and the iOS device build was still running.
-- No current-head IPA after the latest code-bearing commit `f85b9d55` (or documentation-only commit `5a6b5f9d`), QEMU TCI runtime artifact, QEMU-enabled IPA, SideStore installation, or physical iPad Linux boot is verified.
+- No current-head IPA after the latest main head `37011be3` (or patcher repair `6803ae1b`), QEMU TCI runtime artifact, QEMU-enabled IPA, SideStore installation, or physical iPad Linux boot is verified.
 
 ### Runtime and older-feature boundary
 
