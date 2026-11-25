@@ -15,6 +15,7 @@ class SmokeArtifactPackagingTests(unittest.TestCase):
         self.assertIn("Smoke guest expected output: KENRAN_BUTO_XCHG_OK", workflow)
 
     def test_core_only_documentation_matches_guest_artifact(self):
+        workflow = WORKFLOW.read_text(encoding="utf-8")
         docs = DOCS.read_text(encoding="utf-8")
         self.assertIn("KENRAN_BUTO_XCHG_OK", docs)
         self.assertIn('python3 scripts/build_hybrid_runtime_smoke_elf.py "$RUNNER_TEMP/hybrid_runtime_smoke.elf"', workflow)

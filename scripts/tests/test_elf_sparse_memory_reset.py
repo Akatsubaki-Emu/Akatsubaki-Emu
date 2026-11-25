@@ -11,7 +11,9 @@ class ELFSparseMemoryResetTests(unittest.TestCase):
         before_loader = load.split("let image = try ELF64Loader().load", 1)[0]
         self.assertNotIn("memory.clear()", before_loader)
         self.assertEqual(load.count("memory.clear()"), 1)
-        self.assertIn("memory.clear()\n        for (segment, fileOffset) in pending", loader)
+        self.assertIn("memory.clear()\n        didClearGuestMemory = true\n        for (segment, fileOffset) in pending", loader)
+        self.assertIn("if didClearGuestMemory && !didCommitGuestMemory", loader)
+        self.assertIn("didCommitGuestMemory = true", loader)
         self.assertIn("guard memory.beginMapping() else {\n            memory.clear()", loader)
         self.assertGreaterEqual(loader.count("memory.clear()"), 5)
 
