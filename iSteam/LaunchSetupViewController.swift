@@ -101,7 +101,7 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         addSection("Operating system", control: guestControl, to: stack)
         addSection("Launch target", control: runtimeControl, to: stack)
         addSwitchRow("Cardboard / VR-style layout", detail: "Display-layout prototype only; not true stereo VR.", control: vrSwitch, to: stack)
-        addSwitchRow("Keep session data", detail: "Stores the complete VM configuration for Continue from Last Session. It does not save guest RAM or in-game saves.", control: persistSwitch, to: stack)
+        addSwitchRow("Remember session configuration", detail: "When enabled, saves the VM configuration and selected disk paths for Continue from Last Session. It does not snapshot guest RAM; files and game saves written to the writable VM disk remain on that disk.", control: persistSwitch, to: stack)
 
         let slotLabel = UILabel()
         slotLabel.text = "VM configuration slot name"
