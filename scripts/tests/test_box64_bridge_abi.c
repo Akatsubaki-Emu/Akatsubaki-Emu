@@ -60,8 +60,12 @@ int main(void) {
     char temporary_directory[] = "/tmp/box64-bridge-XXXXXX";
     char *created_directory = mkdtemp(temporary_directory);
     assert(created_directory != NULL);
-    assert(strlen(created_directory) < sizeof(expected_directory));
-    strcpy(expected_directory, created_directory);
+    // macOS temporary paths may contain symlinked prefixes such as /var.
+    // Capture getcwd's canonical spelling so the later chdir/getcwd comparison
+    // checks the bridge's restoration behavior rather than path aliasing.
+    assert(chdir(created_directory) == 0);
+    assert(getcwd(expected_directory, sizeof(expected_directory)) != NULL);
+    assert(chdir(original_directory) == 0);
     assert(setenv("BOX64_BRIDGE_TEST_ENV", "expected", 1) == 0);
     assert(box64IsAvailable());
     assert(box64Run("guest.elf", created_directory, 3, arguments) == 73);

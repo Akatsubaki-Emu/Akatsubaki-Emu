@@ -45,9 +45,14 @@ class Box64BridgeABITests(unittest.TestCase):
 
                 subprocess.run(command, check=True, capture_output=True, text=True)
                 result = subprocess.run(
-                    [str(executable)], check=True, capture_output=True, text=True
+                    [str(executable)], check=False, capture_output=True, text=True
                 )
-                self.assertIn("Box64 bridge ABI", result.stdout)
+                self.assertEqual(
+                    result.returncode,
+                    0,
+                    f"mode={mode} stdout={result.stdout!r} stderr={result.stderr!r}",
+                )
+                self.assertIn("Box64 bridge argv ABI", result.stdout)
 
 
 if __name__ == "__main__":
