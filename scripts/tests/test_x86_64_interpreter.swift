@@ -1797,6 +1797,34 @@ struct InterpreterTests {
             let hybridMemory = GuestMemory(size: 8192)
             precondition(hybridMemory.write(program, offset: 0x1000))
             let executor = KenranButoAOTExecutor()
+            // Byte-immediate MOV lowering uses x16 as a scratch register.
+            // Reload the guest-register pointer from the preserved x17 state pointer
+            // before spilling registers, and compare every register with its seed.
+            let byteImmediateProgram = Data([
+                0xB0, 0x7F,             // mov al, 0x7f
+                0xB4, 0x42,             // mov ah, 0x42
+                0x41, 0xB0, 0x99,       // mov r8b, 0x99
+                0x0F, 0x0B              // ud2: exact interpreter side exit
+            ])
+            var byteImmediateRegisters = (0..<16).map { UInt64($0) + 0x1000 }
+            byteImmediateRegisters[0] = 0x1122334455667788
+            byteImmediateRegisters[8] = 0xAABBCCDDEEFF0011
+            let byteImmediateResult = executor.execute(
+                guestCode: byteImmediateProgram,
+                registers: &byteImmediateRegisters,
+                rip: 0x1800, rflags: 0x202, fsBase: 0, gsBase: 0,
+                memory: hybridMemory, maximumInstructions: 8
+            )
+            precondition(byteImmediateResult != nil &&
+                         byteImmediateResult!.guestBytesConsumed == 7)
+            precondition(byteImmediateResult!.instructionCount == 3 &&
+                         byteImmediateResult!.exitRip == 0x1807)
+            precondition(byteImmediateResult!.exitReason == .unsupportedInstruction)
+            precondition(byteImmediateRegisters[0] == 0x112233445566427F)
+            precondition(byteImmediateRegisters[8] == 0xAABBCCDDEEFF0099)
+            for index in 1..<16 where index != 8 {
+                precondition(byteImmediateRegisters[index] == UInt64(index) + 0x1000)
+            }
             var regs = [UInt64](repeating: 0, count: 16)
             let sideExit = executor.execute(guestCode: program, registers: &regs, rip: 0x1000,
                 rflags: 0x202, fsBase: 0, gsBase: 0, memory: hybridMemory, maximumInstructions: 8)

@@ -190,7 +190,7 @@ private final class KenranButoAOTExecutableBlock{
     private static func makeCode(_ t:X86_64AOTTranslation)->Data?{
         var prologue:[UInt32]=[0xD503245F,0xAA0003F1,load64(16,17,8)] // BTI C; mov x17,x0; ldr x16,[x17,#8]
         for r in 0..<16{prologue.append(load64(r,16,r*8))}
-        var epilogue:[UInt32]=[];for r in 0..<16{epilogue.append(store64(r,16,r*8))};epilogue.append(0xD65F03C0)
+        var epilogue:[UInt32]=[load64(16,17,8)];for r in 0..<16{epilogue.append(store64(r,16,r*8))};epilogue.append(0xD65F03C0)
         var data=Data();append(prologue,to:&data);data.append(t.machineCode);append(epilogue,to:&data);return data
     }
 }
