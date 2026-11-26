@@ -2085,7 +2085,8 @@ struct InterpreterTests {
             precondition(xchgByteHybrid.conditionFlags == xchgByteBaseline.conditionFlags)
             precondition(xchgByteHybrid.registerValue(0)! & 0xFF == 0x12)
             precondition(xchgByteHybrid.registerValue(8)! & 0xFF == 0x34)
-            precondition(executor.blocksExecuted == blocksBeforeByteXCHG)
+            // The two leading MOVs execute in one AOT block; byte XCHG then side-exits to the interpreter.
+            precondition(executor.blocksExecuted == blocksBeforeByteXCHG + 1)
 
             let xchgBaselineMemory = GuestMemory(size: 8192)
             let xchgHybridMemory = GuestMemory(size: 8192)
