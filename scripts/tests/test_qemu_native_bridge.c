@@ -145,8 +145,9 @@ static void *qmp_test_server(void *opaque) {
 
 int main(int argc, char **argv) {
     assert(argc == 3);
+    const bool reject_jit_in_tci = strcmp(argv[1], "tci-reject-jit") == 0;
     const bool requires_jit = strcmp(argv[1], "jit") == 0;
-    assert(requires_jit || strcmp(argv[1], "tci") == 0);
+    assert(requires_jit || strcmp(argv[1], "tci") == 0 || reject_jit_in_tci);
     const char *library = argv[2];
 
     // QMP accepts only the small control surface used by the runtime. Reject
@@ -159,6 +160,19 @@ int main(int argc, char **argv) {
     void *probe = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     assert(probe != NULL);
     char validation_error[512] = {0};
+    if (reject_jit_in_tci) {
+        const char *arguments[] = {"qemu-system-x86_64"};
+        assert(!isteam_qemu_validate_library(library, false,
+                                             validation_error, (int)sizeof(validation_error)));
+        assert(strstr(validation_error, "TCI runtime must not export isteam_qemu_set_jit_callbacks") != NULL);
+        memset(validation_error, 0, sizeof(validation_error));
+        assert(!isteam_qemu_start(1, arguments, library, false,
+                                  validation_error, (int)sizeof(validation_error)));
+        assert(strstr(validation_error, "TCI runtime must not export isteam_qemu_set_jit_callbacks") != NULL);
+        dlclose(probe);
+        printf("QEMU native bridge rejected a JIT callback export in TCI mode.\n");
+        return 0;
+    }
     assert(isteam_qemu_validate_library(library, requires_jit,
                                         validation_error, (int)sizeof(validation_error)));
     if (!requires_jit) {

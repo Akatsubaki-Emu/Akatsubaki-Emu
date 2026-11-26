@@ -24,6 +24,12 @@ core-source-and-elf-validation:
     - ./build/hybrid_runtime_smoke.elf
     - python3 scripts/validate-qemu-source.py
     - python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+    - cc -std=c11 -Wall -Wextra -Werror -pthread -fPIC -shared scripts/tests/fake_qemu_runtime.c -o build/libfakeqemu-jit.so
+    - cc -std=c11 -Wall -Wextra -Werror -pthread -DFAKE_QEMU_NO_JIT_CALLBACK -fPIC -shared scripts/tests/fake_qemu_runtime.c -o build/libfakeqemu-tci.so
+    - cc -std=c11 -Wall -Wextra -Werror -pthread -IiSteam iSteam/QEMUNativeBridge.c scripts/tests/test_qemu_native_bridge.c -ldl -o build/test-qemu-native-bridge
+    - ./build/test-qemu-native-bridge jit build/libfakeqemu-jit.so
+    - ./build/test-qemu-native-bridge tci build/libfakeqemu-tci.so
+    - ./build/test-qemu-native-bridge tci-reject-jit build/libfakeqemu-jit.so
   artifacts:
     when: always
     expire_in: 7 days
