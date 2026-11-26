@@ -41,11 +41,11 @@ enum VMAccelerationBackend: String, CaseIterable {
     var detail: String {
         switch self {
         case .automatic:
-            return "Uses QEMU JIT when the device has a ready supported JIT session; otherwise falls back to the bundled threaded TCI interpreter. TCI is slower and still requires a valid device-arm64 runtime package."
+            return "Uses QEMU JIT when the device has a ready supported JIT session; otherwise falls back to the bundled experimental TCTI (threaded-dispatch TCG bytecode) interpreter. TCTI is slower and still requires a valid device-arm64 runtime package."
         case .qemuJIT:
             return "TCG with a 128 MiB translation-block cache and split-WX; requires physical iOS 26+ and a supported StikDebug JIT session."
         case .qemuInterpreter:
-            return "Uses QEMU's threaded TCI interpreter without JIT entitlements or executable-memory support. Slower than JIT; startup validates the bundled device-arm64 TCI runtime."
+            return "Uses QEMU's experimental TCTI (threaded-dispatch TCG bytecode) interpreter without JIT entitlements or executable-memory support. Slower than JIT; startup validates the bundled device-arm64 TCI runtime."
         case .hypervisor:
             return "Unavailable on standard iOS; Hypervisor.framework is not exposed to ordinary iOS apps."
         }
