@@ -703,7 +703,8 @@ class SourceValidatorTests(unittest.TestCase):
         docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
         self.assertIn("QEMU TCG + JIT", settings)
         self.assertIn("QEMU TCI (no JIT)", settings)
-        self.assertIn("Uses QEMU's threaded TCI interpreter without JIT entitlements or executable-memory support.", settings)
+        self.assertIn("Uses QEMU's experimental TCTI (threaded-dispatch TCG bytecode) interpreter without JIT entitlements or executable-memory support.", settings)
+        self.assertIn("TCTI is experimental", settings)
         self.assertIn("TCG with a 128 MiB translation-block cache and split-WX", settings)
         self.assertIn("?? .linuxVM", settings)
         self.assertNotIn("Slower compatibility fallback", settings)
@@ -931,8 +932,13 @@ class SourceValidatorTests(unittest.TestCase):
     def test_aot_architecture_docs_match_translator_version(self):
         root = Path(__file__).resolve().parents[2]
         docs = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
-        self.assertIn("Translator version 10 emits", docs)
-        self.assertIn("Translator version 10 enforces", docs)
+        translator = (root / "src" / "Runtime" / "X86_64AOTTranslator.swift").read_text(encoding="utf-8")
+        marker = 'static let translatorVersion = "'
+        self.assertIn(marker, translator)
+        version = translator.split(marker, 1)[1].split('"', 1)[0]
+        self.assertTrue(version.isdigit())
+        self.assertIn(f"Translator version {version} emits", docs)
+        self.assertIn(f"Translator version {version} enforces", docs)
         self.assertIn("CWDE/CDQE and CDQ/CQO", docs)
         self.assertIn("register-only MOVZX/MOVSX", docs)
         self.assertIn("MOVSXD", docs)

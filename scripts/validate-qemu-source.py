@@ -903,7 +903,7 @@ required = {
         "case qemuInterpreter = \"QEMU TCI (no JIT)\"",
         "TCG with a 128 MiB translation-block cache and split-WX; requires physical iOS 26+ and a supported StikDebug JIT session.",
         "case .automatic, .qemuJIT, .qemuInterpreter: return true",
-        "Uses QEMU's threaded TCI interpreter without JIT entitlements or executable-memory support. Slower than JIT; startup validates the bundled device-arm64 TCI runtime.",
+        "Uses QEMU's experimental TCTI (threaded-dispatch TCG bytecode) interpreter without JIT entitlements or executable-memory support.",
     ],
     "src/Core/VMConfiguration.swift": [
         "static var defaultAccelerator: Accelerator",
