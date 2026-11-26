@@ -9,7 +9,7 @@ class KenranButoAOTDocumentationTests(unittest.TestCase):
         translator = (root / "src" / "Runtime" / "X86_64AOTTranslator.swift").read_text(encoding="utf-8")
         abi = (root / "docs" / "KENRAN_BUTO_AOT_ABI.md").read_text(encoding="utf-8")
         architecture = (root / "docs" / "HYBRID_RUNTIME_ARCHITECTURE.md").read_text(encoding="utf-8")
-        match = re.search(r'static let translatorVersion = "(\\d+)"', translator)
+        match = re.search(r'static let translatorVersion = "(\d+)"', translator)
         self.assertIsNotNone(match, "translator source must declare a numeric cache version")
         version = match.group(1)
         self.assertIn(f"translator version (currently {version})", abi)
