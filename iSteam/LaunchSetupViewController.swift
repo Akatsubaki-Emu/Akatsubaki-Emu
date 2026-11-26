@@ -92,7 +92,11 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         heading.font = .systemFont(ofSize: 30, weight: .bold)
         stack.addArrangedSubview(heading)
         let intro = UILabel()
-        intro.text = "Choose Ubuntu, SteamOS Gaming Mode, or Windows 10. SteamOS mode applies a game-focused Linux VM profile (4 GB RAM, 4 CPUs, 1280×800 at 60 FPS); it is not Valve’s Steam Deck OS image. Supply a compatible bootable ISO or disk image for the selected guest profile. Guest boot still requires the bundled QEMU runtime and suitable UEFI firmware."
+#if os(iOS) || os(tvOS)
+        intro.text = "Choose Ubuntu, SteamOS Gaming Mode, or Windows 10. On iOS/tvOS, SteamOS mode uses a device-conscious game-focused Linux profile (2 GB RAM, 2 CPUs, 1280×800 at 60 FPS); it is not Valve’s Steam Deck OS image. Supply a compatible bootable ISO or disk image. Guest boot still requires the bundled QEMU runtime and suitable UEFI firmware."
+#else
+        intro.text = "Choose Ubuntu, SteamOS Gaming Mode, or Windows 10. On desktop, SteamOS mode uses a game-focused Linux profile (4 GB RAM, 4 CPUs, 1280×800 at 60 FPS); it is not Valve’s Steam Deck OS image. Supply a compatible bootable ISO or disk image. Guest boot still requires the bundled QEMU runtime and suitable UEFI firmware."
+#endif
         intro.font = .preferredFont(forTextStyle: .subheadline)
         intro.textColor = .secondaryLabel
         intro.numberOfLines = 0
@@ -217,8 +221,16 @@ final class LaunchSetupViewController: UIViewController, UIDocumentPickerDelegat
         config.displayFPS = isSteamOS ? 60 : RuntimeSettings.shared.frameRate.value
         config.accelerator = VMConfiguration.defaultAccelerator
         if isSteamOS {
-            config.memoryMB = 4096
-            config.cpuCount = max(config.cpuCount, 4)
+            let profile = VMConfiguration.defaultSteamOS
+#if os(iOS) || os(tvOS)
+            // Old saved slots may contain the former 4 GiB desktop override.
+            // Clamp them to the device profile before resource validation.
+            config.memoryMB = min(config.memoryMB, profile.memoryMB)
+            config.cpuCount = min(max(config.cpuCount, 1), profile.cpuCount)
+#else
+            config.memoryMB = max(config.memoryMB, profile.memoryMB)
+            config.cpuCount = max(config.cpuCount, profile.cpuCount)
+#endif
             config.gpu = .virtioGPU
         }
         return config
