@@ -132,37 +132,29 @@ These items remain outside the first QEMU TCI Linux-boot milestone and should be
 
 GitLab `main` currently points to `ab20a239d5ac45783b73ce06b7f505b2348b9766`; GitHub `main` currently points to `06d21b6bbdc150951dd49d4f119b115bb3d2e146`. The histories are divergent. GitLab contains the AOT compile/source-contract repairs and translator-v12 documentation; GitHub contains a separate QEMU JIT/TCI dependency-isolation change. The existing reconciliation workflow has not been run. Do not force-sync or overwrite either history; obtain explicit owner authorization before main-history reconciliation.
 
-### Current source changes
+### Current source changes (2026-11-26)
 
-- `30a05994` adds mutex-serialized native guest-memory exchange for 1-, 4-, and 8-byte operands, cross-page handling, permission validation, Swift wrappers, and interpreter memory-form `0x86`/`0x87` support.
-- `af00bceb` adds conservative CPUID reporting and a monotonic 1 GHz virtual RDTSC counter without advertising unsupported SIMD.
-- `adf6a271` handles F3 90 PAUSE as a no-op.
-- `afda2d49` hardens the core-only IPA validator for textual/numeric iOS Mach-O platform values and checks `CFBundleSupportedPlatforms`.
-- `8c5d6f94` repairs the static smoke ELF program-header mapping, adds the NativeEmulation C object and bridging header to the native GuestMachine smoke compile, and includes GuestProcess in the PE test compile.
-- `1678a2d5` expands IPA-validator regressions to reject simulator Mach-O and iPhoneSimulator bundle platforms.
-- `2766b3a9` adds AOT/interpreter CWDE, CDQE, CDQ and CQO support and bumps the translator cache version to 10.
-- `f93008df` adds interpreter CBW/CWD support, 0x66 operand-size handling, REX.W precedence regressions and interpreter/AOT fallback tests.
-- `a23d99ba` makes the two static ELF smoke-test builders work in both the repository tree and the flattened downloadable smoke kit.
-- `34491c5c`, `bc445ef5`, `b88e5029` and `f85b9d55` repair and harden the AOT translator-version source-contract validator; the final validator derives its expected version from the translator source.
-- `5a6b5f9d` refreshes this acceptance record with the verified IPA, current CI and mirror status; it is documentation-only.
-- The QEMU runtime and release workflows already define JIT and TCI variants, runtime manifests, and the QEMU licensing gate. The TCI path is the intended no-JIT full-system route; it has not yet booted a guest on a physical iPad.
-- `77ab9207`, `3f11307b`, `6803ae1b`, `1c9e6cfe` and `37011be3` restore the QEMU TCI target-list behavior and regression coverage after a malformed patcher insertion: x86-64 is the default, explicit comma-separated `*-softmmu` targets are validated, shell metacharacters and incomplete overrides fail closed, and patching is idempotent.
+- `efbdf480` — reload the AOT guest-register-array pointer from preserved `x17` after using `x16` as scratch; byte-register AL/AH/R8B preservation regression coverage.
+- `c095723d` and `158481af` — iOS 17 keyboard-layout API availability guard for the iOS 16 deployment target and guest stdin lock-scope assertion.
+- `b26079cc` — preserve the iOS/tvOS SteamOS 2 GiB / 2-vCPU profile; keep desktop 4 GiB / 4-vCPU defaults and add platform-specific UI/test coverage.
+- `fdc4c21c` — align QEMU BIOS fixture paths and release-channel source-contract assertions with the current packaging layout.
+- `e1660af8` — isolate the complete TCI framework/dependency closure under `Frameworks/TCI`, rewrite loader-relative runpaths, re-sign modified Mach-O files and test versioned frameworks/symlinks.
+- `3418baa0` — correct the AOT byte-XCHG hybrid test to expect the supported MOV prefix to execute in AOT before interpreter side-exit.
+- `033c62d8` and `08ab0ae0` — route hardware keyboard key-down/up/cancel events to QEMU/VNC with HID mappings, F-keys, modifiers and key cleanup.
+- `7a151691` — declare project-authored source GPL-2.0-or-later; third-party and combined-work licensing review remains separate.
+- `71ee9407` — enforce strict JIT/TCI callback-export parity in native validation and startup; add a fake JIT-library rejection test for TCI and run native bridge tests in GitLab CI.
+- `e9cf8f87` — add the TCI mismatch case to GitHub's native bridge workflow and assert both CI definitions remain aligned.
 
 ### Hosted and local validation evidence
 
-- GitLab pipeline IID 1262 / ID `3113074471` on exact source SHA `f85b9d55` failed before runner assignment with `ci_quota_exceeded`; job `18354837439` had no runner, start time or duration. No tests ran.
-- GitLab's manual main-only validation pipeline IID 1273 / ID `3113203703` on exact main `37011be3e6b610317f9c2b14ab15a91ce98dc806` failed before runner allocation with `ci_quota_exceeded`; job `18355803586` had no runner, start time or duration. Earlier pipelines 1267–1272 were blocked by the same quota; retries did not start a runner.
-- Local isolated Python/Bash TCI target-list harness: 5/5 passed. A separate local patch-script integration harness passed idempotence, TCI flag preservation, and `bash -n` shell validation. These reconstructed local harnesses do not replace the full repository test suite.
-- Earlier exact-head pipelines 1261 (`b88e5029`), 1259 (`bc445ef5`), 1258 (`a23d99ba`) and 1254 (`2766b3a9`) were also blocked before runner allocation by the same shared quota. Hosted validation has not executed on the current GitLab main.
-- GitHub main remains at `f93008df`; its workflows have not run against the five newer GitLab commits.
-- GitHub core-only IPA run `45582606913` on older source `ad65030d` failed at static ELF loading because the diagnostic ELF did not map its program-header table. Commit `8c5d6f94` fixes that defect; the fix is now on current main.
-- Earlier GitHub core-only IPA run `45580260610` on `2f082fae` passed its older runtime tests and packaged a QEMU-free unsigned IPA, but the old Mach-O validator rejected the device platform and skipped artifact upload. The validator fix and its regression tests are now on current main.
-- Local validator checks passed: Bash syntax, source-contract checks, 4/4 platform regression cases, numeric/text device platform acceptance, simulator platform rejection, and QEMU payload rejection.
-- Both static ELF diagnostic builders/tests passed on Linux x86-64; the guests printed `Linuxx86_64KENRAN_BUTO_RUNTIME_OK` and `KENRAN_BUTO_XCHG_OK`. A separate reconstructed AOT encoding smoke also passed MOV/LEA/XCHG/MOVZX and bounded-fallback checks. These are host tests, not iOS emulator execution.
-- The available core-only diagnostic IPA was built from older source head `d2d13b3d`, before the sign-extension changes. Its SHA-256 is `218865070ce3ed0daca3abae194ca4c763eccd30b1ab3631dec760efed3bf40c`; it is unsigned, ARM64/iPhoneOS, bundle ID `com.xthrx.isteam`, and contains no QEMU. It is not a current-head build or a full-system VM.
-- The two bundled static x86-64 ELF guests execute natively on an x86-64 Linux host and print `Linuxx86_64KENRAN_BUTO_RUNTIME_OK` and `KENRAN_BUTO_XCHG_OK`, each with exit status 0. This does not prove execution through the iOS app's interpreter.
-- GitHub validation at `f93008df` ran the Swift guest-runtime regression job successfully, but the AOT source-contract, packaging-validation and core-only IPA jobs failed because the validator still expected translator version 9. The subsequent GitLab commits updated the validator to derive version 10 dynamically, but have not yet been hosted-validated. At last check, tvOS and visionOS simulator builds passed, the iOS simulator job failed at the same validator step, and the iOS device build was still running.
-- No current-head IPA after the latest main head `37011be3` (or patcher repair `6803ae1b`), QEMU TCI runtime artifact, QEMU-enabled IPA, SideStore installation, or physical iPad Linux boot is verified.
+- Native ARM64 AOT validation completed successfully after the byte-XCHG hybrid block-count assertion was corrected in `3418baa0`. This verifies the hosted ARM64 test path, not physical iOS JIT/AOT execution.
+- The QEMU TCI dependency-isolation synthetic suite was recorded as 17/17 passing locally after `e1660af8`. It does not replace `otool -L`/load-command closure checks, `codesign --verify`, on-device `dlopen`, or a guest boot.
+- The native QEMU bridge now rejects a JIT callback export when TCI is requested and rejects a missing callback when JIT is requested. The C harness covers JIT success, TCI success and TCI-with-JIT-export rejection. GitLab CI and the GitHub validation workflow are wired to run these cases.
+- GitLab pipeline IID 1303 (commit `71ee9407`), IID 1304 (same commit) and IID 1305 (commit `e9cf8f87`) all failed before runner assignment with `ci_quota_exceeded`; no tests ran on the new bridge-parity changes.
+- GitHub repository validation run `45842731799`, platform compile run `45842731803` and core-only IPA run `45842731853` are pending without assigned runners. Build & Release run `45842732055` is queued. No IPA artifact or platform build result is available.
+- GitLab `main` is `e9cf8f8708af1500dd6b70029633f4d210de2853`; GitHub `main` is `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, one commit behind. The GitLab-only commit updates the GitHub validation workflow and its source-contract test; no reverse sync or force-push has been attempted.
+- The project-authored license grant is GPL-2.0-or-later (`7a151691`). The QEMU/UTM file-level and combined-work audit remains incomplete; `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true` must remain unset until qualified review.
+- No current QEMU TCI runtime artifact, QEMU-enabled IPA, SideStore installation or physical iPad Linux boot is verified.
 
 ### Runtime and older-feature boundary
 
@@ -192,9 +184,15 @@ QEMU TCTI is the selected first-playable no-JIT full-system route (legacy intern
 
 
 
-## Latest packaging and validation status (2026-11-26)
+## Latest source and packaging status (2026-11-26)
 
-- The JIT and TCI runtime archives previously passed Mach-O/platform/export checks, but the combined package failed because the `phodav-3.0.0.framework/phodav-3.0.0` dependency bytes differed between the independently built variants.
-- GitHub main commit `06d21b6b` isolates the JIT and TCI dependency trees and adds loader-relative runpaths to TCI Mach-O files. Its QEMU build workflow was queued at the last coordination update; this fix is a candidate, not a verified package.
-- GitLab validation pipelines 1288–1290 failed immediately with `ci_quota_exceeded` before runner assignment. No runner executed the tests; no pass is claimed for the latest source-contract changes.
-- No current QEMU runtime artifact, QEMU-enabled IPA, physical iPad installation, or Linux guest boot is verified. The QEMU publication gate remains closed pending qualified review of the UTM-derived Apache-2.0 bridge and the exact combined distribution.
+GitLab `main` is `e9cf8f8708af1500dd6b70029633f4d210de2853`; GitHub `main` is `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, one commit behind. No force-push or reverse sync has been attempted.
+
+- The AOT guest-register-pointer correction and byte-XCHG hybrid block-count test correction are in main; hosted ARM64 AOT validation passed. Physical iOS JIT/AOT execution remains unverified.
+- QEMU TCI dependency isolation is in main: the complete TCI framework tree is packaged separately, loader-relative runpaths are rewritten, modified Mach-O files are re-signed, and versioned framework/symlink cases are tested. Local synthetic merger tests were recorded 17/17 passing.
+- Hardware keyboard key-down/up/cancel forwarding and F-key/HID mappings are in main. Physical keyboard focus and guest delivery remain unverified.
+- Native QEMU bridge parity is in GitLab main: JIT must export the StikJIT callback and TCI must not. The GitLab C-test job covers both valid modes and the TCI-with-JIT-export rejection case. GitHub's workflow invocation is updated in the GitLab-only follow-up commit.
+- GitLab pipelines IID 1303–1305 failed before runner assignment with `ci_quota_exceeded`. GitHub validation/platform/core-only IPA runs remain pending without assigned runners. No current IPA or QEMU runtime artifact exists.
+- The QEMU publication gate remains closed. The project-authored GPL-2.0-or-later grant does not itself establish compatibility of every QEMU/UTM source file in the combined distribution. Complete the qualified file-level and combined-work audit before enabling the gate.
+- First physical-device target remains a 1 GiB x86-64 Linux guest through QEMU TCI with JIT disabled, VNC-to-Metal display, keyboard/controller/touch input, persistent disk, clean shutdown and repeat boot. No physical iPad guest boot is verified.
+
