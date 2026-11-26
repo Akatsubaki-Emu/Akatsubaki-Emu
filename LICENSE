@@ -1,3 +1,14 @@
+Akatsubaki Emu project-authored code
+SPDX-License-Identifier: GPL-2.0-or-later
+
+The Akatsubaki-authored portions of this repository are licensed under the
+GNU General Public License, version 2 or (at your option) any later version
+published by the Free Software Foundation. The GPL version 2 text below is
+included verbatim. Third-party components retain their own licences; see
+THIRD_PARTY_NOTICES.md.
+
+---------------------------------------------------------------------------
+
                     GNU GENERAL PUBLIC LICENSE
                        Version 2, June 1991
 

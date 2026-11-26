@@ -198,7 +198,13 @@ class MergeQEMURuntimeVariantsTests(unittest.TestCase):
         mock_bin = self.root / "mock-bin"
         mock_bin.mkdir()
         tools = {
-            "file": "#!/bin/sh\necho 'Mach-O 64-bit dynamically linked shared library arm64'\n",
+            "file": (
+                "#!/bin/sh\n"
+                "case \"$1\" in\n"
+                "  *.plist) echo 'XML 1.0 document, ASCII text' ;;\n"
+                "  *) echo 'Mach-O 64-bit dynamically linked shared library arm64' ;;\n"
+                "esac\n"
+            ),
             "otool": (
                 "#!/bin/sh\n"
                 "cat <<'EOF'\n"
