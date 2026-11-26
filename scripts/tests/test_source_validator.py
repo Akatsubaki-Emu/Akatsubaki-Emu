@@ -704,7 +704,7 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("QEMU TCG + JIT", settings)
         self.assertIn("QEMU TCI (no JIT)", settings)
         self.assertIn("Uses QEMU's experimental TCTI (threaded-dispatch TCG bytecode) interpreter without JIT entitlements or executable-memory support.", settings)
-        self.assertIn("TCTI is experimental", settings)
+        self.assertIn("experimental TCTI", settings)
         self.assertIn("TCG with a 128 MiB translation-block cache and split-WX", settings)
         self.assertIn("?? .linuxVM", settings)
         self.assertNotIn("Slower compatibility fallback", settings)
