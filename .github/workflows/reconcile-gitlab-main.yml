@@ -2,6 +2,12 @@ name: Reconcile GitLab mirror history
 
 on:
   workflow_dispatch:
+    inputs:
+      authorize_gitlab_main_merge:
+        description: "Explicit owner authorization to merge the exact reviewed GitLab main history into canonical GitHub main."
+        required: true
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -17,6 +23,7 @@ concurrency:
 
 jobs:
   reconcile:
+    if: github.event_name == 'workflow_dispatch' && github.actor == 'xthrx-chu' && inputs.authorize_gitlab_main_merge == true
     runs-on: ubuntu-latest
     steps:
       - name: Check out canonical main

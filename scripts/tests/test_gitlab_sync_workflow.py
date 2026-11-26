@@ -38,6 +38,20 @@ class GitLabSyncWorkflowTests(unittest.TestCase):
         self.assertIn("group: github-to-gitlab-main", self.workflow)
         self.assertIn("cancel-in-progress: false", self.workflow)
 
+    def test_gitlab_history_merge_requires_explicit_owner_authorization(self):
+        reconcile = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "reconcile-gitlab-main.yml").read_text(encoding="utf-8")
+        self.assertIn("authorize_gitlab_main_merge", reconcile)
+        self.assertIn("default: false", reconcile)
+        self.assertIn("github.event_name == 'workflow_dispatch'", reconcile)
+        self.assertIn("github.actor == 'xthrx-chu'", reconcile)
+        self.assertIn("inputs.authorize_gitlab_main_merge == true", reconcile)
+
+    def test_sync_documentation_declares_github_as_canonical(self):
+        docs = (Path(__file__).resolve().parents[2] / "docs" / "GIT_SYNC.md").read_text(encoding="utf-8")
+        self.assertIn("GitHub `main` is canonical", docs)
+        self.assertIn("downstream mirror", docs)
+        self.assertIn("Never create branches, force-push", docs)
+
 
 class GitHubActionsOwnershipTests(unittest.TestCase):
     ROOT = Path(__file__).resolve().parents[2]
