@@ -425,7 +425,10 @@ struct InterpreterTests {
             precondition(extensionExit == .unsupportedInstruction(address: sideExitAddress))
             precondition(extensionAOT.executeCalls == 1)
             precondition(extensionAOT.refreshCalls == 1)
-            precondition(extensionAOT.lastGuestCodeWindowLength == program.count)
+            // AOT receives a bounded two-instruction window, not the exact
+            // number of initialized bytes in GuestMemory.
+            precondition(extensionAOT.lastGuestCodeWindowLength == 30)
+            precondition(extensionAOT.lastGuestCodeWindowLength <= extensionAOT.lastInstructionBudget * 15)
             precondition(extensionInterpreter.instructionCount == 1)
         }
 
