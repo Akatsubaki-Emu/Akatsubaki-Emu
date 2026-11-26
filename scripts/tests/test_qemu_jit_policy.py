@@ -40,6 +40,7 @@ class QEMUJITPolicyTests(unittest.TestCase):
         self.assertIn("threaded-dispatch TCG bytecode", settings)
         self.assertIn("if mode.isAvailable", ui)
         self.assertIn("guard mode.isAvailable else { return }", ui)
+        self.assertIn("experimental TCTI", ui)
         self.assertNotIn("the no-JIT TCI runtime is not packaged yet", ui)
 
     def test_build_documentation_describes_both_runtime_variants_without_claiming_a_boot(self):

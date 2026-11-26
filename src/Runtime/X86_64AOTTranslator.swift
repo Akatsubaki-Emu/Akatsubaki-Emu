@@ -145,13 +145,16 @@ struct X86_64AOTTranslator {
                     : registerField | ((rex & 0x01) != 0 ? 8 : 0)
                 let bitOffset = usesHighByte ? 8 : 0
                 guard cursor - start <= Self.maximumX86InstructionLength - 1 else {
-                    return fallback(.unsupportedInstruction, start: start, consumed: start)
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .unsupportedInstruction, opcode: bytes[start])
                 }
                 guard cursor < bytes.count else {
                     if bytes.count < guestCodeCount {
-                        return fallback(.inputLimit, start: start, consumed: start)
+                        return result(output, consumed: start, instructions: instructions,
+                                      reason: .inputLimit, fallbackOffset: start)
                     }
-                    return fallback(.truncatedInstruction, start: start, consumed: start)
+                    return fallback(output, consumed: start, instructions: instructions,
+                                    reason: .truncatedInstruction, opcode: bytes[start])
                 }
                 let immediate = bytes[cursor]
                 cursor += 1

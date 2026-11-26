@@ -72,6 +72,21 @@ struct KenranButoAOTTranslatorTests {
         precondition(movREXRImmediate.isComplete && movREXRImmediate.guestBytesConsumed == 3)
         precondition(word(movREXRImmediate.machineCode, 1) == 0xB3401E04)
 
+        // x86 instructions are at most 15 bytes: 13 redundant REX prefixes
+        // plus MOV r8, imm8 is valid; one more prefix must side-exit.
+        let movByteAtMaximumLength = translator.translate(
+            Data([UInt8](repeating: 0x40, count: 13) + [0xB0, 0x7F])
+        )
+        precondition(movByteAtMaximumLength.isComplete)
+        precondition(movByteAtMaximumLength.guestBytesConsumed == 15)
+        precondition(movByteAtMaximumLength.instructionCount == 1)
+        let movByteOverMaximumLength = translator.translate(
+            Data([UInt8](repeating: 0x40, count: 14) + [0xB0, 0x7F])
+        )
+        precondition(movByteOverMaximumLength.stopReason == .unsupportedInstruction)
+        precondition(movByteOverMaximumLength.guestBytesConsumed == 0)
+        precondition(movByteOverMaximumLength.fallbackOpcode == 0x40)
+
         let movByteTruncated = translator.translate(Data([0xB0]))
         precondition(movByteTruncated.stopReason == .truncatedInstruction)
         precondition(movByteTruncated.guestBytesConsumed == 0)

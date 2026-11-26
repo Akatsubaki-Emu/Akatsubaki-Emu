@@ -116,7 +116,7 @@ final class SettingsViewController: UITableViewController {
             cell.accessoryView = makeSwitch(isOn: UserDefaults.standard.bool(forKey: "iSteam.androidExperiment"), action: #selector(toggleAndroidExperiment(_:)))
         case 9:
             c.text = "\(UIDevice.current.model) · iOS \(UIDevice.current.systemVersion)"
-            c.secondaryText = "Hypervisor.framework is unavailable to ordinary iOS apps. QEMU uses JIT when ready and falls back to the bundled threaded TCI interpreter when JIT is unavailable. TCI is slower; physical-device guest boot remains unverified. macOS guest boot is disabled on iOS."
+            c.secondaryText = "Hypervisor.framework is unavailable to ordinary iOS apps. QEMU uses JIT when ready and falls back to the bundled experimental TCTI (threaded-dispatch TCG bytecode) interpreter when JIT is unavailable. TCTI is experimental and slower; physical-device guest boot remains unverified. macOS guest boot is disabled on iOS."
             c.secondaryTextProperties.numberOfLines = 0
         case 10:
             c.text = "DroidDeck feature status"
