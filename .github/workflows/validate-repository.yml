@@ -334,6 +334,7 @@ jobs:
             -o "$RUNNER_TEMP/test-qemu-native-bridge"
           "$RUNNER_TEMP/test-qemu-native-bridge" jit "$RUNNER_TEMP/libfakeqemu-jit.so"
           "$RUNNER_TEMP/test-qemu-native-bridge" tci "$RUNNER_TEMP/libfakeqemu-tci.so"
+          "$RUNNER_TEMP/test-qemu-native-bridge" tci-reject-jit "$RUNNER_TEMP/libfakeqemu-jit.so"
 
 
 
