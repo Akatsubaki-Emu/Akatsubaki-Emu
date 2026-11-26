@@ -103,7 +103,7 @@ class MergeQEMURuntimeVariantsTests(unittest.TestCase):
         tci = make_package(combined / "tci", "tci")
         result = self.run_merge("build/combined", jit=jit, tci=tci)
         self.assertNotEqual(result.returncode, 0)
-        self.assertTrue((jit / "QEMU/bios.bin").is_file())
+        self.assertTrue((jit / "QEMU/JIT/bios.bin").is_file())
         self.assertTrue((tci / "QEMU/bios.bin").is_file())
 
     def test_rejects_missing_lifecycle_export_from_tci(self):
