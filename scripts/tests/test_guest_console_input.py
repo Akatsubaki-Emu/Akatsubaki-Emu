@@ -30,6 +30,7 @@ class GuestConsoleInputTests(unittest.TestCase):
         self.assertLess(flush_lock, flush)
         self.assertLess(flush, ready)
         self.assertLess(ready, flush_unlock)
+        self.assertNotIn("self.lock.unlock()", runtime[flush:ready])
 
         send_start = runtime.index("func sendStandardInput(_ data: Data) -> Int")
         send_enqueue = runtime.index("machine.enqueueStandardInput(data)", send_start)
