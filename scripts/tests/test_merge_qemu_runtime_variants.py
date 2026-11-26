@@ -1,3 +1,4 @@
+import os
 import subprocess
 import tempfile
 import unittest
@@ -58,10 +59,10 @@ class MergeQEMURuntimeVariantsTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_merge(self, output="build/merged", jit=None, tci=None):
+    def run_merge(self, output="build/merged", jit=None, tci=None, env=None):
         return subprocess.run(
             ["bash", str(SCRIPT), str(jit or self.jit), str(tci or self.tci), output],
-            cwd=self.root, capture_output=True, text=True, check=False,
+            cwd=self.root, capture_output=True, text=True, check=False, env=env,
         )
 
     def test_valid_merge_separates_qemu_frameworks_and_rewrites_tci_manifest(self):
@@ -173,15 +174,78 @@ class MergeQEMURuntimeVariantsTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unsafe TCI library path", result.stderr)
 
-    def test_rejects_different_non_qemu_dependency_bytes_and_preserves_existing_output(self):
-        tci = make_package(self.build / "bad-tci", "tci", shared_bytes="different shared dependency")
-        output = self.build / "merged"
-        output.mkdir()
-        sentinel = output / "sentinel.txt"
-        sentinel.write_text("keep old output", encoding="utf-8")
+    def test_preserves_different_jit_and_tci_dependency_trees(self):
+        tci = make_package(self.build / "different-tci", "tci", shared_bytes="different TCI dependency")
         result = self.run_merge(tci=tci)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep old output")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = self.build / "merged"
+        self.assertEqual((output / "Frameworks/Shared.framework/Shared").read_text(), "shared dependency")
+        self.assertEqual((output / "Frameworks/TCI/Shared.framework/Shared").read_text(),
+                         "different TCI dependency")
+
+
+    def test_isolates_versioned_tci_frameworks_and_resigns_runpath_changes(self):
+        framework = self.tci / "Frameworks" / "Versioned.framework"
+        versioned_binary = framework / "Versions" / "A" / "Versioned"
+        versioned_binary.parent.mkdir(parents=True)
+        versioned_binary.write_text("versioned TCI framework binary", encoding="utf-8")
+        (framework / "Versions" / "Current").symlink_to("A")
+        (framework / "Versioned").symlink_to("Versions/Current/Versioned")
+        (framework / "Resources").mkdir()
+        (framework / "Resources" / "Info.plist").write_text("versioned resources", encoding="utf-8")
+        (framework / "Versions" / "A" / "Resources").symlink_to("../../Resources")
+
+        mock_bin = self.root / "mock-bin"
+        mock_bin.mkdir()
+        tools = {
+            "file": "#!/bin/sh\necho 'Mach-O 64-bit dynamically linked shared library arm64'\n",
+            "otool": (
+                "#!/bin/sh\n"
+                "cat <<'EOF'\n"
+                "Load command 1\n"
+                "          cmd LC_RPATH\n"
+                "      cmdsize 40\n"
+                "         path @executable_path/Frameworks (offset 12)\n"
+                "EOF\n"
+            ),
+            "install_name_tool": (
+                "#!/bin/sh\n"
+                "case \"$1\" in\n"
+                "  -add_rpath) printf '\\nMOCK_RPATH=%s' \"$2\" >> \"$3\" ;;\n"
+                "  -delete_rpath) printf '\\nMOCK_DELETED_RPATH=%s' \"$2\" >> \"$3\" ;;\n"
+                "  *) exit 2 ;;\n"
+                "esac\n"
+            ),
+            "codesign": "#!/bin/bash\ntarget=\"$5\"\nprintf '\\nMOCK_SIGNED' >> \"$target\"\n",
+        }
+        for name, source in tools.items():
+            tool = mock_bin / name
+            tool.write_text(source, encoding="utf-8")
+            tool.chmod(0o755)
+
+        env = {**os.environ, "PATH": f"{mock_bin}:{os.environ['PATH']}"}
+        result = self.run_merge(env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        output = self.build / "merged"
+        flat_tci = output / "Frameworks/TCI/QEMU.framework/QEMU"
+        self.assertIn("MOCK_DELETED_RPATH=@executable_path/Frameworks", flat_tci.read_text(encoding="utf-8"))
+        self.assertIn("MOCK_RPATH=@loader_path/..", flat_tci.read_text(encoding="utf-8"))
+        self.assertIn("MOCK_SIGNED", flat_tci.read_text(encoding="utf-8"))
+
+        nested_tci = output / "Frameworks/TCI/Versioned.framework/Versions/A/Versioned"
+        self.assertIn("MOCK_DELETED_RPATH=@executable_path/Frameworks", nested_tci.read_text(encoding="utf-8"))
+        self.assertIn("MOCK_RPATH=@loader_path/../../..", nested_tci.read_text(encoding="utf-8"))
+        self.assertIn("MOCK_SIGNED", nested_tci.read_text(encoding="utf-8"))
+        self.assertTrue((output / "Frameworks/TCI/Versioned.framework/Versioned").is_symlink())
+        self.assertTrue((output / "Frameworks/TCI/Versioned.framework/Versions/Current").is_symlink())
+        self.assertTrue((output / "Frameworks/TCI/Versioned.framework/Versions/A/Resources").is_symlink())
+        self.assertEqual((output / "Frameworks/TCI/Versioned.framework/Resources/Info.plist").read_text(),
+                         "versioned resources")
+
+        jit_binary = output / "Frameworks/QEMU.framework/QEMU"
+        self.assertNotIn("MOCK_RPATH", jit_binary.read_text(encoding="utf-8"))
+        self.assertNotIn("MOCK_SIGNED", jit_binary.read_text(encoding="utf-8"))
 
     def test_rejects_tci_qemu_framework_symlink_escape(self):
         (self.tci / "Frameworks" / "QEMU.framework" / "escape").symlink_to("../../../../outside")

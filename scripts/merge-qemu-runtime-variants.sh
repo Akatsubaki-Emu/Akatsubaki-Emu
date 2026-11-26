@@ -111,9 +111,10 @@ merge_framework_tree() {
       [[ "$link_target" != /* && "$link_target" != *\\* ]] || fail "unsafe framework symlink: $relative -> $link_target"
       local -a link_components=()
       IFS='/' read -r -a link_components <<< "$link_target"
-      for part in "${link_components[@]}"; do
-        [[ "$part" != ".." ]] || fail "framework symlink escapes its tree: $relative -> $link_target"
-      done
+      resolved_link="$(python3 -c 'import os,sys; print(os.path.normpath(os.path.join(os.path.dirname(sys.argv[1]), sys.argv[2])))' "$relative" "$link_target")" \
+        || fail "could not resolve framework symlink: $relative -> $link_target"
+      [[ "$resolved_link" != ".." && "$resolved_link" != ../* && "$resolved_link" != /* ]] \
+        || fail "framework symlink escapes its tree: $relative -> $link_target"
       if [[ -e "$target" || -L "$target" ]]; then
         [[ -L "$target" && "$link_target" == "$(readlink "$target")" ]] || fail "conflicting framework symlink: $relative"
       else
@@ -136,21 +137,47 @@ merge_framework_tree() {
   done < <(find "$source_root" -mindepth 1 -print0)
 }
 
+# Keep the complete TCI dependency closure separate from the JIT build.
+# UTM builds the two iOS sysroots independently; dependencies with the same
+# install name (for example phodav) can legitimately have different bytes.
 merge_framework_tree "$JIT_DIR/Frameworks" "$TEMP_OUT/Frameworks"
 [[ ! -e "$TEMP_OUT/Frameworks/TCI" && ! -L "$TEMP_OUT/Frameworks/TCI" ]] || fail "JIT frameworks already use the reserved Frameworks/TCI path"
-merge_framework_tree "$TCI_DIR/Frameworks" "$TEMP_OUT/Frameworks" "$tci_framework_component"
 mkdir -p "$TEMP_OUT/Frameworks/TCI"
 tci_component_source="$TCI_DIR/Frameworks/$tci_framework_component"
-tci_component_destination="$TEMP_OUT/Frameworks/TCI/$tci_framework_component"
 [[ ! -L "$tci_component_source" ]] || fail "TCI runtime library component must not be a symlink"
-if [[ -d "$tci_component_source" ]]; then
-  mkdir -p "$tci_component_destination"
-  merge_framework_tree "$tci_component_source" "$tci_component_destination"
-elif [[ -f "$tci_component_source" ]]; then
-  cp -a "$tci_component_source" "$tci_component_destination"
-else
-  fail "TCI runtime library component is missing: $tci_framework_component"
-fi
+[[ -d "$tci_component_source" || -f "$tci_component_source" ]] || fail "TCI runtime library component is missing: $tci_framework_component"
+merge_framework_tree "$TCI_DIR/Frameworks" "$TEMP_OUT/Frameworks/TCI"
+
+# Relocate every TCI Mach-O's @rpath search path to the isolated TCI root.
+# Removing inherited paths is important: an @executable_path/Frameworks entry
+# could otherwise resolve a JIT dependency before the matching TCI dependency.
+# Re-sign each modified image ad hoc; the final app is subsequently signed by
+# the user's installation/signing workflow.
+add_variant_rpath() {
+  local variant_root="$1" binary description relative rpath load_commands existing_rpath
+  while IFS= read -r -d '' binary; do
+    description="$(file "$binary" 2>/dev/null || true)"
+    [[ "$description" == *"Mach-O"* ]] || continue
+    [[ "$description" == *"dynamically linked shared library"* || "$description" == *"executable"* ]] || continue
+
+    relative="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$variant_root" "$(dirname "$binary")")" \
+      || fail "could not calculate TCI runpath for $binary"
+    rpath="@loader_path/$relative"
+    load_commands="$(otool -l "$binary" 2>/dev/null)" || fail "could not inspect TCI Mach-O load commands: $binary"
+
+    while IFS= read -r existing_rpath; do
+      [[ -n "$existing_rpath" ]] || continue
+      install_name_tool -delete_rpath "$existing_rpath" "$binary" \
+        || fail "could not remove inherited TCI runpath '$existing_rpath' from $binary"
+    done < <(awk '/cmd LC_RPATH/{getline; getline; if ($1 == "path") { sub(/^[[:space:]]*path[[:space:]]+/, ""); sub(/[[:space:]]+\(offset .*/, ""); print }}' <<< "$load_commands")
+
+    install_name_tool -add_rpath "$rpath" "$binary" \
+      || fail "could not add isolated TCI runpath '$rpath' to $binary"
+    codesign --force --sign - --timestamp=none "$binary" \
+      || fail "could not ad-hoc sign modified TCI Mach-O: $binary"
+  done < <(find "$variant_root" -type f -print0)
+}
+add_variant_rpath "$TEMP_OUT/Frameworks/TCI"
 
 tci_library_merged="Frameworks/TCI/$tci_framework_relative"
 cp -a "$JIT_DIR/QEMU/JIT/." "$TEMP_OUT/QEMU/JIT/"
