@@ -322,7 +322,7 @@ final class VMDisplayViewController: UIViewController {
         case 0x46: return "PRINTSCREEN"
         case 0x47: return "SCROLLLOCK"
         case 0x48: return "PAUSE"
-        case 0x3A...0x45: return "F\\(Int(key.keyCode.rawValue) - 0x39)"
+        case 0x3A...0x45: return "F\(Int(key.keyCode.rawValue) - 0x39)"
         case 0x49: return "INSERT"
         case 0x4A: return "HOME"
         case 0x4B: return "PAGEUP"
@@ -355,7 +355,7 @@ final class VMDisplayViewController: UIViewController {
             // Ignore UIKit key-repeat down events; the guest owns repeat policy.
             if hardwareKeySources[code] != nil { return true }
             guard let name = hardwareKeyName(for: key) else { return false }
-            let source = "hardware-keyboard:\\(code)"
+            let source = "hardware-keyboard:\(code)"
             hardwareKeySources[code] = (name, source)
             vncClient.sendKey(name, down: true, source: source)
             return true

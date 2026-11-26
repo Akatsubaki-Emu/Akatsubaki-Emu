@@ -18,6 +18,8 @@ class HardwareKeyboardVNCRoutingTests(unittest.TestCase):
         self.assertIn("sendHardwareKey(key, isDown: true)", self.display)
         self.assertIn("sendHardwareKey(key, isDown: false)", self.display)
         self.assertIn("vncClient.sendKey(name, down: true, source: source)", self.display)
+        self.assertIn('return "F\\(Int(key.keyCode.rawValue) - 0x39)"', self.display)
+        self.assertIn('let source = "hardware-keyboard:\\(code)"', self.display)
 
     def test_hid_navigation_function_modifier_and_system_keys_are_mapped(self):
         mapping = self.display.split("private func hardwareKeyName", 1)[1].split("private func sendHardwareKey", 1)[0]
