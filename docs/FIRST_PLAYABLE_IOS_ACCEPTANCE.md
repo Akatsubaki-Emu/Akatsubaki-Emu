@@ -76,7 +76,7 @@ The AOT path is optional for the first QEMU TCI guest. TCI does not require Stik
 - [ ] Verify pause/resume, focus changes, orientation, and clean shutdown.
 - [ ] Apply guest resolution and frame-rate settings to the actual renderer rather than only storing UI preferences.
 
-For QEMU TCTI, validate the existing VNC-to-Metal display and keyboard/controller event path on the physical device. The separate static ELF console remains text-only and has no independent framebuffer; it now has a bounded, interruptible guest-stdin queue and a text input field for diagnostic programs.
+For QEMU TCTI, validate the existing VNC-to-Metal display and keyboard/controller event path on the physical device. Hardware-keyboard key-down/up/cancel forwarding and F-key/HID mappings are implemented in main; physical focus, key-up and guest delivery still need verification. The separate static ELF console remains text-only and has no independent framebuffer; it now has a bounded, interruptible guest-stdin queue and a text input field for diagnostic programs.
 
 ### Gate 5 — Persistent QEMU guest disk state
 
@@ -118,7 +118,7 @@ These items remain outside the first QEMU TCI Linux-boot milestone and should be
 | Steam | In-app Steam Store and library/game launch integration | The tvOS Store action is an explanatory prototype; a functional Steam client/session is not integrated |
 | Storage | Persistent VM disks, save slots, external drives and USB | Needs a real block-device layer, image management, snapshots, and device passthrough |
 | Graphics | Guest framebuffer, Metal rendering, 3D translation | Current display experiments are not a complete guest graphics backend |
-| Input | Touch gamepad, movable/resizable controls, pointer lock, motion, hardware keyboard and F-key bar | Needs end-to-end event routing into the guest, focus handling, and per-game profiles |
+| Input | Touch gamepad, movable/resizable controls, pointer lock, motion, hardware keyboard and F-key bar | Touch and hardware-keyboard routing exist in source; physical focus/guest delivery, pointer lock, motion mapping and per-game profiles still need verification |
 | Display | Custom resolution, FPS limits, 60/120 Hz selection | Must be connected to the real renderer and guest timing, not only UI settings |
 | Controllers | Physical gamepads, sticks, buttons and controller mapping | Needs a tested host-to-guest input translation layer |
 | Android | Android guest experiment | UI selection only; no Android execution backend |
@@ -130,7 +130,7 @@ These items remain outside the first QEMU TCI Linux-boot milestone and should be
 
 ## Repository/CI coordination and latest validation status
 
-GitLab `main` currently points to `ab20a239d5ac45783b73ce06b7f505b2348b9766`; GitHub `main` currently points to `06d21b6bbdc150951dd49d4f119b115bb3d2e146`. The histories are divergent. GitLab contains the AOT compile/source-contract repairs and translator-v12 documentation; GitHub contains a separate QEMU JIT/TCI dependency-isolation change. The existing reconciliation workflow has not been run. Do not force-sync or overwrite either history; obtain explicit owner authorization before main-history reconciliation.
+GitLab `main` is `e8934712bbe37b6d3f1069c8689afb9f2e24cdd8`; GitHub `main` is `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, two commits behind. The GitLab-only commits update GitHub CI coverage and refresh these acceptance/feature documents. No reverse sync or force-push has been attempted.
 
 ### Current source changes (2026-11-26)
 
@@ -152,7 +152,7 @@ GitLab `main` currently points to `ab20a239d5ac45783b73ce06b7f505b2348b9766`; Gi
 - The native QEMU bridge now rejects a JIT callback export when TCI is requested and rejects a missing callback when JIT is requested. The C harness covers JIT success, TCI success and TCI-with-JIT-export rejection. GitLab CI and the GitHub validation workflow are wired to run these cases.
 - GitLab pipeline IID 1303 (commit `71ee9407`), IID 1304 (same commit) and IID 1305 (commit `e9cf8f87`) all failed before runner assignment with `ci_quota_exceeded`; no tests ran on the new bridge-parity changes.
 - GitHub repository validation run `45842731799`, platform compile run `45842731803` and core-only IPA run `45842731853` are pending without assigned runners. Build & Release run `45842732055` is queued. No IPA artifact or platform build result is available.
-- GitLab `main` is `e9cf8f8708af1500dd6b70029633f4d210de2853`; GitHub `main` is `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, one commit behind. The GitLab-only commit updates the GitHub validation workflow and its source-contract test; no reverse sync or force-push has been attempted.
+- GitLab `main` is `e8934712bbe37b6d3f1069c8689afb9f2e24cdd8`; GitHub `main` is `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, two commits behind. The GitLab-only commit updates the GitHub validation workflow and its source-contract test; no reverse sync or force-push has been attempted.
 - The project-authored license grant is GPL-2.0-or-later (`7a151691`). The QEMU/UTM file-level and combined-work audit remains incomplete; `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true` must remain unset until qualified review.
 - No current QEMU TCI runtime artifact, QEMU-enabled IPA, SideStore installation or physical iPad Linux boot is verified.
 
@@ -186,7 +186,7 @@ QEMU TCTI is the selected first-playable no-JIT full-system route (legacy intern
 
 ## Latest source and packaging status (2026-11-26)
 
-GitLab `main` is `e9cf8f8708af1500dd6b70029633f4d210de2853`; GitHub `main` is `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, one commit behind. No force-push or reverse sync has been attempted.
+GitLab `main` is `e8934712bbe37b6d3f1069c8689afb9f2e24cdd8`; GitHub `main` is `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, two commits behind. No force-push or reverse sync has been attempted.
 
 - The AOT guest-register-pointer correction and byte-XCHG hybrid block-count test correction are in main; hosted ARM64 AOT validation passed. Physical iOS JIT/AOT execution remains unverified.
 - QEMU TCI dependency isolation is in main: the complete TCI framework tree is packaged separately, loader-relative runpaths are rewritten, modified Mach-O files are re-signed, and versioned framework/symlink cases are tested. Local synthetic merger tests were recorded 17/17 passing.
