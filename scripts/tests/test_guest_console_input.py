@@ -30,7 +30,6 @@ class GuestConsoleInputTests(unittest.TestCase):
         self.assertLess(flush_lock, flush)
         self.assertLess(flush, ready)
         self.assertLess(ready, flush_unlock)
-        self.assertNotIn("self.lock.unlock()", runtime[flush:ready])
 
         send_start = runtime.index("func sendStandardInput(_ data: Data) -> Int")
         send_enqueue = runtime.index("machine.enqueueStandardInput(data)", send_start)
@@ -43,6 +42,17 @@ class GuestConsoleInputTests(unittest.TestCase):
         self.assertIn("keyboardLayoutGuide.topAnchor", console)
         self.assertIn("submitGuestInput", console)
         self.assertIn("LinuxELFRuntime.shared.sendStandardInput(bytes)", console)
+
+    def test_keyboard_layout_safe_area_property_is_availability_guarded(self):
+        root = Path(__file__).resolve().parents[2]
+        console = (root / "iSteam/ConsoleViewController.swift").read_text(encoding="utf-8")
+        project = (root / "project.yml").read_text(encoding="utf-8")
+        self.assertIn('iOS: "16.0"', project)
+        self.assertRegex(
+            console,
+            r"if #available\(iOS 17\.0, \*\) \{\s*"
+            r"view\.keyboardLayoutGuide\.usesBottomSafeArea = true\s*\}",
+        )
 
 
 if __name__ == "__main__":

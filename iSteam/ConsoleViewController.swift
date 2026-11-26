@@ -40,7 +40,9 @@ final class ConsoleViewController: UIViewController {
         textView.backgroundColor = .clear
         textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
 
-        view.keyboardLayoutGuide.usesBottomSafeArea = true
+        if #available(iOS 17.0, *) {
+            view.keyboardLayoutGuide.usesBottomSafeArea = true
+        }
         view.keyboardLayoutGuide.followsUndockedKeyboard = true
         inputField.translatesAutoresizingMaskIntoConstraints = false
         inputField.borderStyle = .roundedRect
