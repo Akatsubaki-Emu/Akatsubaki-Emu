@@ -7,7 +7,7 @@ This document complements the [first-playable acceptance checklist](FIRST_PLAYAB
 
 ## Current mainline snapshot — 2026-11-26
 
-**Authoritative source:** GitLab `main` at `e8934712bbe37b6d3f1069c8689afb9f2e24cdd8`. GitHub `main` is at `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, two commits behind (`e9cf8f87` CI coverage and this documentation refresh); no reverse sync or force-push has been attempted.
+**Authoritative source:** GitLab `main` at `bd6b9207768cf38990f554563c13545ad59e84a7`. GitHub `main` is at `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, three commits behind (`e9cf8f87` CI coverage, `e8934712` feature-document refresh and this head-reference correction); no reverse sync or force-push has been attempted.
 
 - AOT guest-register pointer correction and byte-register regression coverage are in main; the native ARM64 AOT validation completed successfully after the byte-XCHG hybrid block-count assertion was corrected in `3418baa0`. This is hosted ARM64 validation, not physical iOS JIT/AOT execution.
 - iOS 16 deployment compatibility is retained by guarding the iOS 17 keyboard-layout API; the guest stdin lock-scope assertion is also in main.
@@ -35,7 +35,7 @@ This snapshot supersedes older branch hashes and packaging-status statements in 
 - The static ELF diagnostic console now has a bounded, interruptible 64 KiB stdin queue and text input field. It remains text-only and does not provide a guest framebuffer.
 - `6803ae1b` repairs the malformed TCI target-list patcher; `1c9e6cfe` and `37011be3` restore the regression assertions. The isolated helper harness passed 5/5 and the patch-script integration harness passed locally; GitLab exact-main pipeline 1273 remains blocked before runner allocation by `ci_quota_exceeded`.
 - GitLab exact-head pipeline IID 1245 on `1678a2d5` failed before runner assignment with `ci_quota_exceeded`; no tests ran. GitHub run `45582606913` on older `ad65030d` failed at the now-fixed ELF program-header mapping.
-- GitLab `main` currently points to `e8934712bbe37b6d3f1069c8689afb9f2e24cdd8`; GitHub `main` remains at `71ee9407bb4cc491e6d0d2188c00574d183c2a67` and is two commits behind. No source mirror reconciliation or force-push has been attempted.
+- GitLab `main` currently points to `bd6b9207768cf38990f554563c13545ad59e84a7`; GitHub `main` remains at `71ee9407bb4cc491e6d0d2188c00574d183c2a67` and is three commits behind. No source mirror reconciliation or force-push has been attempted.
 
 ## Feature parity
 
@@ -68,7 +68,7 @@ This snapshot supersedes older branch hashes and packaging-status statements in 
 | FEXCore primary, Box64 fallback | RuntimeBackendRouter now tests FEXCore-first selection and Box64-only fallback; no concurrent translator is selected for one process | Neither dynamic translator is integrated as an operational iOS backend. FEXCore needs a Darwin core port; the BoxiOS snapshot is no-JIT and game-specific | P1 after first playable |
 | MeloNX and SharpEmu references | Names appear in project documentation/reference material, not as integrated x86 runtime dependencies | They are separate console-emulation codebases; do not add them to Kenran Butō's x86 path without a distinct supported guest architecture and licence/architecture audit | P3/separate scope |
 | Vapor and StikStore | No current source integration was found by repository search | Do not add speculative dependencies. StosSign and StikDebug are the current relevant signing/JIT integrations | P3/separate scope |
-| Main/nightly iOS, tvOS and visionOS channels | Main/nightly release tags, iOS/tvOS/visionOS targets and a release workflow are declared | GitLab `main` is `e8934712`; GitHub `main` is `71ee9407`, two commits behind. Keep GitLab as the required commit destination; no reverse sync or force-push has been attempted. No current-head QEMU TCI IPA or physical boot is verified | P1 |
+| Main/nightly iOS, tvOS and visionOS channels | Main/nightly release tags, iOS/tvOS/visionOS targets and a release workflow are declared | GitLab `main` is `bd6b9207`; GitHub `main` is `71ee9407`, three commits behind. Keep GitLab as the required commit destination; no reverse sync or force-push has been attempted. No current-head QEMU TCI IPA or physical boot is verified | P1 |
 | AltStore source and xthrx's repo feeds | Separate website/AltStore-source repository and generation workflow | This is release/distribution infrastructure, not part of the guest execution core; keep its source catalogue and Docusaurus docs separate from runtime code | P2 |
 
 ## Correct implementation order
@@ -85,8 +85,8 @@ This snapshot supersedes older branch hashes and packaging-status statements in 
 
 - QEMU TCI is the selected first-playable no-JIT route, but the QEMU/UTM distribution gate remains closed. The release workflow requires `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true` only after qualified file-level and combined-work licensing review. Do not set it before that review.
 - The manual QEMU runtime build workflow can compile/validate JIT and TCI variants, but no TCI runtime artifact, QEMU-enabled iOS IPA, or physical Linux boot is verified.
-- GitLab pipelines IID 1303–1305 on commits `71ee9407` and `e9cf8f87` failed before runner assignment with `ci_quota_exceeded`; no tests ran on the strict-mode changes. Documentation-only commit `e8934712` has not been validated by a runner.
-- GitLab `main` is `e8934712`; GitHub `main` is `71ee9407`, two commits behind. The GitLab-only commits update GitHub CI coverage and refresh these feature/acceptance documents. Do not reverse-sync or force-push without owner authorization. The core-only iOS workflow is QEMU-free diagnostic coverage, not the first playable VM release.
+- GitLab pipelines IID 1303–1305 on commits `71ee9407` and `e9cf8f87` failed before runner assignment with `ci_quota_exceeded`; no tests ran on the strict-mode changes. Documentation-only commits `e8934712` and `bd6b9207` have not been validated by a runner.
+- GitLab `main` is `bd6b9207`; GitHub `main` is `71ee9407`, three commits behind. The GitLab-only commits update GitHub CI coverage and refresh these feature/acceptance documents. Do not reverse-sync or force-push without owner authorization. The core-only iOS workflow is QEMU-free diagnostic coverage, not the first playable VM release.
 - GitHub core-only IPA run `45582606913` on older `ad65030d` failed because the diagnostic ELF did not map its program-header table; `8c5d6f94` fixes that issue. No current-head hosted result or IPA artifact is verified.
 - The static ELF runtime is a bounded user-mode diagnostic. It is not a full-system Linux/Windows emulator. Its stdin queue is interruptible and bounded, but it has no independent framebuffer; QEMU's separate VNC-to-Metal path is intended for the first playable guest.
 - FEXCore/Box64 are not operational iOS dynamic backends; dynamic ELF, broad Linux ABI, Windows/PE, Wine/Proton, full-system graphics/audio beyond the QEMU display path, snapshots, USB passthrough, and Android/VR/tvOS/visionOS guest execution remain incomplete.
