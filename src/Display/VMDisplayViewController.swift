@@ -18,6 +18,7 @@ final class VMDisplayViewController: UIViewController {
     private let pointerRightClick = UIButton(type: .system)
     private let functionKeyBar = UIStackView()
     private var keyboardObservers: [NSObjectProtocol] = []
+    private var hardwareKeySources: [UInt16: (key: String, source: String)] = [:]
     private var lastMotionStatusUpdate: TimeInterval = 0
     private var lastReportedGuestFrameWidth = 0
     private var lastReportedGuestFrameHeight = 0
@@ -37,6 +38,7 @@ final class VMDisplayViewController: UIViewController {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override var canBecomeFirstResponder: Bool { true }
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
 
@@ -91,8 +93,6 @@ final class VMDisplayViewController: UIViewController {
                 self.vncClient.stop()
             }
         }
-        registerKeyboardNotifications()
-        refreshHardwareKeyboardState()
         virtioGPU.start()
         vncClient.onSessionGenerationChanged = { [weak self] generation in
             guard let self else { return }
@@ -132,6 +132,9 @@ final class VMDisplayViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        if keyboardObservers.isEmpty { registerKeyboardNotifications() }
+        refreshHardwareKeyboardState()
+        becomeFirstResponder()
         guard !startupFlowStarted else { return }
         startupFlowStarted = true
         #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
@@ -306,7 +309,105 @@ final class VMDisplayViewController: UIViewController {
         vncClient.tapKey(key)
     }
 
+    private func hardwareKeyName(for key: UIKey) -> String? {
+        // HID usage codes identify navigation, function and modifier keys.
+        // Printable characters are sent without modifiers so Shift is separate.
+        switch key.keyCode.rawValue {
+        case 0x28, 0x58: return "ENTER"
+        case 0x29: return "ESC"
+        case 0x2A: return "BACKSPACE"
+        case 0x2B: return "TAB"
+        case 0x2C: return "SPACE"
+        case 0x39: return "CAPSLOCK"
+        case 0x46: return "PRINTSCREEN"
+        case 0x47: return "SCROLLLOCK"
+        case 0x48: return "PAUSE"
+        case 0x3A...0x45: return "F\\(Int(key.keyCode.rawValue) - 0x39)"
+        case 0x49: return "INSERT"
+        case 0x4A: return "HOME"
+        case 0x4B: return "PAGEUP"
+        case 0x4C: return "DELETE"
+        case 0x4D: return "END"
+        case 0x4E: return "PAGEDOWN"
+        case 0x4F: return "RIGHT"
+        case 0x50: return "LEFT"
+        case 0x51: return "DOWN"
+        case 0x52: return "UP"
+        case 0x53: return "NUMLOCK"
+        case 0x65: return "MENU"
+        case 0xE0, 0xE4: return "CTRL"
+        case 0xE1, 0xE5: return "SHIFT"
+        case 0xE2, 0xE6: return "ALT"
+        case 0xE3: return "META"
+        case 0xE7: return "META_R"
+        default:
+            let characters = key.charactersIgnoringModifiers
+            guard characters.unicodeScalars.count == 1,
+                  let scalar = characters.unicodeScalars.first,
+                  scalar.value >= 0x20, scalar.value <= 0x7E else { return nil }
+            return String(scalar)
+        }
+    }
+
+    private func sendHardwareKey(_ key: UIKey, isDown: Bool) -> Bool {
+        let code = key.keyCode.rawValue
+        if isDown {
+            // Ignore UIKit key-repeat down events; the guest owns repeat policy.
+            if hardwareKeySources[code] != nil { return true }
+            guard let name = hardwareKeyName(for: key) else { return false }
+            let source = "hardware-keyboard:\\(code)"
+            hardwareKeySources[code] = (name, source)
+            vncClient.sendKey(name, down: true, source: source)
+            return true
+        }
+        guard let active = hardwareKeySources.removeValue(forKey: code) else { return false }
+        vncClient.sendKey(active.key, down: false, source: active.source)
+        return true
+    }
+
+    private func releaseHardwareKeyboardKeys() {
+        let heldKeys = Array(hardwareKeySources.values)
+        hardwareKeySources.removeAll(keepingCapacity: true)
+        for held in heldKeys {
+            vncClient.sendKey(held.key, down: false, source: held.source)
+        }
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        var unhandled = Set<UIPress>()
+        for press in presses {
+            guard let key = press.key, sendHardwareKey(key, isDown: true) else {
+                unhandled.insert(press)
+                continue
+            }
+        }
+        if !unhandled.isEmpty { super.pressesBegan(unhandled, with: event) }
+    }
+
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        var unhandled = Set<UIPress>()
+        for press in presses {
+            guard let key = press.key, sendHardwareKey(key, isDown: false) else {
+                unhandled.insert(press)
+                continue
+            }
+        }
+        if !unhandled.isEmpty { super.pressesEnded(unhandled, with: event) }
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        var unhandled = Set<UIPress>()
+        for press in presses {
+            guard let key = press.key, sendHardwareKey(key, isDown: false) else {
+                unhandled.insert(press)
+                continue
+            }
+        }
+        if !unhandled.isEmpty { super.pressesCancelled(unhandled, with: event) }
+    }
+
     private func releaseGuestInputs() {
+        releaseHardwareKeyboardKeys()
         keyboardPanel?.releaseAllKeys()
         gamepad?.releaseAllButtons()
         MotionInputManager.shared.stop()
@@ -323,6 +424,16 @@ final class VMDisplayViewController: UIViewController {
             forName: Notification.Name("GCKeyboardDidDisconnectNotification"),
             object: nil, queue: .main
         ) { [weak self] _ in self?.refreshHardwareKeyboardState() })
+        keyboardObservers.append(center.addObserver(
+            forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.releaseGuestInputs() })
+        keyboardObservers.append(center.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self, self.viewIfLoaded?.window != nil else { return }
+            self.becomeFirstResponder()
+            self.refreshHardwareKeyboardState()
+        })
     }
 
     private func refreshHardwareKeyboardState() {
@@ -330,7 +441,10 @@ final class VMDisplayViewController: UIViewController {
         // F-keys are only shown while a hardware keyboard is connected, and are
         // immediately hidden after disconnect or while the touch keyboard is open.
         functionKeyBar.isHidden = !connected || keyboardPanel?.isHidden == false
-        if !connected { functionKeyBar.isHidden = true }
+        if !connected {
+            functionKeyBar.isHidden = true
+            releaseHardwareKeyboardKeys()
+        }
     }
 
     private func addTouchGamepad() {
@@ -387,6 +501,7 @@ final class VMDisplayViewController: UIViewController {
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        resignFirstResponder()
         keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
         keyboardObservers.removeAll()
         releaseGuestInputs()

@@ -676,6 +676,20 @@ final class QEMUVNCClient {
         case "TAB": return 0xff09
         case "BACKSPACE", "⌫": return 0xff08
         case "SPACE": return 0x20
+        case "CAPSLOCK": return 0xffe5
+        case "HOME": return 0xff50
+        case "PAGEUP": return 0xff55
+        case "PAGEDOWN": return 0xff56
+        case "END": return 0xff57
+        case "INSERT": return 0xff63
+        case "DELETE": return 0xffff
+        case "PRINTSCREEN": return 0xff61
+        case "SCROLLLOCK": return 0xff14
+        case "PAUSE": return 0xff13
+        case "NUMLOCK": return 0xff7f
+        case "MENU": return 0xff67
+        case "META": return 0xffeb
+        case "META_R": return 0xffec
         case "SHIFT": return 0xffe1
         case "CTRL": return 0xffe3
         case "ALT": return 0xffe9
@@ -696,7 +710,9 @@ final class QEMUVNCClient {
         case "F11": return 0xffc8
         case "F12": return 0xffc9
         default:
-            guard value.count == 1, let scalar = value.unicodeScalars.first,
+            // Hardware input sends the unmodified character plus a separate
+            // Shift key; touch keys can still send uppercase characters.
+            guard key.unicodeScalars.count == 1, let scalar = key.unicodeScalars.first,
                   scalar.value < 128 else { return nil }
             return scalar.value
         }
