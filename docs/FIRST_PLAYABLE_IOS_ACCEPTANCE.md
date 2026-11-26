@@ -1,6 +1,6 @@
 # First playable iOS acceptance and remaining feature backlog
 
-**Last audited:** 2026-11-25  
+**Last audited:** 2026-11-26  
 **Scope:** Kenran Butō's first reproducible iOS guest-execution milestone. This is a checklist, not a claim that the milestone has shipped. See [Legacy feature parity and remaining requirements](LEGACY_FEATURE_PARITY.md) for the older cross-chat feature requests and their current implementation status.
 
 ## Validation automation
@@ -9,9 +9,9 @@ Changes to this acceptance checklist trigger both the QEMU-free core-only iOS bu
 
 These hosted checks validate source contracts, native/Swift execution harnesses, and the unsigned physical-device ARM64 build. They do **not** prove signing, installation, JIT activation, or guest execution on a physical iPad; those remain explicit device acceptance gates below.
 
-## Selected first-playable route: QEMU TCI (no JIT)
+## Selected first-playable route: QEMU TCTI (no JIT; legacy profile name TCI)
 
-The first playable physical-iOS guest is a known-good x86-64 Linux image booted through the full-system QEMU TCI interpreter. TCI is the selected no-JIT route: it does not require StikDebug, TXM, executable-memory entitlements, or a JIT pairing. The app's automatic acceleration mode may use JIT when available and fall back to TCI; the explicit QEMU interpreter mode selects TCI directly.
+The first playable physical-iOS guest is a known-good x86-64 Linux image booted through the full-system QEMU TCTI (threaded-dispatch TCG bytecode) interpreter. The project retains the historical TCI profile and directory identifiers for compatibility, but the pinned physical iOS arm64 build selects `--enable-tcg-threaded-interpreter`. This no-JIT route does not require StikDebug, TXM, executable-memory entitlements, or a JIT pairing. The app's automatic acceleration mode may use JIT when available and fall back to TCTI; the explicit QEMU interpreter mode selects the no-JIT variant directly.
 
 The custom `LinuxELFRuntime` and its two static ELF guests are diagnostic user-mode tests for Kenran Butō's interpreter/GuestMachine path. They are valuable regression tests, but they are **not** a bootable Linux OS and do not satisfy the first-playable emulator milestone. The separate core-only IPA workflow intentionally excludes QEMU and is diagnostic only.
 
@@ -22,7 +22,7 @@ The repository has a manual QEMU runtime build workflow for JIT and TCI variants
 The repository now contains:
 
 - A bounded static x86-64 Linux ELF loader and Linux initial-stack builder.
-- A Linux syscall subset including \`uname\`, \`write\`, and \`exit\`.
+- A bounded Linux syscall subset including `uname`, `write`, `exit`, memory-management calls and an interruptible 64 KiB guest-stdin queue for `read(0, ...)`, surfaced by the diagnostic console input field.
 - \`GuestMachine\` orchestration with the x86-64 interpreter and native C-backed guest memory.
 - A partial x86-64-to-ARM64 AOT translator, translated-code cache, backend routing, and interpreter fallback.
 - Atomic memory-form XCHG for 1-, 4-, and 8-byte operands through a mutex-serialized native guest-memory API, including cross-page accesses and permission checks.
@@ -69,14 +69,14 @@ Host-side ELF execution, Swift regression tests, and IPA packaging are not subst
 
 The AOT path is optional for the first QEMU TCI guest. TCI does not require StikDebug or JIT. StikDebug pairing and JIT are required only to validate the optional accelerated user-mode path.
 
-### Gate 4 — QEMU TCI display and input validation
+### Gate 4 — QEMU TCTI display and input validation
 
 - [ ] Connect the guest execution path to a guest framebuffer and a Metal-backed display.
 - [ ] Route touch, hardware keyboard, and controller input into guest input events.
 - [ ] Verify pause/resume, focus changes, orientation, and clean shutdown.
 - [ ] Apply guest resolution and frame-rate settings to the actual renderer rather than only storing UI preferences.
 
-For QEMU TCI, validate the existing VNC-to-Metal display and keyboard/controller event path on the physical device. The separate static ELF console remains text-only and has no independent framebuffer or guest-stdin contract.
+For QEMU TCTI, validate the existing VNC-to-Metal display and keyboard/controller event path on the physical device. The separate static ELF console remains text-only and has no independent framebuffer; it now has a bounded, interruptible guest-stdin queue and a text input field for diagnostic programs.
 
 ### Gate 5 — Persistent QEMU guest disk state
 
@@ -87,7 +87,7 @@ For QEMU TCI, validate the existing VNC-to-Metal display and keyboard/controller
 
 QEMU has a disk-image path, but write persistence across physical-device restarts, crash-safe snapshots, USB passthrough, and external-drive controller semantics still require device validation.
 
-### Gate 6 — First playable: QEMU TCI full-system Linux boot (P0)
+### Gate 6 — First playable: QEMU TCTI full-system Linux boot (P0)
 
 - [ ] Complete the qualified file-level and combined-work QEMU/UTM licensing review.
 - [ ] Run the manual QEMU runtime build workflow and verify the `ios-tci` / `iOS-SE` TCI variant and its runtime manifest.
@@ -130,7 +130,7 @@ These items remain outside the first QEMU TCI Linux-boot milestone and should be
 
 ## Repository/CI coordination and latest validation status
 
-GitLab `main` is the required development destination and currently points to `37011be3e6b610317f9c2b14ab15a91ce98dc806`. The TCI target-list patcher repair is `6803ae1baeaee2fec51cc2c2fd2f6ed8504498f8`; test corrections follow in `1c9e6cfe816fda307d131aa6c632f13a2e2990be` and `37011be3e6b610317f9c2b14ab15a91ce98dc806`. GitHub `main` remains at `f93008dfb5c6143c4e9dc256fca07a363020eccd` and is behind. Do not push the stale GitHub head back to GitLab or force-sync divergent history. No branch reconciliation, merge, force-push, reset, rebase, branch creation, or deletion has been performed.
+GitLab `main` currently points to `ab20a239d5ac45783b73ce06b7f505b2348b9766`; GitHub `main` currently points to `06d21b6bbdc150951dd49d4f119b115bb3d2e146`. The histories are divergent. GitLab contains the AOT compile/source-contract repairs and translator-v12 documentation; GitHub contains a separate QEMU JIT/TCI dependency-isolation change. The existing reconciliation workflow has not been run. Do not force-sync or overwrite either history; obtain explicit owner authorization before main-history reconciliation.
 
 ### Current source changes
 
@@ -166,7 +166,7 @@ GitLab `main` is the required development destination and currently points to `3
 
 ### Runtime and older-feature boundary
 
-The custom `LinuxELFRuntime` is a bounded diagnostic user-mode path. It is not a full-system OS emulator: `read(0, ...)` returns EOF and it has no independent framebuffer contract. The first playable route is the separate QEMU full-system TCI backend, which uses the VNC-to-Metal display/input path and a QEMU disk image. That route still needs a distributable TCI runtime, physical boot, display/input verification, and disk-persistence evidence.
+The custom `LinuxELFRuntime` is a bounded diagnostic user-mode path. It is not a full-system OS emulator: `read(0, ...)` is backed by a bounded, interruptible stdin queue and ConsoleViewController text input, but it has no independent framebuffer contract.
 
 FEXCore and Box64 are not operational iOS dynamic backends. Dynamic ELF/PT_TLS, broad Linux syscall/thread/signal support, Windows PE/EXE execution, Wine/Proton, full-system graphics/audio beyond the QEMU display path, save snapshots, USB passthrough, and Android/VR/tvOS/visionOS guest execution remain separate milestones.
 
@@ -186,7 +186,15 @@ A core-only IPA, static ELF host execution, simulator build, or QEMU compile alo
 
 The first playable physical iOS milestone is complete only when a reproducible current-source IPA containing the approved QEMU TCI runtime is installed on a physical iPad, a known-good x86-64 Linux image boots through TCI with JIT disabled, guest display and keyboard/controller input work, guest disk state survives restarts, repeat boots and cleanup are reliable, and build/test/device evidence is recorded. A QEMU-free core-only IPA, static ELF diagnostic, host execution, simulator run, or successful QEMU compilation alone is insufficient.
 
-## Latest JIT source status (2026-11-25)
+## Latest source status (2026-11-26)
 
-QEMU TCI is the selected first-playable no-JIT full-system route. It does not require StikDebug or TXM. The custom interpreter/static-ELF path is diagnostic coverage and remains useful as a correctness fallback. The 32 MiB TXM/SPTM arena and JIT path are optional acceleration work after TCI boot is proven; StikDebug 3.2.2+ is required for the iOS/iPadOS 27+ TXM/AOT pairing tests. No physical TCI boot or physical JIT/AOT execution is verified.
+QEMU TCTI is the selected first-playable no-JIT full-system route (legacy internal profile name TCI). It does not require StikDebug or TXM. The custom interpreter/static-ELF path is diagnostic coverage and remains useful as a correctness fallback. The 32 MiB TXM/SPTM arena and JIT path are optional acceleration work after TCI boot is proven; StikDebug 3.2.2+ is required for the iOS/iPadOS 27+ TXM/AOT pairing tests. No physical TCI boot or physical JIT/AOT execution is verified.
 
+
+
+## Latest packaging and validation status (2026-11-26)
+
+- The JIT and TCI runtime archives previously passed Mach-O/platform/export checks, but the combined package failed because the `phodav-3.0.0.framework/phodav-3.0.0` dependency bytes differed between the independently built variants.
+- GitHub main commit `06d21b6b` isolates the JIT and TCI dependency trees and adds loader-relative runpaths to TCI Mach-O files. Its QEMU build workflow was queued at the last coordination update; this fix is a candidate, not a verified package.
+- GitLab validation pipelines 1288–1290 failed immediately with `ci_quota_exceeded` before runner assignment. No runner executed the tests; no pass is claimed for the latest source-contract changes.
+- No current QEMU runtime artifact, QEMU-enabled IPA, physical iPad installation, or Linux guest boot is verified. The QEMU publication gate remains closed pending qualified review of the UTM-derived Apache-2.0 bridge and the exact combined distribution.
