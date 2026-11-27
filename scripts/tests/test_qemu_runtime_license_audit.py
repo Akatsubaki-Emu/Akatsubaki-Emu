@@ -164,6 +164,98 @@ class QEMULicenseAuditTests(unittest.TestCase):
             saved = json.loads((output / "license-manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(saved["review_status"], "INVENTORY_ONLY_REQUIRES_QUALIFIED_LICENSE_REVIEW")
 
+    def test_reports_qemu_compiled_sources_and_license_defaults(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            utm = root / "UTM"
+            qemu = utm / "build-ios-tci-arm64" / "qemu-10.0.12-utm"
+            (qemu / "hw" / "vfio").mkdir(parents=True)
+            build = qemu / "utm_build"
+            (build / "generated").mkdir(parents=True)
+            (build / "objects").mkdir(parents=True)
+            (qemu / "LICENSE").write_text(
+                "The QEMU emulator as a whole is released under the GNU General Public License, version 2.\n"
+                "Source files with no licensing information are released under the GNU General Public License, version 2 or (at your option) any later version.\n"
+                "As of July 2013, contributions under version 2 of the GNU General Public License (and no later version) are only accepted for the following files or directories: bsd-user/, linux-user/, hw/vfio/, hw/xen/xen_pt*.\n",
+                encoding="utf-8",
+            )
+            tcg_source = qemu / "hw" / "tcg.c"
+            tcg_source.write_text(
+                "/* SPDX-License-Identifier: GPL-2.0-only */\nint tcg(void) { return 0; }\n",
+                encoding="utf-8",
+            )
+            vfio_source = qemu / "hw" / "vfio" / "vfio.c"
+            vfio_source.write_text(
+                "/* SPDX-License-Identifier: GPL-2.0-only */\nint vfio(void) { return 0; }\n",
+                encoding="utf-8",
+            )
+            generated_source = build / "generated" / "qapi.c"
+            generated_source.write_text("int generated(void) { return 0; }\n", encoding="utf-8")
+            (build / "objects" / "tcg.c.o").write_bytes(b"compiled tcg object")
+            (build / "objects" / "vfio.c.o").write_bytes(b"compiled vfio object")
+            (build / "objects" / "qapi.c.o").write_bytes(b"compiled generated object")
+            compile_database = [
+                {
+                    "directory": str(build),
+                    "file": "../hw/tcg.c",
+                    "output": "objects/tcg.c.o",
+                    "command": "clang -c ../hw/tcg.c -o objects/tcg.c.o",
+                },
+                {
+                    "directory": str(build),
+                    "file": "../hw/vfio/vfio.c",
+                    "output": "objects/vfio.c.o",
+                    "command": "clang -c ../hw/vfio/vfio.c -o objects/vfio.c.o",
+                },
+                {
+                    "directory": str(build),
+                    "file": "generated/qapi.c",
+                    "output": "objects/qapi.c.o",
+                    "command": "clang -c generated/qapi.c -o objects/qapi.c.o",
+                },
+            ]
+            (build / "compile_commands.json").write_text(
+                json.dumps(compile_database), encoding="utf-8"
+            )
+            package = root / "package"
+            package.mkdir()
+            output = root / "audit"
+
+            manifest = build_report(utm, package, output)
+            self.assertEqual(manifest["qemu_source_root_count"], 1)
+            self.assertEqual(manifest["qemu_source_roots"][0]["unannotated_source_default"], "GPL-2.0-or-later")
+            self.assertEqual(manifest["compile_database_count"], 1)
+            self.assertEqual(manifest["compiled_source_count"], 3)
+            self.assertEqual(
+                manifest["compiled_source_license_counts"],
+                {"GPL-2.0-only": 2, "GPL-2.0-or-later": 1},
+            )
+            self.assertEqual(manifest["compiled_gpl2_only_candidate_count"], 2)
+            self.assertEqual(manifest["compiled_restricted_policy_path_count"], 1)
+            self.assertEqual(manifest["compiled_source_missing_spdx_count"], 1)
+            self.assertEqual(manifest["compiled_source_unmapped_count"], 0)
+            by_source = {item["source_path"]: item for item in manifest["compiled_sources"]}
+            tcg_record = by_source["build-ios-tci-arm64/qemu-10.0.12-utm/hw/tcg.c"]
+            self.assertEqual(tcg_record["license_basis"], "SPDX_HEADER")
+            self.assertEqual(
+                tcg_record["object_sha256"],
+                __import__("hashlib").sha256(b"compiled tcg object").hexdigest(),
+            )
+            vfio_record = by_source["build-ios-tci-arm64/qemu-10.0.12-utm/hw/vfio/vfio.c"]
+            self.assertTrue(vfio_record["qemu_restricted_gpl2_policy_path"])
+            generated_record = by_source[
+                "build-ios-tci-arm64/qemu-10.0.12-utm/utm_build/generated/qapi.c"
+            ]
+            self.assertEqual(
+                generated_record["license_basis"], "QEMU_LICENSE_DEFAULT_FOR_UNANNOTATED_SOURCE"
+            )
+            self.assertTrue((output / "qemu-source-root-inventory.json").is_file())
+            self.assertTrue((output / "compiled-source-object-inventory.json").is_file())
+            review_text = (output / "license-review.md").read_text(encoding="utf-8")
+            self.assertIn("GPL-2.0-only candidates found in compiled sources", review_text)
+            self.assertIn("hw/vfio/vfio.c", review_text)
+            self.assertIn("not the final linker closure", review_text)
+
     def test_rejects_output_inside_source_or_package(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
