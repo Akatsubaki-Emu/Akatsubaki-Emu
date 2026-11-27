@@ -1032,7 +1032,8 @@ class SourceValidatorTests(unittest.TestCase):
         self.assertIn("private var sessionGeneration: UInt64?", backend)
         self.assertIn("runtime.stop(sessionGeneration: sessionGeneration)", backend)
         self.assertIn("if backend?.stop() ?? true", engine)
-        self.assertIn("-no-shutdown", builder)
+        self.assertNotIn("-no-shutdown", builder)
+        self.assertIn('Self.sendQMP("system_powerdown")', runtime)
         self.assertIn("-qmp", builder)
 
     def test_txm_arena_tracks_exact_allocations_and_stress_regressions(self):

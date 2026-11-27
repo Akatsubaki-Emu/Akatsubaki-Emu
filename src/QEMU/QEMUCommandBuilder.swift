@@ -52,7 +52,7 @@ struct QEMUCommandBuilder {
             "-device", gpu,
             "-device", "ich9-ahci,id=sata0",
             "-monitor", "none", "-serial", "none", "-parallel", "none",
-            "-no-shutdown", "-qmp", "unix:\(Self.qmpSocketPath),server=on,wait=off",
+            "-qmp", "unix:\(Self.qmpSocketPath),server=on,wait=off",
             "-rtc", "base=utc,clock=host"
         ]
         let bootFromISO = diskImage.map(Self.isISO9660) ?? false

@@ -130,6 +130,8 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
         engine = (root / "src" / "Core" / "VMEngine.swift").read_text(encoding="utf-8")
         display = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
+        builder = (root / "src" / "QEMU" / "QEMUCommandBuilder.swift").read_text(encoding="utf-8")
+        self.assertNotIn('"-no-shutdown"', builder)
         self.assertIn("private var nativeSessionEnded = false", runtime)
         self.assertIn("private var nativeLifecycleMonitor: DispatchSourceTimer?", runtime)
         self.assertIn("startNativeLifecycleMonitoringLocked()", runtime)

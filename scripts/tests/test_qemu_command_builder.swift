@@ -57,9 +57,10 @@ struct QEMUCommandBuilderBehaviorTests {
         let jitArguments = QEMUCommandBuilder(configuration: configuration(.jit)).arguments()
         precondition(accelArgument(jitArguments) == "tcg,tb-size=128,split-wx=on")
 
-        // Keep the process alive after guest poweroff and control repeat launches
-        // through a private AF_UNIX QMP socket instead of re-entering qemu_init.
-        precondition(requestedTCIArguments.contains("-no-shutdown"))
+        // Pause/resume retains QEMU while the app is open, but guest ACPI
+        // shutdown must let the native worker exit and run qemu_cleanup.
+        precondition(!requestedTCIArguments.contains("-no-shutdown"))
+        precondition(!jitArguments.contains("-no-shutdown"))
         precondition(requestedTCIArguments.contains("-qmp"))
         let qmpIndex = requestedTCIArguments.firstIndex(of: "-qmp")
         precondition(qmpIndex != nil && requestedTCIArguments.indices.contains(qmpIndex! + 1))

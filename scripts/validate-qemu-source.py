@@ -1928,7 +1928,7 @@ if "VNCFrameSessionGenerationTests" not in vnc_generation_tests:
     failed = True
 
 
-# QEMU remains a single process; guest sessions pause/reset through a private QMP socket.
+# QEMU is one process per app session; QMP pauses/resumes it, while guest ACPI shutdown exits it for cleanup.
 qmp_bridge = Path("iSteam/QEMUNativeBridge.c").read_text(encoding="utf-8")
 qmp_header = Path("iSteam/QEMUNativeBridge.h").read_text(encoding="utf-8")
 qmp_builder = Path("src/QEMU/QEMUCommandBuilder.swift").read_text(encoding="utf-8")
@@ -1936,7 +1936,7 @@ qmp_runtime = Path("src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8
 qmp_backend = Path("src/QEMU/QEMUBackend.swift").read_text(encoding="utf-8")
 qmp_engine = Path("src/Core/VMEngine.swift").read_text(encoding="utf-8")
 for token in ("bool isteam_qemu_qmp_command", "AF_UNIX", "qmp_capabilities",
-              "SO_RCVTIMEO", "SO_NOSIGPIPE", "MSG_NOSIGNAL", '"system_reset"', '"cont"', '"stop"',
+              "SO_RCVTIMEO", "SO_NOSIGPIPE", "MSG_NOSIGNAL", '"system_reset"', '"system_powerdown"', '"cont"', '"stop"',
               "g_has_started = true", "attempt < 20", "nanosleep(&delay, NULL)"):
     if token not in qmp_bridge:
         print(f"QEMU QMP bridge missing {token!r}", file=sys.stderr)
@@ -1947,14 +1947,19 @@ if qmp_bridge.count("g_has_started = false;") != 1:
 if "isteam_qemu_qmp_command" not in qmp_header:
     print("QEMU native bridge header is missing the QMP command contract", file=sys.stderr)
     failed = True
-for token in ("-no-shutdown", "-qmp", "unix:\\(Self.qmpSocketPath),server=on,wait=off",
+if "-no-shutdown" in qmp_builder:
+    print("QEMU must exit on guest shutdown so qemu_cleanup can release file scopes", file=sys.stderr)
+    failed = True
+for token in ("-qmp", "unix:\\(Self.qmpSocketPath),server=on,wait=off",
               "static let qmpSocketPath"):
     if token not in qmp_builder:
         print(f"QEMU command builder missing persistent-session option {token!r}", file=sys.stderr)
         failed = True
 for token in ("static let shared = QEMUNativeRuntime()", "private init()",
               "private let stateLock = NSLock()", "sessionKey == requestedSessionKey",
-              'Self.sendQMP("system_reset")', 'Self.sendQMP("cont")', 'Self.sendQMP("stop")',
+              'Self.sendQMP("system_reset")', 'Self.sendQMP("system_powerdown")',
+              'Self.sendQMP("cont")', 'Self.sendQMP("stop")',
+              "nativeSessionEnded", "startNativeLifecycleMonitoringLocked()", "refreshCompletedSessionLocked()",
               "private(set) var isPaused = false", "the process and disk scopes remain available",
               "already stopped", "already running"):
     if token not in qmp_runtime:
@@ -1990,7 +1995,7 @@ if "isteam_qemu_qmp_command" not in qmp_native_tests or "unsupported command" no
     failed = True
 
 for token in ("QMPServer", "qmp_test_server", "tooLongSocketPath",
-              '"query-status"', '"system_reset"', "event_and_reply"):
+              '"query-status"', '"system_reset"', '"system_powerdown"', "event_and_reply"):
     if token not in qmp_native_tests:
         print(f"Native QMP socket protocol regression missing {token!r}", file=sys.stderr)
         failed = True
