@@ -436,7 +436,7 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
         self.assertEqual(result.returncode, 0, result.stderr)
 
         package = source.split("      - name: Package and verify in-process QEMU runtime", 1)[1]
-        package = package.split("      - name: Upload verified QEMU runtime artifact", 1)[0]
+        package = package.split("      - name: Generate QEMU runtime license review report", 1)[0]
         package_script = textwrap.dedent(package.split("        run: |" + chr(10), 1)[1])
         package_result = subprocess.run(
             ["bash", "-n"], input=package_script, text=True, capture_output=True
@@ -452,6 +452,8 @@ static int alloc_code_gen_buffer_splitwx_vmremap(size_t size, Error **errp)
             "Build UTM iOS archive",
             "Build UTM iOS TCI archive",
             "Package and verify in-process QEMU runtime",
+            "Generate QEMU runtime license review report",
+            "Upload QEMU runtime license review report (metadata only)",
             "Upload verified QEMU runtime artifact",
         ):
             self.assertEqual(source.count("      - name: " + name), 1)
