@@ -284,6 +284,7 @@ jobs:
             -o "$RUNNER_TEMP/native-guest-memory.o"
           swiftc -parse-as-library -swift-version 5 -D KENRAN_BUTO_AOT_TESTS \
             -Xcc -DKENRAN_BUTO_AOT_TESTS \
+            -Xcc -I. \
             -import-objc-header scripts/tests/NativeGuestMachine-Bridging-Header.h \
             src/Core/EmulationLog.swift \
             src/Performance/TranslationCache.swift \

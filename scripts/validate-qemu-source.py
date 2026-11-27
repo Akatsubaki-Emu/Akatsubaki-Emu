@@ -1885,6 +1885,15 @@ if swift_clang_imports < 2 or aot_test_flag_imports != swift_clang_imports:
         file=sys.stderr,
     )
     failed = True
+native_guest_smoke_step = aot_workflow.split(
+    "Run native GuestMachine stop and pause/resume smoke", 1
+)[-1]
+if "-Xcc -I." not in native_guest_smoke_step:
+    print(
+        "Native GuestMachine Swift bridge must pass the repository root include path to Clang",
+        file=sys.stderr,
+    )
+    failed = True
 
 
 # VNC session generation must survive every asynchronous framebuffer boundary.
