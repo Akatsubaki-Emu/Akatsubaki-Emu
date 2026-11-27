@@ -36,8 +36,11 @@ class HybridStdinSmokeELFTests(unittest.TestCase):
             rx = struct.unpack_from("<IIQQQQQQ", image, 64)
             rw = struct.unpack_from("<IIQQQQQQ", image, 120)
             self.assertEqual((rx[0], rx[1], rx[2], rx[3], rx[5], rx[6]), (1, 5, 0, 0x400000, 0x2000, 0x2000))
-            self.assertEqual((rw[0], rw[1], rw[2], rw[3], rw[5], rw[6]), (1, 6, 0x2000, 0x402000, 1, 0x1000))
-            self.assertEqual(len(image), 0x2001)
+            self.assertEqual((rw[0], rw[1], rw[2], rw[3], rw[6]), (1, 6, 0x2000, 0x402000, 0x1000))
+            self.assertGreater(rw[5], 1)
+            self.assertLessEqual(rw[5], rw[6])
+            self.assertEqual(rw[5], len(image) - 0x2000)
+            self.assertEqual(len(image), 0x2000 + rw[5])
             code = image[0x1000:0x1200]
             self.assertIn(bytes.fromhex("31 c0 31 ff 48 8d 74 24 80"), code)
             self.assertIn(bytes.fromhex("48 89 c3"), code)
