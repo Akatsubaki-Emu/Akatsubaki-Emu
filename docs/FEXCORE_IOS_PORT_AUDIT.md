@@ -35,6 +35,17 @@ A public third-party iOS implementation provides a concrete reference for the pr
 - That bridge uses a 64 MiB dual-mapped JIT pool: debugger-provided RX pages, a writable `vm_remap` alias, `vm_protect`, and `FEXCore::DualMap::WriteOffset`. Its allocation granularity is 16 KiB. It requires an attached debugger/JIT and is not a no-JIT fallback.
 - The minimal bridge's syscall handler is only a bring-up implementation. The repository describes a fuller Windows-game route that composes FEX's ARM64EC translator with Wine, a Windows DLL farm and DXMT; FEX alone does not provide Windows APIs, a Linux dynamic linker, a filesystem or a full-system guest.
 
+### Bridge safety and guest-memory integration blockers
+
+The source-level audit of `app/Madeira/FEXBridge.mm` also found issues that make it unsuitable for direct transplantation:
+
+- It is a minimal static-ELF bring-up harness, not a general Linux process runtime: it handles a bounded PT_LOAD set, builds a minimal initial stack, and implements only a small stdout/stderr write plus exit/exit_group syscall path.
+- Its `QueryGuestExecutableRange` reports an overly broad guest range as executable and writable. That is not an acceptable production W^X or per-page permission policy.
+- It uses process-global exit state and `setjmp/longjmp`; the detached watchdog reads a live FEX thread frame without synchronizing with teardown; and the normal exit path does not release its separately allocated call/return stack. These lifecycle and memory-safety patterns must not be copied.
+- The bridge's FEX loader uses host `mmap` allocations plus a load bias and passes host addresses to FEXCore. Akatsubaki's `iSteam/NativeGuestMemory.cpp` instead stores sparse 4 KiB guest pages in separate C++ allocations with a permission map; it does not expose a contiguous host-mapped guest address space. Simply linking FEXCore would therefore create incompatible memory models.
+- A production adapter needs either a mapped guest-memory backend behind the existing memory API (including 16 KiB iOS host-page handling while preserving 4 KiB guest permissions) or a rigorously specified FEX memory adapter that keeps interpreter/AOT side exits coherent. It must also integrate syscall, signal, thread, TLS, futex and loader semantics.
+- The 64 MiB debugger-backed dual-map pool is evidence of a possible JIT allocation technique, not a safe drop-in allocator. Reuse Kenran Butō's existing W^X provider only after verifying FEX's alias, page, revocation and instruction-cache contracts; do not create a second unmanaged pool.
+
 ### Provenance and reuse boundary
 
 - The FEX upstream code remains MIT. The inspected fork's `FEX/LICENSE-MADEIRA.md` records Madeira-authored modifications from 2026-08-28 onward as GPL-3.0-or-later, with the Madeira Converter Exception; earlier MIT grants remain available under their original terms. Third-party contributions have their own notices.
