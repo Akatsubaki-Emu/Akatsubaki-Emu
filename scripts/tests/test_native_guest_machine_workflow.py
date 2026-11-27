@@ -13,6 +13,8 @@ class NativeGuestMachineWorkflowTests(unittest.TestCase):
         required = (
             "Run native GuestMachine stop and pause/resume smoke",
             "iSteam/NativeGuestMemory.cpp",
+            "iSteam/NativeEmulation.c",
+            "native-emulation.o",
             "iSteam/KenranButoAOTExecutableMemory.c",
             "scripts/tests/NativeGuestMachine-Bridging-Header.h",
             "scripts/tests/test_native_guest_machine_smoke.swift",
@@ -30,6 +32,7 @@ class NativeGuestMachineWorkflowTests(unittest.TestCase):
     def test_bridging_header_exposes_aot_and_native_guest_memory_apis(self):
         header = BRIDGING_HEADER.read_text(encoding="utf-8")
         self.assertIn('include "iSteam/JIT26Protocol.h"', header)
+        self.assertIn('include "iSteam/NativeEmulation.h"', header)
         self.assertIn('include "iSteam/NativeGuestMemory.h"', header)
 
 
