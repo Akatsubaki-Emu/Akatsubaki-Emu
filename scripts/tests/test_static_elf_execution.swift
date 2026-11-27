@@ -851,6 +851,64 @@ struct StaticELFExecutionTests {
         print("Generated runtime smoke ELF executed uname, write and exit through the interpreter")
     }
 
+
+    static func testGeneratedStdinSmokeELF(at url: URL) throws {
+        let memory = GuestMemory(size: 16 * 1024 * 1024)
+        let image = try ELF64Loader().load(url, into: memory, expectedArchitecture: .x86_64)
+        precondition(image.entryPoint == 0x401000, "stdin smoke ELF entry point changed")
+        precondition(image.programHeaderAddress == 0x400040, "stdin smoke ELF program headers must be mapped in PT_LOAD")
+        precondition(image.programHeaderCount == 2, "stdin smoke ELF program-header count changed")
+
+        let stack = try LinuxProcessStackBuilder().build(
+            executablePath: url.path,
+            arguments: [],
+            environment: ["PATH": "/bin"],
+            memory: memory,
+            entryPoint: image.entryPoint,
+            programHeaders: .init(
+                address: image.programHeaderAddress,
+                entrySize: image.programHeaderEntrySize,
+                count: image.programHeaderCount
+            ),
+            maximumImageAddress: image.maximumGuestAddress,
+            randomBytes: Data(repeating: 0x3C, count: 16)
+        )
+#if KENRAN_BUTO_AOT_TESTS
+        let aotExecutor = KenranButoAOTExecutor()
+        precondition(aotExecutor.refreshAvailability(), "ARM64 runner must provide executable memory for stdin smoke")
+        let interpreter = X86_64Interpreter(memory: memory, aotExecutor: aotExecutor)
+#else
+        let interpreter = X86_64Interpreter(memory: memory)
+#endif
+        try interpreter.reset(entryPoint: image.entryPoint)
+        try interpreter.setInitialStackPointer(stack.stackPointer)
+        let (programBreak, overflow) = image.maximumGuestAddress.addingReportingOverflow(4095)
+        precondition(!overflow, "stdin smoke ELF program break overflow")
+        try interpreter.configureLinuxProcess(
+            programBreak: programBreak & ~UInt64(4095),
+            stackBase: stack.stackBase
+        )
+
+        let input = Data("hello\n".utf8)
+        precondition(interpreter.enqueueStandardInput(input) == input.count,
+                     "stdin smoke input was not accepted by the interpreter")
+        let previousMessageCount = EmulationLog.shared.messages.count
+        let exit = try interpreter.run(maxInstructions: 512)
+        precondition(exit == .exited(0), "stdin smoke guest did not exit with status 0")
+        let output = EmulationLog.shared.messages.dropFirst(previousMessageCount).joined(separator: "\n")
+        precondition(output.contains("KENRAN_BUTO_STDIN_READY"), "stdin smoke guest did not announce its read")
+        precondition(output.contains("KENRAN_BUTO_STDIN_ECHO:hello"), "stdin smoke guest did not echo queued input")
+        precondition(output.contains("KENRAN_BUTO_STDIN_OK"), "stdin smoke guest did not write its completion marker")
+        guard let readBack = memory.read(offset: stack.stackPointer - 128, length: input.count) else {
+            preconditionFailure("stdin smoke input buffer was not readable after guest execution")
+        }
+        precondition(readBack == input, "stdin smoke input bytes were not written to guest stack memory")
+#if KENRAN_BUTO_AOT_TESTS
+        precondition(aotExecutor.blocksExecuted > 0, "stdin smoke guest did not execute any native AOT blocks")
+#endif
+        print("Generated stdin smoke ELF read queued input, echoed it and exited through the interpreter")
+    }
+
     static func testSignExtensionInstructions() throws {
         func run(_ code: Data, expectedRAX: UInt64, expectedRDX: UInt64) throws {
             let memory = GuestMemory(size: 4096)
@@ -941,6 +999,9 @@ struct StaticELFExecutionTests {
         }
         if let runtimeSmokePath = CommandLine.arguments.dropFirst(2).first {
             try testGeneratedRuntimeSmokeELF(at: URL(fileURLWithPath: runtimeSmokePath))
+        }
+        if let stdinSmokePath = CommandLine.arguments.dropFirst(3).first {
+            try testGeneratedStdinSmokeELF(at: URL(fileURLWithPath: stdinSmokePath))
         }
         let (elfData, expectedOutput) = makeELF()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".elf")

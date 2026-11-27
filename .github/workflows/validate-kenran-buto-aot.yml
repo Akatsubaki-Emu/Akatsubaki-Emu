@@ -23,6 +23,8 @@ on:
       - "scripts/tests/test_vm_configuration_validation.swift"
       - "scripts/validate-qemu-source.py"
       - "scripts/tests/test_static_elf_execution.swift"
+      - "scripts/build_hybrid_stdin_smoke_elf.py"
+      - "scripts/tests/test_hybrid_stdin_smoke_elf.py"
       - "src/Runtime/ELF64Loader.swift"
       - "src/Runtime/LinuxProcessStackBuilder.swift"
       - "src/Runtime/RuntimeCapabilityRegistry.swift"
@@ -67,6 +69,8 @@ on:
       - "scripts/tests/test_vm_configuration_validation.swift"
       - "scripts/validate-qemu-source.py"
       - "scripts/tests/test_static_elf_execution.swift"
+      - "scripts/build_hybrid_stdin_smoke_elf.py"
+      - "scripts/tests/test_hybrid_stdin_smoke_elf.py"
       - "src/Runtime/ELF64Loader.swift"
       - "src/Runtime/LinuxProcessStackBuilder.swift"
       - "src/Runtime/RuntimeCapabilityRegistry.swift"
@@ -236,6 +240,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/build_hybrid_xchg_smoke_elf.py "$RUNNER_TEMP/hybrid_xchg_smoke.elf"
+          python3 scripts/build_hybrid_runtime_smoke_elf.py "$RUNNER_TEMP/hybrid_runtime_smoke.elf"
+          python3 scripts/build_hybrid_stdin_smoke_elf.py "$RUNNER_TEMP/hybrid_stdin_smoke.elf"
           swiftc -parse-as-library -swift-version 5 -D KENRAN_BUTO_AOT_TESTS \
             -Xcc -DKENRAN_BUTO_AOT_TESTS \
             -import-objc-header iSteam/JIT26Protocol.h \
@@ -251,4 +258,4 @@ jobs:
             scripts/tests/test_static_elf_execution.swift \
             "$RUNNER_TEMP/kenran-buto-aot-memory.o" \
             -o "$RUNNER_TEMP/test-static-elf-aot"
-          "$RUNNER_TEMP/test-static-elf-aot"
+          "$RUNNER_TEMP/test-static-elf-aot" "$RUNNER_TEMP/hybrid_xchg_smoke.elf" "$RUNNER_TEMP/hybrid_runtime_smoke.elf" "$RUNNER_TEMP/hybrid_stdin_smoke.elf"

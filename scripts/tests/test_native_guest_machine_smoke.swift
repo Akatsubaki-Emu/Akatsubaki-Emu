@@ -49,8 +49,7 @@ private final class LogCapture: @unchecked Sendable {
         return storage.joined(separator: "\n")
     }
 
-    func waitForMarker(occurrences: Int, timeout: TimeInterval = 3) throws {
-        let marker = "KENRAN_BUTO_RUNTIME_OK"
+    func waitForMarker(_ marker: String, occurrences: Int = 1, timeout: TimeInterval = 3) throws {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             let count = joined().components(separatedBy: marker).count - 1
@@ -60,7 +59,7 @@ private final class LogCapture: @unchecked Sendable {
         throw NSError(
             domain: "NativeGuestMachineSmoke",
             code: 2,
-            userInfo: [NSLocalizedDescriptionKey: "Guest stdout did not contain the runtime marker \(occurrences) time(s)."]
+            userInfo: [NSLocalizedDescriptionKey: "Guest stdout did not contain marker \(marker) \(occurrences) time(s)."]
         )
     }
 }
@@ -80,10 +79,12 @@ struct NativeGuestMachineSmoke {
     }
 
     static func main() throws {
-        guard CommandLine.arguments.count == 2 else {
-            throw NSError(domain: "NativeGuestMachineSmoke", code: 1)
+        guard CommandLine.arguments.count == 3 else {
+            throw NSError(domain: "NativeGuestMachineSmoke", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Expected runtime and stdin smoke ELF paths."])
         }
         let guestURL = URL(fileURLWithPath: CommandLine.arguments[1])
+        let stdinGuestURL = URL(fileURLWithPath: CommandLine.arguments[2])
         let capture = LogCapture()
         let observer = NotificationCenter.default.addObserver(
             forName: .emulationLogDidWrite,
@@ -112,7 +113,7 @@ struct NativeGuestMachineSmoke {
         precondition(machine.memory.readByte(offset: 0x402104) == 0x78, "uname machine was not written into native guest memory")
         precondition(machine.memory.readByte(offset: 0x401100) == 0x4B, "Runtime marker is missing from the executable segment")
         precondition(machine.memory.allocatedPageCount > 0, "Guest memory pages were not allocated")
-        try capture.waitForMarker(occurrences: 1)
+        try capture.waitForMarker("KENRAN_BUTO_RUNTIME_OK", occurrences: 1)
         let firstOutput = capture.joined()
         precondition(firstOutput.contains("Linux"), "Native guest stdout is missing uname sysname")
         precondition(firstOutput.contains("x86_64"), "Native guest stdout is missing uname machine")
@@ -127,6 +128,30 @@ struct NativeGuestMachineSmoke {
         precondition(machine.memory.allocatedPageCount == 0, "GuestMachine stop did not release native guest pages")
         precondition(machine.memory.readByte(offset: 0x402000) == 0, "Guest data memory was not zeroed after stop")
         precondition(machine.memory.readByte(offset: 0x401000) == 0, "Guest executable memory was not zeroed after stop")
+
+        let stdinMachine = GuestMachine(
+            configuration: configuration,
+            memorySize: UInt64(64 * 1024 * 1024)
+        )
+        precondition(stdinMachine.memory.isAvailable, "Native stdin GuestMemory initialization failed")
+        let stdinImage = try stdinMachine.loadELFImage(at: stdinGuestURL)
+        precondition(stdinImage.entryPoint == 0x401000, "Unexpected stdin smoke entry point")
+        let input = Data("hello
+".utf8)
+        precondition(stdinMachine.enqueueStandardInput(input) == input.count,
+                     "Native GuestMachine rejected queued stdin")
+        let stdinExit = try runToExit(stdinMachine)
+        precondition(stdinExit == .exited(0), "Native stdin guest did not exit with status 0")
+        try capture.waitForMarker("KENRAN_BUTO_STDIN_READY")
+        let stdinOutput = capture.joined()
+        precondition(stdinOutput.contains("KENRAN_BUTO_STDIN_ECHO:hello"),
+                     "Native GuestMachine did not echo queued stdin")
+        precondition(stdinOutput.contains("KENRAN_BUTO_STDIN_OK"),
+                     "Native GuestMachine did not write the stdin completion marker")
+        stdinMachine.stop()
+        precondition(stdinMachine.memory.allocatedPageCount == 0,
+                     "Native stdin GuestMachine stop did not release guest pages")
+        print("C-backed GuestMachine executed read(0), echoed queued input and released guest pages")
         print("C-backed GuestMachine loaded, ran twice, captured stdout and released guest pages")
     }
 }
