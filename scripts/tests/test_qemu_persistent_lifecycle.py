@@ -13,6 +13,7 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn('"stop"', bridge)
         self.assertIn('"cont"', bridge)
         self.assertIn('"system_reset"', bridge)
+        self.assertIn('"system_powerdown"', bridge)
         self.assertIn("SO_RCVTIMEO", bridge)
         self.assertIn("SO_NOSIGPIPE", bridge)
         self.assertIn("MSG_NOSIGNAL", bridge)
@@ -84,7 +85,7 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         native_test = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
         for token in ("qmp_test_server", "qmp_capabilities", "query-status",
-                      "system_reset", "event_and_reply", "pthread_join"):
+                      "system_reset", "system_powerdown", "event_and_reply", "pthread_join"):
             with self.subTest(token=token):
                 self.assertIn(token, native_test)
 
@@ -111,6 +112,18 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("runtime.stop(sessionGeneration: sessionGeneration)", backend)
         self.assertIn("runtime.isRunning(sessionGeneration: sessionGeneration)", backend)
         self.assertIn("Restart Akatsubaki Emu to switch guests", runtime)
+
+    def test_guest_power_button_is_wired_from_ui_to_the_qmp_runtime(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        backend = (root / "src" / "QEMU" / "QEMUBackend.swift").read_text(encoding="utf-8")
+        engine = (root / "src" / "Core" / "VMEngine.swift").read_text(encoding="utf-8")
+        display = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
+        self.assertIn('Self.sendQMP("system_powerdown")', runtime)
+        self.assertIn("runtime.requestGuestPowerDown(sessionGeneration: sessionGeneration)", backend)
+        self.assertIn("backend.requestGuestPowerDown()", engine)
+        self.assertIn("engine.requestGuestPowerDown()", display)
+        self.assertIn('title: "Power Off"', display)
 
     def test_vm_engine_stops_by_pausing_instead_of_waiting_for_process_exit(self):
         root = Path(__file__).resolve().parents[2]

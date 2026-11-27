@@ -32,6 +32,11 @@ final class QEMUBackend {
         return runtime.stop(sessionGeneration: sessionGeneration)
     }
 
+    @discardableResult func requestGuestPowerDown() -> Bool {
+        guard let sessionGeneration else { return false }
+        return runtime.requestGuestPowerDown(sessionGeneration: sessionGeneration)
+    }
+
     var isRunning: Bool { runtime.isRunning(sessionGeneration: sessionGeneration) }
     var isActive: Bool { runtime.isActive(sessionGeneration: sessionGeneration) }
     var lastError: String? { runtime.lastError(sessionGeneration: sessionGeneration) }

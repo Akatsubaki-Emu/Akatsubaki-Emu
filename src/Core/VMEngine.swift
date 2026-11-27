@@ -118,6 +118,20 @@ final class VMEngine {
         EmulationLog.shared.write(message)
     }
 
+    @discardableResult
+    func requestGuestPowerDown() -> Bool {
+        guard case .running = state, let backend else {
+            EmulationLog.shared.write("Guest power-down request ignored because no running QEMU guest is attached.")
+            return false
+        }
+        let accepted = backend.requestGuestPowerDown()
+        if !accepted {
+            let message = backend.lastError ?? "QEMU did not acknowledge the ACPI power-button request."
+            EmulationLog.shared.write("Guest power-down request failed: \(message)")
+        }
+        return accepted
+    }
+
     func stop() {
         guard case .stopped = state else {
             setState(.stopping)

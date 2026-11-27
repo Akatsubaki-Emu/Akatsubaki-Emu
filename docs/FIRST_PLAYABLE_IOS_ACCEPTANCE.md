@@ -74,9 +74,10 @@ The AOT path is optional for the first QEMU TCI guest. TCI does not require Stik
 - [ ] Connect the guest execution path to a guest framebuffer and a Metal-backed display.
 - [ ] Route touch, hardware keyboard, and controller input into guest input events.
 - [ ] Verify pause/resume, focus changes, orientation, and clean shutdown.
+- [ ] Verify the Power Off action sends an ACPI power-button event and that a supported guest OS completes shutdown cleanly.
 - [ ] Apply guest resolution and frame-rate settings to the actual renderer rather than only storing UI preferences.
 
-For QEMU TCTI, validate the existing VNC-to-Metal display and keyboard/controller event path on the physical device. Hardware-keyboard key-down/up/cancel forwarding and F-key/HID mappings are implemented in main; physical focus, key-up and guest delivery still need verification. The separate static ELF console remains text-only and has no independent framebuffer; it now has a bounded, interruptible guest-stdin queue and a text input field for diagnostic programs.
+For QEMU TCTI, validate the existing VNC-to-Metal display and keyboard/controller event path on the physical device. The iOS display now exposes a Power Off action that sends QMP `system_powerdown`; this requests an ACPI power-button event but does not prove the guest OS supports ACPI shutdown or that shutdown completes on-device. Hardware-keyboard key-down/up/cancel forwarding and F-key/HID mappings are implemented in main; physical focus, key-up and guest delivery still need verification. The separate static ELF console remains text-only and has no independent framebuffer; it now has a bounded, interruptible guest-stdin queue and a text input field for diagnostic programs.
 
 ### Gate 5 — Persistent QEMU guest disk state
 

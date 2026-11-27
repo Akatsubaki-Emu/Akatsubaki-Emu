@@ -45,6 +45,9 @@ final class VMDisplayViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: "Power Off", style: .plain, target: self, action: #selector(requestGuestPowerDown)
+        )
         gpu.view.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(gpu.view)
         status.translatesAutoresizingMaskIntoConstraints = false
@@ -195,6 +198,14 @@ final class VMDisplayViewController: UIViewController {
         } else {
             vncClient.start()
         }
+    }
+
+    @objc private func requestGuestPowerDown() {
+        guard engine.requestGuestPowerDown() else {
+            status.text = "Power off unavailable • QEMU guest is not running"
+            return
+        }
+        status.text = "ACPI power button sent • waiting for guest OS shutdown"
     }
 
     private func applyCardboardLayout() {

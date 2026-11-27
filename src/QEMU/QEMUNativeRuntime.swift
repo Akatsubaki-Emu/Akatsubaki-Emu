@@ -430,6 +430,27 @@ final class QEMUNativeRuntime {
         return true
     }
 
+    /// Sends the guest's ACPI power-button event without terminating QEMU.
+    /// The guest OS decides whether and when to complete its shutdown.
+    @discardableResult
+    func requestGuestPowerDown(sessionGeneration expected: UInt64) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard started, expected == sessionGeneration, !isPaused else {
+            controlError = "The active QEMU guest session is not available for power-down."
+            return false
+        }
+        let result = Self.sendQMP("system_powerdown")
+        guard result.success else {
+            controlError = result.error ?? "QEMU did not acknowledge the ACPI power-button request."
+            EmulationLog.shared.write("QEMU guest power-down request failed: \(controlError ?? "unknown QMP error")")
+            return false
+        }
+        controlError = nil
+        EmulationLog.shared.write("Sent an ACPI power-button event to the guest; waiting for the guest OS to shut down.")
+        return true
+    }
+
     private static func sendQMP(_ command: String) -> (success: Bool, error: String?) {
         var errorBuffer = [CChar](repeating: 0, count: 512)
         let success = QEMUCommandBuilder.qmpSocketPath.withCString { socketPath in

@@ -359,6 +359,7 @@ bool isteam_qemu_qmp_command(const char *socket_path, const char *command,
         || (strcmp(command, "stop") != 0
             && strcmp(command, "cont") != 0
             && strcmp(command, "system_reset") != 0
+            && strcmp(command, "system_powerdown") != 0
             && strcmp(command, "query-status") != 0)) {
         if (error_buffer && error_capacity > 0)
             snprintf(error_buffer, (size_t)error_capacity, "Invalid QMP socket path or unsupported command");
