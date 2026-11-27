@@ -96,7 +96,19 @@ done
 rm -rf "$FEX_DIST_DIR"
 mkdir -p "$FEX_DIST_DIR/lib" "$FEX_DIST_DIR/include" "$FEX_DIST_DIR/licenses"
 for library in "${libraries[@]}"; do cp "$library" "$FEX_DIST_DIR/lib/"; done
+# FEX public headers include generated IR and configuration headers. Package both
+# source and build-generated include trees so the artifact is a usable SDK input.
+for generated_header in \
+  "$FEX_BUILD_DIR/include/FEXCore/IR/IRDefines.inc" \
+  "$FEX_BUILD_DIR/include/FEXCore/IR/IRDefines_Dispatch.inc" \
+  "$FEX_BUILD_DIR/include/FEXCore/Config/ConfigValues.inl" \
+  "$FEX_BUILD_DIR/include/FEXCore/Config/ConfigOptions.inl" \
+  "$FEX_BUILD_DIR/generated/git_version.h"; do
+  [[ -s "$generated_header" ]] || fail "Required generated FEXCore header is missing: $generated_header"
+done
 cp -R "$FEX_SOURCE_DIR/FEXCore/include/." "$FEX_DIST_DIR/include/"
+cp -R "$FEX_BUILD_DIR/include/." "$FEX_DIST_DIR/include/"
+cp "$FEX_BUILD_DIR/generated/git_version.h" "$FEX_DIST_DIR/include/"
 cp "$FEX_SOURCE_DIR/LICENSE" "$FEX_DIST_DIR/licenses/FEX-MIT-LICENSE.txt"
 cp "$FEX_SOURCE_DIR/LICENSE-MADEIRA.md" "$FEX_DIST_DIR/licenses/LICENSE-MADEIRA.md"
 cp "$FEX_SOURCE_DIR/COPYING.GPL-3.0" "$FEX_DIST_DIR/licenses/COPYING.GPL-3.0"
