@@ -1,14 +1,15 @@
 # FEXCore and Box64 — iOS integration audit
 
-**Checked:** 2026-11-27 12:30 UTC  
-**Status:** FEXCore is the accepted primary dynamic translator, but is not integrated or built for iOS in Akatsubaki. A pinned FEXCore-only iOS build-validation workflow and contract tests now exist; local static checks pass, but no Xcode build or FEXCore archive has been produced. GitLab main contains later header/consumer-probe fixes than the current GitHub workflow revision. A third-party Madeira/EmuPC fork demonstrates an iOS build and embedding pattern at source level; it has not been independently built or security-audited here. Box64 remains the secondary fallback candidate, not a concurrent engine. No runtime is promoted to operational by this audit.
+**Checked:** 2026-11-27 13:35 UTC  
+**Current status:** FEXCore remains the accepted primary dynamic translator and is still not linked into Akatsubaki, but the pinned iOS ARM64 static-library build is now verified. GitHub Actions run `46002145212` built pinned FEX fork commit `1dc6ed4932bd231df1c53dd7b8043ffdee0ac34a` for `arm64-apple-ios`, minimum iOS 16.0, iPhoneOS SDK 27.1 / Xcode 27.1. Artifact `Akatsubaki-FEXCore-iOS-arm64-3` (ID `15199106936`) contains seven static archives, headers, submodule provenance and licences; its ZIP SHA-256 is `8183ad9c600c3182dab7280d997567755a8479a51c09e8ada692432044f3df58`. The archive was independently integrity-checked and sampled Mach-O members report arm64/iOS. Its manifest explicitly says static-library build only, not linked into Akatsubaki.  
+The Kenran Butō AOT validation run `46006971732` passed all 16 steps on commit `c24f021b5d708fc463162c2fd91c31591cfe69a6`, including a real static ELF guest through the hybrid interpreter/AOT path and native GuestMachine stop/pause/resume smoke. Current application main is `bdcc78dafe6bcc826272fa9120826f2cc538d1b1`, synchronized to GitLab main. Current-head AOT validation, Swift runtime validation and Core-Only IPA build are queued/pending; the last available diagnostic IPA remains older than current main. No physical iPad guest execution, FEXCore runtime integration or QEMU-enabled release is claimed. Box64 remains a secondary fallback candidate, not a concurrent engine.
 
 ## FEXCore primary
 
 - Upstream: https://github.com/FEX-Emu/FEX
 - License: MIT; retain the upstream copyright and licence with any imported source or binary.
 - The upstream top-level CMake platform check supports only 64-bit Linux and Windows and rejects Apple platforms. Therefore, the complete FEX frontend cannot be built for iOS unchanged.
-- FEXCore has its own CMake entry point and a C++ embedding API. Its public context interface exposes syscall, signal-delegator and thunk-handler hooks, thread creation/execution and context lifecycle. This is a plausible route to reuse the translator core without importing the Linux-only frontend, but a standalone iOS build has not been demonstrated.
+- FEXCore has its own CMake entry point and a C++ embedding API. Its public context interface exposes syscall, signal-delegator and thunk-handler hooks, thread creation/execution and context lifecycle. This is a plausible route to reuse the translator core without importing the Linux-only frontend, and the pinned fork's FEXCore-only static libraries have now been built for iOS ARM64; the library is not yet linked into the app or executed.
 - The core uses C++20 and has its own dependency graph. Pin an exact upstream commit and all transitive dependencies; do not track main for a reproducible device build.
 
 ### Darwin/iOS work required
@@ -30,7 +31,7 @@ A public third-party iOS implementation provides a concrete reference for the pr
 ### Verified implementation shape
 
 - Its FEX fork's top-level `FEX/CMakeLists.txt` accepts `Darwin` and `iOS` host targets. This is a Madeira/EmuPC fork change; it does **not** mean the unmodified upstream FEX tree has the same platform support.
-- `build/fex-ios/build.sh` shows an iOS device ARM64 build invocation using the iPhoneOS SDK, a 17.0 deployment target and `cortex-a78`, then builds the FEXCore static libraries and required helpers. This is source-level evidence of a build recipe in that fork, not an Akatsubaki build result.
+- `build/fex-ios/build.sh` shows an iOS device ARM64 build invocation using the iPhoneOS SDK, a 17.0 deployment target and `cortex-a78`, then builds the FEXCore static libraries and required helpers. Akatsubaki's dedicated hosted workflow has now reproduced a pinned FEXCore-only iOS ARM64 static build; this is not a full FEX frontend or a runtime integration.
 - `app/Madeira/FEXBridge.mm` demonstrates the embedding boundary: it creates an FEXCore context, installs a Linux syscall handler and signal delegator, creates a guest thread, and calls `ExecuteThread`.
 - That bridge uses a 64 MiB dual-mapped JIT pool: debugger-provided RX pages, a writable `vm_remap` alias, `vm_protect`, and `FEXCore::DualMap::WriteOffset`. Its allocation granularity is 16 KiB. It requires an attached debugger/JIT and is not a no-JIT fallback.
 - The minimal bridge's syscall handler is only a bring-up implementation. The repository describes a fuller Windows-game route that composes FEX's ARM64EC translator with Wine, a Windows DLL farm and DXMT; FEX alone does not provide Windows APIs, a Linux dynamic linker, a filesystem or a full-system guest.
@@ -57,14 +58,14 @@ The source-level audit of `app/Madeira/FEXBridge.mm` also found issues that make
 ### Recommended Akatsubaki integration sequence
 
 1. Pin an exact FEX revision and dependency/submodule graph; generate a file-level licence inventory before adding it to the build.
-2. Reproduce the iOS ARM64 **FEXCore-only** static build in a dedicated hosted workflow. Keep upstream platform changes separate from Akatsubaki's bridge and record every patch.
+2. **Completed:** reproduce the iOS ARM64 **FEXCore-only** static build in a dedicated hosted workflow. Preserve the pinned fork, dependency graph, hashes and licence inventory; the successful private artifact is run `46002145212` / artifact `15199106936`. Keep upstream platform changes separate from Akatsubaki's bridge.
 3. Implement a C++/Objective-C++ adapter behind `ExecutionBackendRouter`. Reuse the existing Kenran Butō executable-memory provider where its W^X, 16 KiB-page, alias and revocation semantics meet FEX's allocator contract; do not silently add a second unrelated JIT pool.
 4. Implement and test the FEX syscall, signal, thread, TLS, futex, memory and thunk contracts against the existing guest ABI. The current bounded `LinuxSyscallDispatcher` is not sufficient for general Linux userland.
 5. Route unsupported/unavailable FEX execution back to the existing interpreter only at a well-defined side-exit boundary. Select one dynamic translator per process; Box64 remains an alternative, never a concurrent second translator.
 6. Add Wine/ARM64EC and DXMT only as separate, later Windows/graphics integrations after their source provenance and complete dependency licences are reviewed.
 7. Keep QEMU TCTI as the separate no-JIT full-system route. FEXCore is a user-mode dynamic translator and does not replace a bootable PC/OS backend.
 
-**Status:** a viable iOS FEXCore implementation pattern has been found and audited at source level. FEXCore is still **not** built, linked, selected or verified in Akatsubaki on a physical iPad.
+**Status:** the pinned FEXCore iOS ARM64 static libraries are **built and artifact-verified**, but remain **not linked, selected or executed** in Akatsubaki. The iOS bridge, guest-memory adapter and syscall/signal/thread contracts remain open; no physical iPad FEXCore run is claimed.
 
 ## Box64 secondary fallback
 
@@ -125,7 +126,7 @@ The static ELF diagnostic path no longer treats every `read(0, ...)` as immediat
 
 **Verification rule:** source code, a build workflow, a loadable dylib, a host smoke test and a simulator run are separate evidence levels. The backend registry must remain fail-closed until a concrete iOS artifact executes a known guest correctly on a physical iPad.
 
-## Repository synchronization status
+## Historical repository synchronization status (2026-11-25 snapshot; superseded by the current status at the top)
 
 - Current write target is the existing GitLab main branch. At this audit GitLab main is c0d333f83237a1a81b6b1ce2ab2a806ebd153230; GitHub main was last observed at f93008dfb5c6143c4e9dc256fca07a363020eccd and remains behind. No force-push, branch creation, merge or manual sync was attempted.
 - GitLab main includes CWDE/CDQE/CDQ/CQO AOT/interpreter support (translator v10), CBW/CWD interpreter support, portable ELF smoke tests, the REX.W-over-0x66 correctness fix, AOT block-entry coverage and dynamic AOT-version source validation.
@@ -134,4 +135,4 @@ The static ELF diagnostic path no longer treats every `read(0, ...)` as immediat
 - QEMU TCI runtime/release jobs remain gated by QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED. No TCI runtime artifact, QEMU-enabled IPA, physical SideStore installation or physical iPad guest boot is verified.
 - Keep runtime capability reporting fail-closed until a known guest boots and passes interaction, storage and repeat-launch checks on a physical iPad.
 
-No FEXCore/Box64 iOS backend, full-system guest boot, physical-device graphics/input, or QEMU distribution approval is claimed.
+No FEXCore/Box64 runtime backend, full-system guest boot, physical-device graphics/input, or QEMU distribution approval is claimed.
