@@ -109,6 +109,63 @@ done
 cp -R "$FEX_SOURCE_DIR/FEXCore/include/." "$FEX_DIST_DIR/include/"
 cp -R "$FEX_BUILD_DIR/include/." "$FEX_DIST_DIR/include/"
 cp "$FEX_BUILD_DIR/generated/git_version.h" "$FEX_DIST_DIR/include/"
+
+# Package the transitive public headers required by FEXCore's embedding API.
+# The static archives alone are not a usable SDK without fmt/unordered_dense.
+include_sources=(
+  "External/fmt/include"
+  "External/unordered_dense/include"
+  "External/cephes/include"
+  "External/SoftFloat-3e/include"
+  "CodeEmitter"
+  "FEXHeaderUtils"
+)
+for relative in "${include_sources[@]}"; do
+  source_dir="$FEX_SOURCE_DIR/$relative"
+  [[ -d "$source_dir" ]] || fail "Required FEXCore public include directory is missing: $source_dir"
+  destination="$FEX_DIST_DIR/include/third_party/$relative"
+  mkdir -p "$(dirname "$destination")"
+  cp -R "$source_dir" "$destination"
+done
+xxhash_header="$FEX_SOURCE_DIR/External/xxhash/xxhash.h"
+[[ -s "$xxhash_header" ]] || fail "Required xxHash public header is missing: $xxhash_header"
+xxhash_include="$FEX_DIST_DIR/include/third_party/External/xxhash"
+mkdir -p "$xxhash_include"
+cp "$xxhash_header" "$xxhash_include/"
+{
+  printf '%s\\n' '-Iinclude'
+  for relative in "${include_sources[@]}"; do
+    printf '%s\\n' "-Iinclude/third_party/$relative"
+  done
+  printf '%s\\n' '-Iinclude/third_party/External/xxhash'
+} > "$FEX_DIST_DIR/include_paths.txt"
+
+# Compile a consumer-side API probe against the packaged headers. This catches
+# missing generated headers and transitive include dependencies before upload.
+probe="$FEX_BUILD_DIR/fexcore_ios_api_probe.cpp"
+cat > "$probe" <<'CPP'
+#include <FEXCore/Config/Config.h>
+#include <FEXCore/Core/Context.h>
+#include <FEXCore/Core/HostFeatures.h>
+#include <FEXCore/Core/SignalDelegator.h>
+#include <FEXCore/Debug/InternalThreadState.h>
+#include <FEXCore/HLE/SyscallHandler.h>
+
+int main() {
+  FEXCore::HostFeatures Features{};
+  (void)Features;
+  return 0;
+}
+CPP
+SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
+include_args=(-I"$FEX_DIST_DIR/include")
+for relative in "${include_sources[@]}"; do
+  include_args+=(-I"$FEX_DIST_DIR/include/third_party/$relative")
+done
+include_args+=(-I"$FEX_DIST_DIR/include/third_party/External/xxhash")
+xcrun --sdk iphoneos clang++ -target arm64-apple-ios16.0 -isysroot "$SDK_PATH" \\
+  -std=c++20 -fno-exceptions "${include_args[@]}" -fsyntax-only "$probe"
+
 cp "$FEX_SOURCE_DIR/LICENSE" "$FEX_DIST_DIR/licenses/FEX-MIT-LICENSE.txt"
 cp "$FEX_SOURCE_DIR/LICENSE-MADEIRA.md" "$FEX_DIST_DIR/licenses/LICENSE-MADEIRA.md"
 cp "$FEX_SOURCE_DIR/COPYING.GPL-3.0" "$FEX_DIST_DIR/licenses/COPYING.GPL-3.0"
