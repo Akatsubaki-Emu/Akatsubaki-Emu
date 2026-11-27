@@ -148,6 +148,46 @@ def runtime_library_inventory(package_root: Path) -> list[dict[str, Any]]:
     return results
 
 
+def package_file_inventory(package_root: Path) -> list[dict[str, Any]]:
+    """Hash every packaged file without following symlinks outside the package.
+
+    Categories are path/extension heuristics for reviewer triage only; they
+    never assert that a file's licence has been identified.
+    """
+    results: list[dict[str, Any]] = []
+    provenance_names = {name.lower() for name in PACKAGE_REPORTS}
+    firmware_suffixes = {".fd", ".rom", ".efi", ".dtb", ".qcow2", ".img", ".bin"}
+    firmware_directories = {"firmware", "bios", "keymaps", "ovmf", "edk2"}
+    for path in sorted(package_root.rglob("*")):
+        relative = path.relative_to(package_root).as_posix()
+        if path.is_symlink():
+            results.append({"path": relative, "category": "symlink", "target": os.readlink(path)})
+            continue
+        if not path.is_file():
+            continue
+        suffix = path.suffix.lower()
+        parts = {part.lower() for part in path.parts}
+        if parts & firmware_directories or suffix in firmware_suffixes:
+            category = "firmware-data"
+        elif suffix in {".dylib", ".a"}:
+            category = "runtime-library"
+        elif any(part.lower().endswith(".framework") for part in path.parts):
+            category = "framework-resource"
+        elif LICENSE_NAME.match(path.name):
+            category = "license-or-notice"
+        elif path.name.lower() in provenance_names:
+            category = "build-provenance"
+        else:
+            category = "other"
+        results.append({
+            "path": relative,
+            "category": category,
+            "size": path.stat().st_size,
+            "sha256": sha256_file(path),
+        })
+    return results
+
+
 def build_report(utm_root: Path, package_root: Path, output_dir: Path) -> dict[str, Any]:
     utm_root = utm_root.resolve()
     package_root = package_root.resolve()
@@ -162,6 +202,8 @@ def build_report(utm_root: Path, package_root: Path, output_dir: Path) -> dict[s
     spdx_counts = Counter({key: len(value) for key, value in spdx_files.items()})
     frameworks = framework_inventory(package_root)
     runtime_libraries = runtime_library_inventory(package_root)
+    package_files = package_file_inventory(package_root)
+    package_file_category_counts = Counter(item["category"] for item in package_files)
 
     copied_reports: list[str] = []
     for name in PACKAGE_REPORTS:
@@ -193,6 +235,9 @@ def build_report(utm_root: Path, package_root: Path, output_dir: Path) -> dict[s
         "frameworks": frameworks,
         "runtime_library_count": len(runtime_libraries),
         "runtime_libraries": runtime_libraries,
+        "package_file_count": len(package_files),
+        "package_file_category_counts": dict(sorted(package_file_category_counts.items())),
+        "package_files": package_files,
         "copied_package_reports": copied_reports,
         "review_status": "INVENTORY_ONLY_REQUIRES_QUALIFIED_LICENSE_REVIEW",
     }
@@ -215,6 +260,8 @@ def build_report(utm_root: Path, package_root: Path, output_dir: Path) -> dict[s
         f"- Distinct SPDX expressions found in scanned source headers: {len(spdx_counts)}",
         f"- Packaged frameworks inventoried: {len(frameworks)}",
         f"- Packaged dylib/static libraries inventoried: {len(runtime_libraries)}",
+        f"- Complete package files hashed: {len(package_files)}",
+        f"- Firmware/data candidates hashed: {package_file_category_counts.get('firmware-data', 0)}",
         f"- Package reports copied: {', '.join(copied_reports) if copied_reports else 'none'}",
         "",
         "## SPDX expression counts",
@@ -237,6 +284,15 @@ def build_report(utm_root: Path, package_root: Path, output_dir: Path) -> dict[s
         lines.extend(f"- {item['path']} — {item['size']} bytes, SHA-256 {item['sha256']}" for item in runtime_libraries)
     else:
         lines.append("- No dylib or static-library files were found.")
+    lines.extend(["", "## Complete package file inventory", ""])
+    if package_files:
+        lines.extend(
+            f"- [{item['category']}] {item['path']} — "
+            + (f"{item['size']} bytes, SHA-256 {item['sha256']}" if "sha256" in item else f"symlink target {item['target']} (not followed)")
+            for item in package_files
+        )
+    else:
+        lines.append("- No regular files or symlinks were found in the runtime package.")
     lines.extend([
         "",
         "## Review notes",
