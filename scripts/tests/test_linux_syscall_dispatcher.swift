@@ -476,8 +476,8 @@ struct LinuxSyscallDispatcherTests {
         let pausedReadDone = DispatchSemaphore(value: 0)
         let pausedReadResult = LockedBox<LinuxSyscallDispatcher.Outcome>()
         DispatchQueue.global().async {
-            pausedReadResult.set(outputDispatcher.dispatch(number: 0, arg0: 0, arg1: 0x3F3000,
-                                                           arg2: 5, arg3: 0, arg4: 0, arg5: 0)!)
+            pausedReadResult.set(outputDispatcher.dispatch(number: 0,
+                                                           arguments: [0, 0x3F3000, 5, 0, 0, 0])!)
             pausedReadDone.signal()
         }
         precondition(pausedReadDone.wait(timeout: .now() + .milliseconds(25)) == .timedOut)
@@ -487,9 +487,8 @@ struct LinuxSyscallDispatcherTests {
         let resumedInput = Data("pause".utf8)
         precondition(outputDispatcher.enqueueStandardInput(resumedInput) == resumedInput.count)
         outputDispatcher.clearStandardInputPause()
-        let resumedRead = outputDispatcher.dispatch(number: 0, arg0: 0, arg1: 0x3F3000,
-                                                    arg2: UInt64(resumedInput.count),
-                                                    arg3: 0, arg4: 0, arg5: 0)!
+        let resumedRead = outputDispatcher.dispatch(number: 0,
+                                                     arguments: [0, 0x3F3000, UInt64(resumedInput.count), 0, 0, 0])!
         guard case .returned(let resumedCount) = resumedRead else { preconditionFailure() }
         precondition(resumedCount == UInt64(resumedInput.count))
         precondition(memory.read(offset: 0x3F3000, length: resumedInput.count) == resumedInput)
