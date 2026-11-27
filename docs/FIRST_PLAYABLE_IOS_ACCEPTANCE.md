@@ -1,7 +1,23 @@
 # First playable iOS acceptance and remaining feature backlog
 
-**Last audited:** 2026-11-27  
-**Scope:** Kenran Butō's first reproducible iOS guest-execution milestone. This is a checklist, not a claim that the milestone has shipped. See [Legacy feature parity and remaining requirements](LEGACY_FEATURE_PARITY.md) for the older cross-chat feature requests and their current implementation status.
+**Last audited:** 2026-11-27 13:55 UTC  
+
+**Scope:** Kenran Butō's first reproducible iOS guest-execution milestone. This is a checklist, not a claim that the full-system milestone has shipped. See [Legacy feature parity and remaining requirements](LEGACY_FEATURE_PARITY.md) for the older cross-chat feature requests and their current implementation status.
+
+
+## Current verified snapshot — 2026-11-27 13:55 UTC
+
+**Application main:** `9ef6bc0df9706fee50793bd5fbeeca2d9eb53388` (GitHub-to-GitLab synchronization succeeded; GitLab main was read back at the same SHA). The core-only app artifact was built from `bdcc78dafe6bcc826272fa9120826f2cc538d1b1`; the only later change to `9ef6bc0d` is FEXCore audit documentation, so the app/runtime source is identical.
+
+- **Core-only iOS IPA: VERIFIED BUILT.** GitHub Actions run `46007119592` succeeded; artifact `15203941246` (`Akatsubaki-Emu-CoreOnly-iOS-125`, 25,434,755 bytes). IPA SHA-256: `97370b540eb2f44334db1aa51d46f8e46deebe8636c509d2977a1daa6337e5c1`; artifact ZIP SHA-256: `96fa908cde4965c5df19034cfcea1b1917729397c2e678fcc0362cb1e2740b60`. The workflow reported `BUILD SUCCEEDED` and `Core-only IPA validation: PASS`.
+- **IPA inspection: VERIFIED.** Mach-O arm64; iPhoneOS SDK 27.1; `LC_BUILD_VERSION` minimum iOS 16.0; bundle ID `com.xthrx.isteam`; iPhone/iPad device families; unsigned by design; no embedded provisioning profile, code signature, QEMU, UTM or EFI payload. SideStore or another permitted signer is required.
+- The artifact includes three static x86-64 Linux ELF guests: `hybrid_xchg_smoke.elf`, `hybrid_runtime_smoke.elf`, and `hybrid_stdin_smoke.elf`, with builders, tests, checksums, README and the Xcode build log. The app UI imports ELF through Library → Import Game / Executable and launches it in the diagnostic Console.
+- **Kenran Butō ARM64 execution: VERIFIED ON HOSTED ARM64.** AOT run `46006971732` passed all 16 steps, including a real static ELF guest through the hybrid AOT/interpreter path and native GuestMachine stop/pause/resume smoke. Repository validation run `46007119597` also completed successfully, including Swift guest-runtime regression tests.
+- **FEXCore iOS ARM64 libraries: VERIFIED BUILT, NOT INTEGRATED.** Run `46002145212`, artifact `15199106936`, pinned fork commit `1dc6ed4932bd231df1c53dd7b8043ffdee0ac34a`; seven static archives, all 154 object members independently verified as Mach-O arm64 with iOS `LC_BUILD_VERSION`. Artifact SHA-256: `8183ad9c600c3182dab7280d997567755a8479a51c09e8ada692432044f3df58`. No FEXCore bridge, syscall adapter or guest-memory integration is yet linked into the app.
+- **QEMU full-system build: IN PROGRESS.** Build & Release run `46007119653` is compiling UTM dependencies for physical iOS arm64. No TCI runtime artifact or QEMU-enabled IPA is yet available. The QEMU distribution gate remains closed pending qualified file-level and combined-work licensing approval.
+- **Physical iPad execution: NOT YET VERIFIED.** The unsigned IPA is ready for SideStore installation and the three ELF guests are packaged, but no on-device install/launch/interactive result is claimed. Full-system Linux boot, Windows execution, guest graphics/input/audio, persistent disk and repeat-launch device evidence remain open.
+
+The current diagnostic build makes Akatsubaki theoretically usable for the bounded static x86-64 Linux ELF subset. It is not a full PC/OS emulator and does not satisfy the first-playable QEMU TCI physical-device acceptance gate.
 
 ## Validation automation
 
@@ -27,12 +43,12 @@ The repository now contains:
 - A partial x86-64-to-ARM64 AOT translator, translated-code cache, backend routing, and interpreter fallback.
 - Atomic memory-form XCHG for 1-, 4-, and 8-byte operands through a mutex-serialized native guest-memory API, including cross-page accesses and permission checks.
 - Conservative CPUID feature reporting and a monotonic 1 GHz virtual RDTSC counter; unsupported instructions still fall back to the interpreter.
-- A 96 MiB process-lifetime TXM executable arena for StikDebug-backed AOT memory, with exact-allocation tracking, coalescing, and concurrency regression tests. The shared dual-map allocator API is exposed for a future FEXCore bridge, but FEXCore is not linked or operational.
+- A 96 MiB process-lifetime TXM executable arena for StikDebug-backed AOT memory, with exact-allocation tracking, coalescing, and concurrency regression tests. The shared dual-map allocator API is exposed for a future FEXCore bridge; FEXCore's seven iOS ARM64 static libraries are now built and verified, but they are not linked or operational.
 - An application import-to-launch route through \`LibraryViewController\`, \`ConsoleViewController\`, \`GameLauncher\`, \`LinuxELFRuntime\`, and \`GuestMachine\`.
 
 This is a real, bounded execution path, not a complete PC emulator. It does not yet provide dynamic ELF linking, arbitrary Linux userland, a bootable Linux/Windows OS, a production graphics pipeline, or complete guest input.
 
-### 2026-11-27 source snapshot
+### Historical source snapshot (2026-11-27 13:35 UTC; superseded by the current verified snapshot above)
 
 - GitLab `main` was verified at `4596d94561b6182700dd9b8c0f5fd43d0de4d529`. At the last cross-remote comparison, GitHub `main` was a two-commit fast-forward descendant; the intervening changes were limited to the validation assertion and GuestMachine comments. GitLab API rate limiting prevented confirmation of mirror synchronization after that comparison.
 - The native GuestMachine smoke harness now covers repeated static-ELF execution, asynchronous stdin, stop while blocked in `read(0)`, and pause/resume while preserving guest memory and retrying the same syscall. The harness is wired into the Kenran Butō AOT validation workflow, but no current-head Xcode-runner result or physical-iPad result is recorded.
@@ -134,11 +150,11 @@ These items remain outside the first QEMU TCI Linux-boot milestone and should be
 | Android | Android guest experiment | UI selection only; no Android execution backend |
 | VR / visionOS | VR mode, motion input, visionOS support | Prototype/build-target work; no verified guest VR rendering or interaction |
 | tvOS | Apple TV guest launch and controller support | Interface prototype; no verified OS boot or game launch |
-| Dynamic translation | FEXCore/Box64 or another general x86-64 dynamic backend | No integrated, benchmarked iOS backend; interpreter remains correctness fallback |
-| UTM/QEMU | Full-system emulation backend | QEMU TCI is the selected no-JIT first-playable route; the build/release workflows exist, but the GPL compatibility gate, TCI artifact, iOS IPA, and physical Linux boot remain unverified |
+| Dynamic translation | FEXCore/Box64 or another general x86-64 dynamic backend | FEXCore iOS ARM64 static libraries now build and are verified; no integrated, benchmarked runtime backend yet; interpreter remains correctness fallback |
+| UTM/QEMU | Full-system emulation backend | QEMU TCI is the selected no-JIT first-playable route; current UTM/QEMU iOS arm64 build is in progress, but the GPL compatibility gate, distributable TCI artifact, QEMU-enabled IPA and physical Linux boot remain unverified |
 | Vapour Emu | Evaluate after its expected release | Date and availability are unverified; development must not wait for it |
 
-## Repository/CI coordination and latest validation status
+## Historical repository/CI coordination snapshot (2026-11-26; superseded by the current verified snapshot above)
 
 GitLab `main` is `bd6b9207768cf38990f554563c13545ad59e84a7`; GitHub `main` is `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, three commits behind. The GitLab-only commits update GitHub CI coverage and refresh these acceptance/feature documents. No reverse sync or force-push has been attempted.
 
@@ -155,7 +171,7 @@ GitLab `main` is `bd6b9207768cf38990f554563c13545ad59e84a7`; GitHub `main` is `7
 - `71ee9407` — enforce strict JIT/TCI callback-export parity in native validation and startup; add a fake JIT-library rejection test for TCI and run native bridge tests in GitLab CI.
 - `e9cf8f87` — add the TCI mismatch case to GitHub's native bridge workflow and assert both CI definitions remain aligned.
 
-### Hosted and local validation evidence
+### Historical hosted and local validation evidence (2026-11-26; superseded by the current verified snapshot above)
 
 - Native ARM64 AOT validation completed successfully after the byte-XCHG hybrid block-count assertion was corrected in `3418baa0`. This verifies the hosted ARM64 test path, not physical iOS JIT/AOT execution.
 - The QEMU TCI dependency-isolation synthetic suite was recorded as 17/17 passing locally after `e1660af8`. It does not replace `otool -L`/load-command closure checks, `codesign --verify`, on-device `dlopen`, or a guest boot.
@@ -188,13 +204,13 @@ A core-only IPA, static ELF host execution, simulator build, or QEMU compile alo
 
 The first playable physical iOS milestone is complete only when a reproducible current-source IPA containing the approved QEMU TCI runtime is installed on a physical iPad, a known-good x86-64 Linux image boots through TCI with JIT disabled, guest display and keyboard/controller input work, guest disk state survives restarts, repeat boots and cleanup are reliable, and build/test/device evidence is recorded. A QEMU-free core-only IPA, static ELF diagnostic, host execution, simulator run, or successful QEMU compilation alone is insufficient.
 
-## Latest source status (2026-11-26)
+## Historical source status (2026-11-26)
 
 QEMU TCTI is the selected first-playable no-JIT full-system route (legacy internal profile name TCI). It does not require StikDebug or TXM. The custom interpreter/static-ELF path is diagnostic coverage and remains useful as a correctness fallback. The 32 MiB TXM/SPTM arena and JIT path are optional acceleration work after TCI boot is proven; StikDebug 3.2.2+ is required for the iOS/iPadOS 27+ TXM/AOT pairing tests. No physical TCI boot or physical JIT/AOT execution is verified.
 
 
 
-## Latest source and packaging status (2026-11-26)
+## Historical source and packaging status (2026-11-26)
 
 GitLab `main` is `bd6b9207768cf38990f554563c13545ad59e84a7`; GitHub `main` is `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, three commits behind. No force-push or reverse sync has been attempted.
 
