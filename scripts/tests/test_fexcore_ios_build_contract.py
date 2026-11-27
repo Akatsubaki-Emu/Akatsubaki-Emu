@@ -68,6 +68,16 @@ class FEXCoreIOSBuildContractTests(unittest.TestCase):
         self.assertIn("FEX_DIST_DIR must not overlap FEX_BUILD_DIR", self.script)
         self.assertIn('mktemp -d "$safe_temp_root/fexcore-ios-platform-check.XXXXXX"', self.script)
         self.assertLess(self.script.index('FEX_DIST_DIR="$(resolve_output_dir'), self.script.index('rm -rf "$FEX_DIST_DIR"'))
+    def test_repository_build_root_cannot_be_symlinked_outside_checkout(self):
+        self.assertIn('repo_root="$(cd "$ROOT" && pwd -P)"', self.script)
+        self.assertIn('[[ ! -L "$repo_root/build" ]]', self.script)
+        self.assertIn('[[ "$safe_build_root" == "$repo_root/build" ]]', self.script)
+        self.assertIn('[[ "$safe_temp_root" != "/" ]]', self.script)
+        self.assertLess(
+            self.script.index('[[ ! -L "$repo_root/build" ]]'),
+            self.script.index('mkdir -p "$repo_root/build"'),
+        )
+
     def test_document_does_not_claim_operational_runtime_or_kernel_boot(self):
         self.assertIn("not an operational guest runtime", self.doc)
         self.assertIn("not linked into the app yet", self.doc)
