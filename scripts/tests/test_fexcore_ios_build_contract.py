@@ -61,6 +61,13 @@ class FEXCoreIOSBuildContractTests(unittest.TestCase):
         self.assertTrue(lines[compiler_line].endswith("\\"))
         self.assertIn("-std=c++20", lines[compiler_line + 1])
 
+    def test_output_paths_are_confined_before_cleanup(self):
+        self.assertIn("resolve_output_dir", self.script)
+        self.assertIn('[[ ! -L "$requested" ]]', self.script)
+        self.assertIn("must be inside", self.script)
+        self.assertIn("FEX_DIST_DIR must not overlap FEX_BUILD_DIR", self.script)
+        self.assertIn('mktemp -d "$safe_temp_root/fexcore-ios-platform-check.XXXXXX"', self.script)
+        self.assertLess(self.script.index('FEX_DIST_DIR="$(resolve_output_dir'), self.script.index('rm -rf "$FEX_DIST_DIR"'))
     def test_document_does_not_claim_operational_runtime_or_kernel_boot(self):
         self.assertIn("not an operational guest runtime", self.doc)
         self.assertIn("not linked into the app yet", self.doc)
