@@ -177,8 +177,8 @@ def patch_dtc_wrap_source(source: str) -> str:
     GitLab DNS failures on hosted macOS runners otherwise make Meson fail to
     fetch libfdt, even though the same commit is present in qemu/dtc.
     """
-    urls = list(re.finditer(r"(?m)^url\\s*=\\s*(\\S+)\\s*$", source))
-    revisions = re.findall(r"(?m)^revision\\s*=\\s*(\\S+)\\s*$", source)
+    urls = list(re.finditer(r"(?m)^url\s*=\s*(\S+)\s*$", source))
+    revisions = re.findall(r"(?m)^revision\s*=\s*(\S+)\s*$", source)
     if len(urls) != 1 or len(revisions) != 1:
         raise SystemExit("QEMU dtc.wrap changed: expected exactly one URL and revision")
     if revisions[0] != DTC_WRAP_PINNED_REVISION:
