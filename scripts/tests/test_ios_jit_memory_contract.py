@@ -49,7 +49,7 @@ class IOSJITMemoryContractTests(unittest.TestCase):
         self.assertIn("sys_icache_invalidate", self.aot_memory)
 
     def test_txm_aot_blocks_share_one_page_aligned_executable_arena(self):
-        self.assertIn("#define AOT_TXM_ARENA_BYTES (32u * 1024u * 1024u)", self.aot_memory)
+        self.assertIn("#define AOT_TXM_ARENA_BYTES (96u * 1024u * 1024u)", self.aot_memory)
         self.assertEqual(self.aot_memory.count("iSteamJITPrepareRegion(NULL,AOT_TXM_ARENA_BYTES)"), 1)
         self.assertIn("iSteamAOTExecutableArenaAllocate", self.aot_memory)
         self.assertIn("iSteamAOTExecutableArenaFree", self.aot_memory)
