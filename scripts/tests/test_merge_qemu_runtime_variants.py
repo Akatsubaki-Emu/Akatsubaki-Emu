@@ -200,7 +200,8 @@ class MergeQEMURuntimeVariantsTests(unittest.TestCase):
         tools = {
             "file": (
                 "#!/bin/sh\n"
-                "case \"$1\" in\n"
+                "if [ \"${1:-}\" = \"-b\" ]; then shift; fi\n"
+                "case \"${1:-}\" in\n"
                 "  *.plist) echo 'XML 1.0 document, ASCII text' ;;\n"
                 "  *) echo 'Mach-O 64-bit dynamically linked shared library arm64' ;;\n"
                 "esac\n"
