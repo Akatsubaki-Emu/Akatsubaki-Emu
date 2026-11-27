@@ -143,7 +143,7 @@ GitLab `main` is `bd6b9207768cf38990f554563c13545ad59e84a7`; GitHub `main` is `7
 - `e1660af8` — isolate the complete TCI framework/dependency closure under `Frameworks/TCI`, rewrite loader-relative runpaths, re-sign modified Mach-O files and test versioned frameworks/symlinks.
 - `3418baa0` — correct the AOT byte-XCHG hybrid test to expect the supported MOV prefix to execute in AOT before interpreter side-exit.
 - `033c62d8` and `08ab0ae0` — route hardware keyboard key-down/up/cancel events to QEMU/VNC with HID mappings, F-keys, modifiers and key cleanup.
-- `7a151691` — declare project-authored source GPL-2.0-or-later; third-party and combined-work licensing review remains separate.
+- `7a151691` — historical project-authored GPL-2.0-or-later declaration; superseded on 2026-11-27 by GPL-3.0-or-later for files listed in `.reuse/dep5`.
 - `71ee9407` — enforce strict JIT/TCI callback-export parity in native validation and startup; add a fake JIT-library rejection test for TCI and run native bridge tests in GitLab CI.
 - `e9cf8f87` — add the TCI mismatch case to GitHub's native bridge workflow and assert both CI definitions remain aligned.
 
@@ -155,7 +155,7 @@ GitLab `main` is `bd6b9207768cf38990f554563c13545ad59e84a7`; GitHub `main` is `7
 - GitLab pipeline IID 1303 (commit `71ee9407`), IID 1304 (same commit) and IID 1305 (commit `e9cf8f87`) all failed before runner assignment with `ci_quota_exceeded`; no tests ran on the new bridge-parity changes.
 - GitHub repository validation run `45842731799`, platform compile run `45842731803` and core-only IPA run `45842731853` are pending without assigned runners. Build & Release run `45842732055` is queued. No IPA artifact or platform build result is available.
 - GitLab `main` is `bd6b9207768cf38990f554563c13545ad59e84a7`; GitHub `main` is `71ee9407bb4cc491e6d0d2188c00574d183c2a67`, three commits behind. The GitLab-only commit updates the GitHub validation workflow and its source-contract test; no reverse sync or force-push has been attempted.
-- The project-authored license grant is GPL-2.0-or-later (`7a151691`). The QEMU/UTM file-level and combined-work audit remains incomplete; `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true` must remain unset until qualified review.
+- The project-authored source files listed in `.reuse/dep5` are GPL-3.0-or-later (commit `7f85bbb8`). The QEMU file-level and combined-work audit remains incomplete; `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED=true` must remain unset until qualified review.
 - No current QEMU TCI runtime artifact, QEMU-enabled IPA, SideStore installation or physical iPad Linux boot is verified.
 
 ### Runtime and older-feature boundary
@@ -195,6 +195,6 @@ GitLab `main` is `bd6b9207768cf38990f554563c13545ad59e84a7`; GitHub `main` is `7
 - Hardware keyboard key-down/up/cancel forwarding and F-key/HID mappings are in main. Physical keyboard focus and guest delivery remain unverified.
 - Native QEMU bridge parity is in GitLab main: JIT must export the StikJIT callback and TCI must not. The GitLab C-test job covers both valid modes and the TCI-with-JIT-export rejection case. GitHub's workflow invocation is updated in the GitLab-only follow-up commit.
 - GitLab pipelines IID 1303–1305 failed before runner assignment with `ci_quota_exceeded`. GitHub validation/platform/core-only IPA runs remain pending without assigned runners. No current IPA or QEMU runtime artifact exists.
-- The QEMU publication gate remains closed. The project-authored GPL-2.0-or-later grant does not itself establish compatibility of every QEMU/UTM source file in the combined distribution. Complete the qualified file-level and combined-work audit before enabling the gate.
+- The QEMU publication gate remains closed. The project-authored GPL-3.0-or-later grant does not establish compatibility of GPL-2.0-only QEMU files or every bundled dependency in the combined distribution. Complete the qualified file-level and combined-work audit before enabling the gate.
 - First physical-device target remains a 1 GiB x86-64 Linux guest through QEMU TCI with JIT disabled, VNC-to-Metal display, keyboard/controller/touch input, persistent disk, clean shutdown and repeat boot. No physical iPad guest boot is verified.
 

@@ -90,7 +90,7 @@ The development strategy is to reuse mature upstream implementations wherever th
 
 ### Licensing, provenance and platform gates
 
-- Project-authored source files listed in `.reuse/dep5` are GPL-3.0-or-later; upstream-derived portions and third-party components retain their own applicable licence terms. The UTM-derived QEMU bridge has Apache-2.0 provenance and must be assessed before selecting GPLv2 terms for a combined distribution. Record the exact upstream URL, commit, licence, copyright notices, modifications and transitive dependency licences for every imported component.
+- Project-authored source files listed in `.reuse/dep5` are GPL-3.0-or-later; upstream-derived portions and third-party components retain their own applicable licence terms. The UTM-derived QEMU bridge has Apache-2.0 provenance, generally compatible with GPL-3.0-or-later. GPL-2.0-only QEMU files remain incompatible with GPLv3 in a combined distribution. Record the exact upstream URL, commit, licence, copyright notices, modifications and transitive dependency licences for every imported component.
 - FEXCore's upstream repository identifies the project as MIT-licensed and targets ARM64 Linux; Box64, Wine and Proton have their own licence terms and dependency trees. Proton's submodules must be audited individually rather than assuming the top-level licence covers every component.
 - Do not copy code from an unverified project called “a32rt”: first establish the canonical repository and licence. Keep it as a candidate until that check is complete.
 - Prefer linking or vendoring an unmodified upstream component with its notices where practical. Keep local iOS changes in clearly separated patch sets and preserve upstream attribution.
