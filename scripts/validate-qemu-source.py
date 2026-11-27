@@ -1876,8 +1876,14 @@ for token in ("KenranButoAOTExecutableMemory.c", "KenranButoAOTExecution.swift",
     if token not in aot_workflow:
         print(f"AOT workflow missing {token!r}", file=sys.stderr)
         failed = True
-if aot_workflow.count("-Xcc -DKENRAN_BUTO_AOT_TESTS") != 2:
-    print("AOT workflow must forward KENRAN_BUTO_AOT_TESTS to both Swift Clang imports", file=sys.stderr)
+swift_clang_imports = aot_workflow.count("-import-objc-header")
+aot_test_flag_imports = aot_workflow.count("-Xcc -DKENRAN_BUTO_AOT_TESTS")
+if swift_clang_imports < 2 or aot_test_flag_imports != swift_clang_imports:
+    print(
+        "AOT workflow must forward KENRAN_BUTO_AOT_TESTS to every Swift Clang import "
+        f"({aot_test_flag_imports}/{swift_clang_imports})",
+        file=sys.stderr,
+    )
     failed = True
 
 
