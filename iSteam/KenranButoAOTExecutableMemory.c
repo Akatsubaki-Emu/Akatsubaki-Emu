@@ -30,8 +30,8 @@ _Static_assert(offsetof(KenranButoAOTGuestState,gpr)==8,"AOT ABI v1 gpr offset c
 _Static_assert(sizeof(KenranButoAOTGuestState)==96,"AOT ABI v1 state size changed");
 _Static_assert(sizeof(KenranButoAOTMemoryCallbacks)==32,"AOT ABI v1 callback size changed");
 static void set_error(char *b,size_t n,const char *m){if(b&&n)(void)snprintf(b,n,"%s",m);}
-static size_t host_page_size(void){long p=sysconf(_SC_PAGESIZE);return p>0?(size_t)p:4096u;}
-static size_t mapped_size_for(size_t n){size_t page=host_page_size();size_t r=n%page;if(!n)return 0;if(!r)return n;if(n>SIZE_MAX-(page-r))return 0;return n+page-r;}
+static size_t aot_host_page_size(void){long p=sysconf(_SC_PAGESIZE);return p>0?(size_t)p:4096u;}
+static size_t mapped_size_for(size_t n){size_t page=aot_host_page_size();size_t r=n%page;if(!n)return 0;if(!r)return n;if(n>SIZE_MAX-(page-r))return 0;return n+page-r;}
 #if defined(__APPLE__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
 #include <pthread.h>
 static void deallocate_mach_address(vm_address_t a,size_t n){if(a&&n)(void)vm_deallocate(mach_task_self(),a,(vm_size_t)n);}
@@ -145,7 +145,7 @@ iSteamAOTExecutableRegion *iSteamAOTExecutableMemoryCreate(const void *code,size
  int mode=iSteamJITGetProtocolMode();
  if(mode==ISTEAM_JIT_PROTOCOL_STIKDEBUG){
   if(!ensure_txm_arena(error,capacity)){free(r);return NULL;}
-  size_t hostPage=host_page_size();
+  size_t hostPage=aot_host_page_size();
   size_t offset=0;
   if(!iSteamAOTExecutableArenaAllocate(sTXMArena,mapped,hostPage,&offset)){free(r);set_error(error,capacity,"StikDebug AOT executable arena exhausted.");return NULL;}
   r->execute_address=(void *)((uintptr_t)sTXMExecuteBase+offset);
@@ -225,7 +225,7 @@ bool iSteamAOTExecutableMemoryAllocateDualMap(size_t size,
         !iSteamJITHasGetTaskAllow() || !iSteamJITIsReady()) return false;
     char error[256] = {0};
     if (!ensure_txm_arena(error, sizeof(error))) return false;
-    size_t page_size = host_page_size();
+    size_t page_size = aot_host_page_size();
     if (!page_size) return false;
     if (alignment < page_size) alignment = page_size;
     size_t remainder = alignment % page_size;
@@ -259,7 +259,7 @@ bool iSteamAOTExecutableMemoryFreeDualMap(void *execute_address, size_t mapped_s
     uintptr_t address = (uintptr_t)execute_address;
     if (address < base) return false;
     size_t offset = (size_t)(address - base);
-    size_t page_size = host_page_size();
+    size_t page_size = aot_host_page_size();
     if (!page_size || (offset % page_size) != 0 || (mapped_size % page_size) != 0 ||
         offset > AOT_TXM_ARENA_BYTES || mapped_size > AOT_TXM_ARENA_BYTES - offset) return false;
     return iSteamAOTExecutableArenaFree(sTXMArena, offset, mapped_size);
