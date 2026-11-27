@@ -21,8 +21,44 @@ final class QEMUNativeRuntime {
     private var sessionGeneration: UInt64 = 0
     private var controlError: String?
     private var scopedURLs: [URL] = []
+    private var nativeSessionEnded = false
+    private var nativeLifecycleMonitor: DispatchSourceTimer?
 
     private init() {}
+
+    /// Observe the native worker independently of any display controller so
+    /// security-scoped files are released even if the user leaves the VM UI.
+    private func startNativeLifecycleMonitoringLocked() {
+        guard nativeLifecycleMonitor == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+        timer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1), leeway: .milliseconds(250))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.stateLock.lock()
+            self.refreshCompletedSessionLocked()
+            self.stateLock.unlock()
+        }
+        nativeLifecycleMonitor = timer
+        timer.resume()
+    }
+
+    /// Must be called with stateLock held. The native worker clears its active
+    /// flag only after qemu_cleanup has returned.
+    private func refreshCompletedSessionLocked() {
+        guard started, !nativeSessionEnded, !isteam_qemu_is_active() else { return }
+        nativeSessionEnded = true
+        isPaused = false
+        let retainedURLs = scopedURLs
+        scopedURLs.removeAll(keepingCapacity: false)
+        retainedURLs.forEach { $0.stopAccessingSecurityScopedResource() }
+        try? FileManager.default.removeItem(atPath: QEMUCommandBuilder.qmpSocketPath)
+        EmulationLog.shared.write(
+            "QEMU native cleanup completed; released \(retainedURLs.count) security-scoped file access lease(s). "
+            + "Relaunch Akatsubaki Emu before starting another guest."
+        )
+        nativeLifecycleMonitor?.cancel()
+        nativeLifecycleMonitor = nil
+    }
 
     @discardableResult
     func start(configuration: VMConfiguration, diskImage: URL, writableDiskImage: URL? = nil,
@@ -30,6 +66,12 @@ final class QEMUNativeRuntime {
         stateLock.lock()
         defer { stateLock.unlock() }
         try configuration.validateForStart()
+        refreshCompletedSessionLocked()
+        guard !nativeSessionEnded else {
+            throw RuntimeError.runtimeUnavailable(
+                "The previous QEMU process has exited. Relaunch Akatsubaki Emu before starting another guest."
+            )
+        }
         guard configuration.architecture == .x86_64 else {
             throw RuntimeError.runtimeUnavailable(
                 "The bundled QEMU bridge is currently configured for x86_64 guests only."
@@ -213,6 +255,7 @@ final class QEMUNativeRuntime {
         started = true
         isPaused = false
         controlError = nil
+        startNativeLifecycleMonitoringLocked()
         EmulationLog.shared.write("QEMU launch requested with boot media \(diskImage.lastPathComponent)"
             + (writableDiskImage.map { " and writable disk \($0.lastPathComponent)" } ?? ""))
         return advanceSessionGeneration()
@@ -383,8 +426,9 @@ final class QEMUNativeRuntime {
     func reset(sessionGeneration expected: UInt64) -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
-        guard started else {
-            controlError = "QEMU runtime has not been started."
+        refreshCompletedSessionLocked()
+        guard started, !nativeSessionEnded else {
+            controlError = "QEMU runtime is not active; relaunch Akatsubaki Emu before starting another guest."
             return false
         }
         guard expected == sessionGeneration else { return false }
@@ -413,7 +457,8 @@ final class QEMUNativeRuntime {
     func stop(sessionGeneration expected: UInt64) -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
-        guard started else { return true }
+        refreshCompletedSessionLocked()
+        guard started, !nativeSessionEnded else { return true }
         guard expected == sessionGeneration else { return true }
         guard !isPaused else { return true }
         let result = Self.sendQMP("stop")
@@ -436,7 +481,8 @@ final class QEMUNativeRuntime {
     func requestGuestPowerDown(sessionGeneration expected: UInt64) -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
-        guard started, expected == sessionGeneration, !isPaused else {
+        refreshCompletedSessionLocked()
+        guard started, !nativeSessionEnded, expected == sessionGeneration, !isPaused else {
             controlError = "The active QEMU guest session is not available for power-down."
             return false
         }
@@ -484,22 +530,34 @@ final class QEMUNativeRuntime {
 
     var isRunning: Bool {
         stateLock.lock()
-        let guestShouldRun = started && !isPaused
+        refreshCompletedSessionLocked()
+        let guestShouldRun = started && !nativeSessionEnded && !isPaused
         stateLock.unlock()
         return guestShouldRun && isteam_qemu_is_running()
     }
-    var isActive: Bool { isteam_qemu_is_active() }
+
+    var isActive: Bool {
+        stateLock.lock()
+        refreshCompletedSessionLocked()
+        let active = started && !nativeSessionEnded && isteam_qemu_is_active()
+        stateLock.unlock()
+        return active
+    }
 
     func isRunning(sessionGeneration expected: UInt64?) -> Bool {
         stateLock.lock()
-        let ownsRunningSession = expected == sessionGeneration && expected != nil && started && !isPaused
+        refreshCompletedSessionLocked()
+        let ownsRunningSession = expected == sessionGeneration && expected != nil
+            && started && !nativeSessionEnded && !isPaused
         stateLock.unlock()
         return ownsRunningSession && isteam_qemu_is_running()
     }
 
     func isActive(sessionGeneration expected: UInt64?) -> Bool {
         stateLock.lock()
-        let ownsActiveSession = expected == sessionGeneration && expected != nil && started
+        refreshCompletedSessionLocked()
+        let ownsActiveSession = expected == sessionGeneration && expected != nil
+            && started && !nativeSessionEnded
         stateLock.unlock()
         return ownsActiveSession && isteam_qemu_is_active()
     }

@@ -125,6 +125,27 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("engine.requestGuestPowerDown()", display)
         self.assertIn('title: "Power Off"', display)
 
+    def test_acpi_powerdown_waits_for_native_cleanup_and_releases_file_scopes(self):
+        root = Path(__file__).resolve().parents[2]
+        runtime = (root / "src" / "QEMU" / "QEMUNativeRuntime.swift").read_text(encoding="utf-8")
+        engine = (root / "src" / "Core" / "VMEngine.swift").read_text(encoding="utf-8")
+        display = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
+        self.assertIn("private var nativeSessionEnded = false", runtime)
+        self.assertIn("private var nativeLifecycleMonitor: DispatchSourceTimer?", runtime)
+        self.assertIn("startNativeLifecycleMonitoringLocked()", runtime)
+        self.assertIn("refreshCompletedSessionLocked()", runtime)
+        self.assertIn("!isteam_qemu_is_active()", runtime)
+        self.assertIn("scopedURLs.removeAll(keepingCapacity: false)", runtime)
+        self.assertIn("stopAccessingSecurityScopedResource()", runtime)
+        self.assertIn("previous QEMU process has exited", runtime)
+        self.assertIn("case .poweringDown", engine)
+        self.assertIn("candidate.isActive", engine)
+        self.assertIn("setState(.poweredOff)", engine)
+        self.assertIn("Relaunch Akatsubaki Emu", engine)
+        self.assertIn("case .poweredOff", display)
+        self.assertIn("restart Akatsubaki Emu to start another guest", display)
+        self.assertIn("if case .poweringDown = state { return }", engine)
+
     def test_vm_engine_stops_by_pausing_instead_of_waiting_for_process_exit(self):
         root = Path(__file__).resolve().parents[2]
         engine = (root / "src" / "Core" / "VMEngine.swift").read_text(encoding="utf-8")

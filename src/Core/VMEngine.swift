@@ -7,6 +7,8 @@ final class VMEngine {
         case stopped
         case starting
         case running
+        case poweringDown
+        case poweredOff
         case stopping
         case failed(String)
     }
@@ -70,6 +72,22 @@ final class VMEngine {
     }
 
     private func checkStartup(_ candidate: QEMUBackend) {
+        if case .poweringDown = state {
+            // isActive becomes false only after the native worker has completed
+            // qemu_cleanup; the runtime then releases its retained file scopes.
+            guard !candidate.isActive else { return }
+            monitor?.cancel()
+            monitor = nil
+            startupDeadline = nil
+            backend = nil
+            setState(.poweredOff)
+            EmulationLog.shared.write(
+                "QEMU ended after the guest ACPI power-down request; native cleanup completed. "
+                + "Relaunch Akatsubaki Emu before starting another guest."
+            )
+            return
+        }
+
         if case .stopping = state {
             guard !candidate.isRunning else { return }
             monitor?.cancel()
@@ -125,7 +143,10 @@ final class VMEngine {
             return false
         }
         let accepted = backend.requestGuestPowerDown()
-        if !accepted {
+        if accepted {
+            setState(.poweringDown)
+            EmulationLog.shared.write("Guest ACPI power-down requested; waiting for QEMU native cleanup.")
+        } else {
             let message = backend.lastError ?? "QEMU did not acknowledge the ACPI power-button request."
             EmulationLog.shared.write("Guest power-down request failed: \(message)")
         }
@@ -133,6 +154,10 @@ final class VMEngine {
     }
 
     func stop() {
+        // Do not pause a guest after its ACPI shutdown has been requested.
+        // The process-wide runtime monitor owns cleanup if this view disappears.
+        if case .poweringDown = state { return }
+        if case .poweredOff = state { return }
         guard case .stopped = state else {
             setState(.stopping)
             startupDeadline = nil

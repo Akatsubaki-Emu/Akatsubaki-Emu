@@ -77,20 +77,34 @@ final class VMDisplayViewController: UIViewController {
             guard let self else { return }
             switch state {
             case .starting:
+                self.navigationItem.rightBarButtonItem?.isEnabled = false
                 self.status.text = "Starting QEMU • waiting for guest display"
             case .running:
+                self.navigationItem.rightBarButtonItem?.isEnabled = true
                 if !self.vncClient.isConnected {
                     self.status.text = "QEMU active • waiting for guest display"
                 }
+            case .poweringDown:
+                self.navigationItem.rightBarButtonItem?.isEnabled = false
+                self.status.text = "ACPI power button sent • waiting for QEMU cleanup"
+                self.releaseGuestInputs()
+            case .poweredOff:
+                self.navigationItem.rightBarButtonItem?.isEnabled = false
+                self.status.text = "Guest powered off • restart Akatsubaki Emu to start another guest"
+                self.releaseGuestInputs()
+                self.vncClient.stop()
             case .stopping:
+                self.navigationItem.rightBarButtonItem?.isEnabled = false
                 self.status.text = "Stopping virtual machine…"
                 self.releaseGuestInputs()
                 self.vncClient.stop()
             case .stopped:
+                self.navigationItem.rightBarButtonItem?.isEnabled = false
                 self.status.text = "Guest session is stopped or paused. Start again to launch or resume the configured VM."
                 self.releaseGuestInputs()
                 self.vncClient.stop()
             case .failed(let message):
+                self.navigationItem.rightBarButtonItem?.isEnabled = false
                 self.status.text = "VM failed • \(message)"
                 self.releaseGuestInputs()
                 self.vncClient.stop()
@@ -201,11 +215,20 @@ final class VMDisplayViewController: UIViewController {
     }
 
     @objc private func requestGuestPowerDown() {
+        switch engine.state {
+        case .poweringDown, .poweredOff:
+            return
+        case .running:
+            break
+        default:
+            status.text = "Power off unavailable • QEMU guest is not running"
+            return
+        }
         guard engine.requestGuestPowerDown() else {
             status.text = "Power off unavailable • QEMU guest is not running"
             return
         }
-        status.text = "ACPI power button sent • waiting for guest OS shutdown"
+        status.text = "ACPI power button sent • waiting for QEMU cleanup"
     }
 
     private func applyCardboardLayout() {

@@ -97,6 +97,7 @@ QEMU has a disk-image path, but write persistence across physical-device restart
 - [ ] Sign/install the IPA on a physical iPad through SideStore or another supported path.
 - [ ] Boot a known-good x86-64 Linux image through QEMU TCI with JIT disabled.
 - [ ] Verify VNC-to-Metal display, keyboard/controller input, virtual-disk writes, clean shutdown, and repeat boots.
+- [ ] Confirm ACPI shutdown waits for native QEMU cleanup, releases security-scoped disk/firmware URLs, reports the guest as powered off, and requires an app restart before another guest can start.
 - [ ] Record device model, iPadOS version, app/TCI runtime versions, image checksums, logs, and a short screen recording.
 
 QEMU TCI is the selected first playable no-JIT route. The manual build workflow can compile and validate TCI/JIT variants, but the release workflow intentionally withholds QEMU runtime artifacts and QEMU-enabled IPA packaging until the licensing approval variable is set after review. Bochs remains a research alternative, not an integrated or verified replacement.
