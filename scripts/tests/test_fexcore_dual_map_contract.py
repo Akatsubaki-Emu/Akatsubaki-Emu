@@ -28,11 +28,11 @@ class FEXCoreDualMapContractTests(unittest.TestCase):
         )
 
     def test_host_page_size_is_defined_and_used_consistently(self):
-        self.assertIn("static size_t host_page_size(void)", self.source)
+        self.assertIn("static size_t aot_host_page_size(void)", self.source)
         self.assertNotIn("sPageSize", self.source)
-        self.assertIn("size_t page_size = host_page_size();", self.allocate)
-        self.assertIn("size_t page_size = host_page_size();", self.free)
-        self.assertIn("size_t hostPage=host_page_size();", self.source)
+        self.assertIn("size_t page_size = aot_host_page_size();", self.allocate)
+        self.assertIn("size_t page_size = aot_host_page_size();", self.free)
+        self.assertIn("size_t hostPage=aot_host_page_size();", self.source)
 
     def test_new_allocations_are_zero_initialized_after_reservation(self):
         reserve = self.allocate.index("iSteamAOTExecutableArenaAllocate")
