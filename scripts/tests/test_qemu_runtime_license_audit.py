@@ -35,6 +35,13 @@ class QEMULicenseAuditTests(unittest.TestCase):
             qemu_lib = package / "QEMU" / "JIT" / "libqemu-test.dylib"
             qemu_lib.parent.mkdir(parents=True)
             qemu_lib.write_bytes(b"test dylib bytes")
+            firmware = package / "QEMU" / "TCI" / "share" / "qemu" / "edk2-x86_64-code.fd"
+            firmware.parent.mkdir(parents=True)
+            firmware.write_bytes(b"firmware bytes")
+            outside = root / "outside.bin"
+            outside.write_bytes(b"must not be hashed through a package symlink")
+            external_link = package / "QEMU" / "TCI" / "external-link.bin"
+            external_link.symlink_to(outside)
             (package / "dependency-report.txt").write_text("===== Frameworks/Test.framework/Test =====\n", encoding="utf-8")
             (package / "runtime-file-inventory.txt").write_text("Frameworks/Test.framework/Test\n", encoding="utf-8")
             (package / "BUILD-INFO.txt").write_text("Target: physical iOS arm64\n", encoding="utf-8")
@@ -46,6 +53,13 @@ class QEMULicenseAuditTests(unittest.TestCase):
             self.assertEqual(manifest["spdx_expression_counts"], {"MIT": 1})
             self.assertEqual(manifest["framework_count"], 1)
             self.assertEqual(manifest["runtime_library_count"], 1)
+            self.assertEqual(manifest["package_file_count"], len(manifest["package_files"]))
+            firmware_entry = next(item for item in manifest["package_files"] if item["path"].endswith("edk2-x86_64-code.fd"))
+            self.assertEqual(firmware_entry["category"], "firmware-data")
+            self.assertEqual(firmware_entry["sha256"], __import__("hashlib").sha256(b"firmware bytes").hexdigest())
+            symlink_entry = next(item for item in manifest["package_files"] if item["path"].endswith("external-link.bin"))
+            self.assertEqual(symlink_entry["category"], "symlink")
+            self.assertNotIn("sha256", symlink_entry)
             self.assertEqual(manifest["runtime_libraries"][0]["path"], "QEMU/JIT/libqemu-test.dylib")
             self.assertEqual(manifest["frameworks"][0]["bundle_identifier"], "org.example.Test")
             self.assertTrue((output / "dependency-report.txt").is_file())
