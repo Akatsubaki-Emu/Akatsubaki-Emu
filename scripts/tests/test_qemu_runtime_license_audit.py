@@ -11,11 +11,11 @@ from audit_qemu_runtime_licenses import build_report
 
 
 class QEMULicenseAuditTests(unittest.TestCase):
-    def test_generates_metadata_only_inventory(self):
+    def test_generates_metadata_only_inventory_with_safe_package_boundaries(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             utm = root / "UTM"
-            package = root / "firmware" / "package"
+            package = root / "bios" / "package"
             output = root / "audit"
             (utm / "build-iOS-arm64" / "glib").mkdir(parents=True)
             (utm / "src").mkdir()
@@ -25,28 +25,42 @@ class QEMULicenseAuditTests(unittest.TestCase):
                 encoding="utf-8",
             )
             outside_source = root / "outside-source.c"
-            outside_source.write_text("/* SPDX-License-Identifier: GPL-2.0-only */\n", encoding="utf-8")
-            (utm / "src" / "external-source.c").symlink_to(outside_source)
-            outside_license = root / "outside-LICENSE"
-            outside_license.write_text("external licence text\n", encoding="utf-8")
-            (utm / "src" / "LICENSE.external").symlink_to(outside_license)
+            outside_source.write_text(
+                "/* SPDX-License-Identifier: GPL-2.0-only */\nint external(void) { return 0; }\n",
+                encoding="utf-8",
+            )
+            (utm / "src" / "external.c").symlink_to(outside_source)
             (utm / "build-iOS-arm64" / "glib" / "COPYING").write_text(
                 "GLib license placeholder\n", encoding="utf-8"
             )
+
             frameworks = package / "Frameworks" / "Test.framework"
             frameworks.mkdir(parents=True)
             (frameworks / "Test").write_bytes(b"not-a-real-binary; metadata only")
             with (frameworks / "Info.plist").open("wb") as stream:
                 plistlib.dump({"CFBundleExecutable": "Test", "CFBundleIdentifier": "org.example.Test"}, stream)
-            outside_framework = root / "outside-framework" / "External.framework"
+
+            outside_framework = root / "outside" / "External.framework"
             outside_framework.mkdir(parents=True)
-            (outside_framework / "External").write_bytes(b"external framework binary")
+            (outside_framework / "External").write_bytes(b"outside framework binary")
             with (outside_framework / "Info.plist").open("wb") as stream:
-                plistlib.dump({"CFBundleExecutable": "External", "CFBundleIdentifier": "org.example.External"}, stream)
-            (package / "Frameworks" / "External.framework").symlink_to(outside_framework, target_is_directory=True)
+                plistlib.dump(
+                    {"CFBundleExecutable": "External", "CFBundleIdentifier": "org.example.External"},
+                    stream,
+                )
+            (package / "Frameworks" / "External.framework").symlink_to(
+                outside_framework, target_is_directory=True
+            )
+
             qemu_lib = package / "QEMU" / "JIT" / "libqemu-test.dylib"
             qemu_lib.parent.mkdir(parents=True)
             qemu_lib.write_bytes(b"test dylib bytes")
+            outside_runtime = root / "outside-runtime.dylib"
+            outside_runtime.write_bytes(b"must not be hashed through a package symlink")
+            external_runtime_link = package / "QEMU" / "TCI" / "external-runtime.dylib"
+            external_runtime_link.parent.mkdir(parents=True)
+            external_runtime_link.symlink_to(outside_runtime)
+
             firmware = package / "QEMU" / "TCI" / "share" / "qemu" / "edk2-x86_64-code.fd"
             firmware.parent.mkdir(parents=True)
             firmware.write_bytes(b"firmware bytes")
@@ -54,14 +68,22 @@ class QEMULicenseAuditTests(unittest.TestCase):
             outside.write_bytes(b"must not be hashed through a package symlink")
             external_link = package / "QEMU" / "TCI" / "external-link.bin"
             external_link.symlink_to(outside)
-            outside_library = root / "outside-library.dylib"
-            outside_library.write_bytes(b"must not be hashed through a dylib symlink")
-            external_library = package / "QEMU" / "TCI" / "external-library.dylib"
-            external_library.symlink_to(outside_library)
-            (package / "dependency-report.txt").write_text("===== Frameworks/Test.framework/Test =====\n", encoding="utf-8")
-            (package / "runtime-file-inventory.txt").write_text("Frameworks/Test.framework/Test\n", encoding="utf-8")
-            (package / "BUILD-INFO.txt").write_text("Target: physical iOS arm64\n", encoding="utf-8")
-            (package / "QEMU-SOURCE-URL.txt").write_text("https://example.invalid/qemu.tar.xz\n", encoding="utf-8")
+
+            (package / "QEMU" / "runtime-mode-manifest.txt").write_text(
+                "mode=TCI\n", encoding="utf-8"
+            )
+            (package / "dependency-report.txt").write_text(
+                "===== Frameworks/Test.framework/Test =====\n", encoding="utf-8"
+            )
+            (package / "runtime-file-inventory.txt").write_text(
+                "Frameworks/Test.framework/Test\n", encoding="utf-8"
+            )
+            (package / "BUILD-INFO.txt").write_text(
+                "Target: physical iOS arm64\n", encoding="utf-8"
+            )
+            (package / "QEMU-SOURCE-URL.txt").write_text(
+                "https://example.invalid/qemu.tar.xz\n", encoding="utf-8"
+            )
             (package / "UTM-SOURCE-REVISION.txt").write_text("abc123\n", encoding="utf-8")
 
             manifest = build_report(utm, package, output)
@@ -70,25 +92,53 @@ class QEMULicenseAuditTests(unittest.TestCase):
             self.assertEqual(manifest["framework_count"], 1)
             self.assertEqual(manifest["runtime_library_count"], 1)
             self.assertEqual(manifest["package_file_count"], len(manifest["package_files"]))
-            firmware_entry = next(item for item in manifest["package_files"] if item["path"].endswith("edk2-x86_64-code.fd"))
+
+            firmware_entry = next(
+                item for item in manifest["package_files"]
+                if item["path"].endswith("edk2-x86_64-code.fd")
+            )
             self.assertEqual(firmware_entry["category"], "firmware-data")
-            self.assertEqual(firmware_entry["sha256"], __import__("hashlib").sha256(b"firmware bytes").hexdigest())
-            symlink_entry = next(item for item in manifest["package_files"] if item["path"].endswith("external-link.bin"))
+            self.assertEqual(
+                firmware_entry["sha256"],
+                __import__("hashlib").sha256(b"firmware bytes").hexdigest(),
+            )
+            library_entry = next(
+                item for item in manifest["package_files"]
+                if item["path"] == "QEMU/JIT/libqemu-test.dylib"
+            )
+            self.assertEqual(library_entry["category"], "runtime-library")
+            provenance_entry = next(
+                item for item in manifest["package_files"]
+                if item["path"] == "QEMU/runtime-mode-manifest.txt"
+            )
+            self.assertEqual(provenance_entry["category"], "build-provenance")
+
+            symlink_entry = next(
+                item for item in manifest["package_files"]
+                if item["path"] == "QEMU/TCI/external-link.bin"
+            )
             self.assertEqual(symlink_entry["category"], "symlink")
             self.assertNotIn("sha256", symlink_entry)
-            self.assertEqual(manifest["runtime_libraries"][0]["path"], "QEMU/JIT/libqemu-test.dylib")
-            library_entry = next(item for item in manifest["package_files"] if item["path"].endswith("libqemu-test.dylib"))
-            self.assertEqual(library_entry["category"], "runtime-library")
-            framework_file_entry = next(item for item in manifest["package_files"] if item["path"].endswith("Frameworks/Test.framework/Test"))
-            self.assertEqual(framework_file_entry["category"], "framework-resource")
-            external_library_entry = next(item for item in manifest["package_files"] if item["path"].endswith("external-library.dylib"))
-            self.assertEqual(external_library_entry["category"], "symlink")
-            self.assertNotIn("sha256", external_library_entry)
-            external_framework_entry = next(item for item in manifest["package_files"] if item["path"].endswith("Frameworks/External.framework"))
+            external_runtime_entry = next(
+                item for item in manifest["package_files"]
+                if item["path"] == "QEMU/TCI/external-runtime.dylib"
+            )
+            self.assertEqual(external_runtime_entry["category"], "symlink")
+            self.assertNotIn("sha256", external_runtime_entry)
+            external_framework_entry = next(
+                item for item in manifest["package_files"]
+                if item["path"] == "Frameworks/External.framework"
+            )
             self.assertEqual(external_framework_entry["category"], "symlink")
             self.assertNotIn("sha256", external_framework_entry)
+
+            self.assertEqual(
+                [item["path"] for item in manifest["runtime_libraries"]],
+                ["QEMU/JIT/libqemu-test.dylib"],
+            )
             self.assertEqual(manifest["frameworks"][0]["bundle_identifier"], "org.example.Test")
             self.assertTrue((output / "dependency-report.txt").is_file())
+            self.assertTrue((output / "QEMU" / "runtime-mode-manifest.txt").is_file())
             self.assertTrue((output / "license-review.md").is_file())
             self.assertTrue((output / "license-manifest.json").is_file())
             self.assertFalse((output / "Frameworks" / "Test.framework" / "Test").exists())

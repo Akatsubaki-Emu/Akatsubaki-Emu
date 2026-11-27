@@ -49,24 +49,36 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def resolve_inside_root(path: Path, root: Path) -> Path | None:
+    """Resolve a path only when its target remains inside the declared root."""
+    try:
+        resolved_root = root.resolve(strict=True)
+        resolved_path = path.resolve(strict=True)
+        resolved_path.relative_to(resolved_root)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return resolved_path
+
+
 def source_inventory(root: Path) -> tuple[list[str], dict[str, list[str]]]:
     license_files: list[str] = []
     spdx_files: dict[str, list[str]] = defaultdict(list)
     if not root.is_dir():
         return license_files, spdx_files
+    root = root.resolve()
 
-    for current, dirnames, filenames in os.walk(root, followlinks=False):
+    for current, dirnames, filenames in os.walk(root):
         current_path = Path(current)
         dirnames[:] = [
             name for name in dirnames
             if name not in SKIP_DIRS
             and not name.endswith(".xcarchive")
             and not name.startswith("sysroot-")
-            and not (current_path / name).is_symlink()
         ]
         for filename in filenames:
             path = current_path / filename
-            if path.is_symlink():
+            resolved_path = resolve_inside_root(path, root)
+            if resolved_path is None:
                 continue
             relative = path.relative_to(root).as_posix()
             if LICENSE_NAME.match(filename):
@@ -74,9 +86,9 @@ def source_inventory(root: Path) -> tuple[list[str], dict[str, list[str]]]:
             if path.suffix not in SOURCE_SUFFIXES:
                 continue
             try:
-                if path.stat().st_size > 1024 * 1024:
+                if resolved_path.stat().st_size > 1024 * 1024:
                     continue
-                with path.open("r", encoding="utf-8", errors="replace") as stream:
+                with resolved_path.open("r", encoding="utf-8", errors="replace") as stream:
                     for _ in range(80):
                         line = stream.readline()
                         if not line:
@@ -93,43 +105,61 @@ def source_inventory(root: Path) -> tuple[list[str], dict[str, list[str]]]:
 
 def framework_inventory(package_root: Path) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
-    frameworks_root = package_root / "Frameworks"
-    if frameworks_root.is_symlink() or not frameworks_root.is_dir():
+    package_root = package_root.resolve()
+    frameworks_root = resolve_inside_root(package_root / "Frameworks", package_root)
+    if frameworks_root is None or not frameworks_root.is_dir():
         return results
+
+    seen_frameworks: set[Path] = set()
     for framework in sorted(frameworks_root.rglob("*.framework")):
-        if framework.is_symlink() or not framework.is_dir():
+        resolved_framework = resolve_inside_root(framework, package_root)
+        if resolved_framework is None or not resolved_framework.is_dir():
             continue
+        if resolved_framework in seen_frameworks:
+            continue
+        seen_frameworks.add(resolved_framework)
+
         info_candidates = [
-            framework / "Info.plist",
-            framework / "Resources" / "Info.plist",
-            framework / "Versions" / "Current" / "Resources" / "Info.plist",
+            resolved_framework / "Info.plist",
+            resolved_framework / "Resources" / "Info.plist",
+            resolved_framework / "Versions" / "Current" / "Resources" / "Info.plist",
         ]
         info: dict[str, Any] = {}
         for candidate in info_candidates:
-            if not candidate.is_symlink() and candidate.is_file():
+            resolved_candidate = resolve_inside_root(candidate, package_root)
+            if resolved_candidate is not None and resolved_candidate.is_file():
                 try:
-                    with candidate.open("rb") as stream:
+                    with resolved_candidate.open("rb") as stream:
                         loaded = plistlib.load(stream)
                     if isinstance(loaded, dict):
                         info = loaded
                     break
                 except Exception:
                     pass
+
         executable = info.get("CFBundleExecutable")
         binary_candidates: list[Path] = []
         if isinstance(executable, str) and executable:
             binary_candidates.extend([
-                framework / executable,
-                framework / "Versions" / "Current" / executable,
+                resolved_framework / executable,
+                resolved_framework / "Versions" / "Current" / executable,
             ])
-        binary = next((candidate for candidate in binary_candidates if not candidate.is_symlink() and candidate.is_file()), None)
+        binary: Path | None = None
+        binary_path: str | None = None
+        for candidate in binary_candidates:
+            resolved_binary = resolve_inside_root(candidate, package_root)
+            if resolved_binary is not None and resolved_binary.is_file():
+                binary = resolved_binary
+                binary_path = candidate.relative_to(package_root).as_posix()
+                break
+
         item: dict[str, Any] = {
             "path": framework.relative_to(package_root).as_posix(),
             "bundle_identifier": info.get("CFBundleIdentifier"),
             "executable": executable,
         }
-        if binary:
-            item["binary_path"] = binary.relative_to(package_root).as_posix()
+        if binary is not None:
+            item["binary_path"] = binary_path
             item["binary_size"] = binary.stat().st_size
             item["binary_sha256"] = sha256_file(binary)
         else:
@@ -140,13 +170,17 @@ def framework_inventory(package_root: Path) -> list[dict[str, Any]]:
 
 def runtime_library_inventory(package_root: Path) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
+    package_root = package_root.resolve()
     for path in sorted(package_root.rglob("*")):
-        if path.is_symlink() or not path.is_file() or path.suffix.lower() not in {".dylib", ".a"}:
+        if path.suffix.lower() not in {".dylib", ".a"}:
+            continue
+        resolved_path = resolve_inside_root(path, package_root)
+        if resolved_path is None or not resolved_path.is_file():
             continue
         results.append({
             "path": path.relative_to(package_root).as_posix(),
-            "size": path.stat().st_size,
-            "sha256": sha256_file(path),
+            "size": resolved_path.stat().st_size,
+            "sha256": sha256_file(resolved_path),
         })
     return results
 
@@ -161,6 +195,7 @@ def package_file_inventory(package_root: Path) -> list[dict[str, Any]]:
     provenance_names = {name.lower() for name in PACKAGE_REPORTS}
     firmware_suffixes = {".fd", ".rom", ".efi", ".dtb", ".qcow2", ".img", ".bin"}
     firmware_directories = {"firmware", "bios", "keymaps", "ovmf", "edk2"}
+    package_root = package_root.resolve()
     for path in sorted(package_root.rglob("*")):
         relative_path = path.relative_to(package_root)
         relative = relative_path.as_posix()
@@ -179,7 +214,7 @@ def package_file_inventory(package_root: Path) -> list[dict[str, Any]]:
             category = "framework-resource"
         elif LICENSE_NAME.match(path.name):
             category = "license-or-notice"
-        elif path.name.lower() in provenance_names:
+        elif relative.lower() in provenance_names:
             category = "build-provenance"
         else:
             category = "other"
