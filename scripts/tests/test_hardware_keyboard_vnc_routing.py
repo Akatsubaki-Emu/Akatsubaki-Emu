@@ -9,6 +9,13 @@ class HardwareKeyboardVNCRoutingTests(unittest.TestCase):
         cls.display = (root / "src" / "Display" / "VMDisplayViewController.swift").read_text(encoding="utf-8")
         cls.vnc = (root / "src" / "QEMU" / "QEMUVNCClient.swift").read_text(encoding="utf-8")
 
+    def test_ui_key_codes_use_native_cfindex_key_type(self):
+        self.assertIn(
+            "private var hardwareKeySources: [Int: (key: String, source: String)] = [:]",
+            self.display,
+        )
+        self.assertIn("let code = key.keyCode.rawValue", self.display)
+
     def test_controller_receives_hardware_keyboard_events(self):
         self.assertIn("override var canBecomeFirstResponder: Bool { true }", self.display)
         self.assertIn("becomeFirstResponder()", self.display)

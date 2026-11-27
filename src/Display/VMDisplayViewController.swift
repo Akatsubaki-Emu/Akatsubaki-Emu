@@ -18,7 +18,7 @@ final class VMDisplayViewController: UIViewController {
     private let pointerRightClick = UIButton(type: .system)
     private let functionKeyBar = UIStackView()
     private var keyboardObservers: [NSObjectProtocol] = []
-    private var hardwareKeySources: [UInt16: (key: String, source: String)] = [:]
+    private var hardwareKeySources: [Int: (key: String, source: String)] = [:]
     private var lastMotionStatusUpdate: TimeInterval = 0
     private var lastReportedGuestFrameWidth = 0
     private var lastReportedGuestFrameHeight = 0
