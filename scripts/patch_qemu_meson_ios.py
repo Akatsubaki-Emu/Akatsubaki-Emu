@@ -165,6 +165,50 @@ def patch_source(source: str, runtime_path: str) -> str:
     return patched
 
 
+
+DTC_WRAP_UPSTREAM_URL = "https://gitlab.com/qemu-project/dtc.git"
+DTC_WRAP_MIRROR_URL = "https://github.com/qemu/dtc.git"
+DTC_WRAP_PINNED_REVISION = "b6910bec11614980a21e46fbccc35934b671bd81"
+
+
+def patch_dtc_wrap_source(source: str) -> str:
+    """Use QEMU's official GitHub mirror for the exact pinned dtc revision.
+
+    GitLab DNS failures on hosted macOS runners otherwise make Meson fail to
+    fetch libfdt, even though the same commit is present in qemu/dtc.
+    """
+    urls = list(re.finditer(r"(?m)^url\\s*=\\s*(\\S+)\\s*$", source))
+    revisions = re.findall(r"(?m)^revision\\s*=\\s*(\\S+)\\s*$", source)
+    if len(urls) != 1 or len(revisions) != 1:
+        raise SystemExit("QEMU dtc.wrap changed: expected exactly one URL and revision")
+    if revisions[0] != DTC_WRAP_PINNED_REVISION:
+        raise SystemExit("QEMU dtc.wrap changed: pinned dtc revision is not the reviewed mirror commit")
+    match = urls[0]
+    current_url = match.group(1)
+    if current_url == DTC_WRAP_MIRROR_URL:
+        return source
+    if current_url != DTC_WRAP_UPSTREAM_URL:
+        raise SystemExit("QEMU dtc.wrap changed: unexpected dtc source URL")
+    return source[:match.start(1)] + DTC_WRAP_MIRROR_URL + source[match.end(1):]
+
+
+def patch_qemu_tree(qemu_root: Path, runtime_path: str) -> None:
+    """Validate and patch QEMU's iOS Meson settings and pinned dtc mirror."""
+    meson_path = qemu_root / "meson.build"
+    wrap_path = qemu_root / "subprojects" / "dtc.wrap"
+    if not meson_path.is_file():
+        raise SystemExit("QEMU source tree changed: meson.build not found")
+    if not wrap_path.is_file():
+        raise SystemExit("QEMU source tree changed: subprojects/dtc.wrap not found")
+    meson_source = meson_path.read_text(encoding="utf-8")
+    wrap_source = wrap_path.read_text(encoding="utf-8")
+    patched_meson = patch_source(meson_source, runtime_path)
+    patched_wrap = patch_dtc_wrap_source(wrap_source)
+    # Validate both inputs before writing either file, so upstream drift fails closed.
+    meson_path.write_text(patched_meson, encoding="utf-8")
+    wrap_path.write_text(patched_wrap, encoding="utf-8")
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: patch_qemu_meson_ios.py /path/to/qemu/meson.build")
@@ -172,10 +216,8 @@ def main() -> None:
     if not runtime.is_file():
         raise SystemExit("IOS_COMPILER_RT must point to an existing libclang_rt.ios.a")
     path = Path(sys.argv[1])
-    source = path.read_text(encoding="utf-8")
-    patched = patch_source(source, str(runtime))
-    path.write_text(patched, encoding="utf-8")
-    print(f"Patched QEMU Objective-C compiler flags and emulator link arguments: {runtime}")
+    patch_qemu_tree(path.parent, str(runtime))
+    print(f"Patched QEMU iOS compiler/link settings and pinned dtc mirror: {runtime}")
 
 
 if __name__ == "__main__":

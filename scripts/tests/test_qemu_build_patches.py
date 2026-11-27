@@ -793,5 +793,59 @@ build unrelated.dylib: c_LINKER other
         self.assertIn('APP="$ARCHIVE_ROOT/Products/Applications/UTM SE.app"', validator)
         self.assertNotIn("-s iOS-TCI", validator)
 
+
+    def test_qemu_dtc_wrap_uses_official_github_mirror_and_is_idempotent(self):
+        with TemporaryDirectory(prefix="qemu-dtc-mirror-") as temporary:
+            root = Path(temporary)
+            (root / "subprojects").mkdir()
+            meson = root / "meson.build"
+            meson.write_text(
+                "project('qemu', 'c')\\n"
+                "if 'objc' in all_languages\\n"
+                "  objc.get_supported_arguments(warn_flags)\\n"
+                "endif\\n"
+                "config_host_data.set('CONFIG_POSIX_MEMALIGN', cc.has_function('posix_memalign', prefix: '#include <stdlib.h>'))\\n"
+                "emulator_link_args = []\\n",
+                encoding="utf-8",
+            )
+            wrap = root / "subprojects" / "dtc.wrap"
+            wrap.write_text(
+                "[wrap-git]\\n"
+                "url = https://gitlab.com/qemu-project/dtc.git\\n"
+                "revision = b6910bec11614980a21e46fbccc35934b671bd81\\n"
+                "depth = 1\\n",
+                encoding="utf-8",
+            )
+            runtime = "/toolchain/libclang_rt.ios.a"
+            patch_qemu_meson_ios.patch_qemu_tree(root, runtime)
+            first_meson = meson.read_text(encoding="utf-8")
+            first_wrap = wrap.read_text(encoding="utf-8")
+            patch_qemu_meson_ios.patch_qemu_tree(root, runtime)
+            self.assertEqual(meson.read_text(encoding="utf-8"), first_meson)
+            self.assertEqual(wrap.read_text(encoding="utf-8"), first_wrap)
+            self.assertIn("https://github.com/qemu/dtc.git", first_wrap)
+            self.assertIn("revision = b6910bec11614980a21e46fbccc35934b671bd81", first_wrap)
+
+    def test_qemu_dtc_wrap_patch_fails_closed_on_unreviewed_revision_and_url(self):
+        source = (
+            "[wrap-git]\\n"
+            "url = https://gitlab.com/qemu-project/dtc.git\\n"
+            "revision = b6910bec11614980a21e46fbccc35934b671bd81\\n"
+            "depth = 1\\n"
+        )
+        with self.assertRaisesRegex(SystemExit, "pinned dtc revision"):
+            patch_qemu_meson_ios.patch_dtc_wrap_source(source.replace(
+                "b6910bec11614980a21e46fbccc35934b671bd81", "deadbeef"
+            ))
+        with self.assertRaisesRegex(SystemExit, "unexpected dtc source URL"):
+            patch_qemu_meson_ios.patch_dtc_wrap_source(source.replace(
+                "https://gitlab.com/qemu-project/dtc.git", "https://example.invalid/dtc.git"
+            ))
+        with self.assertRaisesRegex(SystemExit, "exactly one URL and revision"):
+            patch_qemu_meson_ios.patch_dtc_wrap_source(source.replace(
+                "[wrap-git]\\n", "[wrap-git]\\nurl = https://github.com/qemu/dtc.git\\n"
+            ))
+
+
 if __name__ == "__main__":
     unittest.main()
