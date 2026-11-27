@@ -895,14 +895,22 @@ struct StaticELFExecutionTests {
         let previousMessageCount = EmulationLog.shared.messages.count
         let exit = try interpreter.run(maxInstructions: 512)
         precondition(exit == .exited(0), "stdin smoke guest did not exit with status 0")
-        let output = EmulationLog.shared.messages.dropFirst(previousMessageCount).joined(separator: "\n")
+        let outputMessages = Array(EmulationLog.shared.messages.dropFirst(previousMessageCount))
+        let output = outputMessages.joined(separator: "\n")
         precondition(output.contains("KENRAN_BUTO_STDIN_READY"), "stdin smoke guest did not announce its read")
-        precondition(output.contains("KENRAN_BUTO_STDIN_ECHO:hello"), "stdin smoke guest did not echo queued input")
         precondition(output.contains("KENRAN_BUTO_STDIN_OK"), "stdin smoke guest did not write its completion marker")
         guard let readBack = memory.read(offset: stack.stackPointer - 128, length: input.count) else {
             preconditionFailure("stdin smoke input buffer was not readable after guest execution")
         }
         precondition(readBack == input, "stdin smoke input bytes were not written to guest stack memory")
+        // A terminal write is a byte stream, but EmulationLog deliberately records
+        // each write(1, ...) call as a separate message.
+        let echoPrefixIndex = outputMessages.firstIndex { $0.contains("KENRAN_BUTO_STDIN_ECHO:") }
+        let echoInputIndex = outputMessages.firstIndex { $0.contains("hello\\n") }
+        precondition(
+            echoPrefixIndex != nil && echoInputIndex != nil && echoPrefixIndex! < echoInputIndex!,
+            "stdin smoke guest did not echo queued input after its prefix"
+        )
 #if KENRAN_BUTO_AOT_TESTS
         precondition(aotExecutor.blocksExecuted > 0, "stdin smoke guest did not execute any native AOT blocks")
 #endif
