@@ -136,8 +136,7 @@ struct NativeGuestMachineSmoke {
         precondition(stdinMachine.memory.isAvailable, "Native stdin GuestMemory initialization failed")
         let stdinImage = try stdinMachine.loadELFImage(at: stdinGuestURL)
         precondition(stdinImage.entryPoint == 0x401000, "Unexpected stdin smoke entry point")
-        let input = Data("hello
-".utf8)
+        let input = Data("hello\n".utf8)
         precondition(stdinMachine.enqueueStandardInput(input) == input.count,
                      "Native GuestMachine rejected queued stdin")
         let stdinExit = try runToExit(stdinMachine)
