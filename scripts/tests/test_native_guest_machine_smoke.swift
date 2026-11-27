@@ -195,6 +195,16 @@ struct NativeGuestMachineSmoke {
             throw error
         }
         precondition(stdinExit == .exited(0), "Native stdin guest did not exit with status 0")
+        let readResult = stdinMachine.memory.readUInt64(offset: 0x402010)
+        let writeResult = stdinMachine.memory.readUInt64(offset: 0x402018)
+        let bufferWord = stdinMachine.memory.readUInt64(offset: 0x402020)
+        print("Native stdin diagnostics read=\(String(describing: readResult)) write=\(String(describing: writeResult)) buffer=\(String(describing: bufferWord))")
+        precondition(readResult == UInt64(input.count),
+                     "Native read(0) returned \(String(describing: readResult)); expected \(input.count)")
+        precondition(bufferWord == 0x0000_0A6F_6C6C_6568,
+                     "Native read(0) did not place hello\\n in the guest stack buffer")
+        precondition(writeResult == UInt64(input.count),
+                     "Native write(1) returned \(String(describing: writeResult)); expected \(input.count)")
         // EmulationLog posts asynchronously; wait for the guest's final write
         // before asserting on the captured stream.
         try capture.waitForMarker("KENRAN_BUTO_STDIN_OK", timeout: 3)

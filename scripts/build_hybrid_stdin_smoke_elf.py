@@ -12,6 +12,10 @@ PAGE = 0x1000
 READY_OFFSET = 0x200
 PREFIX_OFFSET = 0x220
 DONE_OFFSET = 0x240
+READ_RESULT_OFFSET = 0x10
+WRITE_RESULT_OFFSET = 0x18
+BUFFER_WORD_OFFSET = 0x20
+DATA_FILE_SIZE = BUFFER_WORD_OFFSET + 8
 READY = b"KENRAN_BUTO_STDIN_READY\n"
 PREFIX = b"KENRAN_BUTO_STDIN_ECHO:"
 DONE = b"KENRAN_BUTO_STDIN_OK\n"
@@ -24,6 +28,12 @@ def mov_imm32(opcode: int, value: int) -> bytes:
 
 def lea_rsi_rip(code: bytearray, target: int) -> None:
     code.extend(b"\x48\x8D\x35\x00\x00\x00\x00")
+    displacement_offset = len(code) - 4
+    next_instruction = BASE + len(code)
+    struct.pack_into("<i", code, displacement_offset, target - next_instruction)
+
+def store_rax_rip(code: bytearray, target: int) -> None:
+    code.extend(b"\x48\x89\x05\x00\x00\x00\x00")
     displacement_offset = len(code) - 4
     next_instruction = BASE + len(code)
     struct.pack_into("<i", code, displacement_offset, target - next_instruction)
@@ -41,7 +51,10 @@ def build_code() -> bytes:
     code += b"\x48\x8D\x74\x24\x80"
     code += mov_imm32(0xBA, 128)
     code += b"\x0F\x05"
+    store_rax_rip(code, DATA + READ_RESULT_OFFSET)
     code += b"\x48\x89\xC3"
+    code += b"\x48\x8B\x44\x24\x80"
+    store_rax_rip(code, DATA + BUFFER_WORD_OFFSET)
     code += mov_imm32(0xB8, 1)
     code += mov_imm32(0xBF, 1)
     lea_rsi_rip(code, BASE + PREFIX_OFFSET)
@@ -52,6 +65,7 @@ def build_code() -> bytes:
     code += b"\x48\x8D\x74\x24\x80"
     code += b"\x48\x89\xDA"
     code += b"\x0F\x05"
+    store_rax_rip(code, DATA + WRITE_RESULT_OFFSET)
     code += mov_imm32(0xB8, 1)
     code += mov_imm32(0xBF, 1)
     lea_rsi_rip(code, BASE + DONE_OFFSET)
@@ -75,12 +89,12 @@ def build_elf() -> bytes:
     ident = b"\x7fELF" + bytes((2, 1, 1, 0, 0)) + bytes(7)
     ehdr = struct.pack("<16sHHIQQQIHHHHHH", ident, 2, 62, 1, BASE, 64, 0, 0, 64, 56, 2, 64, 0, 0)
     phdr_rx = struct.pack("<IIQQQQQQ", 1, 5, 0, 0x400000, 0x400000, 2 * PAGE, 2 * PAGE, PAGE)
-    phdr_rw = struct.pack("<IIQQQQQQ", 1, 6, 2 * PAGE, DATA, DATA, 1, PAGE, PAGE)
+    phdr_rw = struct.pack("<IIQQQQQQ", 1, 6, 2 * PAGE, DATA, DATA, DATA_FILE_SIZE, PAGE, PAGE)
     header = ehdr + phdr_rx + phdr_rw
     image = bytearray(PAGE)
     image[:len(header)] = header
     image += text
-    image += b"\x00"
+    image += bytes(DATA_FILE_SIZE)
     return bytes(image)
 
 
