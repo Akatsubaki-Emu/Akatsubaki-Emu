@@ -247,10 +247,11 @@ def build_report(utm_root: Path, package_root: Path, output_dir: Path) -> dict[s
     copied_reports: list[str] = []
     for name in PACKAGE_REPORTS:
         source = package_root / name
-        if source.is_file():
+        resolved_source = resolve_inside_root(source, package_root)
+        if resolved_source is not None and resolved_source.is_file():
             destination = output_dir / name
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
+            shutil.copy2(resolved_source, destination)
             copied_reports.append(name)
 
     (output_dir / "license-files.txt").write_text(
@@ -284,10 +285,18 @@ def build_report(utm_root: Path, package_root: Path, output_dir: Path) -> dict[s
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
-    qemu_url_path = package_root / "QEMU-SOURCE-URL.txt"
-    utm_revision_path = package_root / "UTM-SOURCE-REVISION.txt"
-    qemu_url = qemu_url_path.read_text(encoding="utf-8").strip() if qemu_url_path.is_file() else "not recorded"
-    utm_revision = utm_revision_path.read_text(encoding="utf-8").strip() if utm_revision_path.is_file() else "not recorded"
+    qemu_url_path = resolve_inside_root(package_root / "QEMU-SOURCE-URL.txt", package_root)
+    utm_revision_path = resolve_inside_root(package_root / "UTM-SOURCE-REVISION.txt", package_root)
+    qemu_url = (
+        qemu_url_path.read_text(encoding="utf-8").strip()
+        if qemu_url_path is not None and qemu_url_path.is_file()
+        else "not recorded"
+    )
+    utm_revision = (
+        utm_revision_path.read_text(encoding="utf-8").strip()
+        if utm_revision_path is not None and utm_revision_path.is_file()
+        else "not recorded"
+    )
     lines = [
         "# QEMU iOS runtime license and dependency inventory",
         "",

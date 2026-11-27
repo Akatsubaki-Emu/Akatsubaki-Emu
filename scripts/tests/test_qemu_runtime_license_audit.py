@@ -81,10 +81,17 @@ class QEMULicenseAuditTests(unittest.TestCase):
             (package / "BUILD-INFO.txt").write_text(
                 "Target: physical iOS arm64\n", encoding="utf-8"
             )
-            (package / "QEMU-SOURCE-URL.txt").write_text(
-                "https://example.invalid/qemu.tar.xz\n", encoding="utf-8"
+            outside_qemu_url = root / "outside-qemu-source-url.txt"
+            outside_qemu_url.write_text(
+                "https://outside.invalid/qemu.tar.xz\n", encoding="utf-8"
             )
-            (package / "UTM-SOURCE-REVISION.txt").write_text("abc123\n", encoding="utf-8")
+            (package / "QEMU-SOURCE-URL.txt").symlink_to(outside_qemu_url)
+            outside_utm_revision = root / "outside-utm-revision.txt"
+            outside_utm_revision.write_text("external-revision-secret\n", encoding="utf-8")
+            (package / "UTM-SOURCE-REVISION.txt").symlink_to(outside_utm_revision)
+            outside_report = root / "outside-runtime-exports.txt"
+            outside_report.write_text("external-runtime-report-secret\n", encoding="utf-8")
+            (package / "QEMU" / "JIT" / "exports.txt").symlink_to(outside_report)
 
             manifest = build_report(utm, package, output)
             self.assertEqual(manifest["license_file_count"], 2)
@@ -139,6 +146,17 @@ class QEMULicenseAuditTests(unittest.TestCase):
             self.assertEqual(manifest["frameworks"][0]["bundle_identifier"], "org.example.Test")
             self.assertTrue((output / "dependency-report.txt").is_file())
             self.assertTrue((output / "QEMU" / "runtime-mode-manifest.txt").is_file())
+            self.assertFalse((output / "QEMU" / "JIT" / "exports.txt").exists())
+            self.assertFalse((output / "QEMU-SOURCE-URL.txt").exists())
+            self.assertFalse((output / "UTM-SOURCE-REVISION.txt").exists())
+            self.assertNotIn("QEMU/JIT/exports.txt", manifest["copied_package_reports"])
+            self.assertNotIn("QEMU-SOURCE-URL.txt", manifest["copied_package_reports"])
+            self.assertNotIn("UTM-SOURCE-REVISION.txt", manifest["copied_package_reports"])
+            review_text = (output / "license-review.md").read_text(encoding="utf-8")
+            self.assertIn("QEMU source URL: not recorded", review_text)
+            self.assertIn("UTM source revision: not recorded", review_text)
+            self.assertNotIn("outside.invalid", review_text)
+            self.assertNotIn("external-revision-secret", review_text)
             self.assertTrue((output / "license-review.md").is_file())
             self.assertTrue((output / "license-manifest.json").is_file())
             self.assertFalse((output / "Frameworks" / "Test.framework" / "Test").exists())
