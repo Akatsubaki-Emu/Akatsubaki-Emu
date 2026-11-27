@@ -43,6 +43,10 @@ typedef struct iSteamAOTExecutableRegion iSteamAOTExecutableRegion;
 bool iSteamAOTExecutableMemoryIsAvailable(void);
 bool iSteamAOTExecutableMemoryIsPrepared(void);
 bool iSteamAOTExecutableMemoryPrepare(void);
+/* Shared StikDebug dual-map arena API for AOT and FEXCore JIT allocations. */
+bool iSteamAOTExecutableMemoryAllocateDualMap(size_t size, size_t alignment, void **execute_address, void **write_address, size_t *mapped_size);
+bool iSteamAOTExecutableMemoryFreeDualMap(void *execute_address, size_t mapped_size);
+bool iSteamAOTExecutableMemoryGetDualMapWriteOffset(int64_t *write_offset);
 #ifdef KENRAN_BUTO_AOT_TESTS
 void iSteamAOTExecutableMemorySetAvailabilityOverrideForTesting(int available);
 #endif

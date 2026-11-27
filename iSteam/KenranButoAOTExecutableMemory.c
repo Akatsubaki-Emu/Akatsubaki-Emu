@@ -34,7 +34,7 @@ static size_t mapped_size_for(size_t n){long p=sysconf(_SC_PAGESIZE);size_t page
 #if defined(__APPLE__) && TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
 #include <pthread.h>
 static void deallocate_mach_address(vm_address_t a,size_t n){if(a&&n)(void)vm_deallocate(mach_task_self(),a,(vm_size_t)n);}
-#define AOT_TXM_ARENA_BYTES (32u * 1024u * 1024u)
+#define AOT_TXM_ARENA_BYTES (96u * 1024u * 1024u)
 static pthread_mutex_t sTXMArenaInitLock = PTHREAD_MUTEX_INITIALIZER;
 static iSteamAOTExecutableArena *sTXMArena;
 static void *sTXMExecuteBase;
@@ -200,4 +200,87 @@ void iSteamAOTExecutableMemoryDestroy(iSteamAOTExecutableRegion *r){
  if(r->execute_address)(void)munmap(r->execute_address,r->mapped_size);
 #endif
  free(r);
+}
+
+
+/*
+ * Raw dual-map allocations are shared by Kenran Butō AOT and FEXCore's
+ * internal code cache. The returned execute pointer is RX; writes must use
+ * the paired RW alias or execute_address + the exported write offset.
+ *
+ * These APIs intentionally require the StikDebug/TXM arena. A per-allocation
+ * MAP_JIT fallback cannot provide FEXCore's single global DualMap::WriteOffset.
+ */
+bool iSteamAOTExecutableMemoryAllocateDualMap(size_t size,
+                                              size_t alignment,
+                                              void **execute_address,
+                                              void **write_address,
+                                              size_t *mapped_size) {
+    if (!size || !execute_address || !write_address || !mapped_size) return false;
+    *execute_address = NULL;
+    *write_address = NULL;
+    *mapped_size = 0;
+#if TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
+    if (iSteamJITGetProtocolMode() != ISTEAM_JIT_PROTOCOL_STIKDEBUG ||
+        !iSteamJITHasGetTaskAllow() || !iSteamJITIsReady()) return false;
+    char error[256] = {0};
+    if (!ensure_txm_arena(error, sizeof(error))) return false;
+    size_t page_size = sPageSize;
+    if (!page_size) return false;
+    if (alignment < page_size) alignment = page_size;
+    size_t remainder = alignment % page_size;
+    if (remainder) {
+        size_t padding = page_size - remainder;
+        if (alignment > SIZE_MAX - padding) return false;
+        alignment += padding;
+    }
+    size_t rounded_size = mapped_size_for(size);
+    if (!rounded_size || rounded_size > AOT_TXM_ARENA_BYTES) return false;
+    size_t offset = 0;
+    if (!iSteamAOTExecutableArenaAllocate(sTXMArena, rounded_size, alignment, &offset)) return false;
+    void *rx = (void *)((uintptr_t)sTXMExecuteBase + offset);
+    void *rw = (void *)((uintptr_t)sTXMWriteBase + offset);
+    memset(rw, 0, rounded_size);
+    *execute_address = rx;
+    *write_address = rw;
+    *mapped_size = rounded_size;
+    return true;
+#else
+    (void)alignment;
+    return false;
+#endif
+}
+
+bool iSteamAOTExecutableMemoryFreeDualMap(void *execute_address, size_t mapped_size) {
+    if (!execute_address || !mapped_size) return false;
+#if TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
+    if (!sTXMArenaReady || !sTXMArena || !sTXMExecuteBase || !sTXMWriteBase) return false;
+    uintptr_t base = (uintptr_t)sTXMExecuteBase;
+    uintptr_t address = (uintptr_t)execute_address;
+    if (address < base) return false;
+    size_t offset = (size_t)(address - base);
+    if ((offset % sPageSize) != 0 || (mapped_size % sPageSize) != 0 ||
+        offset > AOT_TXM_ARENA_BYTES || mapped_size > AOT_TXM_ARENA_BYTES - offset) return false;
+    void *rw = (void *)((uintptr_t)sTXMWriteBase + offset);
+    memset(rw, 0, mapped_size);
+    return iSteamAOTExecutableArenaFree(sTXMArena, offset, mapped_size);
+#else
+    return false;
+#endif
+}
+
+bool iSteamAOTExecutableMemoryGetDualMapWriteOffset(int64_t *write_offset) {
+    if (!write_offset) return false;
+    *write_offset = 0;
+#if TARGET_OS_IOS && !TARGET_OS_SIMULATOR && !TARGET_OS_MACCATALYST
+    if (iSteamJITGetProtocolMode() != ISTEAM_JIT_PROTOCOL_STIKDEBUG ||
+        !iSteamJITHasGetTaskAllow() || !iSteamJITIsReady()) return false;
+    char error[256] = {0};
+    if (!ensure_txm_arena(error, sizeof(error))) return false;
+    intptr_t difference = (intptr_t)sTXMWriteBase - (intptr_t)sTXMExecuteBase;
+    *write_offset = (int64_t)difference;
+    return true;
+#else
+    return false;
+#endif
 }
