@@ -15,7 +15,7 @@ class QEMULicenseAuditTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             utm = root / "UTM"
-            package = root / "package"
+            package = root / "firmware" / "package"
             output = root / "audit"
             (utm / "build-iOS-arm64" / "glib").mkdir(parents=True)
             (utm / "src").mkdir()
@@ -24,6 +24,12 @@ class QEMULicenseAuditTests(unittest.TestCase):
                 "/* SPDX-License-Identifier: MIT */\nint main(void) { return 0; }\n",
                 encoding="utf-8",
             )
+            outside_source = root / "outside-source.c"
+            outside_source.write_text("/* SPDX-License-Identifier: GPL-2.0-only */\n", encoding="utf-8")
+            (utm / "src" / "external-source.c").symlink_to(outside_source)
+            outside_license = root / "outside-LICENSE"
+            outside_license.write_text("external licence text\n", encoding="utf-8")
+            (utm / "src" / "LICENSE.external").symlink_to(outside_license)
             (utm / "build-iOS-arm64" / "glib" / "COPYING").write_text(
                 "GLib license placeholder\n", encoding="utf-8"
             )
@@ -32,6 +38,12 @@ class QEMULicenseAuditTests(unittest.TestCase):
             (frameworks / "Test").write_bytes(b"not-a-real-binary; metadata only")
             with (frameworks / "Info.plist").open("wb") as stream:
                 plistlib.dump({"CFBundleExecutable": "Test", "CFBundleIdentifier": "org.example.Test"}, stream)
+            outside_framework = root / "outside-framework" / "External.framework"
+            outside_framework.mkdir(parents=True)
+            (outside_framework / "External").write_bytes(b"external framework binary")
+            with (outside_framework / "Info.plist").open("wb") as stream:
+                plistlib.dump({"CFBundleExecutable": "External", "CFBundleIdentifier": "org.example.External"}, stream)
+            (package / "Frameworks" / "External.framework").symlink_to(outside_framework, target_is_directory=True)
             qemu_lib = package / "QEMU" / "JIT" / "libqemu-test.dylib"
             qemu_lib.parent.mkdir(parents=True)
             qemu_lib.write_bytes(b"test dylib bytes")
@@ -42,6 +54,10 @@ class QEMULicenseAuditTests(unittest.TestCase):
             outside.write_bytes(b"must not be hashed through a package symlink")
             external_link = package / "QEMU" / "TCI" / "external-link.bin"
             external_link.symlink_to(outside)
+            outside_library = root / "outside-library.dylib"
+            outside_library.write_bytes(b"must not be hashed through a dylib symlink")
+            external_library = package / "QEMU" / "TCI" / "external-library.dylib"
+            external_library.symlink_to(outside_library)
             (package / "dependency-report.txt").write_text("===== Frameworks/Test.framework/Test =====\n", encoding="utf-8")
             (package / "runtime-file-inventory.txt").write_text("Frameworks/Test.framework/Test\n", encoding="utf-8")
             (package / "BUILD-INFO.txt").write_text("Target: physical iOS arm64\n", encoding="utf-8")
@@ -61,6 +77,16 @@ class QEMULicenseAuditTests(unittest.TestCase):
             self.assertEqual(symlink_entry["category"], "symlink")
             self.assertNotIn("sha256", symlink_entry)
             self.assertEqual(manifest["runtime_libraries"][0]["path"], "QEMU/JIT/libqemu-test.dylib")
+            library_entry = next(item for item in manifest["package_files"] if item["path"].endswith("libqemu-test.dylib"))
+            self.assertEqual(library_entry["category"], "runtime-library")
+            framework_file_entry = next(item for item in manifest["package_files"] if item["path"].endswith("Frameworks/Test.framework/Test"))
+            self.assertEqual(framework_file_entry["category"], "framework-resource")
+            external_library_entry = next(item for item in manifest["package_files"] if item["path"].endswith("external-library.dylib"))
+            self.assertEqual(external_library_entry["category"], "symlink")
+            self.assertNotIn("sha256", external_library_entry)
+            external_framework_entry = next(item for item in manifest["package_files"] if item["path"].endswith("Frameworks/External.framework"))
+            self.assertEqual(external_framework_entry["category"], "symlink")
+            self.assertNotIn("sha256", external_framework_entry)
             self.assertEqual(manifest["frameworks"][0]["bundle_identifier"], "org.example.Test")
             self.assertTrue((output / "dependency-report.txt").is_file())
             self.assertTrue((output / "license-review.md").is_file())

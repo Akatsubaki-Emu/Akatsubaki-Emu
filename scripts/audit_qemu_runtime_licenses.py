@@ -55,16 +55,19 @@ def source_inventory(root: Path) -> tuple[list[str], dict[str, list[str]]]:
     if not root.is_dir():
         return license_files, spdx_files
 
-    for current, dirnames, filenames in os.walk(root):
+    for current, dirnames, filenames in os.walk(root, followlinks=False):
         current_path = Path(current)
         dirnames[:] = [
             name for name in dirnames
             if name not in SKIP_DIRS
             and not name.endswith(".xcarchive")
             and not name.startswith("sysroot-")
+            and not (current_path / name).is_symlink()
         ]
         for filename in filenames:
             path = current_path / filename
+            if path.is_symlink():
+                continue
             relative = path.relative_to(root).as_posix()
             if LICENSE_NAME.match(filename):
                 license_files.append(relative)
@@ -91,10 +94,10 @@ def source_inventory(root: Path) -> tuple[list[str], dict[str, list[str]]]:
 def framework_inventory(package_root: Path) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     frameworks_root = package_root / "Frameworks"
-    if not frameworks_root.is_dir():
+    if frameworks_root.is_symlink() or not frameworks_root.is_dir():
         return results
     for framework in sorted(frameworks_root.rglob("*.framework")):
-        if not framework.is_dir():
+        if framework.is_symlink() or not framework.is_dir():
             continue
         info_candidates = [
             framework / "Info.plist",
@@ -103,7 +106,7 @@ def framework_inventory(package_root: Path) -> list[dict[str, Any]]:
         ]
         info: dict[str, Any] = {}
         for candidate in info_candidates:
-            if candidate.is_file():
+            if not candidate.is_symlink() and candidate.is_file():
                 try:
                     with candidate.open("rb") as stream:
                         loaded = plistlib.load(stream)
@@ -119,7 +122,7 @@ def framework_inventory(package_root: Path) -> list[dict[str, Any]]:
                 framework / executable,
                 framework / "Versions" / "Current" / executable,
             ])
-        binary = next((candidate for candidate in binary_candidates if candidate.is_file()), None)
+        binary = next((candidate for candidate in binary_candidates if not candidate.is_symlink() and candidate.is_file()), None)
         item: dict[str, Any] = {
             "path": framework.relative_to(package_root).as_posix(),
             "bundle_identifier": info.get("CFBundleIdentifier"),
@@ -138,7 +141,7 @@ def framework_inventory(package_root: Path) -> list[dict[str, Any]]:
 def runtime_library_inventory(package_root: Path) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for path in sorted(package_root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in {".dylib", ".a"}:
+        if path.is_symlink() or not path.is_file() or path.suffix.lower() not in {".dylib", ".a"}:
             continue
         results.append({
             "path": path.relative_to(package_root).as_posix(),
@@ -159,19 +162,20 @@ def package_file_inventory(package_root: Path) -> list[dict[str, Any]]:
     firmware_suffixes = {".fd", ".rom", ".efi", ".dtb", ".qcow2", ".img", ".bin"}
     firmware_directories = {"firmware", "bios", "keymaps", "ovmf", "edk2"}
     for path in sorted(package_root.rglob("*")):
-        relative = path.relative_to(package_root).as_posix()
+        relative_path = path.relative_to(package_root)
+        relative = relative_path.as_posix()
         if path.is_symlink():
             results.append({"path": relative, "category": "symlink", "target": os.readlink(path)})
             continue
         if not path.is_file():
             continue
         suffix = path.suffix.lower()
-        parts = {part.lower() for part in path.parts}
+        parts = {part.lower() for part in relative_path.parts}
         if parts & firmware_directories or suffix in firmware_suffixes:
             category = "firmware-data"
         elif suffix in {".dylib", ".a"}:
             category = "runtime-library"
-        elif any(part.lower().endswith(".framework") for part in path.parts):
+        elif any(part.lower().endswith(".framework") for part in relative_path.parts):
             category = "framework-resource"
         elif LICENSE_NAME.match(path.name):
             category = "license-or-notice"
