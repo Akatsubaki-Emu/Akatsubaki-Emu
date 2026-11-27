@@ -15,6 +15,7 @@ on:
       - "scripts/patch_qemu_stikjit_ios.py"
       - "scripts/patch_qemu_tci_exports.py"
       - "scripts/patch_utm_qemu_ios.py"
+      - "scripts/audit_qemu_runtime_licenses.py"
       - "scripts/prune_utm_missing_qemu_frameworks.py"
       - "scripts/patch_qemu_meson_ios.py"
       - "scripts/verify_qemu_meson_link.py"
@@ -363,6 +364,23 @@ jobs:
             fi
           done
           echo "Physical iOS arm64 runtime variants: JIT and TCI"
+
+      - name: Generate QEMU runtime license review report
+        if: steps.freshness.outputs.build == 'true'
+        run: |
+          python3 scripts/audit_qemu_runtime_licenses.py \
+            --utm-source UTM \
+            --runtime-package build/qemu-runtime \
+            --output-dir build/qemu-license-review
+
+      - name: Upload QEMU runtime license review report (metadata only)
+        if: steps.freshness.outputs.build == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: AkatsubakiEmu-qemu-license-review-${{ github.sha }}
+          path: build/qemu-license-review/
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Upload verified QEMU runtime artifact
         if: steps.freshness.outputs.build == 'true' && vars.QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED == 'true'
