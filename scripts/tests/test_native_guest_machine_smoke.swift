@@ -140,7 +140,7 @@ struct NativeGuestMachineSmoke {
         try machine.reset(entryPoint: image.entryPoint)
         let secondExit = try runToExit(machine)
         precondition(secondExit == .exited(0), "Second native GuestMachine launch did not exit with status 0")
-        try capture.waitForMarker(occurrences: 2)
+        try capture.waitForMarker("KENRAN_BUTO_RUNTIME_OK", occurrences: 2)
 
         machine.stop()
         precondition(machine.memory.allocatedPageCount == 0, "GuestMachine stop did not release native guest pages")
