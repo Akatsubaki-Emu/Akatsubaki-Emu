@@ -282,6 +282,9 @@ jobs:
           clang++ -std=c++17 -Wall -Wextra -Werror -pthread -I iSteam \
             -c iSteam/NativeGuestMemory.cpp \
             -o "$RUNNER_TEMP/native-guest-memory.o"
+          clang -std=c11 -Wall -Wextra -Werror -I iSteam \
+            -c iSteam/NativeEmulation.c \
+            -o "$RUNNER_TEMP/native-emulation.o"
           swiftc -parse-as-library -swift-version 5 -D KENRAN_BUTO_AOT_TESTS \
             -Xcc -DKENRAN_BUTO_AOT_TESTS \
             -Xcc -I. \
@@ -301,6 +304,7 @@ jobs:
             scripts/tests/test_native_guest_machine_smoke.swift \
             "$RUNNER_TEMP/native-guest-aot-memory.o" \
             "$RUNNER_TEMP/native-guest-memory.o" \
+            "$RUNNER_TEMP/native-emulation.o" \
             -Xlinker -lc++ \
             -o "$RUNNER_TEMP/test-native-guest-machine-smoke"
           "$RUNNER_TEMP/test-native-guest-machine-smoke" \
