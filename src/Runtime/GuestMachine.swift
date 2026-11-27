@@ -9,6 +9,7 @@ protocol GuestCPUBackend: AnyObject {
     func configureLinuxProcess(programBreak: UInt64, stackBase: UInt64) throws
     func run(maxInstructions: UInt64) throws -> GuestCPUExit
     func requestStop()
+    func requestPause()
     func resume()
 }
 
@@ -64,6 +65,7 @@ final class GuestMachine {
     private let activeCPULock = NSLock()
     private var activeCPU: GuestCPUBackend?
     private var pendingStopRequested = false
+    private var pendingPauseRequested = false
     private let inputBackendLock = NSLock()
     private var linuxInputBackend: X86_64Interpreter?
 
@@ -83,14 +85,29 @@ final class GuestMachine {
         activeCPULock.lock()
         activeCPU = backend
         let shouldStop = backend != nil && pendingStopRequested
-        if backend != nil { pendingStopRequested = false }
+        let shouldPause = backend != nil && pendingPauseRequested && !shouldStop
+        if backend != nil {
+            pendingStopRequested = false
+            pendingPauseRequested = false
+        }
         activeCPULock.unlock()
-        if shouldStop { backend?.requestStop() }
+        if shouldStop {
+            backend?.requestStop()
+        } else if shouldPause {
+            backend?.requestPause()
+        }
     }
 
-    private func clearPendingStopRequest() {
+    private func clearPendingPauseRequest() {
+        activeCPULock.lock()
+        pendingPauseRequested = false
+        activeCPULock.unlock()
+    }
+
+    private func clearPendingExecutionRequests() {
         activeCPULock.lock()
         pendingStopRequested = false
+        pendingPauseRequested = false
         activeCPULock.unlock()
     }
 
@@ -101,9 +118,26 @@ final class GuestMachine {
     private func requestActiveStop() -> Bool {
         activeCPULock.lock()
         let backend = activeCPU
-        if backend == nil { pendingStopRequested = true }
+        if backend == nil {
+            pendingStopRequested = true
+            pendingPauseRequested = false
+        }
         activeCPULock.unlock()
         backend?.requestStop()
+        return backend != nil
+    }
+
+    /// Requests a non-destructive pause. A blocked syscall is retried at its
+    /// original guest instruction after resume.
+    @discardableResult
+    private func requestActivePause() -> Bool {
+        activeCPULock.lock()
+        let backend = activeCPU
+        if backend == nil && !pendingStopRequested {
+            pendingPauseRequested = true
+        }
+        activeCPULock.unlock()
+        backend?.requestPause()
         return backend != nil
     }
 
@@ -317,14 +351,13 @@ final class GuestMachine {
     }
 
     func pause() {
-        // Interrupt an active batch without waiting for its execution lock.
-        _ = requestActiveStop()
+        // Preserve a blocked guest read: it is retried from the same RIP on resume.
+        _ = requestActivePause()
         withExecutionLock {
-            // A caller can pause between bounded execution batches as well.
             if state == .configured {
                 state = .paused
             }
-            clearPendingStopRequest()
+            clearPendingPauseRequest()
         }
     }
 
@@ -345,7 +378,7 @@ final class GuestMachine {
             initialStackBase = nil
             state = .stopped
             lastExit = nil
-            clearPendingStopRequest()
+            clearPendingExecutionRequests()
         }
     }
 

@@ -4,6 +4,7 @@ final class LinuxSyscallDispatcher {
     enum Outcome {
         case returned(UInt64)
         case exited(Int32)
+        case paused
     }
 
     private let memory: GuestMemory
@@ -19,6 +20,7 @@ final class LinuxSyscallDispatcher {
     private var standardInputBuffer = Data()
     private var standardInputClosed = false
     private var standardInputInterrupted = false
+    private var standardInputPauseRequested = false
     private static let maximumStandardInputBytes = 65_536
 
     init(memory: GuestMemory, log: EmulationLog = .shared) {
@@ -70,6 +72,7 @@ final class LinuxSyscallDispatcher {
         standardInputBuffer.removeAll(keepingCapacity: true)
         standardInputClosed = false
         standardInputInterrupted = false
+        standardInputPauseRequested = false
         standardInputCondition.broadcast()
         standardInputCondition.unlock()
     }
@@ -100,6 +103,24 @@ final class LinuxSyscallDispatcher {
     func interruptStandardInputRead() {
         standardInputCondition.lock()
         standardInputInterrupted = true
+        standardInputPauseRequested = false
+        standardInputCondition.broadcast()
+        standardInputCondition.unlock()
+    }
+
+    /// Wake a guest blocked in read(0) for a pause without delivering EINTR.
+    func pauseStandardInputRead() {
+        standardInputCondition.lock()
+        if !standardInputInterrupted {
+            standardInputPauseRequested = true
+        }
+        standardInputCondition.broadcast()
+        standardInputCondition.unlock()
+    }
+
+    func clearStandardInputPause() {
+        standardInputCondition.lock()
+        standardInputPauseRequested = false
         standardInputCondition.broadcast()
         standardInputCondition.unlock()
     }
@@ -110,31 +131,37 @@ final class LinuxSyscallDispatcher {
         standardInputCondition.unlock()
     }
 
-    private func readStandardInput(address: UInt64, requested: UInt64) -> UInt64 {
-        guard requested <= UInt64(Int.max) else { return errno(22) }
-        if requested == 0 { return 0 }
+    private func readStandardInput(address: UInt64, requested: UInt64) -> Outcome {
+        guard requested <= UInt64(Int.max) else { return .returned(errno(22)) }
+        if requested == 0 { return .returned(0) }
         standardInputCondition.lock()
-        while standardInputBuffer.isEmpty && !standardInputClosed && !standardInputInterrupted {
+        while standardInputBuffer.isEmpty && !standardInputClosed &&
+              !standardInputInterrupted && !standardInputPauseRequested {
             standardInputCondition.wait()
         }
         if standardInputInterrupted {
             standardInputInterrupted = false
             standardInputCondition.unlock()
-            return errno(4)
+            return .returned(errno(4))
+        }
+        if standardInputPauseRequested {
+            standardInputPauseRequested = false
+            standardInputCondition.unlock()
+            return .paused
         }
         guard !standardInputBuffer.isEmpty else {
             standardInputCondition.unlock()
-            return 0
+            return .returned(0)
         }
         let count = min(Int(requested), standardInputBuffer.count)
         let bytes = Data(standardInputBuffer.prefix(count))
         guard memory.write(bytes, offset: address) else {
             standardInputCondition.unlock()
-            return errno(14)
+            return .returned(errno(14))
         }
         standardInputBuffer.removeSubrange(0..<count)
         standardInputCondition.unlock()
-        return UInt64(count)
+        return .returned(UInt64(count))
     }
 
     func dispatch(number: UInt64, arguments: [UInt64]) -> Outcome? {
@@ -149,7 +176,7 @@ final class LinuxSyscallDispatcher {
         switch number {
         case 0:
             guard arg0 == 0, !isStandardDescriptorClosed(arg0) else { return .returned(errno(9)) }
-            return .returned(readStandardInput(address: arg1, requested: arg2))
+            return readStandardInput(address: arg1, requested: arg2)
         case 1:
             let descriptor = arg0
             let address = arg1

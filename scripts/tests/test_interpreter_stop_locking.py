@@ -39,6 +39,23 @@ class InterpreterStopLockingTests(unittest.TestCase):
         stop_index = syscall_block.index("if shouldStopExecution() { return .interrupted }")
         self.assertGreater(stop_index, dispatch_index)
 
+    def test_blocking_syscall_pause_retries_same_guest_instruction(self):
+        source = SOURCE.read_text(encoding="utf-8")
+        syscall_start = source.index("} else if second == 0x05 {")
+        next_opcode = source.index("} else if second == 0x31 {", syscall_start)
+        syscall_block = source[syscall_start:next_opcode]
+        self.assertIn("case .paused:", syscall_block)
+        self.assertIn("rip = instructionAddress", syscall_block)
+        self.assertIn("if shouldPauseExecution() { return .interrupted }", syscall_block)
+
+    def test_guest_machine_pause_uses_non_destructive_request(self):
+        machine_source = (ROOT / "src/Runtime/GuestMachine.swift").read_text(encoding="utf-8")
+        pause_start = machine_source.index("    func pause() {")
+        stop_start = machine_source.index("    func requestStop()", pause_start)
+        pause_body = machine_source[pause_start:stop_start]
+        self.assertIn("requestActivePause()", pause_body)
+        self.assertNotIn("requestActiveStop()", pause_body)
+
 
 if __name__ == "__main__":
     unittest.main()

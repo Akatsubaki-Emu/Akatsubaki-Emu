@@ -273,6 +273,76 @@ struct NativeGuestMachineSmoke {
         let completionCount = capture.guestStdout().components(separatedBy: "KENRAN_BUTO_STDIN_OK").count - 1
         precondition(completionCount == 1, "Guest executed the post-read completion write after stop")
         print("C-backed GuestMachine interrupted blocked read(0) before guest code resumed and released guest pages")
+        let pauseMachine = GuestMachine(
+            configuration: configuration,
+            memorySize: UInt64(64 * 1024 * 1024)
+        )
+        precondition(pauseMachine.memory.isAvailable, "Native pause GuestMemory initialization failed")
+        let pauseImage = try pauseMachine.loadELFImage(at: stdinGuestURL)
+        precondition(pauseImage.entryPoint == 0x401000, "Unexpected stdin pause smoke entry point")
+        let pauseResult = GuestRunResult()
+        let pauseRunCompleted = DispatchSemaphore(value: 0)
+        Thread.detachNewThread {
+            do {
+                pauseResult.set(.success(try runToExit(pauseMachine)))
+            } catch {
+                pauseResult.set(.failure(error))
+            }
+            pauseRunCompleted.signal()
+        }
+
+        do {
+            try capture.waitForMarker("KENRAN_BUTO_STDIN_READY", occurrences: 3, timeout: 5)
+        } catch {
+            pauseMachine.stop()
+            _ = pauseRunCompleted.wait(timeout: .now() + .seconds(1))
+            throw error
+        }
+
+        let pauseCompleted = DispatchSemaphore(value: 0)
+        Thread.detachNewThread {
+            pauseMachine.pause()
+            pauseCompleted.signal()
+        }
+        guard pauseCompleted.wait(timeout: .now() + .seconds(5)) == .success else {
+            pauseMachine.stop()
+            _ = pauseRunCompleted.wait(timeout: .now() + .seconds(1))
+            preconditionFailure("GuestMachine.pause did not suspend blocked read(0)")
+        }
+        guard pauseRunCompleted.wait(timeout: .now() + .seconds(5)) == .success else {
+            preconditionFailure("Guest execution did not finish after GuestMachine.pause")
+        }
+        guard let pauseOutcome = pauseResult.get() else {
+            preconditionFailure("Paused guest did not publish its execution result")
+        }
+        switch pauseOutcome {
+        case .success(let exit):
+            precondition(exit == .interrupted, "Paused guest did not side-exit cleanly")
+        case .failure(let error):
+            throw error
+        }
+        precondition(pauseMachine.state == .paused, "GuestMachine.pause did not preserve paused state")
+        precondition(pauseMachine.memory.allocatedPageCount > 0,
+                     "GuestMachine.pause unexpectedly cleared guest memory")
+        let pausedCompletionCount = capture.guestStdout().components(separatedBy: "KENRAN_BUTO_STDIN_OK").count - 1
+        precondition(pausedCompletionCount == 1, "Paused guest completed its blocked read before resume")
+
+        let resumeInput = Data("resume\n".utf8)
+        precondition(pauseMachine.enqueueStandardInput(resumeInput) == resumeInput.count,
+                     "Paused guest rejected input queued before resume")
+        precondition(pauseMachine.resume(), "GuestMachine.resume did not resume the paused guest")
+        let resumedExit = try runToExit(pauseMachine)
+        precondition(resumedExit == .exited(0), "Paused guest did not resume its original read(0)")
+        try capture.waitForMarker("KENRAN_BUTO_STDIN_OK", occurrences: 2, timeout: 5)
+        let resumedOutput = capture.guestStdout()
+        precondition(resumedOutput.contains("KENRAN_BUTO_STDIN_ECHO:resume\n"),
+                     "Paused guest did not echo input after re-executing read(0)")
+        let resumedCompletionCount = resumedOutput.components(separatedBy: "KENRAN_BUTO_STDIN_OK").count - 1
+        precondition(resumedCompletionCount == 2, "Paused guest did not emit exactly one completion marker after resume")
+        pauseMachine.stop()
+        precondition(pauseMachine.memory.allocatedPageCount == 0,
+                     "GuestMachine.stop did not release pages after pause/resume")
+        print("C-backed GuestMachine paused and resumed blocked read(0) without delivering EINTR")
         print("C-backed GuestMachine loaded, ran twice, captured stdout and released guest pages")
     }
 }

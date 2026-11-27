@@ -35,6 +35,7 @@ final class X86_64Interpreter: GuestCPUBackend {
     private var halted = false
     private let stopLock = NSLock()
     private var stopRequested = false
+    private var pauseRequested = false
 
     init(memory: GuestMemory, aotExecutor: KenranButoAOTExecuting? = nil) {
         self.memory = memory
@@ -59,6 +60,7 @@ final class X86_64Interpreter: GuestCPUBackend {
         halted = false
         stopLock.lock()
         stopRequested = false
+        pauseRequested = false
         stopLock.unlock()
     }
 
@@ -84,15 +86,26 @@ final class X86_64Interpreter: GuestCPUBackend {
     func requestStop() {
         stopLock.lock()
         stopRequested = true
+        pauseRequested = false
         stopLock.unlock()
         syscallDispatcher.interruptStandardInputRead()
+    }
+
+    func requestPause() {
+        stopLock.lock()
+        let canPause = !stopRequested
+        if canPause { pauseRequested = true }
+        stopLock.unlock()
+        if canPause { syscallDispatcher.pauseStandardInputRead() }
     }
 
     func resume() {
         stopLock.lock()
         stopRequested = false
+        pauseRequested = false
         stopLock.unlock()
         syscallDispatcher.clearStandardInputInterrupt()
+        syscallDispatcher.clearStandardInputPause()
     }
 
     @discardableResult
@@ -111,6 +124,12 @@ final class X86_64Interpreter: GuestCPUBackend {
         return stopRequested
     }
 
+    private func shouldPauseExecution() -> Bool {
+        stopLock.lock()
+        defer { stopLock.unlock() }
+        return pauseRequested
+    }
+
     func run(maxInstructions: UInt64) throws -> GuestCPUExit {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         if halted { return .halted }
@@ -121,7 +140,7 @@ final class X86_64Interpreter: GuestCPUBackend {
         var aotDeclined = false
         let stopCheckMask: UInt64 = aotIsAvailable ? 0x0f : 0xff
         while executed < maxInstructions {
-            if executed & stopCheckMask == 0 && shouldStopExecution() {
+            if executed & stopCheckMask == 0 && (shouldStopExecution() || shouldPauseExecution()) {
                 return .interrupted
             }
 
@@ -174,6 +193,7 @@ final class X86_64Interpreter: GuestCPUBackend {
                             return .backendUnavailable("Kenran Butō AOT side exit did not preserve exact guest RIP.")
                         }
                         if shouldStopExecution() { return .interrupted }
+                        if shouldPauseExecution() { return .interrupted }
                         continue
                     } else {
                         // A declined native block disables AOT for the rest of this run.
@@ -896,11 +916,15 @@ final class X86_64Interpreter: GuestCPUBackend {
                             halted = true
                             instructionCount &+= 1
                             return .exited(status)
+                        case .paused:
+                            rip = instructionAddress
+                            return .interrupted
                         }
                     }
                     // A host stop may interrupt a blocking syscall such as read(0, ...).
                     // Side-exit before the guest executes another instruction after that interrupt.
                     if shouldStopExecution() { return .interrupted }
+                        if shouldPauseExecution() { return .interrupted }
                 } else if second == 0x31 { // RDTSC: expose a monotonic 1 GHz virtual counter.
                     let ticks = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
                     registers[0] = UInt64(UInt32(truncatingIfNeeded: ticks))
