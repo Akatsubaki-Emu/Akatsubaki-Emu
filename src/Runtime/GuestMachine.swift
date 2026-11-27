@@ -313,6 +313,8 @@ final class GuestMachine {
     }
 
     @discardableResult
+    /// A caller can pause between bounded execution batches as well.
+    /// Pausing preserves guest registers and memory; resume retries an interrupted syscall.
     func runBatch(maxInstructions: UInt64) throws -> GuestCPUExit {
         guard maxInstructions > 0 else { throw GuestEngineError.invalidInstructionBudget }
         guard memory.isAvailable else { throw GuestEngineError.memoryUnavailable }
