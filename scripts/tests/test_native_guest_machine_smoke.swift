@@ -219,6 +219,60 @@ struct NativeGuestMachineSmoke {
         precondition(stdinMachine.memory.allocatedPageCount == 0,
                      "Native stdin GuestMachine stop did not release guest pages")
         print("C-backed GuestMachine woke blocked read(0), echoed asynchronous input and released guest pages")
+        let stoppingMachine = GuestMachine(
+            configuration: configuration,
+            memorySize: UInt64(64 * 1024 * 1024)
+        )
+        precondition(stoppingMachine.memory.isAvailable, "Native stop GuestMemory initialization failed")
+        let stoppingImage = try stoppingMachine.loadELFImage(at: stdinGuestURL)
+        precondition(stoppingImage.entryPoint == 0x401000, "Unexpected stdin stop smoke entry point")
+        let stoppingResult = GuestRunResult()
+        let stoppingRunCompleted = DispatchSemaphore(value: 0)
+        Thread.detachNewThread {
+            do {
+                stoppingResult.set(.success(try runToExit(stoppingMachine)))
+            } catch {
+                stoppingResult.set(.failure(error))
+            }
+            stoppingRunCompleted.signal()
+        }
+
+        do {
+            try capture.waitForMarker("KENRAN_BUTO_STDIN_READY", occurrences: 2, timeout: 5)
+        } catch {
+            stoppingMachine.stop()
+            _ = stoppingRunCompleted.wait(timeout: .now() + .seconds(1))
+            throw error
+        }
+
+        let stoppingCompleted = DispatchSemaphore(value: 0)
+        Thread.detachNewThread {
+            stoppingMachine.stop()
+            stoppingCompleted.signal()
+        }
+        guard stoppingCompleted.wait(timeout: .now() + .seconds(5)) == .success else {
+            stoppingMachine.requestStop()
+            _ = stoppingRunCompleted.wait(timeout: .now() + .seconds(1))
+            preconditionFailure("GuestMachine.stop did not interrupt a blocked read(0)")
+        }
+        guard stoppingRunCompleted.wait(timeout: .now() + .seconds(5)) == .success else {
+            preconditionFailure("Guest execution did not finish after GuestMachine.stop")
+        }
+        guard let stoppingOutcome = stoppingResult.get() else {
+            preconditionFailure("Stopped guest did not publish its execution result")
+        }
+        switch stoppingOutcome {
+        case .success(let exit):
+            precondition(exit == .interrupted, "Guest executed post-read instructions after stop")
+        case .failure(let error):
+            throw error
+        }
+        precondition(stoppingMachine.state == .stopped, "GuestMachine.stop did not set stopped state")
+        precondition(stoppingMachine.memory.allocatedPageCount == 0,
+                     "GuestMachine.stop did not release blocked guest pages")
+        let completionCount = capture.guestStdout().components(separatedBy: "KENRAN_BUTO_STDIN_OK").count - 1
+        precondition(completionCount == 1, "Guest executed the post-read completion write after stop")
+        print("C-backed GuestMachine interrupted blocked read(0) before guest code resumed and released guest pages")
         print("C-backed GuestMachine loaded, ran twice, captured stdout and released guest pages")
     }
 }

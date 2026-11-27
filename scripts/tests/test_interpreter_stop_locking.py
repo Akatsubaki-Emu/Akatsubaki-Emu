@@ -30,6 +30,14 @@ class InterpreterStopLockingTests(unittest.TestCase):
         self.assertIn('"if shouldStopExecution() { return .interrupted }"', validator)
         self.assertNotIn('"if stopRequested { return .interrupted }"', validator)
 
+    def test_blocking_syscall_observes_host_stop_before_next_guest_instruction(self):
+        source = SOURCE.read_text(encoding="utf-8")
+        syscall_start = source.index("} else if second == 0x05 {")
+        next_opcode = source.index("} else if second == 0x31 {", syscall_start)
+        syscall_block = source[syscall_start:next_opcode]
+        dispatch_index = syscall_block.index("syscallDispatcher.dispatch(")
+        stop_index = syscall_block.index("if shouldStopExecution() { return .interrupted }")
+        self.assertGreater(stop_index, dispatch_index)
 
 
 if __name__ == "__main__":

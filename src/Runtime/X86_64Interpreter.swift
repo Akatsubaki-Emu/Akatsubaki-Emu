@@ -898,6 +898,9 @@ final class X86_64Interpreter: GuestCPUBackend {
                             return .exited(status)
                         }
                     }
+                    // A host stop may interrupt a blocking syscall such as read(0, ...).
+                    // Side-exit before the guest executes another instruction after that interrupt.
+                    if shouldStopExecution() { return .interrupted }
                 } else if second == 0x31 { // RDTSC: expose a monotonic 1 GHz virtual counter.
                     let ticks = UInt64(ProcessInfo.processInfo.systemUptime * 1_000_000_000)
                     registers[0] = UInt64(UInt32(truncatingIfNeeded: ticks))
