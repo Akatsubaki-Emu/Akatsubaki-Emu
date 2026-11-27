@@ -37,6 +37,11 @@ on:
       - "scripts/tests/test_aot_executable_arena.c"
       - "iSteam/AOTExecutableArena.c"
       - "scripts/tests/test_native_guest_machine_smoke.swift"
+      - "scripts/tests/NativeGuestMachine-Bridging-Header.h"
+      - "scripts/tests/test_native_guest_machine_workflow.py"
+      - "scripts/build_hybrid_runtime_smoke_elf.py"
+      - "iSteam/NativeGuestMemory.cpp"
+      - "iSteam/NativeGuestMemory.h"
       - "src/Runtime/ExecutionBackendRouter.swift"
       - "scripts/tests/test_execution_backend_router.swift"
       - ".github/workflows/build-core-only-ios.yml"
@@ -83,6 +88,11 @@ on:
       - "scripts/tests/test_aot_executable_arena.c"
       - "iSteam/AOTExecutableArena.c"
       - "scripts/tests/test_native_guest_machine_smoke.swift"
+      - "scripts/tests/NativeGuestMachine-Bridging-Header.h"
+      - "scripts/tests/test_native_guest_machine_workflow.py"
+      - "scripts/build_hybrid_runtime_smoke_elf.py"
+      - "iSteam/NativeGuestMemory.cpp"
+      - "iSteam/NativeGuestMemory.h"
       - "src/Runtime/ExecutionBackendRouter.swift"
       - "scripts/tests/test_execution_backend_router.swift"
       - ".github/workflows/build-core-only-ios.yml"
@@ -259,3 +269,39 @@ jobs:
             "$RUNNER_TEMP/kenran-buto-aot-memory.o" \
             -o "$RUNNER_TEMP/test-static-elf-aot"
           "$RUNNER_TEMP/test-static-elf-aot" "$RUNNER_TEMP/hybrid_xchg_smoke.elf" "$RUNNER_TEMP/hybrid_runtime_smoke.elf" "$RUNNER_TEMP/hybrid_stdin_smoke.elf"
+
+      - name: Run native GuestMachine stop and pause/resume smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build_hybrid_runtime_smoke_elf.py "$RUNNER_TEMP/hybrid_runtime_smoke.elf"
+          python3 scripts/build_hybrid_stdin_smoke_elf.py "$RUNNER_TEMP/hybrid_stdin_smoke.elf"
+          clang -std=c11 -Wall -Wextra -Werror -D KENRAN_BUTO_AOT_TESTS -I iSteam \
+            -c iSteam/KenranButoAOTExecutableMemory.c \
+            -o "$RUNNER_TEMP/native-guest-aot-memory.o"
+          clang++ -std=c++17 -Wall -Wextra -Werror -pthread -I iSteam \
+            -c iSteam/NativeGuestMemory.cpp \
+            -o "$RUNNER_TEMP/native-guest-memory.o"
+          swiftc -parse-as-library -swift-version 5 -D KENRAN_BUTO_AOT_TESTS \
+            -Xcc -DKENRAN_BUTO_AOT_TESTS \
+            -import-objc-header scripts/tests/NativeGuestMachine-Bridging-Header.h \
+            src/Core/EmulationLog.swift \
+            src/Performance/TranslationCache.swift \
+            src/Runtime/X86_64AOTTranslator.swift \
+            src/Runtime/KenranButoAOTCompiler.swift \
+            src/Runtime/KenranButoAOTExecution.swift \
+            src/Runtime/GuestMemory.swift \
+            src/Runtime/ELF64Loader.swift \
+            src/Runtime/LinuxProcessStackBuilder.swift \
+            src/Runtime/LinuxSyscallDispatcher.swift \
+            src/Runtime/X86_64ALU.swift \
+            src/Runtime/X86_64Interpreter.swift \
+            src/Runtime/GuestMachine.swift \
+            scripts/tests/test_native_guest_machine_smoke.swift \
+            "$RUNNER_TEMP/native-guest-aot-memory.o" \
+            "$RUNNER_TEMP/native-guest-memory.o" \
+            -Xlinker -lc++ \
+            -o "$RUNNER_TEMP/test-native-guest-machine-smoke"
+          "$RUNNER_TEMP/test-native-guest-machine-smoke" \
+            "$RUNNER_TEMP/hybrid_runtime_smoke.elf" \
+            "$RUNNER_TEMP/hybrid_stdin_smoke.elf"
