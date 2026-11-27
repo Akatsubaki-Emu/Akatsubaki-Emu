@@ -240,7 +240,7 @@ int main(int argc, char **argv) {
 
     // Exercise the real QMP greeting, qmp_capabilities handshake, command
     // request, interleaved event and return response over AF_UNIX.
-    const char *qmp_commands[] = {"query-status", "stop", "cont", "system_reset", "system_powerdown"};
+    const char *qmp_commands[] = {"query-status", "stop", "cont", "system_reset", "system_powerdown", "quit"};
     char temporaryDirectory[] = "/tmp/isteam-qmp-XXXXXX";
     char *createdDirectory = mkdtemp(temporaryDirectory);
     assert(createdDirectory != NULL);

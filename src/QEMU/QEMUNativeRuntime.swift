@@ -23,6 +23,7 @@ final class QEMUNativeRuntime {
     private var scopedURLs: [URL] = []
     private var nativeSessionEnded = false
     private var nativeLifecycleMonitor: DispatchSourceTimer?
+    private var powerDownRequestedGeneration: UInt64?
 
     private init() {}
 
@@ -47,6 +48,7 @@ final class QEMUNativeRuntime {
     private func refreshCompletedSessionLocked() {
         guard started, !nativeSessionEnded, !isteam_qemu_is_active() else { return }
         nativeSessionEnded = true
+        powerDownRequestedGeneration = nil
         isPaused = false
         let retainedURLs = scopedURLs
         scopedURLs.removeAll(keepingCapacity: false)
@@ -475,14 +477,15 @@ final class QEMUNativeRuntime {
         return true
     }
 
-    /// Sends the guest's ACPI power-button event without terminating QEMU.
-    /// The guest OS decides whether and when to complete its shutdown.
+    /// Gives the guest OS 30 seconds to handle the ACPI power-button event.
+    /// If the guest ignores ACPI, a controlled QMP quit ensures native cleanup.
     @discardableResult
     func requestGuestPowerDown(sessionGeneration expected: UInt64) -> Bool {
         stateLock.lock()
         defer { stateLock.unlock() }
         refreshCompletedSessionLocked()
-        guard started, !nativeSessionEnded, expected == sessionGeneration, !isPaused else {
+        guard started, !nativeSessionEnded, expected == sessionGeneration, !isPaused,
+              powerDownRequestedGeneration == nil else {
             controlError = "The active QEMU guest session is not available for power-down."
             return false
         }
@@ -492,9 +495,29 @@ final class QEMUNativeRuntime {
             EmulationLog.shared.write("QEMU guest power-down request failed: \(controlError ?? "unknown QMP error")")
             return false
         }
+        powerDownRequestedGeneration = expected
         controlError = nil
-        EmulationLog.shared.write("Sent an ACPI power-button event to the guest; waiting for the guest OS to shut down.")
+        EmulationLog.shared.write("Sent an ACPI power-button event; waiting up to 30 seconds for guest shutdown.")
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .seconds(30)) { [weak self] in
+            self?.forceQuitAfterPowerDown(sessionGeneration: expected)
+        }
         return true
+    }
+
+    private func forceQuitAfterPowerDown(sessionGeneration expected: UInt64) {
+        stateLock.lock()
+        let shouldQuit = started && !nativeSessionEnded
+            && sessionGeneration == expected
+            && powerDownRequestedGeneration == expected
+        stateLock.unlock()
+        guard shouldQuit else { return }
+
+        EmulationLog.shared.write("Guest did not complete ACPI shutdown within 30 seconds; requesting controlled QEMU quit.")
+        let result = Self.sendQMP("quit")
+        if !result.success && isteam_qemu_is_active() {
+            // Last-resort native shutdown request if the QMP socket is unavailable.
+            isteam_qemu_request_stop()
+        }
     }
 
     private static func sendQMP(_ command: String) -> (success: Bool, error: String?) {

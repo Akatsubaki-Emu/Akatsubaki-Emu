@@ -1936,7 +1936,7 @@ qmp_runtime = Path("src/QEMU/QEMUNativeRuntime.swift").read_text(encoding="utf-8
 qmp_backend = Path("src/QEMU/QEMUBackend.swift").read_text(encoding="utf-8")
 qmp_engine = Path("src/Core/VMEngine.swift").read_text(encoding="utf-8")
 for token in ("bool isteam_qemu_qmp_command", "AF_UNIX", "qmp_capabilities",
-              "SO_RCVTIMEO", "SO_NOSIGPIPE", "MSG_NOSIGNAL", '"system_reset"', '"system_powerdown"', '"cont"', '"stop"',
+              "SO_RCVTIMEO", "SO_NOSIGPIPE", "MSG_NOSIGNAL", '"system_reset"', '"system_powerdown"', '"quit"', '"cont"', '"stop"',
               "g_has_started = true", "attempt < 20", "nanosleep(&delay, NULL)"):
     if token not in qmp_bridge:
         print(f"QEMU QMP bridge missing {token!r}", file=sys.stderr)
@@ -1957,8 +1957,9 @@ for token in ("-qmp", "unix:\\(Self.qmpSocketPath),server=on,wait=off",
         failed = True
 for token in ("static let shared = QEMUNativeRuntime()", "private init()",
               "private let stateLock = NSLock()", "sessionKey == requestedSessionKey",
-              'Self.sendQMP("system_reset")', 'Self.sendQMP("system_powerdown")',
+              'Self.sendQMP("system_reset")', 'Self.sendQMP("system_powerdown")', 'Self.sendQMP("quit")',
               'Self.sendQMP("cont")', 'Self.sendQMP("stop")',
+              "powerDownRequestedGeneration", ".seconds(30)", "isteam_qemu_request_stop()",
               "nativeSessionEnded", "startNativeLifecycleMonitoringLocked()", "refreshCompletedSessionLocked()",
               "private(set) var isPaused = false", "the process and disk scopes remain available",
               "already stopped", "already running"):
@@ -1982,8 +1983,9 @@ for token in ("guard candidate.stop() else", "if backend?.stop() ?? true", "QEMU
         print(f"VMEngine does not pause and retain QEMU for repeat launches: {token!r}", file=sys.stderr)
         failed = True
 qmp_command_tests = Path("scripts/tests/test_qemu_command_builder.swift").read_text(encoding="utf-8")
-if "QEMUCommandBuilder.qmpSocketPath" not in qmp_command_tests or "-no-shutdown" not in qmp_command_tests:
-    print("QEMU command-line persistence regression is missing", file=sys.stderr)
+if ("QEMUCommandBuilder.qmpSocketPath" not in qmp_command_tests
+        or "!requestedTCIArguments.contains(\"-no-shutdown\")" not in qmp_command_tests):
+    print("QEMU command-line shutdown/cleanup regression is missing", file=sys.stderr)
     failed = True
 qmp_tests = Path("scripts/tests/test_qemu_persistent_lifecycle.py").read_text(encoding="utf-8")
 qmp_native_tests = Path("scripts/tests/test_qemu_native_bridge.c").read_text(encoding="utf-8")
@@ -1995,7 +1997,7 @@ if "isteam_qemu_qmp_command" not in qmp_native_tests or "unsupported command" no
     failed = True
 
 for token in ("QMPServer", "qmp_test_server", "tooLongSocketPath",
-              '"query-status"', '"system_reset"', '"system_powerdown"', "event_and_reply"):
+              '"query-status"', '"system_reset"', '"system_powerdown"', '"quit"', "event_and_reply"):
     if token not in qmp_native_tests:
         print(f"Native QMP socket protocol regression missing {token!r}", file=sys.stderr)
         failed = True

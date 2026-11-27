@@ -14,6 +14,7 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn('"cont"', bridge)
         self.assertIn('"system_reset"', bridge)
         self.assertIn('"system_powerdown"', bridge)
+        self.assertIn('"quit"', bridge)
         self.assertIn("SO_RCVTIMEO", bridge)
         self.assertIn("SO_NOSIGPIPE", bridge)
         self.assertIn("MSG_NOSIGNAL", bridge)
@@ -85,7 +86,7 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         native_test = (root / "scripts" / "tests" / "test_qemu_native_bridge.c").read_text(encoding="utf-8")
         for token in ("qmp_test_server", "qmp_capabilities", "query-status",
-                      "system_reset", "system_powerdown", "event_and_reply", "pthread_join"):
+                      "system_reset", "system_powerdown", "quit", "event_and_reply", "pthread_join"):
             with self.subTest(token=token):
                 self.assertIn(token, native_test)
 
@@ -134,6 +135,10 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertNotIn('"-no-shutdown"', builder)
         self.assertIn("private var nativeSessionEnded = false", runtime)
         self.assertIn("private var nativeLifecycleMonitor: DispatchSourceTimer?", runtime)
+        self.assertIn("powerDownRequestedGeneration", runtime)
+        self.assertIn('Self.sendQMP("quit")', runtime)
+        self.assertIn(".seconds(30)", runtime)
+        self.assertIn("isteam_qemu_request_stop()", runtime)
         self.assertIn("startNativeLifecycleMonitoringLocked()", runtime)
         self.assertIn("refreshCompletedSessionLocked()", runtime)
         self.assertIn("!isteam_qemu_is_active()", runtime)
