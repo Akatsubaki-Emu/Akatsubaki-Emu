@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
     // QMP accepts only the small control surface used by the runtime. Reject
     // arbitrary commands before opening a local socket.
     char qmp_error[512] = {0};
-    assert(!isteam_qemu_qmp_command("/tmp/not-a-qmp-socket", "quit",
+    assert(!isteam_qemu_qmp_command("/tmp/not-a-qmp-socket", "unsupported-test-command",
                                     qmp_error, (int)sizeof(qmp_error)));
     assert(strstr(qmp_error, "unsupported command") != NULL);
 

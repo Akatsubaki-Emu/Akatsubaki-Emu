@@ -1992,7 +1992,9 @@ qmp_native_tests = Path("scripts/tests/test_qemu_native_bridge.c").read_text(enc
 if "QEMUPersistentLifecycleTests" not in qmp_tests:
     print("QEMU persistent lifecycle regression tests are missing", file=sys.stderr)
     failed = True
-if "isteam_qemu_qmp_command" not in qmp_native_tests or "unsupported command" not in qmp_native_tests:
+if ("isteam_qemu_qmp_command" not in qmp_native_tests
+        or "unsupported command" not in qmp_native_tests
+        or "unsupported-test-command" not in qmp_native_tests):
     print("Native QMP command whitelist regression is missing", file=sys.stderr)
     failed = True
 
