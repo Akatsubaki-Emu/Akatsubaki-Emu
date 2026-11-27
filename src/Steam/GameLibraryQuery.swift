@@ -16,24 +16,26 @@ struct GameLibraryQuery {
     var limit: Int?
 
     func apply(to source: [GameEntry]) -> [GameEntry] {
+        if limit == 0 || source.isEmpty { return [] }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let tag = requiredTag?.trimmingCharacters(in: .whitespacesAndNewlines)
-        var result = source.filter { game in
-            if favoritesOnly && !game.isFavorite { return false }
+        var result = source
+        result.removeAll { game in
+            if favoritesOnly && !game.isFavorite { return true }
             if let tag, !tag.isEmpty,
                !game.tags.contains(where: {
                    $0.trimmingCharacters(in: .whitespacesAndNewlines)
                        .localizedCaseInsensitiveCompare(tag) == .orderedSame
                }) {
-                return false
+                return true
             }
-            guard !query.isEmpty else { return true }
-            return game.name.localizedCaseInsensitiveContains(query)
-                || game.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
-                || (game.notes?.localizedCaseInsensitiveContains(query) ?? false)
+            guard !query.isEmpty else { return false }
+            return !game.name.localizedCaseInsensitiveContains(query)
+                && !game.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
+                && !(game.notes?.localizedCaseInsensitiveContains(query) ?? false)
         }
 
-        result.sort { lhs, rhs in
+        let orderedBefore: (GameEntry, GameEntry) -> Bool = { lhs, rhs in
             if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite }
             switch sortOrder {
             case .title:
@@ -49,8 +51,16 @@ struct GameLibraryQuery {
             }
         }
 
-        if let limit, limit >= 0, result.count > limit {
-            result = Array(result.prefix(limit))
+        if limit == 1 {
+            guard let best = result.min(by: orderedBefore) else { return [] }
+            return [best]
+        }
+
+        if result.count > 1 {
+            result.sort(by: orderedBefore)
+        }
+        if let limit, limit > 1, result.count > limit {
+            result.removeLast(result.count - limit)
         }
         return result
     }
@@ -75,12 +85,18 @@ extension GameStore {
                 }
             }
         }
-        return tags.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        tags.sort { $0.localizedStandardCompare($1) == .orderedAscending }
+        return tags
     }
 
     var recentlyPlayed: [GameEntry] {
-        games.filter { $0.lastPlayedAt != nil }.sorted {
-            ($0.lastPlayedAt ?? .distantPast) > ($1.lastPlayedAt ?? .distantPast)
+        var result = games
+        result.removeAll { $0.lastPlayedAt == nil }
+        if result.count > 1 {
+            result.sort {
+                ($0.lastPlayedAt ?? .distantPast) > ($1.lastPlayedAt ?? .distantPast)
+            }
         }
+        return result
     }
 }

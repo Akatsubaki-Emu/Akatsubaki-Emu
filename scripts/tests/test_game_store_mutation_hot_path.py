@@ -51,6 +51,14 @@ class GameStoreMutationHotPathTests(unittest.TestCase):
         loader = section("    private func loadGames()", "    private func readableGames()")
         self.assertIn("Self.isValidLibrary(decoded)", loader)
 
+    def test_search_filters_and_sorts_the_loaded_snapshot_in_place(self):
+        search = section("    func search(_ query:", "    func setFavorite(")
+        self.assertIn("var results = readableGames() ?? []", search)
+        self.assertIn("results.removeAll { game in", search)
+        self.assertIn("results.sort {", search)
+        self.assertNotIn(".filter", search)
+        self.assertNotIn(".sorted", search)
+
 
 if __name__ == "__main__":
     unittest.main()
