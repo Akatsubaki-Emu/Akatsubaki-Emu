@@ -906,7 +906,7 @@ struct StaticELFExecutionTests {
         // A terminal write is a byte stream, but EmulationLog deliberately records
         // each write(1, ...) call as a separate message.
         let echoPrefixIndex = outputMessages.firstIndex { $0.contains("KENRAN_BUTO_STDIN_ECHO:") }
-        let echoInputIndex = outputMessages.firstIndex { $0.contains("hello\\n") }
+        let echoInputIndex = outputMessages.firstIndex { $0.contains("hello") }
         precondition(
             echoPrefixIndex != nil && echoInputIndex != nil && echoPrefixIndex! < echoInputIndex!,
             "stdin smoke guest did not echo queued input after its prefix"
