@@ -61,16 +61,20 @@ private final class LogCapture: @unchecked Sendable {
         lock.unlock()
     }
 
-    func joined() -> String {
+    func guestStdout() -> String {
         lock.lock()
         defer { lock.unlock() }
-        return storage.joined(separator: "\n")
+        let prefix = "[guest stdout] "
+        return storage.compactMap { message in
+            guard message.hasPrefix(prefix) else { return nil }
+            return String(message.dropFirst(prefix.count))
+        }.joined()
     }
 
     func waitForMarker(_ marker: String, occurrences: Int = 1, timeout: TimeInterval = 3) throws {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            let count = joined().components(separatedBy: marker).count - 1
+            let count = guestStdout().components(separatedBy: marker).count - 1
             if count >= occurrences { return }
             Thread.sleep(forTimeInterval: 0.01)
         }
@@ -132,7 +136,7 @@ struct NativeGuestMachineSmoke {
         precondition(machine.memory.readByte(offset: 0x401100) == 0x4B, "Runtime marker is missing from the executable segment")
         precondition(machine.memory.allocatedPageCount > 0, "Guest memory pages were not allocated")
         try capture.waitForMarker("KENRAN_BUTO_RUNTIME_OK", occurrences: 1)
-        let firstOutput = capture.joined()
+        let firstOutput = capture.guestStdout()
         precondition(firstOutput.contains("Linux"), "Native guest stdout is missing uname sysname")
         precondition(firstOutput.contains("x86_64"), "Native guest stdout is missing uname machine")
         precondition(firstOutput.contains("KENRAN_BUTO_RUNTIME_OK"), "Native guest stdout is missing runtime marker")
@@ -191,10 +195,13 @@ struct NativeGuestMachineSmoke {
             throw error
         }
         precondition(stdinExit == .exited(0), "Native stdin guest did not exit with status 0")
-        let stdinOutput = capture.joined()
+        // EmulationLog posts asynchronously; wait for the guest's final write
+        // before asserting on the captured stream.
+        try capture.waitForMarker("KENRAN_BUTO_STDIN_OK", timeout: 3)
+        let stdinOutput = capture.guestStdout()
         precondition(stdinOutput.contains("KENRAN_BUTO_STDIN_READY"),
                      "Native GuestMachine did not announce its blocking read(0)")
-        precondition(stdinOutput.contains("KENRAN_BUTO_STDIN_ECHO:hello"),
+        precondition(stdinOutput.contains("KENRAN_BUTO_STDIN_ECHO:hello\n"),
                      "Native GuestMachine did not echo asynchronously queued stdin")
         precondition(stdinOutput.contains("KENRAN_BUTO_STDIN_OK"),
                      "Native GuestMachine did not write the stdin completion marker")
