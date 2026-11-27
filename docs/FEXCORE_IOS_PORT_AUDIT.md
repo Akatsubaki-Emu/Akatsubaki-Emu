@@ -1,7 +1,7 @@
 # FEXCore and Box64 — iOS integration audit
 
 **Checked:** 2026-11-27 12:30 UTC  
-**Status:** FEXCore is the accepted primary dynamic translator, but is not integrated or built for iOS in Akatsubaki. A third-party Madeira/EmuPC fork demonstrates an iOS build and embedding pattern at source level; it has not been independently built or security-audited here. Box64 remains the secondary fallback candidate, not a concurrent engine. No runtime is promoted to operational by this audit.
+**Status:** FEXCore is the accepted primary dynamic translator, but is not integrated or built for iOS in Akatsubaki. A pinned FEXCore-only iOS build-validation workflow and contract tests now exist; local static checks pass, but no Xcode build or FEXCore archive has been produced. GitLab main contains later header/consumer-probe fixes than the current GitHub workflow revision. A third-party Madeira/EmuPC fork demonstrates an iOS build and embedding pattern at source level; it has not been independently built or security-audited here. Box64 remains the secondary fallback candidate, not a concurrent engine. No runtime is promoted to operational by this audit.
 
 ## FEXCore primary
 

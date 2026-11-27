@@ -18,7 +18,7 @@
 4. **OS compatibility:** Windows PE loading, DLL/import handling, Win32/NT services and Wine/Proton are composed with the CPU path.
 5. **Graphics:** DirectX → Vulkan → Metal is a separate pipeline and can run alongside CPU work when the required translation layers are present.
 6. **Host services:** audio, input, networking and storage are orthogonal subsystems and can run alongside CPU/GPU work.
-7. **Full-system fallback:** QEMU TCG is the existing full-system integration candidate, but the current distribution gate remains closed: GPL-2.0-only QEMU files remain incompatible with GPLv3 in a combined work, while Apache-2.0 UTM-derived material is generally compatible with GPL-3.0-or-later. Bochs 3.1 is the preferred no-JIT prototype candidate; neither full-system path is verified on a physical iPad. Full-system emulation remains separate from PE process translation.
+7. **Full-system fallback:** QEMU TCI/TCG remains the selected first-playable full-system route, but the current distribution gate remains closed pending qualified file-level and combined-work licensing review. Bochs 3.1 is an unselected contingency only if the QEMU gate cannot be cleared and a separate backend change is explicitly approved; its unauthenticated 8-bit RFB frontend and lack of official iOS support make it a non-drop-in port. No full-system path is verified on a physical iPad. Full-system emulation remains separate from PE process translation.
 8. **Architecture-specific paths:** a32rt is only for ARM32 guests; native ARM64 is used only where the guest ABI is compatible.
 
 ## Routing policy
@@ -29,7 +29,7 @@
 | Linux x64 ELF process | AOT cache + one of FEXCore or Box64; Linux syscall ABI; diagnostic interpreter only for limited bring-up |
 | ARM32 Linux ELF | a32rt architecture backend; QEMU full-system where a complete OS is needed |
 | Native ARM64 process | native ARM64 under a compatible ABI |
-| Complete OS/kernel | No selectable backend yet; Bochs 3.1 is the license-compatible prototype candidate, while QEMU TCG remains license-gated |
+| Complete OS/kernel | QEMU TCI/TCG is the selected no-JIT first-playable path but remains distribution-gated; Bochs is an unselected contingency, not a current backend |
 
 ## Upstream reuse and porting plan
 
