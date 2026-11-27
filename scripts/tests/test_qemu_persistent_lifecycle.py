@@ -138,6 +138,7 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("powerDownRequestedGeneration", runtime)
         self.assertIn('Self.sendQMP("quit")', runtime)
         self.assertIn(".seconds(120)", runtime)
+        self.assertIn("120s grace period before forced exit", display)
         self.assertIn("isteam_qemu_request_stop()", runtime)
         self.assertIn("startNativeLifecycleMonitoringLocked()", runtime)
         self.assertIn("refreshCompletedSessionLocked()", runtime)
