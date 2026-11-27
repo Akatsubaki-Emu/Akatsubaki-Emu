@@ -1,4 +1,5 @@
 import Foundation
+import Dispatch
 
 // Minimal host-only configuration and device bridge adapters. The execution
 // engine under test is the production GuestMachine and native GuestMemory.
@@ -31,6 +32,23 @@ final class HostDeviceBridge {
     }
 
     func writeSharedFile(_ data: Data, relativePath: String) throws {}
+}
+
+private final class GuestRunResult: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: Result<GuestCPUExit, Error>?
+
+    func set(_ result: Result<GuestCPUExit, Error>) {
+        lock.lock()
+        storage = result
+        lock.unlock()
+    }
+
+    func get() -> Result<GuestCPUExit, Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
 }
 
 private final class LogCapture: @unchecked Sendable {
@@ -137,20 +155,53 @@ struct NativeGuestMachineSmoke {
         let stdinImage = try stdinMachine.loadELFImage(at: stdinGuestURL)
         precondition(stdinImage.entryPoint == 0x401000, "Unexpected stdin smoke entry point")
         let input = Data("hello\n".utf8)
+        let stdinResult = GuestRunResult()
+        let stdinCompleted = DispatchSemaphore(value: 0)
+        Thread.detachNewThread {
+            do {
+                stdinResult.set(.success(try runToExit(stdinMachine)))
+            } catch {
+                stdinResult.set(.failure(error))
+            }
+            stdinCompleted.signal()
+        }
+
+        do {
+            try capture.waitForMarker("KENRAN_BUTO_STDIN_READY", timeout: 5)
+        } catch {
+            stdinMachine.stop()
+            _ = stdinCompleted.wait(timeout: .now() + .seconds(1))
+            throw error
+        }
         precondition(stdinMachine.enqueueStandardInput(input) == input.count,
-                     "Native GuestMachine rejected queued stdin")
-        let stdinExit = try runToExit(stdinMachine)
+                     "Native GuestMachine rejected input for its blocked read(0)")
+        guard stdinCompleted.wait(timeout: .now() + .seconds(5)) == .success else {
+            stdinMachine.stop()
+            _ = stdinCompleted.wait(timeout: .now() + .seconds(1))
+            preconditionFailure("Native GuestMachine did not wake blocked read(0) after console input arrived")
+        }
+        guard let stdinOutcome = stdinResult.get() else {
+            preconditionFailure("Native stdin guest did not publish its execution result")
+        }
+        let stdinExit: GuestCPUExit
+        switch stdinOutcome {
+        case .success(let exit):
+            stdinExit = exit
+        case .failure(let error):
+            throw error
+        }
         precondition(stdinExit == .exited(0), "Native stdin guest did not exit with status 0")
-        try capture.waitForMarker("KENRAN_BUTO_STDIN_READY")
         let stdinOutput = capture.joined()
+        precondition(stdinOutput.contains("KENRAN_BUTO_STDIN_READY"),
+                     "Native GuestMachine did not announce its blocking read(0)")
         precondition(stdinOutput.contains("KENRAN_BUTO_STDIN_ECHO:hello"),
-                     "Native GuestMachine did not echo queued stdin")
+                     "Native GuestMachine did not echo asynchronously queued stdin")
         precondition(stdinOutput.contains("KENRAN_BUTO_STDIN_OK"),
                      "Native GuestMachine did not write the stdin completion marker")
         stdinMachine.stop()
         precondition(stdinMachine.memory.allocatedPageCount == 0,
                      "Native stdin GuestMachine stop did not release guest pages")
-        print("C-backed GuestMachine executed read(0), echoed queued input and released guest pages")
+        print("C-backed GuestMachine woke blocked read(0), echoed asynchronous input and released guest pages")
         print("C-backed GuestMachine loaded, ran twice, captured stdout and released guest pages")
     }
 }
