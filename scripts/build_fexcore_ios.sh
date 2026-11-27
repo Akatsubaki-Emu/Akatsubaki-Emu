@@ -133,11 +133,11 @@ xxhash_include="$FEX_DIST_DIR/include/third_party/External/xxhash"
 mkdir -p "$xxhash_include"
 cp "$xxhash_header" "$xxhash_include/"
 {
-  printf '%s\\n' '-Iinclude'
+  printf '%s\n' '-Iinclude'
   for relative in "${include_sources[@]}"; do
-    printf '%s\\n' "-Iinclude/third_party/$relative"
+    printf '%s\n' "-Iinclude/third_party/$relative"
   done
-  printf '%s\\n' '-Iinclude/third_party/External/xxhash'
+  printf '%s\n' '-Iinclude/third_party/External/xxhash'
 } > "$FEX_DIST_DIR/include_paths.txt"
 
 # Compile a consumer-side API probe against the packaged headers. This catches
@@ -163,7 +163,7 @@ for relative in "${include_sources[@]}"; do
   include_args+=(-I"$FEX_DIST_DIR/include/third_party/$relative")
 done
 include_args+=(-I"$FEX_DIST_DIR/include/third_party/External/xxhash")
-xcrun --sdk iphoneos clang++ -target arm64-apple-ios16.0 -isysroot "$SDK_PATH" \\
+xcrun --sdk iphoneos clang++ -target arm64-apple-ios16.0 -isysroot "$SDK_PATH" \
   -std=c++20 -fno-exceptions "${include_args[@]}" -fsyntax-only "$probe"
 
 cp "$FEX_SOURCE_DIR/LICENSE" "$FEX_DIST_DIR/licenses/FEX-MIT-LICENSE.txt"
