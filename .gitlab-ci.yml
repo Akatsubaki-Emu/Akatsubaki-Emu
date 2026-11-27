@@ -15,6 +15,7 @@ core-source-and-elf-validation:
   timeout: 20m
   script:
     - python3 --version
+    - bash -n scripts/build_fexcore_ios.sh
     - mkdir -p build
     - cc -std=c11 -Wall -Wextra -Werror -pthread -IiSteam iSteam/AOTExecutableArena.c scripts/tests/test_aot_executable_arena.c -o build/test_aot_executable_arena
     - ./build/test_aot_executable_arena
