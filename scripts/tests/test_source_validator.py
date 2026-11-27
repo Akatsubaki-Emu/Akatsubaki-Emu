@@ -110,10 +110,19 @@ class SourceValidatorTests(unittest.TestCase):
         pause = source.split("func pause()", 1)[1].split("func stop()", 1)[0]
         stop = source.split("func stop()", 1)[1].split("func resume()", 1)[0]
         self.assertIn("pendingStopRequested", activation)
-        self.assertIn("if shouldStop { backend?.requestStop() }", activation)
-        self.assertIn("if backend == nil { pendingStopRequested = true }", interruption)
-        self.assertIn("clearPendingStopRequest()", pause)
-        self.assertIn("clearPendingStopRequest()", stop)
+        self.assertIn("pendingPauseRequested", activation)
+        self.assertIn("if shouldStop {", activation)
+        self.assertIn("backend?.requestStop()", activation)
+        self.assertIn("else if shouldPause {", activation)
+        self.assertIn("backend?.requestPause()", activation)
+        self.assertIn("if backend == nil {", interruption)
+        self.assertIn("pendingStopRequested = true", interruption)
+        self.assertIn("if backend == nil && !pendingStopRequested {", interruption)
+        self.assertIn("pendingPauseRequested = true", interruption)
+        self.assertIn("backend?.requestStop()", interruption)
+        self.assertIn("backend?.requestPause()", interruption)
+        self.assertIn("clearPendingPauseRequest()", pause)
+        self.assertIn("clearPendingExecutionRequests()", stop)
 
     def test_manual_release_dispatch_requires_main_for_both_channels(self):
         root = Path(__file__).resolve().parents[2]

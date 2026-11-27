@@ -17,12 +17,16 @@ class AOTExecutableArenaTests(unittest.TestCase):
             self.skipTest("A C compiler is required for the native arena regression test")
         with tempfile.TemporaryDirectory() as temporary:
             binary = Path(temporary) / "aot-arena-test"
-            subprocess.run(
-                [
-                    compiler, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
-                    "-pthread", str(ARENA_SOURCE), str(HARNESS), "-o", str(binary),
-                ],
-                check=True, capture_output=True, text=True,
+            command = [
+                compiler, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+                "-pthread", "-I", str(ROOT / "iSteam"),
+                str(ARENA_SOURCE), str(HARNESS), "-o", str(binary),
+            ]
+            compilation = subprocess.run(command, check=False, capture_output=True, text=True)
+            self.assertEqual(
+                compilation.returncode,
+                0,
+                f"Native arena compiler failed:\n{compilation.stdout}\n{compilation.stderr}",
             )
             result = subprocess.run([str(binary)], check=True, capture_output=True, text=True)
             self.assertIn("Kenran Butō executable arena allocator tests passed", result.stdout)
