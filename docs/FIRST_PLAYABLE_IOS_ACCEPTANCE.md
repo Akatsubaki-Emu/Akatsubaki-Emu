@@ -1,6 +1,6 @@
 # First playable iOS acceptance and remaining feature backlog
 
-**Last audited:** 2026-11-26  
+**Last audited:** 2026-11-27  
 **Scope:** Kenran Butō's first reproducible iOS guest-execution milestone. This is a checklist, not a claim that the milestone has shipped. See [Legacy feature parity and remaining requirements](LEGACY_FEATURE_PARITY.md) for the older cross-chat feature requests and their current implementation status.
 
 ## Validation automation
@@ -23,14 +23,22 @@ The repository now contains:
 
 - A bounded static x86-64 Linux ELF loader and Linux initial-stack builder.
 - A bounded Linux syscall subset including `uname`, `write`, `exit`, memory-management calls and an interruptible 64 KiB guest-stdin queue for `read(0, ...)`, surfaced by the diagnostic console input field.
-- \`GuestMachine\` orchestration with the x86-64 interpreter and native C-backed guest memory.
+- \`GuestMachine\` orchestration with the x86-64 interpreter and native C-backed guest memory, including non-destructive pause/resume of blocked stdin reads without clearing guest state.
 - A partial x86-64-to-ARM64 AOT translator, translated-code cache, backend routing, and interpreter fallback.
 - Atomic memory-form XCHG for 1-, 4-, and 8-byte operands through a mutex-serialized native guest-memory API, including cross-page accesses and permission checks.
 - Conservative CPUID feature reporting and a monotonic 1 GHz virtual RDTSC counter; unsupported instructions still fall back to the interpreter.
-- A 32 MiB TXM executable arena for StikDebug-backed AOT memory, with exact-allocation tracking, coalescing, and concurrency regression tests.
+- A 96 MiB process-lifetime TXM executable arena for StikDebug-backed AOT memory, with exact-allocation tracking, coalescing, and concurrency regression tests. The shared dual-map allocator API is exposed for a future FEXCore bridge, but FEXCore is not linked or operational.
 - An application import-to-launch route through \`LibraryViewController\`, \`ConsoleViewController\`, \`GameLauncher\`, \`LinuxELFRuntime\`, and \`GuestMachine\`.
 
 This is a real, bounded execution path, not a complete PC emulator. It does not yet provide dynamic ELF linking, arbitrary Linux userland, a bootable Linux/Windows OS, a production graphics pipeline, or complete guest input.
+
+### 2026-11-27 source snapshot
+
+- GitLab `main` was verified at `4596d94561b6182700dd9b8c0f5fd43d0de4d529`. At the last cross-remote comparison, GitHub `main` was a two-commit fast-forward descendant; the intervening changes were limited to the validation assertion and GuestMachine comments. GitLab API rate limiting prevented confirmation of mirror synchronization after that comparison.
+- The native GuestMachine smoke harness now covers repeated static-ELF execution, asynchronous stdin, stop while blocked in `read(0)`, and pause/resume while preserving guest memory and retrying the same syscall. The harness is wired into the Kenran Butō AOT validation workflow, but no current-head Xcode-runner result or physical-iPad result is recorded.
+- The latest recorded GitLab pipeline 1347 failed before runner allocation with `ci_quota_exceeded` on the preceding `76c4011d` commit; it did not validate `4596d945`. The native C/Swift smoke source and the executable-arena stress harness therefore remain unverified on the current head.
+- No current-head IPA, physical iPad installation, physical AOT/JIT execution, QEMU TCI runtime package, or full-system guest boot is claimed. The QEMU distribution gate remains closed pending qualified file-level and combined-work licensing review.
+
 
 ## Acceptance gates
 
