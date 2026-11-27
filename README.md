@@ -62,6 +62,11 @@ https://akatsubaki-emu.github.io/AltSource.json
 
 The source includes separate entries for iOS Main, iOS Nightly, tvOS Main, and tvOS Nightly when published. Apple TV sideloading support depends on the installer and device; an IPA link alone does not guarantee tvOS installation.
 
+## Regional guides
+
+- [Hong Kong（香港繁體中文）](README_HK.md) — regional installation notes and troubleshooting.
+- [Japan（日本語）](README_JP.md) — regional installation notes and troubleshooting.
+
 ## Features and project status
 
 ### iOS app — Akatsubaki Emu
