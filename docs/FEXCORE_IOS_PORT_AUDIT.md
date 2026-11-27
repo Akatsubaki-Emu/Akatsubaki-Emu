@@ -1,4 +1,4 @@
-# FEXCore and Box64 — iOS integration audit
+# FEXCore and Box64 â iOS integration audit
 
 **Checked:** 2026-11-25 10:53 UTC  
 **Status:** FEXCore is the accepted primary dynamic translator, but is not integrated or built for iOS. Box64 is the secondary fallback candidate, not a concurrent engine. No runtime is promoted to operational by this audit.
@@ -14,7 +14,7 @@
 ### Darwin/iOS work required
 
 1. **Core-only build:** add a reproducible CMake wrapper that configures only FEXCore, bypassing the top-level Linux/Windows frontend check without silently patching away required platform checks. Cross-compile for arm64-apple-ios with the Xcode iOS SDK and produce a static library/framework. Record every patch and dependency licence.
-2. **Executable memory:** replace upstream assumptions about executable mappings with Kenran Butō's W^X/StikDebug allocator. Reuse the 32 MiB TXM arena where its semantics fit; test 16 KiB host pages, writable aliases, instruction-cache invalidation, allocation failure and JIT revocation. Never mark the backend available merely because the library links.
+2. **Executable memory:** replace upstream assumptions about executable mappings with Kenran ButÅ's W^X/StikDebug allocator. Reuse the 32 MiB TXM arena where its semantics fit; test 16 KiB host pages, writable aliases, instruction-cache invalidation, allocation failure and JIT revocation. Never mark the backend available merely because the library links.
 3. **Host feature interface:** report the real A16 ARM64 features and expose only x86 features the translator can implement correctly. Validate CPUID and instruction feature masks against the guest workload.
 4. **Syscalls:** implement FEXCore's syscall-handler interface as an adapter to the Linux guest ABI. The existing Swift dispatcher is a small diagnostic subset, not enough for FEXCore or general Linux applications.
 5. **Signals and threads:** implement the signal-delegator boundary, guest signal frames, clone/thread lifecycle, futexes, TLS, robust mutexes and process/thread identity. Darwin signals and thread primitives are not identical to Linux semantics.
@@ -23,15 +23,47 @@
 8. **Integration:** add a C++/Objective-C++ bridge with a pinned ABI. Keep one FEXCore context per guest process, route cache misses to FEXCore, and side-exit unsupported or unavailable work to the existing interpreter. The router must never run FEXCore and Box64 concurrently for one process.
 9. **Validation:** run upstream FEXCore tests, translator differential tests, the two static ELF smoke guests through the FEXCore path, dynamic-loader/syscall/thread tests, and finally a physical iPad test. Record correctness before benchmarking.
 
+## iOS FEXCore reference implementation audit — Madeira / EmuPC (2026-11-27)
+
+A current public iOS implementation provides a concrete reference for the previously theoretical Darwin port: [EmuPC](https://github.com/yabdelsa2862-lab/EmuPC), based on [Madeira](https://github.com/willfaust/Madeira). This is a research reference, not an integrated Akatsubaki dependency. The inspected EmuPC `main` tree was at `ce3cc7fdd98b8e7c47925c7ab046acbb83e3978d`.
+
+### Verified implementation shape
+
+- Its FEX fork's top-level `FEX/CMakeLists.txt` accepts `Darwin` and `iOS` host targets. This is a Madeira/EmuPC fork change; it does **not** mean the unmodified upstream FEX tree has the same platform support.
+- `build/fex-ios/build.sh` configures an iOS device ARM64 build with the iPhoneOS SDK, a 17.0 deployment target and `cortex-a78`, then builds the FEXCore static libraries and required helpers. This establishes a reproducible build recipe in that fork, not an Akatsubaki build result.
+- `app/Madeira/FEXBridge.mm` demonstrates the embedding boundary: it creates an FEXCore context, installs a Linux syscall handler and signal delegator, creates a guest thread, and calls `ExecuteThread`.
+- That bridge uses a 64 MiB dual-mapped JIT pool: debugger-provided RX pages, a writable `vm_remap` alias, `vm_protect`, and `FEXCore::DualMap::WriteOffset`. Its allocation granularity is 16 KiB. It requires an attached debugger/JIT and is not a no-JIT fallback.
+- The minimal bridge's syscall handler is only a bring-up implementation. The complete EmuPC Windows-game route additionally composes FEX's ARM64EC translator with Wine, a Windows DLL farm and DXMT; FEX alone does not provide Windows APIs, a Linux dynamic linker, a filesystem or a full-system guest.
+
+### Provenance and reuse boundary
+
+- The FEX upstream code remains MIT. The inspected fork's `FEX/LICENSE-MADEIRA.md` records Madeira-authored modifications from 2026-08-28 onward as GPL-3.0-or-later, with the Madeira Converter Exception; earlier MIT grants remain available under their original terms. Third-party contributions have their own notices.
+- The exception is an additional permission for the specified Madeira-authored material; it is not a blanket permission attached to Akatsubaki's own GPL-3.0-or-later files. Preserve the exact per-file provenance and exception scope if any such modifications are ever reused.
+- The Wine fork's `docs/wine-lgpl-provenance.md` describes an LGPL-2.1-or-later branch based on Wine 11.4 plus Madeira patches, but explicitly records an outstanding ownership-confirmation item. Do not import that patch set until its provenance and licence are independently resolved.
+- The DXMT fork's iOS build and patches include Madeira-authored GPL-3.0-or-later material and the Apple Metal Shader Converter exception. Do not copy those changes or bundle the converter until the applicable rights, exception scope, third-party notices and Apple agreement are reviewed.
+- No EmuPC/Madeira source or binary was copied into Akatsubaki by this audit.
+
+### Recommended Akatsubaki integration sequence
+
+1. Pin an exact FEX revision and dependency/submodule graph; generate a file-level licence inventory before adding it to the build.
+2. Reproduce the iOS ARM64 **FEXCore-only** static build in a dedicated hosted workflow. Keep the upstream platform changes separate from Akatsubaki's bridge and record every patch.
+3. Implement a C++/Objective-C++ adapter behind `ExecutionBackendRouter`. Reuse the existing Kenran Butō executable-memory provider where its W^X, 16 KiB-page, alias and revocation semantics meet FEX's allocator contract; do not silently add a second unrelated JIT pool.
+4. Implement and test the FEX syscall, signal, thread, TLS, futex, memory and thunk contracts against the existing guest ABI. The current bounded `LinuxSyscallDispatcher` is not sufficient for general Linux userland.
+5. Route unsupported/unavailable FEX execution back to the existing interpreter only at a well-defined side-exit boundary. Select one dynamic translator per process; Box64 remains an alternative, never a concurrent second translator.
+6. Add Wine/ARM64EC and DXMT only as separate, later Windows/graphics integrations after their source provenance and complete dependency licences are reviewed.
+7. Keep QEMU TCTI as the separate no-JIT full-system route. FEXCore is a user-mode dynamic translator and does not replace a bootable PC/OS backend.
+
+**Status:** a viable iOS FEXCore implementation pattern has been found and audited at source level. FEXCore is still **not** built, linked, selected or verified in Akatsubaki on a physical iPad.
+
 ## Box64 secondary fallback
 
 - Upstream: https://github.com/ptitSeb/box64, MIT licensed and designed for Linux userlands on ARM64/RISC-V/LoongArch Linux hosts. Upstream Box64 is not a drop-in Darwin/iOS runtime.
 - iOS snapshot: https://github.com/cloverfield11/box64-ios-library, also MIT. It provides a static-library entry point (box64_library_main when built with BUILD_LIB) that matches the symbol expected by Akatsubaki's existing Box64Bridge.
-- The inspected snapshot reports JIT/dynarec disabled and a Powder Toy x86-64 path at roughly 4.5–5 FPS through a custom MetalGL bridge. Its touch bridge is targeted to the tested Powder Toy binary layout. This is a valuable no-JIT proof of concept, not evidence of broad Linux game compatibility.
-- The snapshot is based on an older Box64 commit and contains game-specific workarounds. Do not transplant those hard-coded guest addresses into Kenran Butō. Audit the complete fork diff, build scripts, transitive libraries and symbols before packaging.
+- The inspected snapshot reports JIT/dynarec disabled and a Powder Toy x86-64 path at roughly 4.5â5 FPS through a custom MetalGL bridge. Its touch bridge is targeted to the tested Powder Toy binary layout. This is a valuable no-JIT proof of concept, not evidence of broad Linux game compatibility.
+- The snapshot is based on an older Box64 commit and contains game-specific workarounds. Do not transplant those hard-coded guest addresses into Kenran ButÅ. Audit the complete fork diff, build scripts, transitive libraries and symbols before packaging.
 - **Integration decision:** retain Box64 as a secondary fallback. Build and package it only after the same smoke corpus passes through the static library, its guest ABI/syscall contract is explicit, and the iOS display/input adapters are separated from game-specific hacks. FEXCore wins whenever both are operational; Box64 is selected only if FEXCore is unavailable or rejected for that workload.
 
-## 2026-11-25 20:50 UTC update — diagnostic stdin
+## 2026-11-25 20:50 UTC update â diagnostic stdin
 
 The static ELF diagnostic path no longer treats every `read(0, ...)` as immediate EOF:
 
@@ -59,7 +91,7 @@ The static ELF diagnostic path no longer treats every `read(0, ...)` as immediat
 
 - MoltenVK maps a Vulkan subset onto Metal and supports iOS/tvOS, but its upstream project is now community-maintained on a best-effort basis. It is a plausible Vulkan portability layer, not proof that a Linux Vulkan driver stack can run on iOS.
 - DXVK translates Direct3D 8/9/10/11 to Vulkan for Linux/Wine. It expects Wine and a compatible Vulkan driver/feature set. It cannot be dropped into the iOS app without the Linux user-mode, Wine and Vulkan host layers.
-- Direct3D 12 needs a separate vkd3d-proton path; it is not covered by DXVK's D3D8–11 scope. Validate API coverage, shader features, memory sharing and Metal synchronization on the actual iPad before claiming support.
+- Direct3D 12 needs a separate vkd3d-proton path; it is not covered by DXVK's D3D8â11 scope. Validate API coverage, shader features, memory sharing and Metal synchronization on the actual iPad before claiming support.
 
 ## Guest input/display integration gap
 
