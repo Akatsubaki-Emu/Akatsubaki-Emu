@@ -1,6 +1,23 @@
 # Akatsubaki Emu — 香港版使用指南（繁體中文）
 
-> [English project README](README.md) · [日本語ガイド](README_JP.md)
+> [English project README](README.md) · [日本語ガイド](README_JP.md) · [自動選擇語言的官方網站](https://akatsubaki-emu.github.io/?region=auto)
+
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](https://spdx.org/licenses/GPL-3.0-or-later.html)
+[![Stars](https://img.shields.io/github/stars/Akatsubaki-Emu/Akatsubaki-Emu)](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/stargazers)
+[![Forks](https://img.shields.io/github/forks/Akatsubaki-Emu/Akatsubaki-Emu)](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/forks)
+[![Issues](https://img.shields.io/github/issues/Akatsubaki-Emu/Akatsubaki-Emu)](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/issues)
+[![Contributors](https://img.shields.io/github/contributors/Akatsubaki-Emu/Akatsubaki-Emu)](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/graphs/contributors)
+[![Last commit](https://img.shields.io/github/last-commit/Akatsubaki-Emu/Akatsubaki-Emu/main)](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/commits/main)
+[![Monthly commits](https://img.shields.io/github/commit-activity/m/Akatsubaki-Emu/Akatsubaki-Emu)](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/commits/main)
+[![Latest release](https://img.shields.io/github/v/release/Akatsubaki-Emu/Akatsubaki-Emu?display_name=tag)](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases)
+[![Build & release](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions/workflows/release.yml/badge.svg)](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions/workflows/release.yml)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://makeapullrequest.com)
+
+[**GitHub**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu) · [**Releases**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases) · [**Nightly**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly) · [**Main**](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/main) · [**Documentation**](https://akatsubaki-emu.github.io/docs/)
+
+![Repository metrics overview](docs/metrics-overview.svg)
+
+<sub>動態徽章顯示 GitHub 儲存庫統計；圖表是活動快照，不代表模擬器相容性、效能或實機測試覆蓋率。</sub>
 
 本頁為香港使用者整理 Akatsubaki Emu 的下載、安裝、測試及回報問題方法。這是地區化的入門指南；香港地區並沒有獨立的程式版本或特殊功能保證。
 
@@ -21,6 +38,16 @@ Akatsubaki Emu 仍在積極開發，屬於實驗性軟件，可能不穩定、�
 
 請以主專案 README、發佈說明及測試紀錄為準；不要把規劃中的功能當成已完成的功能。
 
+
+
+## 功能與技術狀態
+
+- iOS App 包含實驗性遊戲庫、檔案匯入、VM／工作階段設定，以及 PE／ELF 唯讀中繼資料檢查。
+- Kenran Butō 有限度地執行靜態 x86-64 Linux ELF，使用 `GuestMachine`、`ELF64Loader`、Linux syscall 子集、x86-64 interpreter 和原生 C guest memory。
+- ARM64 AOT 只支援部分 x86-64 指令；不支援的指令須回退至 interpreter。
+- 動態連結、一般 Linux 使用者空間、Windows API／核心、Wine／Proton、Box64／FEXCore 執行環境、正式 3D GPU 翻譯、完整客體輸入／網絡及任意遊戲相容性均未確認。
+- tvOS 仍是 Siri Remote 介面預覽；QEMU／UTM 全系統執行路徑受獨立授權審查及發佈閘門限制。尚無實體 iOS 裝置成功啟動客體 OS 的證據。
+
 ## 下載
 
 只使用官方專案連結：
@@ -30,6 +57,8 @@ Akatsubaki Emu 仍在積極開發，屬於實驗性軟件，可能不穩定、�
 - [Nightly 測試版本](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/nightly)
 - [Main 發佈版本](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/releases/tag/main)
 - [官方 AltStore／PAL source](https://akatsubaki-emu.github.io/AltSource.json)
+
+<a href="https://altdirect.app/?url=https://akatsubaki-emu.github.io/AltSource.json" target="_blank" rel="noopener noreferrer"><img src="https://altdirect.app/assets/png/AltSource_Blue.png" alt="Add Akatsubaki Emu source to AltStore" width="200"></a>
 
 下載時請選擇與裝置相符的 iOS IPA。tvOS 套件並不適用於 iPhone／iPad。Nightly 包含較新的開發變更，可能較不穩定。
 

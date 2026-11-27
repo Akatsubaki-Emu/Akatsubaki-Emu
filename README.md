@@ -67,6 +67,8 @@ The source includes separate entries for iOS Main, iOS Nightly, tvOS Main, and t
 - [Hong Kong（香港繁體中文）](README_HK.md) — regional installation notes and troubleshooting.
 - [Japan（日本語）](README_JP.md) — regional installation notes and troubleshooting.
 
+For automatic language selection, visit the [official project website](https://akatsubaki-emu.github.io/?region=auto). It uses browser language preferences for Japanese or Hong Kong Traditional Chinese. Add `?region=en` to stay on English. GitHub itself always renders this universal `README.md`; it cannot detect a visitor's geographic region.
+
 ## Features and project status
 
 ### iOS app — Akatsubaki Emu
