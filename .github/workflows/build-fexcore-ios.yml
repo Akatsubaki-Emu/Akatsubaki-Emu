@@ -1,0 +1,63 @@
+name: FEXCore iOS ARM64 build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-fexcore-ios.yml'
+      - 'scripts/build_fexcore_ios.sh'
+      - 'docs/FEXCORE_IOS_FORK_BUILD.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fexcore-ios-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-fexcore-ios:
+    if: github.ref == 'refs/heads/main'
+    name: Build pinned FEXCore for physical iOS ARM64
+    runs-on: xcode-27
+    timeout-minutes: 120
+    steps:
+      - name: Checkout Akatsubaki Emu
+        uses: actions/checkout@v7
+
+      - name: Checkout pinned FEX iOS fork and recursive dependencies
+        uses: actions/checkout@v7
+        with:
+          repository: willfaust/FEX
+          ref: 1dc6ed4932bd231df1c53dd7b8043ffdee0ac34a
+          path: build/third_party/FEX
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Select Xcode and install CMake/Ninja if needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          if ! command -v cmake >/dev/null 2>&1; then brew install cmake; fi
+          if ! command -v ninja >/dev/null 2>&1; then brew install ninja; fi
+          cmake --version
+          ninja --version
+
+      - name: Build and validate FEXCore static libraries for iOS arm64
+        shell: bash
+        env:
+          FEX_SOURCE_DIR: ${{ github.workspace }}/build/third_party/FEX
+          FEX_BUILD_DIR: ${{ github.workspace }}/build/fexcore-ios
+          FEX_DIST_DIR: ${{ runner.temp }}/fexcore-ios-dist
+        run: bash scripts/build_fexcore_ios.sh
+
+      - name: Upload private FEXCore validation artifact (not a release)
+        uses: actions/upload-artifact@v7
+        with:
+          name: Akatsubaki-FEXCore-iOS-arm64-${{ github.run_number }}
+          path: ${{ runner.temp }}/fexcore-ios-dist/
+          if-no-files-found: error
+          retention-days: 7
