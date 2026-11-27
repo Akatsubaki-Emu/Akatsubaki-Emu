@@ -86,7 +86,7 @@ final class VMDisplayViewController: UIViewController {
                 }
             case .poweringDown:
                 self.navigationItem.rightBarButtonItem?.isEnabled = false
-                self.status.text = "ACPI power button sent • waiting for QEMU cleanup"
+                self.status.text = "ACPI power button sent • 120s grace period before forced exit"
                 self.releaseGuestInputs()
             case .poweredOff:
                 self.navigationItem.rightBarButtonItem?.isEnabled = false
@@ -228,7 +228,7 @@ final class VMDisplayViewController: UIViewController {
             status.text = "Power off unavailable • QEMU guest is not running"
             return
         }
-        status.text = "ACPI power button sent • waiting for QEMU cleanup"
+        status.text = "ACPI power button sent • 120s grace period before forced exit"
     }
 
     private func applyCardboardLayout() {

@@ -477,7 +477,7 @@ final class QEMUNativeRuntime {
         return true
     }
 
-    /// Gives the guest OS 30 seconds to handle the ACPI power-button event.
+    /// Gives the guest OS 120 seconds to handle the ACPI power-button event.
     /// If the guest ignores ACPI, a controlled QMP quit ensures native cleanup.
     @discardableResult
     func requestGuestPowerDown(sessionGeneration expected: UInt64) -> Bool {
@@ -497,8 +497,8 @@ final class QEMUNativeRuntime {
         }
         powerDownRequestedGeneration = expected
         controlError = nil
-        EmulationLog.shared.write("Sent an ACPI power-button event; waiting up to 30 seconds for guest shutdown.")
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .seconds(30)) { [weak self] in
+        EmulationLog.shared.write("Sent an ACPI power-button event; waiting up to 120 seconds for guest shutdown.")
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .seconds(120)) { [weak self] in
             self?.forceQuitAfterPowerDown(sessionGeneration: expected)
         }
         return true
@@ -512,7 +512,7 @@ final class QEMUNativeRuntime {
         stateLock.unlock()
         guard shouldQuit else { return }
 
-        EmulationLog.shared.write("Guest did not complete ACPI shutdown within 30 seconds; requesting controlled QEMU quit.")
+        EmulationLog.shared.write("Guest did not complete ACPI shutdown within 120 seconds; requesting controlled QEMU quit.")
         let result = Self.sendQMP("quit")
         if !result.success && isteam_qemu_is_active() {
             // Last-resort native shutdown request if the QMP socket is unavailable.

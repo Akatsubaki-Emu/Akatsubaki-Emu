@@ -137,7 +137,7 @@ class QEMUPersistentLifecycleTests(unittest.TestCase):
         self.assertIn("private var nativeLifecycleMonitor: DispatchSourceTimer?", runtime)
         self.assertIn("powerDownRequestedGeneration", runtime)
         self.assertIn('Self.sendQMP("quit")', runtime)
-        self.assertIn(".seconds(30)", runtime)
+        self.assertIn(".seconds(120)", runtime)
         self.assertIn("isteam_qemu_request_stop()", runtime)
         self.assertIn("startNativeLifecycleMonitoringLocked()", runtime)
         self.assertIn("refreshCompletedSessionLocked()", runtime)

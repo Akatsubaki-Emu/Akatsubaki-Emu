@@ -1959,7 +1959,7 @@ for token in ("static let shared = QEMUNativeRuntime()", "private init()",
               "private let stateLock = NSLock()", "sessionKey == requestedSessionKey",
               'Self.sendQMP("system_reset")', 'Self.sendQMP("system_powerdown")', 'Self.sendQMP("quit")',
               'Self.sendQMP("cont")', 'Self.sendQMP("stop")',
-              "powerDownRequestedGeneration", ".seconds(30)", "isteam_qemu_request_stop()",
+              "powerDownRequestedGeneration", ".seconds(120)", "isteam_qemu_request_stop()",
               "nativeSessionEnded", "startNativeLifecycleMonitoringLocked()", "refreshCompletedSessionLocked()",
               "private(set) var isPaused = false", "the process and disk scopes remain available",
               "already stopped", "already running"):
