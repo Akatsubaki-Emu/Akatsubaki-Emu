@@ -1107,6 +1107,10 @@ required = {
         "guard game.validate(), seen.insert(game.id).inserted",
     ],
     "src/GPU/MetalGPUBackend.swift": [
+        "private var pendingFrameDrainScheduled = false",
+        "guard pendingFullFrame != nil, !pendingFrameDrainScheduled else",
+        "pendingFrameDrainScheduled = true",
+        "pendingFrameDrainScheduled = false",
         "view.framebufferOnly = false",
         "view.autoResizeDrawable = false",
         "let drawableSize = CGSize(width: width, height: height)",

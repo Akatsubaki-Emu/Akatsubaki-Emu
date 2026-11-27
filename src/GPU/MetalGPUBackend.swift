@@ -45,6 +45,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     private var publishedFrameSequence: UInt64 = 0
     private var pendingFullFrame: PendingFrame?
     private var requiresFullFrameUpload = false
+    private var pendingFrameDrainScheduled = false
     private let targetFrameRate: Int
     private let maxFramebufferBytes = 64 * 1024 * 1024
     private let maxFramebufferPoolBytes = 128 * 1024 * 1024
@@ -259,16 +260,30 @@ final class MetalGPUBackend: NSObject, GPUBackend {
     }
 
     private func schedulePendingFrameDrain() {
+        textureLock.lock()
+        guard pendingFullFrame != nil, !pendingFrameDrainScheduled else {
+            textureLock.unlock()
+            return
+        }
+        pendingFrameDrainScheduled = true
+        textureLock.unlock()
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.drainPendingFrame()
         }
     }
 
     private func drainPendingFrame() {
-        guard let device else { return }
+        guard let device else {
+            textureLock.lock()
+            pendingFrameDrainScheduled = false
+            textureLock.unlock()
+            return
+        }
 
         textureLock.lock()
         guard let pending = pendingFullFrame else {
+            pendingFrameDrainScheduled = false
             textureLock.unlock()
             return
         }
@@ -277,6 +292,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
               pending.width == framebufferWidth,
               pending.height == framebufferHeight else {
             pendingFullFrame = nil
+            pendingFrameDrainScheduled = false
             textureLock.unlock()
             return
         }
@@ -295,6 +311,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
             slot = FramebufferSlot(texture: texture)
             framebufferSlots.append(slot)
         } else {
+            pendingFrameDrainScheduled = false
             textureLock.unlock()
             return
         }
@@ -332,6 +349,7 @@ final class MetalGPUBackend: NSObject, GPUBackend {
         let shouldSchedule = publish && !displayUpdateScheduled
         if shouldSchedule { displayUpdateScheduled = true }
         let shouldDrainPending = pendingFullFrame != nil
+        pendingFrameDrainScheduled = false
         textureLock.unlock()
 
         if shouldSchedule { enqueueDisplayUpdate() }
