@@ -3,7 +3,7 @@
 **Purpose:** assemble the exact technical facts and questions for a qualified licensing reviewer. This document is not a legal opinion and does not approve distribution.
 
 ## Pinned source and project licensing
-- Akatsubaki Emu project license: GPL-2.0-or-later (`LICENSE`).
+- Akatsubaki Emu project license: GPL-3.0-or-later (`LICENSE`).
 - UTM source used by the current runtime build: UTM 5.0.9, commit `3d4b8d8cb1ce93a8b1a9610695c12487685f0c15`, project license Apache-2.0.
 - QEMU source used by the runtime workflow: UTM release archive `qemu-10.0.12-utm.tar.xz`, QEMU 10.0.12-utm. The project-level QEMU license is recorded as GPL-2.0-only; individual files can have separate SPDX exceptions and must be checked individually.
 - The active QEMU native bridge currently records adaptation of UTM lifecycle/launcher material, including `Services/UTMQemuSystem.m`, `Configuration/UTMQemuConfiguration+Arguments.swift` and `QEMULauncher/Bootstrap.c`. The exact scope of that adaptation and whether it is a derivative work requires qualified review.
@@ -16,12 +16,12 @@
 - Confirm source availability for the exact QEMU fork, UTM patches, project patches, build scripts and corresponding dependency sources. Record the source offer/location and the process for providing corresponding source to recipients.
 - Review LGPL obligations for dynamically linked frameworks, including replacement/relinking rights and whether iOS code-signing/sideloading workflows satisfy those obligations.
 - Review attribution, copyright notices, license texts, patent notices, modification notices and redistribution conditions for every component.
-- Confirm whether the QEMU dynamic framework and GPL-2.0-or-later host app form one combined work for distribution purposes, and identify the license that can legally cover the combined binary.
+- Confirm whether the QEMU dynamic framework and GPL-3.0-or-later host app form one combined work for distribution purposes, and identify the license that can legally cover the combined binary.
 
 ## Specific compatibility questions
-1. Does the UTM-derived material in the active native bridge/argument path remain Apache-2.0-licensed derivative material, and is it compatible with the GPL-2.0-only QEMU components when linked into the iOS app?
+1. Does the exact QEMU linked source/object closure contain GPL-2.0-only files that are incompatible with GPL-3.0-or-later project code in the combined iOS app?
 2. Do the UTM QEMU fork patches or retained iOS frameworks contain Apache-2.0-only or other terms that create additional incompatibility with GPL-2.0-only components?
-3. Can the app be distributed under GPL-2.0 terms for the combined work, or is separate permission, a clean-room replacement of adapted UTM code, or a different runtime required?
+3. Can the app/runtime be distributed under GPL-3.0-or-later with the exact QEMU file-level licence closure, or must particular GPL-2.0-only QEMU files be excluded/replaced or separately licensed?
 4. Do any dependency or firmware licenses impose additional source, relinking, notice, patent or installation-information obligations for this sideloaded iOS distribution?
 5. Does the final packaging process preserve the required notices and make the corresponding source and build instructions available to every recipient?
 

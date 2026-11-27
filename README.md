@@ -13,7 +13,7 @@
 
 > Akatsubaki Emu is an experimental iOS, tvOS, and visionOS game-library and guest-runtime project.
 
-[![License: GPL-2.0-or-later](https://img.shields.io/badge/License-GPL--2.0--or--later-blue.svg)](https://spdx.org/licenses/GPL-2.0-or-later.html)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](https://spdx.org/licenses/GPL-3.0-or-later.html)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://makeapullrequest.com)
 [![Akatsubaki Emu Build & Release](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions/workflows/release.yml/badge.svg)](https://github.com/Akatsubaki-Emu/Akatsubaki-Emu/actions/workflows/release.yml)
 
@@ -186,17 +186,17 @@ Third-party projects retain their own licenses and copyrights. Review upstream l
 
 ## License and disclaimer
 
-The Akatsubaki Emu project is licensed under the **GNU General Public License version 2 or (at your option) any later version (GPL-2.0-or-later)**. See [LICENSE](LICENSE).
+Akatsubaki Emu project-authored source files are licensed under the **GNU General Public License version 3 or (at your option) any later version (GPL-3.0-or-later)**. File-level scope and exceptions are recorded in [`.reuse/dep5`](.reuse/dep5); see [LICENSE](LICENSE). Third-party files retain their original licences.
 
 ## Third-party licensing: UTM and QEMU
 
-The GPL-2.0-or-later notice above applies to Akatsubaki-authored code, except portions carrying explicit third-party-derived notices; it does not relicense third-party components.
+The GPL-3.0-or-later grant applies only to project-authored files listed in `.reuse/dep5`. Files with upstream provenance retain their original or separately identified terms; this repository-wide notice does not relicense third-party components.
 
 The full-system QEMU runtime is built from UTM pinned at commit [`3d4b8d8cb1ce93a8b1a9610695c12487685f0c15`](https://github.com/utmapp/UTM/commit/3d4b8d8cb1ce93a8b1a9610695c12487685f0c15) (UTM 5.0.9). At that revision, UTM's repository-level `LICENSE` is Apache License 2.0. That notice applies to UTM-authored material covered by it; it is not a blanket licence for the QEMU fork or every dependency in UTM's app archive. The pinned UTM `patches/sources` selects QEMU `v10.0.12-utm`. QEMU's project-level licensing is GPLv2 with file-level exceptions: some files are GPL-2.0-only, while other files and dependencies may carry different terms. Do not assume one licence applies to every file.
 
 The runtime packagers extract QEMU's dynamic library/framework, its dependency frameworks, and firmware/data from UTM's iOS archives. They do not bundle UTM's Swift UI wrapper. Akatsubaki loads QEMU in-process through `QEMUNativeRuntime`; a separate framework or dynamic-library boundary is not a separate process and does not, by itself, settle whether the distributed app and runtime form one combined work.
 
-Apache-2.0 is not compatible with GPL-2.0-only when the works are combined into a single derivative work. GPL-2.0-only QEMU components can in principle be combined with GPL-2.0-or-later project code by selecting GPLv2 terms; this does not relicense QEMU or override file-level notices. However, `iSteam/QEMUNativeBridge.c` identifies an adaptation of UTM lifecycle integration material with Apache-2.0 provenance. If that Apache-derived material is part of the same combined work, the GPLv2 option may not be available for that distribution; GPLv3-compatible terms, separate permission, or a clean-room replacement would need to be assessed. Whether this particular app/runtime distribution is a combined work, and which file-level grants apply, requires qualified, fact-specific review. Do not infer QEMU compatibility from UTM's repository-level Apache licence or from dynamic linking.
+Apache-2.0 is generally compatible with GPL-3.0-or-later, so the UTM-derived portions are no longer the same GPLv2 compatibility obstacle. However, QEMU's project-level licence is GPLv2 with file-level exceptions: any GPL-2.0-only files incorporated into the combined iOS app/runtime remain incompatible with GPL-3.0-only terms. Files explicitly marked GPL-2.0-or-later may be used under GPLv3; permissively licensed QEMU files retain their own notices. The exact QEMU source/object/dependency closure still needs to be inventoried. `iSteam/QEMUNativeBridge.c` is identified in `.reuse/dep5` as containing both Apache-2.0 UTM-derived material and GPL-3.0-or-later project-authored changes. Obtain qualified review of the exact combined distribution before approval.
 
 QEMU runtime artifact upload and QEMU-enabled IPA publication remain blocked pending that review. CI compilation or internal validation is not approval to redistribute. Do not set `QEMU_GPL_COMPATIBILITY_REVIEW_APPROVED` to `true` until a qualified file-level and combined-work review approves the exact build and distribution model. Preserve corresponding source, local patches/modifications, copyright notices, and licence texts as required by the applicable licences. App Store distribution terms require separate review; sideloading does not remove GPL obligations.
 
